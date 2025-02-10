@@ -1,0 +1,11 @@
+{
+	"id": "nutstore",
+	"name": "NutStore Plugin",
+	"version": "0.0.1",
+	"minAppVersion": "0.15.0",
+	"description": "ns plugin",
+	"author": "yang",
+	"authorUrl": "",
+	"fundingUrl": "",
+	"isDesktopOnly": false
+}
