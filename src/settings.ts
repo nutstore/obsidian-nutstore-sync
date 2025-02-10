@@ -1,11 +1,11 @@
-import { App, PluginSettingTab, Setting } from 'obsidian'
+import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import i18n from './i18n'
-import MyPlugin from './index'
+import NutStorePlugin from './index'
 
 export class NutstoreSettingTab extends PluginSettingTab {
-	plugin: MyPlugin
+	plugin: NutStorePlugin
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: NutStorePlugin) {
 		super(app, plugin)
 		this.plugin = plugin
 	}
@@ -33,14 +33,45 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName(i18n.t('settings.password.name'))
 			.setDesc(i18n.t('settings.password.desc'))
-			.addText((text) =>
+			.addText((text) => {
 				text
+
 					.setPlaceholder(i18n.t('settings.password.placeholder'))
 					.setValue(this.plugin.settings.password)
 					.onChange(async (value) => {
 						this.plugin.settings.password = value
 						await this.plugin.saveSettings()
+					})
+				text.inputEl.type = 'password'
+			})
+
+		new Setting(containerEl)
+			.setName(i18n.t('settings.remoteDir.name'))
+			.setDesc(i18n.t('settings.remoteDir.desc'))
+			.addText((text) =>
+				text
+					.setPlaceholder(i18n.t('settings.remoteDir.placeholder'))
+					.setValue(this.plugin.settings.remoteDir)
+					.onChange(async (value) => {
+						this.plugin.settings.remoteDir = value
+						await this.plugin.saveSettings()
 					}),
 			)
+
+		new Setting(containerEl)
+			.setName(i18n.t('settings.checkConnection.name'))
+			.setDesc(i18n.t('settings.checkConnection.desc'))
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('settings.checkConnection.name'))
+					.onClick(async () => {
+						const isConnected = await this.plugin.checkWebDAVConnection()
+						if (isConnected) {
+							new Notice(i18n.t('settings.checkConnection.success'))
+						} else {
+							new Notice(i18n.t('settings.checkConnection.failure'))
+						}
+					})
+			})
 	}
 }

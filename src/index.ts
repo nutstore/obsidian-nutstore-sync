@@ -1,22 +1,24 @@
 import { Plugin } from 'obsidian'
+import { createClient } from 'webdav'
+import { DAV_API } from './consts'
 import i18n from './i18n'
 import { NutstoreSettingTab } from './settings'
-
-// Remember to rename these classes and interfaces!
+import './webdav-patch'
 
 interface MyPluginSettings {
 	account: string
 	password: string
+	remoteDir: string
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	account: '',
 	password: '',
+	remoteDir: '',
 }
 
-export default class MyPlugin extends Plugin {
+export default class NutStorePlugin extends Plugin {
 	settings: MyPluginSettings
-	localeCheckInterval: number
 
 	async onload() {
 		await this.loadSettings()
@@ -35,15 +37,27 @@ export default class MyPlugin extends Plugin {
 		i18n.changeLanguage(locale)
 	}
 
-	onunload() {
-		clearInterval(this.localeCheckInterval)
-	}
-
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings)
+	}
+
+	createWebDAVClient() {
+		return createClient(DAV_API, {
+			username: this.settings.account,
+			password: this.settings.password,
+		})
+	}
+
+	async checkWebDAVConnection(): Promise<boolean> {
+		try {
+			const client = this.createWebDAVClient()
+			return await client.exists('/')
+		} catch (error) {
+			return false
+		}
 	}
 }
