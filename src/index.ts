@@ -1,19 +1,21 @@
+import { toBase64 } from 'js-base64'
 import { Plugin } from 'obsidian'
 import { createClient } from 'webdav'
 import { DAV_API } from './consts'
 import i18n from './i18n'
 import { NutstoreSettingTab } from './settings'
+import { NutStoreSync } from './sync'
 import './webdav-patch'
 
 interface MyPluginSettings {
 	account: string
-	password: string
+	credential: string
 	remoteDir: string
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	account: '',
-	password: '',
+	credential: '',
 	remoteDir: '',
 }
 
@@ -30,6 +32,14 @@ export default class NutStorePlugin extends Plugin {
 				i18n.changeLanguage(locale)
 			}, 60000),
 		)
+		this.addRibbonIcon('refresh-ccw', 'Start Sync', async () => {
+			const sync = new NutStoreSync({
+				plugin: this,
+				token: toBase64(`${this.settings.account}:${this.settings.credential}`),
+				remoteDir: this.settings.remoteDir,
+			})
+			await sync.start()
+		})
 	}
 
 	updateLanguage() {
@@ -48,7 +58,7 @@ export default class NutStorePlugin extends Plugin {
 	createWebDAVClient() {
 		return createClient(DAV_API, {
 			username: this.settings.account,
-			password: this.settings.password,
+			password: this.settings.credential,
 		})
 	}
 

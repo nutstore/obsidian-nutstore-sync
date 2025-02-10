@@ -31,15 +31,15 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			)
 
 		new Setting(containerEl)
-			.setName(i18n.t('settings.password.name'))
-			.setDesc(i18n.t('settings.password.desc'))
+			.setName(i18n.t('settings.credential.name'))
+			.setDesc(i18n.t('settings.credential.desc'))
 			.addText((text) => {
 				text
 
-					.setPlaceholder(i18n.t('settings.password.placeholder'))
-					.setValue(this.plugin.settings.password)
+					.setPlaceholder(i18n.t('settings.credential.placeholder'))
+					.setValue(this.plugin.settings.credential)
 					.onChange(async (value) => {
-						this.plugin.settings.password = value
+						this.plugin.settings.credential = value
 						await this.plugin.saveSettings()
 					})
 				text.inputEl.type = 'password'

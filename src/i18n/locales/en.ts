@@ -6,10 +6,10 @@ export default {
 			desc: 'Enter your WebDAV account',
 			placeholder: 'Enter your account',
 		},
-		password: {
-			name: 'Password',
-			desc: 'Enter your WebDAV password',
-			placeholder: 'Enter your password',
+		credential: {
+			name: 'Credential',
+			desc: 'Enter your WebDAV credential',
+			placeholder: 'Enter your credential',
 		},
 		checkConnection: {
 			name: 'Check Connection',

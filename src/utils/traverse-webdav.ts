@@ -1,4 +1,4 @@
-import * as dayjs from 'dayjs'
+import dayjs from 'dayjs'
 import { FileStat, WebDAVClient } from 'webdav'
 import { StatModel } from '~/model/stat.model'
 import { apiLimiter } from './api-limiter'
