@@ -1,4 +1,3 @@
-import dayjs from 'dayjs'
 import { isNotJunk } from 'junk'
 import { partial } from 'lodash-es'
 import { normalizePath, Vault } from 'obsidian'
@@ -41,6 +40,6 @@ export async function toStatModel(
 		path,
 		basename: basename(path),
 		isDir: stat.type === 'folder',
-		mtime: dayjs(stat.mtime),
+		mtime: new Date(stat.mtime).valueOf(),
 	}
 }

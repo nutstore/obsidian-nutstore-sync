@@ -1,4 +1,3 @@
-import dayjs from 'dayjs'
 import { FileStat, WebDAVClient } from 'webdav'
 import { StatModel } from '~/model/stat.model'
 import { apiLimiter } from './api-limiter'
@@ -21,7 +20,7 @@ export async function traverseWebDAV(
 			path: item.filename,
 			basename: item.basename,
 			isDir: item.type === 'directory',
-			mtime: dayjs(item.lastmod),
+			mtime: new Date(item.lastmod).valueOf(),
 		})),
 		await Promise.all(
 			contents

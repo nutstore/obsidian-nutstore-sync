@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { objectHash } from 'ohash'
 import path, { basename } from 'path'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'
@@ -9,7 +9,6 @@ import { deltaCacheKV } from '~/storage'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
 import NutStorePlugin from '..'
 import IFileSystem from './fs.interface'
-import { objectHash } from 'ohash'
 
 export class NutstoreFileSystem implements IFileSystem {
 	private webdav: WebDAVClient
@@ -96,11 +95,17 @@ export class NutstoreFileSystem implements IFileSystem {
 					path: delta.path,
 					basename: basename(delta.path),
 					isDir: delta.isDir,
-					mtime: dayjs(delta.modified),
+					mtime: new Date(delta.modified).valueOf(),
 				})
 			}
 		}
-		return [...filesMap.values()]
+		const contents = [...filesMap.values()]
+		for (const item of contents) {
+			if (path.isAbsolute(item.path)) {
+				item.path = path.relative(this.options.remoteBaseDir, item.path)
+			}
+		}
+		return contents
 	}
 }
 
