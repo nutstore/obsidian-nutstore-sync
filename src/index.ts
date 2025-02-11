@@ -36,7 +36,7 @@ export default class NutStorePlugin extends Plugin {
 			const sync = new NutStoreSync({
 				plugin: this,
 				token: toBase64(`${this.settings.account}:${this.settings.credential}`),
-				remoteDir: this.settings.remoteDir,
+				remoteBaseDir: this.settings.remoteDir,
 			})
 			await sync.start()
 		})

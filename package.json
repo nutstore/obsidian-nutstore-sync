@@ -26,6 +26,7 @@
 		"localforage": "^1.10.0",
 		"lodash-es": "^4.17.21",
 		"obsidian": "latest",
+		"ohash": "^1.1.4",
 		"prettier": "^3.5.0",
 		"ramda": "^0.30.1",
 		"tslib": "2.4.0",

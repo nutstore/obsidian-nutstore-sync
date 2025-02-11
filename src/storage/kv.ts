@@ -25,5 +25,8 @@ function useStorage<T = any>(instance: LocalForage) {
 		get(key: string) {
 			return instance.getItem<T>(key)
 		},
+		clear() {
+			return instance.clear()
+		},
 	}
 }

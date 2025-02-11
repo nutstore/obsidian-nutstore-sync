@@ -11,7 +11,7 @@ export class NutStoreSync {
 		private options: {
 			plugin: NutStorePlugin
 			token: string
-			remoteDir: string
+			remoteBaseDir: string
 		},
 	) {
 		this.remoteFs = new NutstoreFileSystem(this.options)
@@ -22,6 +22,8 @@ export class NutStoreSync {
 
 	async start() {
 		const localContents = await this.localFS.walk()
-		console.log(localContents)
+		console.log('local contents', localContents)
+		const remoteContents = await this.remoteFs.walk()
+		console.log('remote contents', remoteContents)
 	}
 }
