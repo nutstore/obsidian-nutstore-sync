@@ -1,4 +1,4 @@
-import { objectHash } from 'ohash'
+import { Vault } from 'obsidian'
 import path, { basename } from 'path'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'
@@ -6,8 +6,9 @@ import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
 import { DAV_API } from '~/consts'
 import { StatModel } from '~/model/stat.model'
 import { deltaCacheKV } from '~/storage'
+import { getDBKey } from '~/utils/get-db-key'
+import { getRootFolderName } from '~/utils/get-root-folder-name'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
-import NutStorePlugin from '..'
 import IFileSystem from './fs.interface'
 
 export class NutstoreFileSystem implements IFileSystem {
@@ -15,7 +16,7 @@ export class NutstoreFileSystem implements IFileSystem {
 
 	constructor(
 		private options: {
-			plugin: NutStorePlugin
+			vault: Vault
 			token: string
 			remoteBaseDir: string
 		},
@@ -28,19 +29,18 @@ export class NutstoreFileSystem implements IFileSystem {
 	}
 
 	async walk() {
-		const kvKey = objectHash({
-			remoteBaseDir: this.options.remoteBaseDir,
-			vaultName: this.options.plugin.app.vault.getName(),
-		})
+		const kvKey = getDBKey(
+			this.options.vault.getName(),
+			this.options.remoteBaseDir,
+		)
 		let deltaCache = await deltaCacheKV.get(kvKey)
-		const normRemoteBaseDir = normalizeRemotePath(this.options.remoteBaseDir)
 		if (deltaCache) {
 			let cursor = deltaCache.deltas.at(-1)?.cursor ?? deltaCache.originCursor
 			while (true) {
 				const events = await getDelta({
 					token: this.options.token,
 					cursor,
-					folderName: this.options.remoteBaseDir,
+					folderName: getRootFolderName(this.options.remoteBaseDir),
 				})
 				if (events.response.cursor === cursor) {
 					break
@@ -49,11 +49,11 @@ export class NutstoreFileSystem implements IFileSystem {
 					deltaCache.deltas = []
 					deltaCache.files = await traverseWebDAV(
 						this.webdav,
-						normRemoteBaseDir,
+						this.options.remoteBaseDir,
 					)
 					cursor = await getLatestDeltaCursor({
 						token: this.options.token,
-						folderName: this.options.remoteBaseDir,
+						folderName: getRootFolderName(this.options.remoteBaseDir),
 					}).then((d) => d?.response?.cursor)
 				} else if (events.response.delta.entry.length > 0) {
 					deltaCache.deltas.push(events.response)
@@ -67,12 +67,15 @@ export class NutstoreFileSystem implements IFileSystem {
 				}
 			}
 		} else {
-			const files = await await traverseWebDAV(this.webdav, normRemoteBaseDir)
+			const files = await await traverseWebDAV(
+				this.webdav,
+				this.options.remoteBaseDir,
+			)
 			const {
 				response: { cursor: originCursor },
 			} = await getLatestDeltaCursor({
 				token: this.options.token,
-				folderName: this.options.remoteBaseDir,
+				folderName: getRootFolderName(this.options.remoteBaseDir),
 			})
 			deltaCache = {
 				files,
@@ -90,14 +93,15 @@ export class NutstoreFileSystem implements IFileSystem {
 		for (const delta of deltasMap.values()) {
 			if (delta.isDeleted) {
 				filesMap.delete(delta.path)
-			} else {
-				filesMap.set(delta.path, {
-					path: delta.path,
-					basename: basename(delta.path),
-					isDir: delta.isDir,
-					mtime: new Date(delta.modified).valueOf(),
-				})
+				continue
 			}
+			filesMap.set(delta.path, {
+				path: delta.path,
+				basename: basename(delta.path),
+				isDir: delta.isDir,
+				isDeleted: delta.isDeleted,
+				mtime: new Date(delta.modified).valueOf(),
+			})
 		}
 		const contents = [...filesMap.values()]
 		for (const item of contents) {
@@ -107,11 +111,4 @@ export class NutstoreFileSystem implements IFileSystem {
 		}
 		return contents
 	}
-}
-
-export function normalizeRemotePath(remoteBaseDir: string) {
-	if (remoteBaseDir.startsWith('/')) {
-		return path.resolve(remoteBaseDir)
-	}
-	return `/${remoteBaseDir}`
 }

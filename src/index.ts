@@ -5,6 +5,7 @@ import { DAV_API } from './consts'
 import i18n from './i18n'
 import { NutstoreSettingTab } from './settings'
 import { NutStoreSync } from './sync'
+import { stdRemotePath } from './utils/std-remote-path'
 import './webdav-patch'
 
 interface MyPluginSettings {
@@ -34,9 +35,10 @@ export default class NutStorePlugin extends Plugin {
 		)
 		this.addRibbonIcon('refresh-ccw', 'Start Sync', async () => {
 			const sync = new NutStoreSync({
-				plugin: this,
+				webdav: this.createWebDAVClient(),
+				vault: this.app.vault,
 				token: toBase64(`${this.settings.account}:${this.settings.credential}`),
-				remoteBaseDir: this.settings.remoteDir,
+				remoteBaseDir: stdRemotePath(this.settings.remoteDir),
 			})
 			await sync.start()
 		})

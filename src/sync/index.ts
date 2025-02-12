@@ -1,7 +1,18 @@
+import dayjs from 'dayjs'
+import { Notice, Vault } from 'obsidian'
+import { WebDAVClient } from 'webdav'
 import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
-import NutStorePlugin from '..'
+import { SyncRecord } from '~/storage/helper'
+import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import MkdirLocalTask from './tasks/mkdir-local.task'
+import MkdirRemoteTask from './tasks/mkdir-remote.task'
+import PullTask from './tasks/pull.task'
+import PushTask from './tasks/push.task'
+import RemoveLocalTask from './tasks/remove-local.task'
+import RemoveRemoteTask from './tasks/remove-remote.task'
+import { BaseTask } from './tasks/task.interface'
 
 export class NutStoreSync {
 	remoteFs: IFileSystem
@@ -9,21 +20,174 @@ export class NutStoreSync {
 
 	constructor(
 		private options: {
-			plugin: NutStorePlugin
+			vault: Vault
 			token: string
 			remoteBaseDir: string
+			webdav: WebDAVClient
 		},
 	) {
 		this.remoteFs = new NutstoreFileSystem(this.options)
 		this.localFS = new LocalVaultFileSystem({
-			vault: this.options.plugin.app.vault,
+			vault: this.options.vault,
 		})
 	}
 
 	async start() {
-		const localContents = await this.localFS.walk()
-		console.log('local contents', localContents)
-		const remoteContents = await this.remoteFs.walk()
-		console.log('remote contents', remoteContents)
+		const syncRecord = new SyncRecord(
+			this.options.vault,
+			this.options.remoteBaseDir,
+		)
+		const localStats = await this.localFS.walk()
+		const remoteStats = await this.remoteFs.walk()
+		const localStatsMap = new Map(localStats.map((item) => [item.path, item]))
+		const remoteStatsMap = new Map(remoteStats.map((item) => [item.path, item]))
+		const mixedPath = new Set([
+			...localStatsMap.keys(),
+			...remoteStatsMap.keys(),
+		])
+		console.debug('local Stats', localStats)
+		console.debug('remote Stats', remoteStats)
+
+		const taskOptions = {
+			webdav: this.options.webdav,
+			vault: this.options.vault,
+			remoteBaseDir: this.options.remoteBaseDir,
+		}
+
+		const tasks: BaseTask[] = []
+		const records = await syncRecord.getRecords()
+
+		// sync folder: remote -> local
+		for (const remote of remoteStats) {
+			if (!remote.isDir) {
+				continue
+			}
+			const localPath = this.remotePathToLocalPath(remote.path)
+			const local = localStatsMap.get(localPath)
+			const record = records.get(localPath)
+			if (local) {
+				if (!local.isDir) {
+					new Notice('同步失败!')
+					throw new Error(`except folder but file: ${remote.path}`)
+				}
+			} else {
+				if (record) {
+					const remoteChanged = !dayjs(remote.mtime).isSame(record.remote.mtime)
+					if (!remoteChanged) {
+						// TODO: memfs 如果 remote dir 下没有其他文件 则可以安全移除?
+					}
+				}
+				tasks.push(
+					new MkdirLocalTask({
+						...taskOptions,
+						localPath,
+						remotePath: remote.path,
+					}),
+				)
+			}
+		}
+
+		// sync folder: local -> remote
+		for (const local of localStats) {
+			if (!local.isDir) {
+				continue
+			}
+			const remote = remoteStatsMap.get(local.path)
+			const record = records.get(local.path)
+			if (!remote) {
+				tasks.push(
+					new MkdirRemoteTask({
+						...taskOptions,
+						localPath: local.path,
+						remotePath: local.path,
+					}),
+				)
+				continue
+			}
+			if (!remote.isDir) {
+				new Notice('同步失败!')
+				throw new Error(`except folder but file: ${remote.path}`)
+			}
+		}
+
+		// sync files
+		for (const p of mixedPath) {
+			const remote = remoteStatsMap.get(p)
+			const local = localStatsMap.get(p)
+			const record = records.get(p)
+			const options = {
+				...taskOptions,
+				remotePath: p,
+				localPath: p,
+			}
+			if (local?.isDir || remote?.isDir) {
+				continue
+			}
+			if (record) {
+				if (remote) {
+					const remoteChanged = !dayjs(remote.mtime).isSame(record.remote.mtime)
+					if (local) {
+						const localChanged = !dayjs(local.mtime).isSame(record.local.mtime)
+						if (remoteChanged) {
+							if (localChanged) {
+								// merge
+							} else {
+								tasks.push(new PullTask(options))
+							}
+						} else {
+							if (localChanged) {
+								tasks.push(new PushTask(options))
+							}
+						}
+					} else {
+						if (remoteChanged) {
+							tasks.push(new PullTask(options))
+						} else {
+							tasks.push(new RemoveRemoteTask(options))
+						}
+					}
+				} else {
+					if (local) {
+						const localChanged = !dayjs(local.mtime).isSame(record.local.mtime)
+						if (localChanged) {
+							tasks.push(new PushTask(options))
+						} else {
+							tasks.push(new RemoveLocalTask(options))
+						}
+					}
+				}
+			} else {
+				if (remote) {
+					if (local) {
+						// merge
+					} else {
+						tasks.push(new PullTask(options))
+					}
+				} else {
+					if (local) {
+						tasks.push(new PushTask(options))
+					}
+				}
+			}
+		}
+		const tasksResult = await execTasks(tasks)
+		console.debug('tasks', tasks)
+		console.debug('tasks result', tasksResult)
 	}
+
+	remotePathToLocalPath(path: string) {
+		return remotePathToLocalPath(
+			this.options.vault,
+			this.options.remoteBaseDir,
+			path,
+		)
+	}
+}
+
+async function execTasks(tasks: BaseTask[]) {
+	const res: Awaited<ReturnType<BaseTask['exec']>>[] = []
+	for (const t of tasks) {
+		res.push(await t.exec())
+	}
+	return res
 }

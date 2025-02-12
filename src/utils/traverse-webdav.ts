@@ -1,6 +1,7 @@
 import { FileStat, WebDAVClient } from 'webdav'
 import { StatModel } from '~/model/stat.model'
 import { apiLimiter } from './api-limiter'
+import { fileStatToStatModel } from './file-stat-to-stat-model'
 
 const getDirectoryContents = apiLimiter.wrap(
 	(client: WebDAVClient, path: string) =>
@@ -16,12 +17,7 @@ export async function traverseWebDAV(
 ): Promise<StatModel[]> {
 	const contents = await getDirectoryContents(client, from)
 	return [
-		contents.map((item) => ({
-			path: item.filename,
-			basename: item.basename,
-			isDir: item.type === 'directory',
-			mtime: new Date(item.lastmod).valueOf(),
-		})),
+		contents.map(fileStatToStatModel),
 		await Promise.all(
 			contents
 				.filter((item) => item.type === 'directory')
