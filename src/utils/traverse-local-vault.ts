@@ -4,10 +4,12 @@ import { normalizePath, Vault } from 'obsidian'
 import { basename, isAbsolute, join } from 'path'
 import { isNotNil } from 'ramda'
 import { StatModel } from '~/model/stat.model'
+import { SyncRecordModel } from '~/model/sync-record.model'
 import { statVaultItem } from './stat-vault-item'
 
 export async function traverseLocalVault(
 	vault: Vault,
+	records: Map<string, SyncRecordModel>,
 	from: string = ``,
 ): Promise<StatModel[]> {
 	if (!isAbsolute(from)) {
@@ -15,7 +17,10 @@ export async function traverseLocalVault(
 	}
 	const normPath = normalizePath(from)
 	let { files, folders } = await vault.adapter.list(normPath)
-	files = files.filter(isNotJunk)
+	files = files.filter(
+		(path) =>
+			records.has(normPath) || (isNotJunk(path) && isNotJunk(basename(path))),
+	)
 	folders = folders.filter(
 		(path) => !['.git', '.obsidian'].includes(basename(path)),
 	)
@@ -24,6 +29,6 @@ export async function traverseLocalVault(
 	).then((arr) => arr.filter(isNotNil))
 	return [
 		contents,
-		await Promise.all(folders.map(partial(traverseLocalVault, vault))),
+		await Promise.all(folders.map(partial(traverseLocalVault, vault, records))),
 	].flat(2)
 }
