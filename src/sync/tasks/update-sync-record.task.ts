@@ -1,3 +1,4 @@
+import { isBinaryFile } from 'isbinaryfile'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import { BaseTask } from './task.interface'
@@ -13,10 +14,13 @@ export default class UpdateSyncRecordTask extends BaseTask {
 			}
 			const remote = await statWebDAVItem(this.webdav, this.remotePath)
 			const file = await this.vault.adapter.readBinary(this.localPath)
+			const base = await isBinaryFile(Buffer.from(file)).then((isBin) =>
+				isBin ? undefined : new Blob([file]),
+			)
 			await this.syncRecord.updateFileRecord(this.localPath, {
 				local,
 				remote,
-				base: new Blob([file]),
+				base,
 			})
 			return true
 		} catch (e) {
