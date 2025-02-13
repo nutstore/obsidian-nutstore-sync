@@ -23,4 +23,13 @@ export default {
 			placeholder: 'Enter the remote directory',
 		},
 	},
+	sync: {
+		failed: 'Sync failed!',
+		error: {
+			folderButFile: 'Expected folder but found file: {path}',
+		},
+		start: 'Sync started.',
+		complete: 'Sync completed.',
+		failedWithError: 'Sync failed with error: {error}',
+	},
 }
