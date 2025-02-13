@@ -22,6 +22,7 @@ export default class PullTask extends BaseTask {
 			await this.syncRecord.updateFileRecord(this.localPath, {
 				remote: remoteStat,
 				local: localStat!,
+				base: new Blob([file]),
 			})
 			return true
 		} catch (e) {

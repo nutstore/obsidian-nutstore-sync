@@ -6,6 +6,7 @@ import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import { SyncRecord } from '~/storage/helper'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import ConflictResolveTask from './tasks/conflict-resolve.task'
 import MkdirLocalTask from './tasks/mkdir-local.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import PullTask from './tasks/pull.task'
@@ -134,7 +135,7 @@ export class NutStoreSync {
 						const localChanged = !dayjs(local.mtime).isSame(record.local.mtime)
 						if (remoteChanged) {
 							if (localChanged) {
-								// merge
+								tasks.push(new ConflictResolveTask({ ...options, record }))
 							} else {
 								tasks.push(new PullTask(options))
 							}
@@ -163,7 +164,7 @@ export class NutStoreSync {
 			} else {
 				if (remote) {
 					if (local) {
-						// merge
+						tasks.push(new ConflictResolveTask(options))
 					} else {
 						tasks.push(new PullTask(options))
 					}

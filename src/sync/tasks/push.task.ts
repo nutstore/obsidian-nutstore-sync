@@ -30,6 +30,7 @@ export default class PushTask extends BaseTask {
 			this.syncRecord.updateFileRecord(this.localPath, {
 				local: localStat,
 				remote: remoteStat,
+				base: new Blob([content]),
 			})
 			return res
 		} catch (e) {
