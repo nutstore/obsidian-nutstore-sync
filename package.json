@@ -25,6 +25,7 @@
 		"junk": "^4.0.1",
 		"localforage": "^1.10.0",
 		"lodash-es": "^4.17.21",
+		"memfs": "^4.17.0",
 		"obsidian": "latest",
 		"ohash": "^1.1.4",
 		"prettier": "^3.5.0",

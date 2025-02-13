@@ -15,8 +15,8 @@ import RemoveRemoteTask from './tasks/remove-remote.task'
 import { BaseTask } from './tasks/task.interface'
 
 export class NutStoreSync {
-	remoteFs: IFileSystem
-	localFS: IFileSystem
+	private remoteFs: IFileSystem
+	private localFS: IFileSystem
 
 	constructor(
 		private options: {
@@ -29,6 +29,10 @@ export class NutStoreSync {
 		this.remoteFs = new NutstoreFileSystem(this.options)
 		this.localFS = new LocalVaultFileSystem({
 			vault: this.options.vault,
+			syncRecord: new SyncRecord(
+				this.options.vault,
+				this.options.remoteBaseDir,
+			),
 		})
 	}
 
@@ -170,8 +174,8 @@ export class NutStoreSync {
 				}
 			}
 		}
-		const tasksResult = await execTasks(tasks)
 		console.debug('tasks', tasks)
+		const tasksResult = await execTasks(tasks)
 		console.debug('tasks result', tasksResult)
 	}
 
