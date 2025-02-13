@@ -36,7 +36,12 @@ export default class ConflictResolveTask extends BaseTask {
 			const [mergedText, solveResult] = dmp.patch_apply(patch, localText)
 			console.debug('mergedText', mergedText)
 			if (solveResult.includes(false)) {
-				throw new Error('failed to auto merge')
+				console.error(
+					'Failed to auto merge: ',
+					[mergedText, solveResult],
+					patch,
+				)
+				return false
 			}
 			await this.webdav.unlock(this.remotePath, lock.token)
 			const putResult = await this.webdav.putFileContents(

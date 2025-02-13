@@ -5,6 +5,7 @@ import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import { SyncRecord } from '~/storage/helper'
+import { isSub } from '~/utils/is-sub'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import ConflictResolveTask from './tasks/conflict-resolve.task'
 import MkdirLocalTask from './tasks/mkdir-local.task'
@@ -63,6 +64,7 @@ export class NutStoreSync {
 		const records = await syncRecord.getRecords()
 
 		// sync folder: remote -> local
+		const removeFolderTasks: RemoveRemoteTask[] = []
 		for (const remote of remoteStats) {
 			if (!remote.isDir) {
 				continue
@@ -75,13 +77,43 @@ export class NutStoreSync {
 					new Notice('同步失败!')
 					throw new Error(`except folder but file: ${remote.path}`)
 				}
-			} else {
-				if (record) {
-					const remoteChanged = !dayjs(remote.mtime).isSame(record.remote.mtime)
-					if (!remoteChanged) {
-						// TODO: memfs 如果 remote dir 下没有其他文件 则可以安全移除?
+			} else if (record) {
+				const remoteChanged = !dayjs(remote.mtime).isSame(record.remote.mtime)
+				if (remoteChanged) {
+					tasks.push(
+						new MkdirLocalTask({
+							...taskOptions,
+							localPath,
+							remotePath: remote.path,
+						}),
+					)
+				} else {
+					// 如果远程文件夹里没有修改过的文件 或者没有不在syncRecord里的路径 那就可以把整个文件夹都删咯!
+					let removable = true
+					for (const sub of remoteStats) {
+						if (!isSub(remote.path, sub.path)) {
+							continue
+						}
+						const subRecord = records.get(sub.path)
+						if (
+							!subRecord ||
+							!dayjs(sub.mtime).isSame(subRecord.remote.mtime)
+						) {
+							removable = false
+							break
+						}
+					}
+					if (removable) {
+						removeFolderTasks.push(
+							new RemoveRemoteTask({
+								...taskOptions,
+								localPath: remote.path,
+								remotePath: remote.path,
+							}),
+						)
 					}
 				}
+			} else {
 				tasks.push(
 					new MkdirLocalTask({
 						...taskOptions,
@@ -175,9 +207,14 @@ export class NutStoreSync {
 				}
 			}
 		}
+
+		removeFolderTasks.sort((a, b) => b.remotePath.length - a.remotePath.length)
+		console.log('remove folder tasks:', removeFolderTasks)
 		console.debug('tasks', tasks)
 		const tasksResult = await execTasks(tasks)
+		const removeFolderTasksResult = await execTasks(removeFolderTasks)
 		console.debug('tasks result', tasksResult)
+		console.debug('remove folder tasks result:', removeFolderTasksResult)
 	}
 
 	remotePathToLocalPath(path: string) {

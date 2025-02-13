@@ -1,27 +1,13 @@
-import { basename, dirname } from 'path'
+import { basename } from 'path'
 import { StatModel } from '~/model/stat.model'
+import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import { BaseTask } from './task.interface'
 
 export default class MkdirLocalTask extends BaseTask {
 	async exec() {
 		try {
-			const stack: string[] = []
-			let currentPath = this.localPath
-			if (await this.vault.adapter.exists(currentPath)) {
-				console.debug('mkdir: already exists: ', currentPath)
-				return true
-			}
-			while (true) {
-				if (await this.vault.adapter.exists(currentPath)) {
-					break
-				}
-				stack.push(currentPath)
-				currentPath = dirname(currentPath)
-			}
-			while (stack.length) {
-				await this.vault.adapter.mkdir(stack.pop()!)
-			}
+			await mkdirsVault(this.vault, this.localPath)
 			const remoteStat = await statWebDAVItem(this.webdav, this.remotePath)
 			const localStat: StatModel = {
 				path: this.localPath,

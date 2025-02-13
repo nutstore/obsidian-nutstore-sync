@@ -1,4 +1,6 @@
+import { dirname } from 'path'
 import { BufferLike } from 'webdav'
+import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import { BaseTask } from './task.interface'
@@ -7,6 +9,7 @@ export default class PullTask extends BaseTask {
 	async exec() {
 		const lock = await this.webdav.lock(this.remotePath)
 		try {
+			await mkdirsVault(this.vault, dirname(this.localPath))
 			const remoteStat = await statWebDAVItem(this.webdav, this.remotePath)
 			const file = (await this.webdav.getFileContents(this.remotePath, {
 				format: 'binary',

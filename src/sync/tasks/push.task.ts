@@ -1,4 +1,6 @@
 import { normalizePath } from 'obsidian'
+import { dirname } from 'path'
+import { mkdirsWedbDAV } from '~/utils/mkdirs-webdav'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import { BaseTask, BaseTaskOptions } from './task.interface'
@@ -14,6 +16,7 @@ export default class PushTask extends BaseTask {
 
 	async exec() {
 		try {
+			await mkdirsWedbDAV(this.webdav, dirname(this.remotePath))
 			const content = await this.vault.adapter.readBinary(
 				normalizePath(this.localPath),
 			)
