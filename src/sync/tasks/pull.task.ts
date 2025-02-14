@@ -7,7 +7,6 @@ import { BaseTask } from './task.interface'
 
 export default class PullTask extends BaseTask {
 	async exec() {
-		const lock = await this.webdav.lock(this.remotePath)
 		try {
 			await mkdirsVault(this.vault, dirname(this.localPath))
 			const remoteStat = await statWebDAVItem(this.webdav, this.remotePath)
@@ -31,8 +30,6 @@ export default class PullTask extends BaseTask {
 		} catch (e) {
 			console.error(this, e)
 			return false
-		} finally {
-			this.webdav.unlock(this.remotePath, lock.token)
 		}
 	}
 }
