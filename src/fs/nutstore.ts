@@ -67,7 +67,7 @@ export class NutstoreFileSystem implements IFileSystem {
 				}
 			}
 		} else {
-			const files = await await traverseWebDAV(
+			const files = await traverseWebDAV(
 				this.webdav,
 				this.options.remoteBaseDir,
 			)
