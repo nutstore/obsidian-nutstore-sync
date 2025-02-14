@@ -31,6 +31,7 @@ export class NutStoreSync {
 			webdav: WebDAVClient
 		},
 	) {
+		this.options = Object.freeze(this.options)
 		this.remoteFs = new NutstoreFileSystem(this.options)
 		this.localFS = new LocalVaultFileSystem({
 			vault: this.options.vault,
@@ -41,7 +42,15 @@ export class NutStoreSync {
 		})
 	}
 
+	async prepare() {
+		const webdav = this.options.webdav
+		await webdav.createDirectory(this.options.remoteBaseDir, {
+			recursive: true,
+		})
+	}
+
 	async start() {
+		await this.prepare()
 		try {
 			new Notice(i18n.t('sync.start'))
 			const syncRecord = new SyncRecord(
@@ -141,13 +150,41 @@ export class NutStoreSync {
 				const remote = remoteStatsMap.get(local.path)
 				const record = records.get(local.path)
 				if (!remote) {
-					tasks.push(
-						new MkdirRemoteTask({
-							...taskOptions,
-							localPath: local.path,
-							remotePath: local.path,
-						}),
-					)
+					if (record) {
+						// 远程以前有文件夹 现在没了 如果本地这个文件夹里没没有发生修改 那么也应该删除本地的文件夹!
+
+						let removable = true
+						for (const sub of localStats) {
+							if (!isSub(local.path, sub.path)) {
+								continue
+							}
+							const subRecord = records.get(sub.path)
+							if (
+								!subRecord ||
+								!dayjs(sub.mtime).isSame(subRecord.local.mtime)
+							) {
+								removable = false
+								break
+							}
+						}
+						if (removable) {
+							tasks.push(
+								new RemoveLocalTask({
+									...taskOptions,
+									localPath: local.path,
+									remotePath: local.path,
+								}),
+							)
+						}
+					} else {
+						tasks.push(
+							new MkdirRemoteTask({
+								...taskOptions,
+								localPath: local.path,
+								remotePath: local.path,
+							}),
+						)
+					}
 					continue
 				}
 				if (!remote.isDir) {
