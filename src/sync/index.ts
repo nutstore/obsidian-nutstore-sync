@@ -8,7 +8,9 @@ import i18n from '~/i18n'
 import { SyncRecord } from '~/storage/helper'
 import { isSub } from '~/utils/is-sub'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
-import ConflictResolveTask from './tasks/conflict-resolve.task'
+import ConflictResolveTask, {
+	ConflictStrategy,
+} from './tasks/conflict-resolve.task'
 import MkdirLocalTask from './tasks/mkdir-local.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import PullTask from './tasks/pull.task'
@@ -180,7 +182,13 @@ export class NutStoreSync {
 							)
 							if (remoteChanged) {
 								if (localChanged) {
-									tasks.push(new ConflictResolveTask({ ...options, record }))
+									tasks.push(
+										new ConflictResolveTask({
+											...options,
+											record,
+											strategy: ConflictStrategy.LatestTimeStamp,
+										}),
+									)
 								} else {
 									tasks.push(new PullTask(options))
 								}
@@ -211,7 +219,12 @@ export class NutStoreSync {
 				} else {
 					if (remote) {
 						if (local) {
-							tasks.push(new ConflictResolveTask(options))
+							tasks.push(
+								new ConflictResolveTask({
+									...options,
+									strategy: ConflictStrategy.LatestTimeStamp,
+								}),
+							)
 						} else {
 							tasks.push(new PullTask(options))
 						}
