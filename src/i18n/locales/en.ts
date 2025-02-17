@@ -22,6 +22,10 @@ export default {
 			desc: 'Enter the remote directory',
 			placeholder: 'Enter the remote directory',
 		},
+		login: {
+			name: 'Login',
+			desc: 'Click to login',
+		},
 	},
 	sync: {
 		failed: 'Sync failed!',

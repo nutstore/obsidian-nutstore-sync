@@ -22,6 +22,10 @@ export default {
 			success: 'WebDAV 连接成功',
 			failure: 'WebDAV 连接失败',
 		},
+		login: {
+			name: '登录',
+			desc: '点击登录',
+		},
 	},
 	sync: {
 		failed: '同步失败!',

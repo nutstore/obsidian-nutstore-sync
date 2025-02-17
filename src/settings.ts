@@ -73,5 +73,16 @@ export class NutstoreSettingTab extends PluginSettingTab {
 						}
 					})
 			})
+
+		new Setting(containerEl).addButton((button) => {
+			button
+				.setButtonText(i18n.t('settings.login.name'))
+				.setTooltip(i18n.t('settings.login.desc'))
+				.onClick(async () => {
+					window.open(
+						'https://www.jianguoyun.com/d/openid/auth?client_id=ChBtB1nGO_ZMyq67-d7-mbiNEgQIARAAIiCHytIpw1adUMaa3OQ96gf2BhqyXUgtAnAiHzMFncsSZg&redirect_uri=https%3A%2F%2Fct-pomerium.jianguoyun.net.cn%2Foauth2%2Fcallback&response_type=code&scope=openid+profile+email+offline_access&state=K0ViUVRkUXpRZFVUQVEyUlJoYTh4aUQvY0tvU2J4NFdsb0VVMUR0RTNsbldNdW9MN2pkcEhEa1d6d1piM2JmS0wwVDlUeTA5QnlhZlorREpvZjc0VWc9PXwxNzM5NzU3NzUyfFtPTL0BH3Qh-Xb8QyE-2FeMoCAm1GfdzYVzdEdwKzuWTtnZD-V29UoLoeC2wTQg_tJ2XOZf7KKbEvh73D9YCTfVoDynqqHrMt-VoFl1QqGlQ3JYhZG8RpxTjQveATX-eiFIQNBWwrzwij4s3Su61C5QY5fLmyfPCotZlsWiktUFrQ1S9EKWmRze0LFGRwCBBed-tBGcyTtTAZ9NnDCg9QFQQbLDhIvjwwig6LI4PbvZNcr9P2pOthCd4wj7YzVBnTedsCwCKSIXNzpDJMWFsn1Xkt8oaR0VBdGQ6s046Fu1y4HlUn_0KGX2Vz3VrdlZ8RJMxkesmFiQuOzld_cXK9B4q-enTGHx0Bw5QtcILG-AQiiz-cqzhWYSmh29d_r_uPkproneMuVdNTfUvFt9l8b1hRvMYbFnmBBylWibvO1lhqHWB9DJyk7gOgB7C6Gr5f9vsNhyemn2XKJtM065NBFdLm4iDJS48WHcWbwRShKvXN7E8T6ni_Y8I-fZw_5GepkP5_28p1LhejFfdaCAKbtrsE8Noz1QReHc0vhJHOPESv4LWUFGV91x1NnmkrIqh0JQguJswM6sVQuxy7OHRdDv11lRsCdv8QZl6bfJrAdXaAPiejpEXuq57hXBtIBw0kldynXgd7-PwPFfAiI1vLoIx-ufYU4xvUbtim8xZda2V38obJsENGv5UY7BN7bQZVdER6IkQ6ulXydhk7Eu5Jo9Cnc8nJ4uLfhKH2TlObSlhSCvWsqr',
+					)
+				})
+		})
 	}
 }
