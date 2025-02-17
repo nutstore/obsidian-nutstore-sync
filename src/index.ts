@@ -40,7 +40,9 @@ export default class NutStorePlugin extends Plugin {
 				webdav: this.createWebDAVClient(),
 				vault: this.app.vault,
 				token: toBase64(`${this.settings.account}:${this.settings.credential}`),
-				remoteBaseDir: stdRemotePath(this.settings.remoteDir),
+				remoteBaseDir: stdRemotePath(
+					this.settings.remoteDir || this.app.vault.getName(),
+				),
 			})
 			await sync.start()
 		})
