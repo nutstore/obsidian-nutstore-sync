@@ -12,12 +12,14 @@ interface MyPluginSettings {
 	account: string
 	credential: string
 	remoteDir: string
+	accessToken: string
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	account: '',
 	credential: '',
 	remoteDir: '',
+	accessToken: '',
 }
 
 export default class NutStorePlugin extends Plugin {
@@ -41,6 +43,9 @@ export default class NutStorePlugin extends Plugin {
 				remoteBaseDir: stdRemotePath(this.settings.remoteDir),
 			})
 			await sync.start()
+		})
+		this.registerObsidianProtocolHandler('nutstore-sync/sso', () => {
+			// TODO: save access_token
 		})
 	}
 
