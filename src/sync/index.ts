@@ -1,8 +1,14 @@
 import consola, { LogLevels } from 'consola'
 import dayjs from 'dayjs'
-import { Notice, Vault } from 'obsidian'
+import { Vault } from 'obsidian'
 import path from 'path'
 import { WebDAVClient } from 'webdav'
+import {
+	emitEndSync,
+	emitStartSync,
+	emitSyncError,
+	emitSyncProgress,
+} from '~/events'
 import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
@@ -56,7 +62,8 @@ export class NutStoreSync {
 	async start() {
 		await this.prepare()
 		try {
-			new Notice(i18n.t('sync.start'))
+			emitStartSync()
+
 			const syncRecord = new SyncRecord(
 				this.options.vault,
 				this.options.remoteBaseDir,
@@ -94,7 +101,6 @@ export class NutStoreSync {
 				const record = records.get(localPath)
 				if (local) {
 					if (!local.isDir) {
-						new Notice(i18n.t('sync.failed'))
 						throw new Error(
 							i18n.t('sync.error.folderButFile', { path: remote.path }),
 						)
@@ -278,7 +284,6 @@ export class NutStoreSync {
 					continue
 				}
 				if (!remote.isDir) {
-					new Notice(i18n.t('sync.failed'))
 					throw new Error(
 						i18n.t('sync.error.folderButFile', { path: remote.path }),
 					)
@@ -494,7 +499,7 @@ export class NutStoreSync {
 			)
 			tasks.splice(0, 0, ...removeFolderTasks)
 			consola.debug('tasks', tasks)
-			const tasksResult = await execTasks(tasks)
+			const tasksResult = await this.execTasks(tasks)
 			consola.debug('tasks result', tasksResult)
 			// update mtime in records
 			if (tasks.length > 0) {
@@ -513,11 +518,24 @@ export class NutStoreSync {
 				}
 				await syncRecord.setRecords(records)
 			}
-			new Notice(i18n.t('sync.complete'))
+			emitEndSync()
 		} catch (error) {
+			emitSyncError(error)
 			consola.error('Sync error:', error)
-			new Notice(i18n.t('sync.failedWithError', { error: error.message }))
 		}
+	}
+
+	private async execTasks(tasks: BaseTask[]) {
+		const res: Awaited<ReturnType<BaseTask['exec']>>[] = []
+		let completed = 0
+		const total = tasks.length
+
+		for (const t of tasks) {
+			res.push(await t.exec())
+			completed++
+			emitSyncProgress(total, completed)
+		}
+		return res
 	}
 
 	remotePathToLocalPath(path: string) {
@@ -536,12 +554,4 @@ function remotePathToAbsolute(
 	return path.isAbsolute(remotePath)
 		? remotePath
 		: path.resolve(remoteBaseDir, remotePath)
-}
-
-async function execTasks(tasks: BaseTask[]) {
-	const res: Awaited<ReturnType<BaseTask['exec']>>[] = []
-	for (const t of tasks) {
-		res.push(await t.exec())
-	}
-	return res
 }

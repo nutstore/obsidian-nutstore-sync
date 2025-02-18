@@ -30,10 +30,13 @@ export default {
 	sync: {
 		failed: 'Sync failed!',
 		error: {
-			folderButFile: 'Expected folder but found file: {path}',
+			folderButFile: 'Expected folder but found file: {{path}}',
 		},
 		start: 'Sync started.',
 		complete: 'Sync completed.',
-		failedWithError: 'Sync failed with error: {error}',
+		failedWithError: 'Sync failed with error: {{error}}',
+		progress: 'Sync progress: {{completed}}/{{total}}',
+		startButton: 'Start Sync',
+		failedStatus: 'Sync Failed',
 	},
 }

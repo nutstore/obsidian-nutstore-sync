@@ -35,6 +35,7 @@
 		"ohash": "^1.1.4",
 		"prettier": "^3.5.0",
 		"ramda": "^0.30.1",
+		"rxjs": "^7.8.1",
 		"tslib": "2.4.0",
 		"typescript": "^5",
 		"webdav": "^5.7.1"
