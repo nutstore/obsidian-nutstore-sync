@@ -1,5 +1,6 @@
 {
 	"editor.formatOnSave": true,
+	"tailwindCSS.codeActions": false,
 	"editor.defaultFormatter": "esbenp.prettier-vscode",
 
 	"editor.codeActionsOnSave": {
