@@ -25,6 +25,10 @@ export class SyncRecord {
 		return map
 	}
 
+	setRecords(records: Map<string, SyncRecordModel>) {
+		return syncRecordKV.set(this.key, records)
+	}
+
 	async getRecord(path: string) {
 		const map = await syncRecordKV.get(this.key)
 		return map?.get(path)
