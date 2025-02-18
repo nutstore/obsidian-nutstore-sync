@@ -1,7 +1,8 @@
 import { toBase64 } from 'js-base64'
-import { Plugin } from 'obsidian'
+import { Notice, Plugin } from 'obsidian'
 import { createClient } from 'webdav'
 import { DAV_API } from './consts'
+import { onEndSync, onStartSync, onSyncError, onSyncProgress } from './events'
 import i18n from './i18n'
 import { NutstoreSettingTab } from './settings'
 import { NutStoreSync } from './sync'
@@ -24,18 +25,57 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 
 export default class NutStorePlugin extends Plugin {
 	settings: MyPluginSettings
+	private syncStatusBar: HTMLElement
+	private subscriptions: (() => void)[] = []
 
 	async onload() {
 		await this.loadSettings()
 		this.updateLanguage()
 		this.addSettingTab(new NutstoreSettingTab(this.app, this))
+
+		this.syncStatusBar = this.addStatusBarItem()
+		this.syncStatusBar.style.display = 'none'
+
+		const startSub = onStartSync().subscribe(() => {
+			this.syncStatusBar.style.display = 'block'
+			this.syncStatusBar.setText(i18n.t('sync.start'))
+			new Notice(i18n.t('sync.start'))
+		})
+
+		const progressSub = onSyncProgress().subscribe(({ total, completed }) => {
+			this.syncStatusBar.setText(i18n.t('sync.progress', { completed, total }))
+		})
+
+		const endSub = onEndSync().subscribe(() => {
+			this.syncStatusBar.setText(i18n.t('sync.complete'))
+			new Notice(i18n.t('sync.complete'))
+			setTimeout(() => {
+				this.syncStatusBar.style.display = 'none'
+			}, 3000)
+		})
+
+		const errorSub = onSyncError().subscribe((error) => {
+			this.syncStatusBar.setText(i18n.t('sync.failedStatus'))
+			new Notice(i18n.t('sync.failedWithError', { error: error.message }))
+			setTimeout(() => {
+				this.syncStatusBar.style.display = 'none'
+			}, 3000)
+		})
+
+		this.subscriptions.push(
+			() => startSub.unsubscribe(),
+			() => progressSub.unsubscribe(),
+			() => endSub.unsubscribe(),
+			() => errorSub.unsubscribe(),
+		)
+
 		this.registerInterval(
 			window.setInterval(() => {
 				const [locale] = navigator.language.split('-')
 				i18n.changeLanguage(locale)
 			}, 60000),
 		)
-		this.addRibbonIcon('refresh-ccw', 'Start Sync', async () => {
+		this.addRibbonIcon('refresh-ccw', i18n.t('sync.startButton'), async () => {
 			const sync = new NutStoreSync({
 				webdav: this.createWebDAVClient(),
 				vault: this.app.vault,
@@ -49,6 +89,10 @@ export default class NutStorePlugin extends Plugin {
 		this.registerObsidianProtocolHandler('nutstore-sync/sso', () => {
 			// TODO: save access_token
 		})
+	}
+
+	async onunload() {
+		this.subscriptions.forEach((unsub) => unsub())
 	}
 
 	updateLanguage() {

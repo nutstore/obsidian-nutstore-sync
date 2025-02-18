@@ -30,10 +30,13 @@ export default {
 	sync: {
 		failed: '同步失败!',
 		error: {
-			folderButFile: '预期文件夹但发现文件: {path}',
+			folderButFile: '预期文件夹但发现文件: {{path}}',
 		},
 		start: '同步开始。',
 		complete: '同步完成。',
-		failedWithError: '同步失败，错误信息: {error}',
+		failedWithError: '同步失败，错误信息: {{error}}',
+		progress: '同步进度: {{completed}}/{{total}}',
+		startButton: '开始同步',
+		failedStatus: '同步失败',
 	},
 }
