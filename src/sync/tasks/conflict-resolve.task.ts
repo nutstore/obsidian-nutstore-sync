@@ -1,3 +1,4 @@
+import consola from 'consola'
 import dayjs from 'dayjs'
 import { diff_match_patch } from 'diff-match-patch'
 import { isBinaryFile } from 'isbinaryfile'
@@ -54,7 +55,7 @@ export default class ConflictResolveTask extends BaseTask {
 			}
 			return true
 		} catch (e) {
-			console.error(this, e)
+			consola.error(this, e)
 			return false
 		}
 	}
@@ -77,9 +78,9 @@ export default class ConflictResolveTask extends BaseTask {
 			dmp.diff_cleanupSemantic(diffs)
 			const patch = dmp.patch_make(baseText, diffs)
 			const [mergedText, solveResult] = dmp.patch_apply(patch, localText)
-			console.debug('mergedText', mergedText)
+			consola.debug('mergedText', mergedText)
 			if (solveResult.includes(false)) {
-				console.error(
+				consola.error(
 					'Failed to auto merge: ',
 					[mergedText, solveResult],
 					patch,
@@ -104,7 +105,7 @@ export default class ConflictResolveTask extends BaseTask {
 			})
 			return true
 		} catch (e) {
-			console.error(this, e)
+			consola.error(this, e)
 			return false
 		}
 	}

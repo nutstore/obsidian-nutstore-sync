@@ -1,3 +1,4 @@
+import consola from 'consola'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { BaseTask, BaseTaskOptions } from './task.interface'
 
@@ -26,7 +27,7 @@ export default class RemoveLocalTask extends BaseTask {
 			}
 			return true
 		} catch (e) {
-			console.error(e)
+			consola.error(e)
 			return false
 		}
 	}

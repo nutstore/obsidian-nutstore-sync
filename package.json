@@ -18,6 +18,7 @@
 		"@typescript-eslint/parser": "5.29.0",
 		"bottleneck": "^2.19.5",
 		"builtin-modules": "3.3.0",
+		"consola": "^3.4.0",
 		"dayjs": "^1.11.13",
 		"diff-match-patch": "^1.0.5",
 		"esbuild": "0.17.3",

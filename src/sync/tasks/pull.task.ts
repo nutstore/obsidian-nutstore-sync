@@ -1,3 +1,4 @@
+import consola from 'consola'
 import { dirname } from 'path'
 import { BufferLike } from 'webdav'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
@@ -17,8 +18,8 @@ export default class PullTask extends BaseTask {
 			await this.vault.adapter.writeBinary(this.localPath, file)
 			const localStat = await statVaultItem(this.vault, this.localPath)
 			if (!localStat) {
-				console.debug('PullTask: local path:', this.localPath)
-				console.debug('PullTask: local stat is null')
+				consola.debug('PullTask: local path:', this.localPath)
+				consola.debug('PullTask: local stat is null')
 				return false
 			}
 			await this.syncRecord.updateFileRecord(this.localPath, {
@@ -28,7 +29,7 @@ export default class PullTask extends BaseTask {
 			})
 			return true
 		} catch (e) {
-			console.error(this, e)
+			consola.error(this, e)
 			return false
 		}
 	}
