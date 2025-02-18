@@ -1,5 +1,7 @@
+import consola, { LogLevels } from 'consola'
 import dayjs from 'dayjs'
 import { Notice, Vault } from 'obsidian'
+import path from 'path'
 import { WebDAVClient } from 'webdav'
 import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
@@ -18,6 +20,8 @@ import PushTask from './tasks/push.task'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
 import { BaseTask } from './tasks/task.interface'
+
+consola.level = LogLevels.verbose
 
 export class NutStoreSync {
 	private remoteFs: IFileSystem
@@ -67,8 +71,8 @@ export class NutStoreSync {
 				...localStatsMap.keys(),
 				...remoteStatsMap.keys(),
 			])
-			console.debug('local Stats', localStats)
-			console.debug('remote Stats', remoteStats)
+			consola.debug('local Stats', localStats)
+			consola.debug('remote Stats', remoteStats)
 
 			const taskOptions = {
 				webdav: this.options.webdav,
@@ -98,6 +102,19 @@ export class NutStoreSync {
 				} else if (record) {
 					const remoteChanged = !dayjs(remote.mtime).isSame(record.remote.mtime)
 					if (remoteChanged) {
+						consola.debug({
+							reason: 'remote folder changed',
+							remotePath: remotePathToAbsolute(
+								remote.path,
+								this.options.remoteBaseDir,
+							),
+							localPath: localPath,
+							conditions: {
+								remoteChanged,
+								localExists: !!local,
+								recordExists: !!record,
+							},
+						})
 						tasks.push(
 							new MkdirLocalTask({
 								...taskOptions,
@@ -123,6 +140,19 @@ export class NutStoreSync {
 						}
 					}
 					if (removable) {
+						consola.debug({
+							reason: 'remote folder is removable',
+							remotePath: remotePathToAbsolute(
+								remote.path,
+								this.options.remoteBaseDir,
+							),
+							localPath: localPath,
+							conditions: {
+								removable,
+								localExists: !!local,
+								recordExists: !!record,
+							},
+						})
 						removeFolderTasks.push(
 							new RemoveRemoteTask({
 								...taskOptions,
@@ -132,6 +162,18 @@ export class NutStoreSync {
 						)
 					}
 				} else {
+					consola.debug({
+						reason: 'remote folder does not exist locally',
+						remotePath: remotePathToAbsolute(
+							remote.path,
+							this.options.remoteBaseDir,
+						),
+						localPath: localPath,
+						conditions: {
+							localExists: !!local,
+							recordExists: !!record,
+						},
+					})
 					tasks.push(
 						new MkdirLocalTask({
 							...taskOptions,
@@ -153,6 +195,19 @@ export class NutStoreSync {
 					if (record) {
 						const localChanged = !dayjs(local.mtime).isSame(record.local.mtime)
 						if (localChanged) {
+							consola.debug({
+								reason: 'local folder changed',
+								remotePath: remotePathToAbsolute(
+									local.path,
+									this.options.remoteBaseDir,
+								),
+								localPath: local.path,
+								conditions: {
+									localChanged,
+									remoteExists: !!remote,
+									recordExists: !!record,
+								},
+							})
 							tasks.push(
 								new MkdirRemoteTask({
 									...taskOptions,
@@ -178,6 +233,19 @@ export class NutStoreSync {
 							}
 						}
 						if (removable) {
+							consola.debug({
+								reason: 'local folder is removable',
+								remotePath: remotePathToAbsolute(
+									local.path,
+									this.options.remoteBaseDir,
+								),
+								localPath: local.path,
+								conditions: {
+									removable,
+									remoteExists: !!remote,
+									recordExists: !!record,
+								},
+							})
 							tasks.push(
 								new RemoveLocalTask({
 									...taskOptions,
@@ -187,6 +255,18 @@ export class NutStoreSync {
 							)
 						}
 					} else {
+						consola.debug({
+							reason: 'local folder does not exist remotely',
+							remotePath: remotePathToAbsolute(
+								local.path,
+								this.options.remoteBaseDir,
+							),
+							localPath: local.path,
+							conditions: {
+								remoteExists: !!remote,
+								recordExists: !!record,
+							},
+						})
 						tasks.push(
 							new MkdirRemoteTask({
 								...taskOptions,
@@ -229,6 +309,21 @@ export class NutStoreSync {
 							)
 							if (remoteChanged) {
 								if (localChanged) {
+									consola.debug({
+										reason: 'both local and remote files changed',
+										remotePath: remotePathToAbsolute(
+											p,
+											this.options.remoteBaseDir,
+										),
+										localPath: p,
+										conditions: {
+											remoteChanged,
+											localChanged,
+											recordExists: !!record,
+											remoteExists: !!remote,
+											localExists: !!local,
+										},
+									})
 									tasks.push(
 										new ConflictResolveTask({
 											...options,
@@ -237,21 +332,72 @@ export class NutStoreSync {
 										}),
 									)
 								} else {
-									console.log(0)
-
+									consola.debug({
+										reason: 'remote file changed',
+										remotePath: remotePathToAbsolute(
+											p,
+											this.options.remoteBaseDir,
+										),
+										localPath: p,
+										conditions: {
+											remoteChanged,
+											recordExists: !!record,
+											remoteExists: !!remote,
+											localExists: !!local,
+										},
+									})
 									tasks.push(new PullTask(options))
 								}
 							} else {
 								if (localChanged) {
+									consola.debug({
+										reason: 'local file changed',
+										remotePath: remotePathToAbsolute(
+											p,
+											this.options.remoteBaseDir,
+										),
+										localPath: p,
+										conditions: {
+											localChanged,
+											recordExists: !!record,
+											remoteExists: !!remote,
+											localExists: !!local,
+										},
+									})
 									tasks.push(new PushTask(options))
 								}
 							}
 						} else {
 							if (remoteChanged) {
-								console.log(1)
-
+								consola.debug({
+									reason: 'remote file changed and local file does not exist',
+									remotePath: remotePathToAbsolute(
+										p,
+										this.options.remoteBaseDir,
+									),
+									localPath: p,
+									conditions: {
+										remoteChanged,
+										recordExists: !!record,
+										remoteExists: !!remote,
+										localExists: !!local,
+									},
+								})
 								tasks.push(new PullTask(options))
 							} else {
+								consola.debug({
+									reason: 'remote file is removable',
+									remotePath: remotePathToAbsolute(
+										p,
+										this.options.remoteBaseDir,
+									),
+									localPath: p,
+									conditions: {
+										recordExists: !!record,
+										remoteExists: !!remote,
+										localExists: !!local,
+									},
+								})
 								tasks.push(new RemoveRemoteTask(options))
 							}
 						}
@@ -261,8 +407,35 @@ export class NutStoreSync {
 								record.local.mtime,
 							)
 							if (localChanged) {
+								consola.debug({
+									reason: 'local file changed and remote file does not exist',
+									remotePath: remotePathToAbsolute(
+										p,
+										this.options.remoteBaseDir,
+									),
+									localPath: p,
+									conditions: {
+										localChanged,
+										recordExists: !!record,
+										remoteExists: !!remote,
+										localExists: !!local,
+									},
+								})
 								tasks.push(new PushTask(options))
 							} else {
+								consola.debug({
+									reason: 'local file is removable',
+									remotePath: remotePathToAbsolute(
+										p,
+										this.options.remoteBaseDir,
+									),
+									localPath: p,
+									conditions: {
+										recordExists: !!record,
+										remoteExists: !!remote,
+										localExists: !!local,
+									},
+								})
 								tasks.push(new RemoveLocalTask(options))
 							}
 						}
@@ -270,6 +443,16 @@ export class NutStoreSync {
 				} else {
 					if (remote) {
 						if (local) {
+							consola.debug({
+								reason: 'both local and remote files exist without a record',
+								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
+								localPath: p,
+								conditions: {
+									recordExists: !!record,
+									remoteExists: !!remote,
+									localExists: !!local,
+								},
+							})
 							tasks.push(
 								new ConflictResolveTask({
 									...options,
@@ -277,12 +460,30 @@ export class NutStoreSync {
 								}),
 							)
 						} else {
-							console.log(2)
-
+							consola.debug({
+								reason: 'remote file exists without a local file',
+								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
+								localPath: p,
+								conditions: {
+									recordExists: !!record,
+									remoteExists: !!remote,
+									localExists: !!local,
+								},
+							})
 							tasks.push(new PullTask(options))
 						}
 					} else {
 						if (local) {
+							consola.debug({
+								reason: 'local file exists without a remote file',
+								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
+								localPath: p,
+								conditions: {
+									recordExists: !!record,
+									remoteExists: !!remote,
+									localExists: !!local,
+								},
+							})
 							tasks.push(new PushTask(options))
 						}
 					}
@@ -292,15 +493,15 @@ export class NutStoreSync {
 			removeFolderTasks.sort(
 				(a, b) => b.remotePath.length - a.remotePath.length,
 			)
-			console.log('remove folder tasks:', removeFolderTasks)
-			console.debug('tasks', tasks)
+			consola.debug('remove folder tasks:', removeFolderTasks)
+			consola.debug('tasks', tasks)
 			const tasksResult = await execTasks(tasks)
 			const removeFolderTasksResult = await execTasks(removeFolderTasks)
-			console.debug('tasks result', tasksResult)
-			console.debug('remove folder tasks result:', removeFolderTasksResult)
+			consola.debug('tasks result', tasksResult)
+			consola.debug('remove folder tasks result:', removeFolderTasksResult)
 			new Notice(i18n.t('sync.complete'))
 		} catch (error) {
-			console.error('Sync error:', error)
+			consola.error('Sync error:', error)
 			new Notice(i18n.t('sync.failedWithError', { error: error.message }))
 		}
 	}
@@ -312,6 +513,15 @@ export class NutStoreSync {
 			path,
 		)
 	}
+}
+
+function remotePathToAbsolute(
+	remotePath: string,
+	remoteBaseDir: string,
+): string {
+	return path.isAbsolute(remotePath)
+		? remotePath
+		: path.resolve(remoteBaseDir, remotePath)
 }
 
 async function execTasks(tasks: BaseTask[]) {

@@ -1,3 +1,4 @@
+import consola from 'consola'
 import { isBinaryFile } from 'isbinaryfile'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
@@ -24,7 +25,7 @@ export default class UpdateSyncRecordTask extends BaseTask {
 			})
 			return true
 		} catch (e) {
-			console.error(this, e)
+			consola.error(this, e)
 			return false
 		}
 	}

@@ -1,3 +1,4 @@
+import consola from 'consola'
 import { normalizePath } from 'obsidian'
 import { dirname } from 'path'
 import { mkdirsWedbDAV } from '~/utils/mkdirs-webdav'
@@ -26,8 +27,8 @@ export default class PushTask extends BaseTask {
 			const remoteStat = await statWebDAVItem(this.webdav, this.remotePath)
 			const localStat = await statVaultItem(this.vault, this.localPath)
 			if (!localStat) {
-				console.debug('PushTask: local path:', this.localPath)
-				console.debug('PushTask: local stat is null')
+				consola.debug('PushTask: local path:', this.localPath)
+				consola.debug('PushTask: local stat is null')
 				return false
 			}
 			this.syncRecord.updateFileRecord(this.localPath, {
@@ -37,7 +38,7 @@ export default class PushTask extends BaseTask {
 			})
 			return res
 		} catch (e) {
-			console.error(this, e)
+			consola.error(this, e)
 			return false
 		}
 	}

@@ -1,3 +1,4 @@
+import consola from 'consola'
 import { basename } from 'path'
 import { StatModel } from '~/model/stat.model'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
@@ -22,7 +23,7 @@ export default class MkdirLocalTask extends BaseTask {
 			})
 			return true
 		} catch (e) {
-			console.error(this, e)
+			consola.error(this, e)
 			return false
 		}
 	}
