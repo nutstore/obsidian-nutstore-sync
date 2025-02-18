@@ -246,7 +246,7 @@ export class NutStoreSync {
 									recordExists: !!record,
 								},
 							})
-							tasks.push(
+							removeFolderTasks.push(
 								new RemoveLocalTask({
 									...taskOptions,
 									localPath: local.path,
@@ -489,16 +489,30 @@ export class NutStoreSync {
 					}
 				}
 			}
-
 			removeFolderTasks.sort(
 				(a, b) => b.remotePath.length - a.remotePath.length,
 			)
-			consola.debug('remove folder tasks:', removeFolderTasks)
+			tasks.splice(0, 0, ...removeFolderTasks)
 			consola.debug('tasks', tasks)
 			const tasksResult = await execTasks(tasks)
-			const removeFolderTasksResult = await execTasks(removeFolderTasks)
 			consola.debug('tasks result', tasksResult)
-			consola.debug('remove folder tasks result:', removeFolderTasksResult)
+			// update mtime in records
+			if (tasks.length > 0) {
+				const latestRemoteEntities = await this.remoteFs.walk()
+				const records = await syncRecord.getRecords()
+				for (const task of tasks) {
+					const record = records.get(task.localPath)
+					const remote = latestRemoteEntities.find(
+						(v) =>
+							remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
+							task.remotePath,
+					)
+					if (record && remote) {
+						record.remote.mtime = remote.mtime
+					}
+				}
+				await syncRecord.setRecords(records)
+			}
 			new Notice(i18n.t('sync.complete'))
 		} catch (error) {
 			consola.error('Sync error:', error)
