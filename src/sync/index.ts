@@ -105,31 +105,31 @@ export class NutStoreSync {
 								remotePath: remote.path,
 							}),
 						)
-					} else {
-						// 如果远程文件夹里没有修改过的文件 或者没有不在syncRecord里的路径 那就可以把整个文件夹都删咯!
-						let removable = true
-						for (const sub of remoteStats) {
-							if (!isSub(remote.path, sub.path)) {
-								continue
-							}
-							const subRecord = records.get(sub.path)
-							if (
-								!subRecord ||
-								!dayjs(sub.mtime).isSame(subRecord.remote.mtime)
-							) {
-								removable = false
-								break
-							}
+						continue
+					}
+					// 如果远程文件夹里没有修改过的文件 或者没有不在syncRecord里的路径 那就可以把整个文件夹都删咯!
+					let removable = true
+					for (const sub of remoteStats) {
+						if (!isSub(remote.path, sub.path)) {
+							continue
 						}
-						if (removable) {
-							removeFolderTasks.push(
-								new RemoveRemoteTask({
-									...taskOptions,
-									localPath: remote.path,
-									remotePath: remote.path,
-								}),
-							)
+						const subRecord = records.get(sub.path)
+						if (
+							!subRecord ||
+							!dayjs(sub.mtime).isSame(subRecord.remote.mtime)
+						) {
+							removable = false
+							break
 						}
+					}
+					if (removable) {
+						removeFolderTasks.push(
+							new RemoveRemoteTask({
+								...taskOptions,
+								localPath: remote.path,
+								remotePath: remote.path,
+							}),
+						)
 					}
 				} else {
 					tasks.push(
@@ -151,8 +151,18 @@ export class NutStoreSync {
 				const record = records.get(local.path)
 				if (!remote) {
 					if (record) {
+						const localChanged = !dayjs(local.mtime).isSame(record.local.mtime)
+						if (localChanged) {
+							tasks.push(
+								new MkdirRemoteTask({
+									...taskOptions,
+									localPath: local.path,
+									remotePath: local.path,
+								}),
+							)
+							continue
+						}
 						// 远程以前有文件夹 现在没了 如果本地这个文件夹里没没有发生修改 那么也应该删除本地的文件夹!
-
 						let removable = true
 						for (const sub of localStats) {
 							if (!isSub(local.path, sub.path)) {
@@ -227,6 +237,8 @@ export class NutStoreSync {
 										}),
 									)
 								} else {
+									console.log(0)
+
 									tasks.push(new PullTask(options))
 								}
 							} else {
@@ -236,6 +248,8 @@ export class NutStoreSync {
 							}
 						} else {
 							if (remoteChanged) {
+								console.log(1)
+
 								tasks.push(new PullTask(options))
 							} else {
 								tasks.push(new RemoveRemoteTask(options))
@@ -263,6 +277,8 @@ export class NutStoreSync {
 								}),
 							)
 						} else {
+							console.log(2)
+
 							tasks.push(new PullTask(options))
 						}
 					} else {
