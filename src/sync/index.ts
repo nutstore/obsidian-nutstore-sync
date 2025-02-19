@@ -62,16 +62,12 @@ export class NutStoreSync {
 		)
 	}
 
-	async prepare() {
-		const webdav = this.options.webdav
-		await webdav.createDirectory(this.options.remoteBaseDir, {
-			recursive: true,
-		})
-	}
-
 	async start() {
-		await this.prepare()
 		try {
+			const webdav = this.options.webdav
+			await webdav.createDirectory(this.options.remoteBaseDir, {
+				recursive: true,
+			})
 			emitStartSync()
 
 			const syncRecord = new SyncRecord(
@@ -92,7 +88,7 @@ export class NutStoreSync {
 			consola.debug('remote Stats', remoteStats)
 
 			const taskOptions = {
-				webdav: this.options.webdav,
+				webdav,
 				vault: this.options.vault,
 				remoteBaseDir: this.options.remoteBaseDir,
 			}
@@ -516,28 +512,36 @@ export class NutStoreSync {
 			if (tasks.length > 0) {
 				const latestRemoteEntities = await this.remoteFs.walk()
 				const records = await syncRecord.getRecords()
-				for (const task of tasks) {
-					const remote = latestRemoteEntities.find(
-						(v) =>
-							remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
-							task.remotePath,
-					)
-					if (!remote) {
-						continue
-					}
-					const local = await statVaultItem(this.options.vault, task.localPath)
-					if (!local) {
-						continue
-					}
-					const file = await this.options.vault.adapter.readBinary(
-						task.localPath,
-					)
-					records.set(task.localPath, {
-						remote,
-						local,
-						base: new Blob([file]),
-					})
-				}
+				await Promise.all(
+					tasks.map(async (task, i) => {
+						if (!tasksResult[i]) {
+							return
+						}
+						const remote = latestRemoteEntities.find(
+							(v) =>
+								remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
+								task.remotePath,
+						)
+						if (!remote) {
+							return
+						}
+						const local = await statVaultItem(
+							this.options.vault,
+							task.localPath,
+						)
+						if (!local) {
+							return
+						}
+						const file = await this.options.vault.adapter.readBinary(
+							task.localPath,
+						)
+						records.set(task.localPath, {
+							remote,
+							local,
+							base: new Blob([file]),
+						})
+					}),
+				)
 				await syncRecord.setRecords(records)
 			}
 			emitEndSync(failedCount)
