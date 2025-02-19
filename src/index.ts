@@ -125,7 +125,7 @@ export default class NutStorePlugin extends Plugin {
 					transform: rotate(0deg);
 				}
 				to {
-					transform: rotate(360deg);
+					transform: rotate(-360deg);
 				}
 			}
 			.nutstore-sync-spinning {
