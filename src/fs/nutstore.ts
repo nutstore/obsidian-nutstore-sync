@@ -48,7 +48,7 @@ export class NutstoreFileSystem implements IFileSystem {
 				if (events.response.reset) {
 					deltaCache.deltas = []
 					deltaCache.files = await traverseWebDAV(
-						this.webdav,
+						this.options.token,
 						this.options.remoteBaseDir,
 					)
 					cursor = await getLatestDeltaCursor({
@@ -68,7 +68,7 @@ export class NutstoreFileSystem implements IFileSystem {
 			}
 		} else {
 			const files = await traverseWebDAV(
-				this.webdav,
+				this.options.token,
 				this.options.remoteBaseDir,
 			)
 			const {

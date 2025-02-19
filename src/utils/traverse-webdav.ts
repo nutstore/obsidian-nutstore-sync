@@ -1,21 +1,18 @@
-import { FileStat, WebDAVClient } from 'webdav'
+import { getDirectoryContents } from '~/api/webdav'
 import { StatModel } from '~/model/stat.model'
 import { fileStatToStatModel } from './file-stat-to-stat-model'
 
 export async function traverseWebDAV(
-	client: WebDAVClient,
+	token: string,
 	from: string = '',
 ): Promise<StatModel[]> {
-	const contents = (await client.getDirectoryContents(from, {
-		details: false,
-		deep: false,
-	})) as FileStat[]
+	const contents = await getDirectoryContents(token, from)
 	return [
 		contents.map(fileStatToStatModel),
 		await Promise.all(
 			contents
 				.filter((item) => item.type === 'directory')
-				.map((item) => traverseWebDAV(client, item.filename)),
+				.map((item) => traverseWebDAV(token, item.filename)),
 		),
 	].flat(2)
 }
