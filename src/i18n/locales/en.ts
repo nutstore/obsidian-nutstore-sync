@@ -34,6 +34,7 @@ export default {
 		},
 		start: 'Sync started.',
 		complete: 'Sync completed.',
+		completeWithFailed: 'Sync completed with {{failedCount}} failed tasks.',
 		failedWithError: 'Sync failed with error: {{error}}',
 		progress: 'Sync progress: {{completed}}/{{total}}',
 		startButton: 'Start Sync',

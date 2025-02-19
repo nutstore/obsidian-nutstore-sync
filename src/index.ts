@@ -52,12 +52,16 @@ export default class NutStorePlugin extends Plugin {
 			this.syncStatusBar.setText(i18n.t('sync.progress', { completed, total }))
 		})
 
-		const endSub = onEndSync().subscribe(() => {
+		const endSub = onEndSync().subscribe((failedCount) => {
 			this.isSyncing = false
 			this.ribbonIconEl.removeAttribute('aria-disabled')
 			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
-			this.syncStatusBar.setText(i18n.t('sync.complete'))
-			new Notice(i18n.t('sync.complete'))
+			const statusText =
+				failedCount > 0
+					? i18n.t('sync.completeWithFailed', { failedCount })
+					: i18n.t('sync.complete')
+			this.syncStatusBar.setText(statusText)
+			new Notice(statusText)
 			setTimeout(() => {
 				this.syncStatusBar.style.display = 'none'
 			}, 3000)

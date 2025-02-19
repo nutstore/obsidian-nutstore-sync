@@ -1,6 +1,7 @@
 import { Subject } from 'rxjs'
 
-const endSync = new Subject<void>()
+const endSync = new Subject<number>()
 
 export const onEndSync = () => endSync.asObservable()
-export const emitEndSync = () => endSync.next()
+export const emitEndSync = (failedCount: number = 0) =>
+	endSync.next(failedCount)
