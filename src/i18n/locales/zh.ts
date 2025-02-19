@@ -39,5 +39,6 @@ export default {
 		progress: '同步进度: {{percent}}%',
 		startButton: '开始同步',
 		failedStatus: '同步失败',
+		cancelled: '同步已取消。',
 	},
 }

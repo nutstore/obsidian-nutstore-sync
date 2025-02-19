@@ -2,12 +2,14 @@ import consola, { LogLevels } from 'consola'
 import dayjs from 'dayjs'
 import { Vault } from 'obsidian'
 import path from 'path'
+import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
 import {
 	emitEndSync,
 	emitStartSync,
 	emitSyncError,
 	emitSyncProgress,
+	onCancelSync,
 } from '~/events'
 import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
@@ -33,6 +35,8 @@ consola.level = LogLevels.verbose
 export class NutStoreSync {
 	private remoteFs: IFileSystem
 	private localFS: IFileSystem
+	private isCancelled: boolean = false
+	private subscriptions: Subscription[] = []
 
 	constructor(
 		private options: {
@@ -51,6 +55,11 @@ export class NutStoreSync {
 				this.options.remoteBaseDir,
 			),
 		})
+		this.subscriptions.push(
+			onCancelSync().subscribe(() => {
+				this.isCancelled = true
+			}),
+		)
 	}
 
 	async prepare() {
@@ -535,6 +544,8 @@ export class NutStoreSync {
 		} catch (error) {
 			emitSyncError(error)
 			consola.error('Sync error:', error)
+		} finally {
+			this.subscriptions.forEach((sub) => sub.unsubscribe())
 		}
 	}
 
@@ -542,8 +553,11 @@ export class NutStoreSync {
 		const res: Awaited<ReturnType<BaseTask['exec']>>[] = []
 		let completed = 0
 		const total = tasks.length
-
 		for (const t of tasks) {
+			if (this.isCancelled) {
+				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				break
+			}
 			res.push(await t.exec())
 			completed++
 			emitSyncProgress(total, completed)
