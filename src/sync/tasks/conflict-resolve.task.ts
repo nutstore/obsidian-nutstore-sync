@@ -43,22 +43,17 @@ export default class ConflictResolveTask extends BaseTask {
 			const remoteMtime = dayjs(remote.mtime)
 			const useRemote = remoteMtime.isAfter(localMtime)
 			if (useRemote) {
-				var file = (await this.webdav.getFileContents(this.remotePath, {
+				const file = (await this.webdav.getFileContents(this.remotePath, {
 					details: false,
 					format: 'binary',
 				})) as BufferLike
 				await this.vault.adapter.writeBinary(this.localPath, file)
 			} else {
-				file = await this.vault.adapter.readBinary(this.localPath)
+				const file = await this.vault.adapter.readBinary(this.localPath)
 				await this.webdav.putFileContents(this.remotePath, file, {
 					overwrite: true,
 				})
 			}
-			await this.syncRecord.updateFileRecord(this.localPath, {
-				local: (await statVaultItem(this.vault, this.localPath))!,
-				remote: await statWebDAVItem(this.webdav, this.remotePath),
-				base: new Blob([file]),
-			})
 			return true
 		} catch (e) {
 			consola.error(this, e)
@@ -104,11 +99,6 @@ export default class ConflictResolveTask extends BaseTask {
 				throw new Error('failed to webdav.putFileContents')
 			}
 			await this.vault.adapter.write(this.localPath, mergedText)
-			await this.syncRecord.updateFileRecord(this.localPath, {
-				local: (await statVaultItem(this.vault, this.localPath))!,
-				remote: await statWebDAVItem(this.webdav, this.remotePath),
-				base: new Blob([localText]),
-			})
 			return true
 		} catch (e) {
 			consola.error(this, e)
