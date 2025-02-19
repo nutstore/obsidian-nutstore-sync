@@ -1,5 +1,6 @@
+import { isNil, partial } from 'lodash-es'
 import { requestUrl } from 'obsidian'
-import { basename } from 'path'
+import { basename, join } from 'path'
 import { FileStat } from 'webdav'
 import { DAV_API } from '~/consts'
 import { parseXml } from '~/utils/parse-xml'
@@ -28,15 +29,18 @@ function extractNextLink(linkHeader: string): string | null {
 }
 
 function convertToFileStat(
+	serverBase: string,
 	item: WebDAVResponse['multistatus']['response'][number],
 ): FileStat {
 	const props = item.propstat.prop
-	const isDir = !!props.resourcetype?.collection
-	const filename = decodeURIComponent(basename(item.href))
+	const isDir = !isNil(props.resourcetype?.collection)
+	const href = decodeURIComponent(item.href)
+	const filename =
+		serverBase === '/' ? href : join('/', href.replace(serverBase, ''))
 
 	return {
 		filename,
-		basename: filename,
+		basename: basename(filename),
 		lastmod: props.getlastmodified || '',
 		size: props.getcontentlength ? parseInt(props.getcontentlength, 10) : 0,
 		type: isDir ? 'directory' : 'file',
@@ -82,7 +86,7 @@ export async function getDirectoryContents(
 			: [result.multistatus.response]
 
 		// 跳过第一个条目（当前目录）
-		contents.push(...items.slice(1).map(convertToFileStat))
+		contents.push(...items.slice(1).map(partial(convertToFileStat, '/dav')))
 
 		const linkHeader = response.headers['link'] || response.headers['Link']
 		if (!linkHeader) {
