@@ -7,6 +7,7 @@ import i18n from './i18n'
 import { NutstoreSettingTab } from './settings'
 import { NutStoreSync } from './sync'
 import { stdRemotePath } from './utils/std-remote-path'
+import { updateLanguage } from './utils/update-language'
 import './webdav-patch'
 
 interface MyPluginSettings {
@@ -31,8 +32,8 @@ export default class NutStorePlugin extends Plugin {
 	private ribbonIconEl: HTMLElement
 
 	async onload() {
+		await updateLanguage()
 		await this.loadSettings()
-		this.updateLanguage()
 		this.addSettingTab(new NutstoreSettingTab(this.app, this))
 
 		this.syncStatusBar = this.addStatusBarItem()
@@ -80,12 +81,7 @@ export default class NutStorePlugin extends Plugin {
 			() => errorSub.unsubscribe(),
 		)
 
-		this.registerInterval(
-			window.setInterval(() => {
-				const [locale] = navigator.language.split('-')
-				i18n.changeLanguage(locale)
-			}, 60000),
-		)
+		this.registerInterval(window.setInterval(updateLanguage, 60000))
 
 		this.ribbonIconEl = this.addRibbonIcon(
 			'refresh-ccw',
@@ -141,11 +137,6 @@ export default class NutStorePlugin extends Plugin {
 		if (styleEl) {
 			styleEl.remove()
 		}
-	}
-
-	updateLanguage() {
-		const [locale] = navigator.language.split('-')
-		i18n.changeLanguage(locale)
 	}
 
 	async loadSettings() {
