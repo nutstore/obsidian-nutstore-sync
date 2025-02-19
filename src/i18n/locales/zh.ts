@@ -38,6 +38,7 @@ export default {
 		failedWithError: '同步失败，错误信息: {{error}}',
 		progress: '同步进度: {{percent}}%',
 		startButton: '开始同步',
+		stopButton: '停止同步',
 		failedStatus: '同步失败',
 		cancelled: '同步已取消。',
 	},
