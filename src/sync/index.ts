@@ -500,7 +500,8 @@ export class NutStoreSync {
 			tasks.splice(0, 0, ...removeFolderTasks)
 			consola.debug('tasks', tasks)
 			const tasksResult = await this.execTasks(tasks)
-			consola.debug('tasks result', tasksResult)
+			const failedCount = tasksResult.filter((r) => r === false).length
+			consola.debug('tasks result', tasksResult, 'failed:', failedCount)
 			// update mtime in records
 			if (tasks.length > 0) {
 				const latestRemoteEntities = await this.remoteFs.walk()
@@ -518,7 +519,7 @@ export class NutStoreSync {
 				}
 				await syncRecord.setRecords(records)
 			}
-			emitEndSync()
+			emitEndSync(failedCount)
 		} catch (error) {
 			emitSyncError(error)
 			consola.error('Sync error:', error)

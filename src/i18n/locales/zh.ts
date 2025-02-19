@@ -34,6 +34,7 @@ export default {
 		},
 		start: '同步开始。',
 		complete: '同步完成。',
+		completeWithFailed: '同步完成，但有 {{failedCount}} 个任务失败。',
 		failedWithError: '同步失败，错误信息: {{error}}',
 		progress: '同步进度: {{completed}}/{{total}}',
 		startButton: '开始同步',
