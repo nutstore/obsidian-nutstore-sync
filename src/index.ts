@@ -27,6 +27,8 @@ export default class NutStorePlugin extends Plugin {
 	settings: MyPluginSettings
 	private syncStatusBar: HTMLElement
 	private subscriptions: (() => void)[] = []
+	private isSyncing: boolean = false
+	private ribbonIconEl: HTMLElement
 
 	async onload() {
 		await this.loadSettings()
@@ -37,6 +39,9 @@ export default class NutStorePlugin extends Plugin {
 		this.syncStatusBar.style.display = 'none'
 
 		const startSub = onStartSync().subscribe(() => {
+			this.isSyncing = true
+			this.ribbonIconEl.setAttr('aria-disabled', 'true')
+			this.ribbonIconEl.addClass('nutstore-sync-spinning')
 			this.syncStatusBar.style.display = 'block'
 			this.syncStatusBar.setText(i18n.t('sync.start'))
 			new Notice(i18n.t('sync.start'))
@@ -47,6 +52,9 @@ export default class NutStorePlugin extends Plugin {
 		})
 
 		const endSub = onEndSync().subscribe(() => {
+			this.isSyncing = false
+			this.ribbonIconEl.removeAttribute('aria-disabled')
+			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
 			this.syncStatusBar.setText(i18n.t('sync.complete'))
 			new Notice(i18n.t('sync.complete'))
 			setTimeout(() => {
@@ -55,6 +63,9 @@ export default class NutStorePlugin extends Plugin {
 		})
 
 		const errorSub = onSyncError().subscribe((error) => {
+			this.isSyncing = false
+			this.ribbonIconEl.removeAttribute('aria-disabled')
+			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
 			this.syncStatusBar.setText(i18n.t('sync.failedStatus'))
 			new Notice(i18n.t('sync.failedWithError', { error: error.message }))
 			setTimeout(() => {
@@ -75,17 +86,50 @@ export default class NutStorePlugin extends Plugin {
 				i18n.changeLanguage(locale)
 			}, 60000),
 		)
-		this.addRibbonIcon('refresh-ccw', i18n.t('sync.startButton'), async () => {
-			const sync = new NutStoreSync({
-				webdav: this.createWebDAVClient(),
-				vault: this.app.vault,
-				token: toBase64(`${this.settings.account}:${this.settings.credential}`),
-				remoteBaseDir: stdRemotePath(
-					this.settings.remoteDir || this.app.vault.getName(),
-				),
-			})
-			await sync.start()
-		})
+
+		this.ribbonIconEl = this.addRibbonIcon(
+			'refresh-ccw',
+			i18n.t('sync.startButton'),
+			async () => {
+				if (this.isSyncing) {
+					return
+				}
+				const sync = new NutStoreSync({
+					webdav: this.createWebDAVClient(),
+					vault: this.app.vault,
+					token: toBase64(
+						`${this.settings.account}:${this.settings.credential}`,
+					),
+					remoteBaseDir: stdRemotePath(
+						this.settings.remoteDir || this.app.vault.getName(),
+					),
+				})
+				await sync.start()
+			},
+		)
+
+		// Add CSS to style disabled button and spinning animation
+		const css = document.createElement('style')
+		css.id = 'nutstore-sync-styles'
+		css.textContent = `
+			.view-action[aria-disabled="true"] {
+				opacity: 0.5;
+				cursor: not-allowed;
+				}
+			@keyframes spin {
+				from {
+					transform: rotate(0deg);
+				}
+				to {
+					transform: rotate(360deg);
+				}
+			}
+			.nutstore-sync-spinning {
+				animation: spin 2s linear infinite;
+			}
+		`
+		document.head.appendChild(css)
+
 		this.registerObsidianProtocolHandler('nutstore-sync/sso', () => {
 			// TODO: save access_token
 		})
@@ -93,6 +137,10 @@ export default class NutStorePlugin extends Plugin {
 
 	async onunload() {
 		this.subscriptions.forEach((unsub) => unsub())
+		const styleEl = document.getElementById('nutstore-sync-styles')
+		if (styleEl) {
+			styleEl.remove()
+		}
 	}
 
 	updateLanguage() {
