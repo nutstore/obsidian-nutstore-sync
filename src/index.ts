@@ -38,6 +38,7 @@ export default class NutStorePlugin extends Plugin {
 	private subscriptions: Subscription[] = []
 	private isSyncing: boolean = false
 	private ribbonIconEl: HTMLElement
+	private stopSyncRibbonEl: HTMLElement
 
 	async onload() {
 		await updateLanguage()
@@ -54,6 +55,15 @@ export default class NutStorePlugin extends Plugin {
 			this.syncStatusBar.style.display = 'block'
 			this.syncStatusBar.setText(i18n.t('sync.start'))
 			new Notice(i18n.t('sync.start'))
+
+			// 显示停止同步按钮
+			this.stopSyncRibbonEl = this.addRibbonIcon(
+				'square',
+				i18n.t('sync.stopButton'),
+				() => {
+					emitCancelSync()
+				},
+			)
 		})
 
 		const progressSub = onSyncProgress().subscribe(({ total, completed }) => {
@@ -74,6 +84,11 @@ export default class NutStorePlugin extends Plugin {
 			setTimeout(() => {
 				this.syncStatusBar.style.display = 'none'
 			}, 3000)
+
+			// 移除停止同步按钮
+			if (this.stopSyncRibbonEl) {
+				this.stopSyncRibbonEl.remove()
+			}
 		})
 
 		const errorSub = onSyncError().subscribe((error) => {
@@ -85,6 +100,11 @@ export default class NutStorePlugin extends Plugin {
 			setTimeout(() => {
 				this.syncStatusBar.style.display = 'none'
 			}, 3000)
+
+			// 移除停止同步按钮
+			if (this.stopSyncRibbonEl) {
+				this.stopSyncRibbonEl.remove()
+			}
 		})
 
 		this.subscriptions.push(startSub, progressSub, endSub, errorSub)
@@ -145,6 +165,9 @@ export default class NutStorePlugin extends Plugin {
 		const styleEl = document.getElementById('nutstore-sync-styles')
 		if (styleEl) {
 			styleEl.remove()
+		}
+		if (this.stopSyncRibbonEl) {
+			this.stopSyncRibbonEl.remove()
 		}
 	}
 

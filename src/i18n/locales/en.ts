@@ -38,6 +38,7 @@ export default {
 		failedWithError: 'Sync failed with error: {{error}}',
 		progress: 'Sync progress: {{percent}}%',
 		startButton: 'Start Sync',
+		stopButton: 'Stop Sync',
 		failedStatus: 'Sync Failed',
 		cancelled: 'Sync cancelled.',
 	},
