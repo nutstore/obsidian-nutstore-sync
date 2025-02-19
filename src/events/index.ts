@@ -1,3 +1,4 @@
+export * from './sync-cancel'
 export * from './sync-end'
 export * from './sync-error'
 export * from './sync-progress'

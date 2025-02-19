@@ -39,5 +39,6 @@ export default {
 		progress: 'Sync progress: {{percent}}%',
 		startButton: 'Start Sync',
 		failedStatus: 'Sync Failed',
+		cancelled: 'Sync cancelled.',
 	},
 }

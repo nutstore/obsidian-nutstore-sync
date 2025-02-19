@@ -1,11 +1,19 @@
 import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'
+import { Subscription } from 'rxjs'
 import { createClient } from 'webdav'
 import { DAV_API } from './consts'
-import { onEndSync, onStartSync, onSyncError, onSyncProgress } from './events'
+import {
+	emitCancelSync,
+	onEndSync,
+	onStartSync,
+	onSyncError,
+	onSyncProgress,
+} from './events'
 import i18n from './i18n'
 import { NutstoreSettingTab } from './settings'
 import { NutStoreSync } from './sync'
+import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
 import './webdav-patch'
@@ -27,7 +35,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 export default class NutStorePlugin extends Plugin {
 	settings: MyPluginSettings
 	private syncStatusBar: HTMLElement
-	private subscriptions: (() => void)[] = []
+	private subscriptions: Subscription[] = []
 	private isSyncing: boolean = false
 	private ribbonIconEl: HTMLElement
 
@@ -49,7 +57,7 @@ export default class NutStorePlugin extends Plugin {
 		})
 
 		const progressSub = onSyncProgress().subscribe(({ total, completed }) => {
-			const percent = Math.round((completed / total) * 100)
+			const percent = Math.round((completed / total) * 10000) / 100
 			this.syncStatusBar.setText(i18n.t('sync.progress', { percent }))
 		})
 
@@ -79,12 +87,7 @@ export default class NutStorePlugin extends Plugin {
 			}, 3000)
 		})
 
-		this.subscriptions.push(
-			() => startSub.unsubscribe(),
-			() => progressSub.unsubscribe(),
-			() => endSub.unsubscribe(),
-			() => errorSub.unsubscribe(),
-		)
+		this.subscriptions.push(startSub, progressSub, endSub, errorSub)
 
 		this.registerInterval(window.setInterval(updateLanguage, 60000))
 
@@ -137,7 +140,8 @@ export default class NutStorePlugin extends Plugin {
 	}
 
 	async onunload() {
-		this.subscriptions.forEach((unsub) => unsub())
+		emitCancelSync()
+		this.subscriptions.forEach((sub) => sub.unsubscribe())
 		const styleEl = document.getElementById('nutstore-sync-styles')
 		if (styleEl) {
 			styleEl.remove()
@@ -153,10 +157,11 @@ export default class NutStorePlugin extends Plugin {
 	}
 
 	createWebDAVClient() {
-		return createClient(DAV_API, {
+		const client = createClient(DAV_API, {
 			username: this.settings.account,
 			password: this.settings.credential,
 		})
+		return createRateLimitedWebDAVClient(client)
 	}
 
 	async checkWebDAVConnection(): Promise<boolean> {
