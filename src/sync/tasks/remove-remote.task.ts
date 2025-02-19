@@ -1,14 +1,14 @@
 import consola from 'consola'
-import { BaseTask } from './task.interface'
+import { BaseTask, toTaskError } from './task.interface'
 
 export default class RemoveRemoteTask extends BaseTask {
 	async exec() {
 		try {
 			await this.webdav.deleteFile(this.remotePath)
-			return true
+			return { success: true }
 		} catch (e) {
 			consola.error(e)
-			return false
+			return { success: false, error: toTaskError(e) }
 		}
 	}
 }

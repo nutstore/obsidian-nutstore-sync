@@ -1,6 +1,6 @@
 import consola from 'consola'
 import { statVaultItem } from '~/utils/stat-vault-item'
-import { BaseTask, BaseTaskOptions } from './task.interface'
+import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export default class RemoveLocalTask extends BaseTask {
 	constructor(
@@ -15,7 +15,10 @@ export default class RemoveLocalTask extends BaseTask {
 		try {
 			const stat = await statVaultItem(this.vault, this.localPath)
 			if (!stat) {
-				throw new Error('not found: ' + this.localPath)
+				return {
+					success: false,
+					error: new Error('not found: ' + this.localPath),
+				}
 			}
 			if (stat.isDir) {
 				await this.vault.adapter.rmdir(
@@ -25,10 +28,10 @@ export default class RemoveLocalTask extends BaseTask {
 			} else {
 				await this.vault.adapter.remove(this.localPath)
 			}
-			return true
+			return { success: true }
 		} catch (e) {
 			consola.error(e)
-			return false
+			return { success: false, error: toTaskError(e) }
 		}
 	}
 }
