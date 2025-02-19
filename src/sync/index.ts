@@ -28,7 +28,7 @@ import PullTask from './tasks/pull.task'
 import PushTask from './tasks/push.task'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
-import { BaseTask } from './tasks/task.interface'
+import { BaseTask, TaskResult } from './tasks/task.interface'
 
 consola.level = LogLevels.verbose
 
@@ -506,7 +506,7 @@ export class NutStoreSync {
 			tasks.splice(0, 0, ...removeFolderTasks)
 			consola.debug('tasks', tasks)
 			const tasksResult = await this.execTasks(tasks)
-			const failedCount = tasksResult.filter((r) => r === false).length
+			const failedCount = tasksResult.filter((r) => !r.success).length
 			consola.debug('tasks result', tasksResult, 'failed:', failedCount)
 			// update mtime in records
 			if (tasks.length > 0) {
@@ -514,7 +514,7 @@ export class NutStoreSync {
 				const records = await syncRecord.getRecords()
 				await Promise.all(
 					tasks.map(async (task, i) => {
-						if (!tasksResult[i]) {
+						if (!tasksResult[i]?.success) {
 							return
 						}
 						const remote = latestRemoteEntities.find(
@@ -532,13 +532,18 @@ export class NutStoreSync {
 						if (!local) {
 							return
 						}
-						const file = await this.options.vault.adapter.readBinary(
-							task.localPath,
-						)
+						if (local.isDir) {
+							var base = undefined
+						} else {
+							const buffer = await this.options.vault.adapter.readBinary(
+								task.localPath,
+							)
+							base = new Blob([buffer])
+						}
 						records.set(task.localPath, {
 							remote,
 							local,
-							base: new Blob([file]),
+							base,
 						})
 					}),
 				)
@@ -554,7 +559,7 @@ export class NutStoreSync {
 	}
 
 	private async execTasks(tasks: BaseTask[]) {
-		const res: Awaited<ReturnType<BaseTask['exec']>>[] = []
+		const res: TaskResult[] = []
 		let completed = 0
 		const total = tasks.length
 		for (const t of tasks) {

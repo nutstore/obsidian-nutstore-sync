@@ -11,6 +11,11 @@ export interface BaseTaskOptions {
 	localPath: string
 }
 
+export interface TaskResult {
+	success: boolean
+	error?: Error
+}
+
 export abstract class BaseTask {
 	constructor(readonly options: BaseTaskOptions) {}
 
@@ -40,5 +45,12 @@ export abstract class BaseTask {
 		return new SyncRecord(this.vault, this.options.remoteBaseDir)
 	}
 
-	abstract exec(): Promise<boolean>
+	abstract exec(): Promise<TaskResult>
+}
+
+export function toTaskError(e: unknown): Error {
+	if (e instanceof Error) {
+		return e
+	}
+	return new Error(String(e))
 }

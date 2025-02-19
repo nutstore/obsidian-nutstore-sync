@@ -2,7 +2,7 @@ import consola from 'consola'
 import { normalizePath } from 'obsidian'
 import { dirname } from 'path'
 import { mkdirsWedbDAV } from '~/utils/mkdirs-webdav'
-import { BaseTask, BaseTaskOptions } from './task.interface'
+import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export default class PushTask extends BaseTask {
 	constructor(
@@ -22,10 +22,10 @@ export default class PushTask extends BaseTask {
 			const res = await this.webdav.putFileContents(this.remotePath, content, {
 				overwrite: this.options.overwrite ?? false,
 			})
-			return res
+			return { success: res }
 		} catch (e) {
 			consola.error(this, e)
-			return false
+			return { success: false, error: toTaskError(e) }
 		}
 	}
 }

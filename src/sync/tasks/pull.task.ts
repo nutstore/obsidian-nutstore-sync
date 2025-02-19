@@ -2,7 +2,7 @@ import consola from 'consola'
 import { dirname } from 'path'
 import { BufferLike } from 'webdav'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
-import { BaseTask } from './task.interface'
+import { BaseTask, toTaskError } from './task.interface'
 
 export default class PullTask extends BaseTask {
 	async exec() {
@@ -13,10 +13,10 @@ export default class PullTask extends BaseTask {
 				details: false,
 			})) as BufferLike
 			await this.vault.adapter.writeBinary(this.localPath, file)
-			return true
+			return { success: true }
 		} catch (e) {
 			consola.error(this, e)
-			return false
+			return { success: false, error: toTaskError(e) }
 		}
 	}
 }

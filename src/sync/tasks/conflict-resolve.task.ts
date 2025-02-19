@@ -6,7 +6,7 @@ import { BufferLike } from 'webdav'
 import { SyncRecordModel } from '~/model/sync-record.model'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
-import { BaseTask, BaseTaskOptions } from './task.interface'
+import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export enum ConflictStrategy {
 	DiffMatchPatch,
@@ -36,7 +36,10 @@ export default class ConflictResolveTask extends BaseTask {
 		try {
 			const local = await statVaultItem(this.vault, this.localPath)
 			if (!local) {
-				throw new Error('local is nil: ' + this.localPath)
+				return {
+					success: false,
+					error: new Error('Local file not found: ' + this.localPath),
+				}
 			}
 			const remote = await statWebDAVItem(this.webdav, this.remotePath)
 			const localMtime = dayjs(local.mtime)
@@ -54,10 +57,10 @@ export default class ConflictResolveTask extends BaseTask {
 					overwrite: true,
 				})
 			}
-			return true
+			return { success: true }
 		} catch (e) {
-			consola.error(this, e)
-			return false
+			consola.error(e)
+			return { success: false, error: toTaskError(e) }
 		}
 	}
 
@@ -65,7 +68,10 @@ export default class ConflictResolveTask extends BaseTask {
 		try {
 			const localBuffer = await this.vault.adapter.readBinary(this.localPath)
 			if (await isBinaryFile(Buffer.from(localBuffer))) {
-				throw new Error(`Cannot merge binary file!`)
+				return {
+					success: false,
+					error: new Error('Cannot merge binary file'),
+				}
 			}
 			const localText = await new Blob([localBuffer]).text()
 			const remoteText = (await this.webdav.getFileContents(this.remotePath, {
@@ -81,28 +87,27 @@ export default class ConflictResolveTask extends BaseTask {
 			const [mergedText, solveResult] = dmp.patch_apply(patch, localText)
 			consola.debug('mergedText', mergedText)
 			if (solveResult.includes(false)) {
-				consola.error(
-					'Failed to auto merge: ',
-					[mergedText, solveResult],
-					patch,
-				)
-				return false
+				return {
+					success: false,
+					error: new Error('Failed to auto merge'),
+				}
 			}
 			const putResult = await this.webdav.putFileContents(
 				this.remotePath,
 				mergedText,
-				{
-					overwrite: true,
-				},
+				{ overwrite: true },
 			)
 			if (!putResult) {
-				throw new Error('failed to webdav.putFileContents')
+				return {
+					success: false,
+					error: new Error('Failed to upload merged content'),
+				}
 			}
 			await this.vault.adapter.write(this.localPath, mergedText)
-			return true
+			return { success: true }
 		} catch (e) {
-			consola.error(this, e)
-			return false
+			consola.error(e)
+			return { success: false, error: toTaskError(e) }
 		}
 	}
 }
