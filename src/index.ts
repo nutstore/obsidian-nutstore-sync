@@ -49,7 +49,8 @@ export default class NutStorePlugin extends Plugin {
 		})
 
 		const progressSub = onSyncProgress().subscribe(({ total, completed }) => {
-			this.syncStatusBar.setText(i18n.t('sync.progress', { completed, total }))
+			const percent = Math.round((completed / total) * 100)
+			this.syncStatusBar.setText(i18n.t('sync.progress', { percent }))
 		})
 
 		const endSub = onEndSync().subscribe((failedCount) => {

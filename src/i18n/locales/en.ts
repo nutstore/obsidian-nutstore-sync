@@ -36,7 +36,7 @@ export default {
 		complete: 'Sync completed.',
 		completeWithFailed: 'Sync completed with {{failedCount}} failed tasks.',
 		failedWithError: 'Sync failed with error: {{error}}',
-		progress: 'Sync progress: {{completed}}/{{total}}',
+		progress: 'Sync progress: {{percent}}%',
 		startButton: 'Start Sync',
 		failedStatus: 'Sync Failed',
 	},
