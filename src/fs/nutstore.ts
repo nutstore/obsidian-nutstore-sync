@@ -1,5 +1,6 @@
 import { Vault } from 'obsidian'
-import path, { basename } from 'path'
+import path, { basename, join } from 'path'
+import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'
 import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
@@ -8,6 +9,8 @@ import { StatModel } from '~/model/stat.model'
 import { deltaCacheKV } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
+import { statsToMemfs } from '~/utils/stats-to-memfs'
+import { stdRemotePath } from '~/utils/std-remote-path'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
 import IFileSystem from './fs.interface'
 
@@ -103,7 +106,14 @@ export class NutstoreFileSystem implements IFileSystem {
 				mtime: new Date(delta.modified).valueOf(),
 			})
 		}
-		const contents = [...filesMap.values()]
+		const fs = statsToMemfs(Array.from(filesMap.values()))
+		const base = stdRemotePath(this.options.remoteBaseDir)
+		const subPath = (await fs.promises.readdir(base, {
+			recursive: true,
+		})) as string[]
+		const contents = subPath
+			.map((path) => filesMap.get(join(base, path)))
+			.filter(isNotNil)
 		for (const item of contents) {
 			if (path.isAbsolute(item.path)) {
 				item.path = path.relative(this.options.remoteBaseDir, item.path)
