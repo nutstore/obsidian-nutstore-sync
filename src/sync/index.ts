@@ -16,6 +16,7 @@ import i18n from '~/i18n'
 import { SyncRecord } from '~/storage/helper'
 import { isSub } from '~/utils/is-sub'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import { statVaultItem } from '~/utils/stat-vault-item'
 import ConflictResolveTask, {
 	ConflictStrategy,
 } from './tasks/conflict-resolve.task'
@@ -507,15 +508,26 @@ export class NutStoreSync {
 				const latestRemoteEntities = await this.remoteFs.walk()
 				const records = await syncRecord.getRecords()
 				for (const task of tasks) {
-					const record = records.get(task.localPath)
 					const remote = latestRemoteEntities.find(
 						(v) =>
 							remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
 							task.remotePath,
 					)
-					if (record && remote) {
-						record.remote.mtime = remote.mtime
+					if (!remote) {
+						continue
 					}
+					const local = await statVaultItem(this.options.vault, task.localPath)
+					if (!local) {
+						continue
+					}
+					const file = await this.options.vault.adapter.readBinary(
+						task.localPath,
+					)
+					records.set(task.localPath, {
+						remote,
+						local,
+						base: new Blob([file]),
+					})
 				}
 				await syncRecord.setRecords(records)
 			}
