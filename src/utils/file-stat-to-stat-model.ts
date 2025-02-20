@@ -8,5 +8,6 @@ export function fileStatToStatModel(from: FileStat): StatModel {
 		isDir: from.type === 'directory',
 		isDeleted: false,
 		mtime: new Date(from.lastmod).valueOf(),
+		size: from.size,
 	}
 }

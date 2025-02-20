@@ -16,5 +16,6 @@ export async function statVaultItem(
 		isDir: stat.type === 'folder',
 		isDeleted: false,
 		mtime: new Date(stat.mtime).valueOf(),
+		size: stat.size,
 	}
 }

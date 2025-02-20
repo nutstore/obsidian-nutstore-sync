@@ -104,6 +104,7 @@ export class NutstoreFileSystem implements IFileSystem {
 				isDir: delta.isDir,
 				isDeleted: delta.isDeleted,
 				mtime: new Date(delta.modified).valueOf(),
+				size: delta.size,
 			})
 		}
 		const fs = statsToMemfs(Array.from(filesMap.values()))
