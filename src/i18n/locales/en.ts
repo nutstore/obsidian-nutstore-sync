@@ -31,6 +31,11 @@ export default {
 		failed: 'Sync failed!',
 		error: {
 			folderButFile: 'Expected folder but found file: {{path}}',
+			notFound: 'Not found: {{path}}',
+			localPathNotFound: 'Local path not found: {{path}}',
+			cannotMergeBinary: 'Cannot merge binary file',
+			failedToAutoMerge: 'Failed to auto merge',
+			failedToUploadMerged: 'Failed to upload merged content',
 		},
 		start: 'Sync started.',
 		complete: 'Sync completed.',

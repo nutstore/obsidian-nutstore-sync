@@ -1,4 +1,5 @@
 import consola from 'consola'
+import i18n from '~/i18n'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { BaseTask, toTaskError } from './task.interface'
 
@@ -11,7 +12,9 @@ export default class MkdirRemoteTask extends BaseTask {
 				consola.debug('PullTask: local stat is null')
 				return {
 					success: false,
-					error: new Error('Local path not found: ' + this.localPath),
+					error: new Error(
+						i18n.t('sync.error.localPathNotFound', { path: this.localPath }),
+					),
 				}
 			}
 			if (await this.webdav.exists(this.remotePath)) {

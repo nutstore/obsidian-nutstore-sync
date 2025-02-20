@@ -31,6 +31,11 @@ export default {
 		failed: '同步失败!',
 		error: {
 			folderButFile: '预期文件夹但发现文件: {{path}}',
+			notFound: '未找到: {{path}}',
+			localPathNotFound: '本地路径未找到: {{path}}',
+			cannotMergeBinary: '无法合并二进制文件',
+			failedToAutoMerge: '自动合并失败',
+			failedToUploadMerged: '上传合并内容失败',
 		},
 		start: '同步开始。',
 		complete: '同步完成。',
