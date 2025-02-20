@@ -39,77 +39,102 @@ export default class NutStorePlugin extends Plugin {
 	private isSyncing: boolean = false
 	private ribbonIconEl: HTMLElement
 	private stopSyncRibbonEl: HTMLElement
+	private statusHideTimer: NodeJS.Timeout | null = null
 
-	async onload() {
-		await updateLanguage()
-		await this.loadSettings()
-		this.addSettingTab(new NutstoreSettingTab(this.app, this))
+	private updateSyncStatus(status: {
+		text: string
+		isError?: boolean
+		showNotice?: boolean
+		hideAfter?: number
+	}) {
+		if (this.statusHideTimer) {
+			clearTimeout(this.statusHideTimer)
+			this.statusHideTimer = null
+		}
 
-		this.syncStatusBar = this.addStatusBarItem()
-		this.syncStatusBar.style.display = 'none'
+		this.syncStatusBar.setText(status.text)
+		this.syncStatusBar.removeClass('hidden')
 
-		const startSub = onStartSync().subscribe(() => {
-			this.isSyncing = true
+		if (status.showNotice) {
+			new Notice(status.text)
+		}
+
+		if (status.hideAfter) {
+			this.statusHideTimer = setTimeout(() => {
+				this.syncStatusBar.addClass('hidden')
+				this.statusHideTimer = null
+			}, status.hideAfter)
+		}
+	}
+
+	private toggleSyncUI(isSyncing: boolean) {
+		this.isSyncing = isSyncing
+
+		if (isSyncing) {
 			this.ribbonIconEl.setAttr('aria-disabled', 'true')
 			this.ribbonIconEl.addClass('nutstore-sync-spinning')
-			this.syncStatusBar.style.display = 'block'
-			this.syncStatusBar.setText(i18n.t('sync.start'))
-			new Notice(i18n.t('sync.start'))
-
-			// 显示停止同步按钮
 			this.stopSyncRibbonEl = this.addRibbonIcon(
 				'square',
 				i18n.t('sync.stopButton'),
-				() => {
-					emitCancelSync()
-				},
+				() => emitCancelSync(),
 			)
+		} else {
+			this.ribbonIconEl.removeAttribute('aria-disabled')
+			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
+			if (this.stopSyncRibbonEl) {
+				this.stopSyncRibbonEl.remove()
+			}
+		}
+	}
+
+	async onload() {
+		await this.loadSettings()
+		await updateLanguage()
+		this.registerInterval(window.setInterval(updateLanguage, 60000))
+		this.addSettingTab(new NutstoreSettingTab(this.app, this))
+
+		this.syncStatusBar = this.addStatusBarItem()
+		this.syncStatusBar.addClass('nutstore-sync-status', 'hidden')
+
+		const startSub = onStartSync().subscribe(() => {
+			this.toggleSyncUI(true)
+			this.updateSyncStatus({
+				text: i18n.t('sync.start'),
+				showNotice: true,
+			})
 		})
 
 		const progressSub = onSyncProgress().subscribe(({ total, completed }) => {
 			const percent = Math.round((completed / total) * 10000) / 100
-			this.syncStatusBar.setText(i18n.t('sync.progress', { percent }))
+			this.updateSyncStatus({
+				text: i18n.t('sync.progress', { percent }),
+			})
 		})
 
 		const endSub = onEndSync().subscribe((failedCount) => {
-			this.isSyncing = false
-			this.ribbonIconEl.removeAttribute('aria-disabled')
-			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
-			const statusText =
-				failedCount > 0
-					? i18n.t('sync.completeWithFailed', { failedCount })
-					: i18n.t('sync.complete')
-			this.syncStatusBar.setText(statusText)
-			new Notice(statusText)
-			setTimeout(() => {
-				this.syncStatusBar.style.display = 'none'
-			}, 3000)
-
-			// 移除停止同步按钮
-			if (this.stopSyncRibbonEl) {
-				this.stopSyncRibbonEl.remove()
-			}
+			this.toggleSyncUI(false)
+			this.updateSyncStatus({
+				text:
+					failedCount > 0
+						? i18n.t('sync.completeWithFailed', { failedCount })
+						: i18n.t('sync.complete'),
+				showNotice: true,
+				hideAfter: 3000,
+			})
 		})
 
 		const errorSub = onSyncError().subscribe((error) => {
-			this.isSyncing = false
-			this.ribbonIconEl.removeAttribute('aria-disabled')
-			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
-			this.syncStatusBar.setText(i18n.t('sync.failedStatus'))
+			this.toggleSyncUI(false)
+			this.updateSyncStatus({
+				text: i18n.t('sync.failedStatus'),
+				isError: true,
+				showNotice: true,
+				hideAfter: 3000,
+			})
 			new Notice(i18n.t('sync.failedWithError', { error: error.message }))
-			setTimeout(() => {
-				this.syncStatusBar.style.display = 'none'
-			}, 3000)
-
-			// 移除停止同步按钮
-			if (this.stopSyncRibbonEl) {
-				this.stopSyncRibbonEl.remove()
-			}
 		})
 
 		this.subscriptions.push(startSub, progressSub, endSub, errorSub)
-
-		this.registerInterval(window.setInterval(updateLanguage, 60000))
 
 		this.ribbonIconEl = this.addRibbonIcon(
 			'refresh-ccw',
@@ -131,28 +156,6 @@ export default class NutStorePlugin extends Plugin {
 				await sync.start()
 			},
 		)
-
-		// Add CSS to style disabled button and spinning animation
-		const css = document.createElement('style')
-		css.id = 'nutstore-sync-styles'
-		css.textContent = `
-			.view-action[aria-disabled="true"] {
-				opacity: 0.5;
-				cursor: not-allowed;
-				}
-			@keyframes spin {
-				from {
-					transform: rotate(0deg);
-				}
-				to {
-					transform: rotate(-360deg);
-				}
-			}
-			.nutstore-sync-spinning {
-				animation: spin 2s linear infinite;
-			}
-		`
-		document.head.appendChild(css)
 
 		this.registerObsidianProtocolHandler('nutstore-sync/sso', () => {
 			// TODO: save access_token

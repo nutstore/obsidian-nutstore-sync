@@ -1,8 +1,27 @@
-/*
+.view-action[aria-disabled='true'] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+@keyframes nutstore-sync-spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(-360deg);
+	}
+}
 
-If your plugin does not need CSS, delete this file.
+.nutstore-sync-spinning {
+	animation: nutstore-sync-spin 2s linear infinite;
+}
 
-*/
+.nutstore-sync-status {
+	opacity: 1;
+	transition: opacity 0.3s ease-in-out;
+}
+
+.nutstore-sync-status.hidden {
+	opacity: 0;
+	display: none;
+}
