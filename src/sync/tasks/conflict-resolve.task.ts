@@ -1,6 +1,7 @@
 import consola from 'consola'
 import dayjs from 'dayjs'
 import { diff_match_patch } from 'diff-match-patch'
+import { md5 } from 'hash-wasm'
 import { isBinaryFile } from 'isbinaryfile'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
@@ -63,16 +64,24 @@ export default class ConflictResolveTask extends BaseTask {
 		try {
 			const localMtime = dayjs(local.mtime)
 			const remoteMtime = dayjs(remote.mtime)
+			if (remoteMtime.isSame(localMtime)) {
+				throw new Error()
+			}
+			const localContent = await this.vault.adapter.readBinary(this.localPath)
 			const useRemote = remoteMtime.isAfter(localMtime)
 			if (useRemote) {
-				const file = (await this.webdav.getFileContents(this.remotePath, {
-					details: false,
-					format: 'binary',
-				})) as BufferLike
-				await this.vault.adapter.writeBinary(this.localPath, file)
+				const remoteContent = (await this.webdav.getFileContents(
+					this.remotePath,
+					{
+						details: false,
+						format: 'binary',
+					},
+				)) as BufferLike
+				if (await hashEq(localContent, remoteContent)) {
+					await this.vault.adapter.writeBinary(this.localPath, remoteContent)
+				}
 			} else {
-				const file = await this.vault.adapter.readBinary(this.localPath)
-				await this.webdav.putFileContents(this.remotePath, file, {
+				await this.webdav.putFileContents(this.remotePath, localContent, {
 					overwrite: true,
 				})
 			}
@@ -86,6 +95,13 @@ export default class ConflictResolveTask extends BaseTask {
 	async execDiffMatchPatch() {
 		try {
 			const localBuffer = await this.vault.adapter.readBinary(this.localPath)
+			const remoteBuffer = (await this.webdav.getFileContents(this.remotePath, {
+				format: 'binary',
+				details: false,
+			})) as BufferLike
+			if (await hashEq(localBuffer, remoteBuffer)) {
+				return { success: true }
+			}
 			if (await isBinaryFile(Buffer.from(localBuffer))) {
 				return {
 					success: false,
@@ -93,10 +109,7 @@ export default class ConflictResolveTask extends BaseTask {
 				}
 			}
 			const localText = await new Blob([localBuffer]).text()
-			const remoteText = (await this.webdav.getFileContents(this.remotePath, {
-				format: 'text',
-				details: false,
-			})) as string
+			const remoteText = await new Blob([remoteBuffer]).text()
 			const { record } = this.options
 			const baseText = (await record?.base?.text()) ?? remoteText
 			const dmp = new diff_match_patch()
@@ -129,4 +142,10 @@ export default class ConflictResolveTask extends BaseTask {
 			return { success: false, error: toTaskError(e) }
 		}
 	}
+}
+
+async function hashEq(a: BufferLike, b: BufferLike): Promise<boolean> {
+	const localHash = await md5(new Uint8Array(a))
+	const remoteHash = await md5(new Uint8Array(b))
+	return localHash === remoteHash
 }
