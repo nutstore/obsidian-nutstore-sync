@@ -4,4 +4,5 @@ export interface StatModel {
 	isDir: boolean
 	isDeleted: boolean
 	mtime: number
+	size: number
 }
