@@ -20,6 +20,8 @@ export default class ConflictResolveTask extends BaseTask {
 		public readonly options: BaseTaskOptions & {
 			record?: SyncRecordModel
 			strategy: ConflictStrategy
+			remoteStat?: StatModel
+			localStat?: StatModel
 		},
 	) {
 		super(options)
@@ -27,11 +29,15 @@ export default class ConflictResolveTask extends BaseTask {
 
 	async exec() {
 		try {
-			const local = await statVaultItem(this.vault, this.localPath)
+			const local =
+				this.options.localStat ??
+				(await statVaultItem(this.vault, this.localPath))
 			if (!local) {
 				throw new Error('Local file not found: ' + this.localPath)
 			}
-			const remote = await statWebDAVItem(this.webdav, this.remotePath)
+			const remote =
+				this.options.remoteStat ??
+				(await statWebDAVItem(this.webdav, this.remotePath))
 			if (remote.isDir) {
 				throw new Error('Remote path is a directory: ' + this.remotePath)
 			}
