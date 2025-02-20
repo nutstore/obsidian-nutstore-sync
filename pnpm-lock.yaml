@@ -50,6 +50,9 @@ importers:
       fast-xml-parser:
         specifier: ^4.5.1
         version: 4.5.1
+      hash-wasm:
+        specifier: ^4.12.0
+        version: 4.12.0
       http-status-codes:
         specifier: ^2.3.0
         version: 2.3.0
@@ -791,6 +794,9 @@ packages:
 
   has-property-descriptors@1.0.2:
     resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==}
+
+  hash-wasm@4.12.0:
+    resolution: {integrity: sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==}
 
   hot-patcher@2.0.1:
     resolution: {integrity: sha512-ECg1JFG0YzehicQaogenlcs2qg6WsXQsxtnbr1i696u5tLUjtJdQAh0u2g0Q5YV45f263Ta1GnUJsc8WIfJf4Q==}
@@ -2000,6 +2006,8 @@ snapshots:
     dependencies:
       es-define-property: 1.0.1
     optional: true
+
+  hash-wasm@4.12.0: {}
 
   hot-patcher@2.0.1: {}
 
