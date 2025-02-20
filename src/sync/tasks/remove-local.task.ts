@@ -1,4 +1,5 @@
 import consola from 'consola'
+import i18n from '~/i18n'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
@@ -17,7 +18,9 @@ export default class RemoveLocalTask extends BaseTask {
 			if (!stat) {
 				return {
 					success: false,
-					error: new Error('not found: ' + this.localPath),
+					error: new Error(
+						i18n.t('sync.error.notFound', { path: this.localPath }),
+					),
 				}
 			}
 			if (stat.isDir) {
