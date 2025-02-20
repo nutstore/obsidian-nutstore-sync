@@ -107,7 +107,11 @@ export class NutstoreFileSystem implements IFileSystem {
 				size: delta.size,
 			})
 		}
-		const fs = statsToMemfs(Array.from(filesMap.values()))
+		const stats = Array.from(filesMap.values())
+		if (stats.length === 0) {
+			return []
+		}
+		const fs = statsToMemfs(stats)
 		const base = stdRemotePath(this.options.remoteBaseDir)
 		const subPath = (await fs.promises.readdir(base, {
 			recursive: true,
