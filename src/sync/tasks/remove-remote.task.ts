@@ -8,7 +8,7 @@ export default class RemoveRemoteTask extends BaseTask {
 			return { success: true }
 		} catch (e) {
 			consola.error(e)
-			return { success: false, error: toTaskError(e) }
+			return { success: false, error: toTaskError(e, this) }
 		}
 	}
 }

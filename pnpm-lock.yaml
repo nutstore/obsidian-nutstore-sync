@@ -77,6 +77,9 @@ importers:
       memfs:
         specifier: ^4.17.0
         version: 4.17.0
+      node-diff3:
+        specifier: ^3.1.2
+        version: 3.1.2
       obsidian:
         specifier: latest
         version: 1.7.2(@codemirror/state@6.5.2)(@codemirror/view@6.36.2)
@@ -972,6 +975,10 @@ packages:
 
   nested-property@4.0.0:
     resolution: {integrity: sha512-yFehXNWRs4cM0+dz7QxCd06hTbWbSkV0ISsqBfkntU6TOY4Qm3Q88fRRLOddkGh2Qq6dZvnKVAahfhjcUvLnyA==}
+
+  node-diff3@3.1.2:
+    resolution: {integrity: sha512-wUd9TWy059I8mZdH6G3LPNlAEfxDvXtn/RcyFrbqL3v34WlDxn+Mh4HDhOwWuaMk/ROVepe5tTpnGHbve6Db2g==}
+    engines: {node: '>14'}
 
   node-domexception@1.0.0:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
@@ -2156,6 +2163,8 @@ snapshots:
   natural-compare@1.4.0: {}
 
   nested-property@4.0.0: {}
+
+  node-diff3@3.1.2: {}
 
   node-domexception@1.0.0: {}
 

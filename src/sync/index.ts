@@ -339,7 +339,9 @@ export class NutStoreSync {
 										new ConflictResolveTask({
 											...options,
 											record,
-											strategy: ConflictStrategy.LatestTimeStamp,
+											strategy: ConflictStrategy.DiffMatchPatch,
+											localStat: local,
+											remoteStat: remote,
 										}),
 									)
 								} else {
@@ -467,7 +469,9 @@ export class NutStoreSync {
 							tasks.push(
 								new ConflictResolveTask({
 									...options,
-									strategy: ConflictStrategy.LatestTimeStamp,
+									strategy: ConflictStrategy.DiffMatchPatch,
+									localStat: local,
+									remoteStat: remote,
 								}),
 							)
 						} else {

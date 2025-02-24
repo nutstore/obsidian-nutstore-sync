@@ -25,7 +25,7 @@ export default class PushTask extends BaseTask {
 			return { success: res }
 		} catch (e) {
 			consola.error(this, e)
-			return { success: false, error: toTaskError(e) }
+			return { success: false, error: toTaskError(e, this) }
 		}
 	}
 }

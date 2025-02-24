@@ -16,7 +16,7 @@ export default class PullTask extends BaseTask {
 			return { success: true }
 		} catch (e) {
 			consola.error(this, e)
-			return { success: false, error: toTaskError(e) }
+			return { success: false, error: toTaskError(e, this) }
 		}
 	}
 }

@@ -36,6 +36,7 @@ export default {
 			cannotMergeBinary: 'Cannot merge binary file',
 			failedToAutoMerge: 'Failed to auto merge',
 			failedToUploadMerged: 'Failed to upload merged content',
+			conflictsMarkedInFile: 'Conflicts found and marked in file',
 		},
 		start: '⌛️ Sync started',
 		complete: '✅ Sync completed',
