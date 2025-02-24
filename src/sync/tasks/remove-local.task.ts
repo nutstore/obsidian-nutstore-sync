@@ -16,12 +16,7 @@ export default class RemoveLocalTask extends BaseTask {
 		try {
 			const stat = await statVaultItem(this.vault, this.localPath)
 			if (!stat) {
-				return {
-					success: false,
-					error: new Error(
-						i18n.t('sync.error.notFound', { path: this.localPath }),
-					),
-				}
+				throw new Error(i18n.t('sync.error.notFound', { path: this.localPath }))
 			}
 			if (stat.isDir) {
 				await this.vault.adapter.rmdir(
@@ -34,7 +29,7 @@ export default class RemoveLocalTask extends BaseTask {
 			return { success: true }
 		} catch (e) {
 			consola.error(e)
-			return { success: false, error: toTaskError(e) }
+			return { success: false, error: toTaskError(e, this) }
 		}
 	}
 }

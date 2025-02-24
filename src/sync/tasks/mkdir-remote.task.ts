@@ -10,12 +10,9 @@ export default class MkdirRemoteTask extends BaseTask {
 			if (!localStat) {
 				consola.debug('PullTask: local path:', this.localPath)
 				consola.debug('PullTask: local stat is null')
-				return {
-					success: false,
-					error: new Error(
-						i18n.t('sync.error.localPathNotFound', { path: this.localPath }),
-					),
-				}
+				throw new Error(
+					i18n.t('sync.error.localPathNotFound', { path: this.localPath }),
+				)
 			}
 			if (await this.webdav.exists(this.remotePath)) {
 				consola.debug('mkdir remote: already exists:', this.remotePath)
@@ -27,7 +24,7 @@ export default class MkdirRemoteTask extends BaseTask {
 			return { success: true }
 		} catch (e) {
 			consola.error(this, e)
-			return { success: false, error: toTaskError(e) }
+			return { success: false, error: toTaskError(e, this) }
 		}
 	}
 }

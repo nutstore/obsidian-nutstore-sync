@@ -25,3 +25,11 @@
 	opacity: 0;
 	display: none;
 }
+
+.conflict.ours {
+	background-color: rgb(0, 255, 208);
+}
+
+.conflict.theirs {
+	background-color: rgb(0, 132, 255);
+}

@@ -13,7 +13,7 @@ export interface BaseTaskOptions {
 
 export interface TaskResult {
 	success: boolean
-	error?: Error
+	error?: TaskError
 }
 
 export abstract class BaseTask {
@@ -48,9 +48,21 @@ export abstract class BaseTask {
 	abstract exec(): Promise<TaskResult>
 }
 
-export function toTaskError(e: unknown): Error {
-	if (e instanceof Error) {
+export class TaskError extends Error {
+	constructor(
+		message: string,
+		readonly task: BaseTask,
+		readonly cause?: Error,
+	) {
+		super(message)
+		this.name = 'TaskError'
+	}
+}
+
+export function toTaskError(e: unknown, task: BaseTask): TaskError {
+	if (e instanceof TaskError) {
 		return e
 	}
-	return new Error(String(e))
+	const message = e instanceof Error ? e.message : String(e)
+	return new TaskError(message, task, e instanceof Error ? e : undefined)
 }

@@ -1,8 +1,9 @@
 import consola from 'consola'
 import dayjs from 'dayjs'
 import { diff_match_patch } from 'diff-match-patch'
-import { md5 } from 'hash-wasm'
 import { isBinaryFile } from 'isbinaryfile'
+import { isEqual } from 'lodash-es'
+import { mergeDigIn } from 'node-diff3'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
@@ -55,7 +56,7 @@ export default class ConflictResolveTask extends BaseTask {
 			consola.error(this, e)
 			return {
 				success: false,
-				error: toTaskError(e),
+				error: toTaskError(e, this),
 			}
 		}
 	}
@@ -77,7 +78,7 @@ export default class ConflictResolveTask extends BaseTask {
 						format: 'binary',
 					},
 				)) as BufferLike
-				if (await hashEq(localContent, remoteContent)) {
+				if (isEqual(localContent, remoteContent)) {
 					await this.vault.adapter.writeBinary(this.localPath, remoteContent)
 				}
 			} else {
@@ -88,7 +89,7 @@ export default class ConflictResolveTask extends BaseTask {
 			return { success: true }
 		} catch (e) {
 			consola.error(e)
-			return { success: false, error: toTaskError(e) }
+			return { success: false, error: toTaskError(e, this) }
 		}
 	}
 
@@ -99,14 +100,11 @@ export default class ConflictResolveTask extends BaseTask {
 				format: 'binary',
 				details: false,
 			})) as BufferLike
-			if (await hashEq(localBuffer, remoteBuffer)) {
+			if (await isEqual(localBuffer, remoteBuffer)) {
 				return { success: true }
 			}
 			if (await isBinaryFile(Buffer.from(localBuffer))) {
-				return {
-					success: false,
-					error: new Error(i18n.t('sync.error.cannotMergeBinary')),
-				}
+				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
 			}
 			const localText = await new Blob([localBuffer]).text()
 			const remoteText = await new Blob([remoteBuffer]).text()
@@ -115,14 +113,26 @@ export default class ConflictResolveTask extends BaseTask {
 			const dmp = new diff_match_patch()
 			const diffs = dmp.diff_main(baseText, remoteText)
 			dmp.diff_cleanupSemantic(diffs)
-			const patch = dmp.patch_make(baseText, diffs)
-			const [mergedText, solveResult] = dmp.patch_apply(patch, localText)
-			consola.debug('mergedText', mergedText)
+			const patches = dmp.patch_make(baseText, diffs)
+			let [mergedText, solveResult] = dmp.patch_apply(patches, localText)
 			if (solveResult.includes(false)) {
-				return {
-					success: false,
-					error: new Error(i18n.t('sync.error.failedToAutoMerge')),
-				}
+				const diff3MergedResult = mergeDigIn(localText, baseText, remoteText, {
+					stringSeparator: '\n',
+				})
+				const merged = diff3MergedResult.conflict
+					? diff3MergedResult.result.map((value) => {
+							switch (value) {
+								case '<<<<<<<':
+									return `<mark class="conflict ours">`
+								case '=======':
+									return `</mark><mark class="conflict theirs">`
+								case '>>>>>>>':
+									return `</mark>`
+							}
+							return value
+						})
+					: diff3MergedResult.result
+				mergedText = merged.join('\n')
 			}
 			const putResult = await this.webdav.putFileContents(
 				this.remotePath,
@@ -130,22 +140,13 @@ export default class ConflictResolveTask extends BaseTask {
 				{ overwrite: true },
 			)
 			if (!putResult) {
-				return {
-					success: false,
-					error: new Error(i18n.t('sync.error.failedToUploadMerged')),
-				}
+				throw new Error(i18n.t('sync.error.failedToUploadMerged'))
 			}
 			await this.vault.adapter.write(this.localPath, mergedText)
 			return { success: true }
 		} catch (e) {
 			consola.error(e)
-			return { success: false, error: toTaskError(e) }
+			return { success: false, error: toTaskError(e, this) }
 		}
 	}
-}
-
-async function hashEq(a: BufferLike, b: BufferLike): Promise<boolean> {
-	const localHash = await md5(new Uint8Array(a))
-	const remoteHash = await md5(new Uint8Array(b))
-	return localHash === remoteHash
 }
