@@ -44,6 +44,11 @@ export class NutstoreSettingTab extends PluginSettingTab {
 
 		containerEl.createEl('h2', { text: i18n.t('settings.title') })
 
+		// 添加备份警告
+		new Setting(containerEl)
+			.setName(i18n.t('settings.backupWarning.name'))
+			.setDesc(i18n.t('settings.backupWarning.desc'))
+
 		new Setting(containerEl)
 			.setName(i18n.t('settings.account.name'))
 			.setDesc(i18n.t('settings.account.desc'))
