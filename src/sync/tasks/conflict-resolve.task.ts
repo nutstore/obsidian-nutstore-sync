@@ -3,11 +3,11 @@ import dayjs from 'dayjs'
 import { diff_match_patch } from 'diff-match-patch'
 import { isBinaryFile } from 'isbinaryfile'
 import { isEqual } from 'lodash-es'
-import { mergeDigIn } from 'node-diff3'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
+import { mergeDigIn } from '~/utils/merg-dig-in'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
@@ -119,20 +119,7 @@ export default class ConflictResolveTask extends BaseTask {
 				const diff3MergedResult = mergeDigIn(localText, baseText, remoteText, {
 					stringSeparator: '\n',
 				})
-				const merged = diff3MergedResult.conflict
-					? diff3MergedResult.result.map((value) => {
-							switch (value) {
-								case '<<<<<<<':
-									return `<mark class="conflict ours">`
-								case '=======':
-									return `</mark><mark class="conflict theirs">`
-								case '>>>>>>>':
-									return `</mark>`
-							}
-							return value
-						})
-					: diff3MergedResult.result
-				mergedText = merged.join('\n')
+				mergedText = diff3MergedResult.result.join('\n')
 			}
 			const putResult = await this.webdav.putFileContents(
 				this.remotePath,
