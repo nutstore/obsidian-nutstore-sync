@@ -15,6 +15,7 @@ import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
+import { useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/helper'
 import { isSub } from '~/utils/is-sub'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
@@ -64,6 +65,7 @@ export class NutStoreSync {
 
 	async start() {
 		try {
+			const settings = useSettings()
 			const webdav = this.options.webdav
 			await webdav.createDirectory(this.options.remoteBaseDir, {
 				recursive: true,
@@ -342,6 +344,7 @@ export class NutStoreSync {
 											strategy: ConflictStrategy.DiffMatchPatch,
 											localStat: local,
 											remoteStat: remote,
+											useGitStyle: settings.useGitStyle,
 										}),
 									)
 								} else {
@@ -472,6 +475,7 @@ export class NutStoreSync {
 									strategy: ConflictStrategy.DiffMatchPatch,
 									localStat: local,
 									remoteStat: remote,
+									useGitStyle: settings.useGitStyle,
 								}),
 							)
 						} else {

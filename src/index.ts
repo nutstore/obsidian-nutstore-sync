@@ -11,29 +11,20 @@ import {
 	onSyncProgress,
 } from './events'
 import i18n from './i18n'
-import { NutstoreSettingTab } from './settings'
+import {
+	DEFAULT_SETTINGS,
+	NutstoreSettingTab,
+	NutstoreSettings,
+	setPluginInstance,
+} from './settings'
 import { NutStoreSync } from './sync'
 import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
 import './webdav-patch'
 
-interface MyPluginSettings {
-	account: string
-	credential: string
-	remoteDir: string
-	accessToken: string
-}
-
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	account: '',
-	credential: '',
-	remoteDir: '',
-	accessToken: '',
-}
-
 export default class NutStorePlugin extends Plugin {
-	settings: MyPluginSettings
+	settings: NutstoreSettings
 	private syncStatusBar: HTMLElement
 	private subscriptions: Subscription[] = []
 	private isSyncing: boolean = false
@@ -88,6 +79,7 @@ export default class NutStorePlugin extends Plugin {
 	}
 
 	async onload() {
+		setPluginInstance(this)
 		await this.loadSettings()
 		await updateLanguage()
 		this.registerInterval(window.setInterval(updateLanguage, 60000))
@@ -140,9 +132,8 @@ export default class NutStorePlugin extends Plugin {
 			'refresh-ccw',
 			i18n.t('sync.startButton'),
 			async () => {
-				if (this.isSyncing) {
-					return
-				}
+				if (this.isSyncing) return
+
 				const sync = new NutStoreSync({
 					webdav: this.createWebDAVClient(),
 					vault: this.app.vault,
@@ -163,6 +154,7 @@ export default class NutStorePlugin extends Plugin {
 	}
 
 	async onunload() {
+		setPluginInstance(null)
 		emitCancelSync()
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
 		const styleEl = document.getElementById('nutstore-sync-styles')

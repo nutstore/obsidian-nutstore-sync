@@ -12,18 +12,24 @@ export function mergeDigIn(
 	options: {
 		excludeFalseConflicts?: boolean
 		stringSeparator?: string | RegExp
+		useGitStyle?: boolean
 	},
 ) {
 	const defaults = {
 		excludeFalseConflicts: true,
 		stringSeparator: /\s+/,
 		label: {},
+		useGitStyle: false,
 	}
 	options = Object.assign(defaults, options)
 
-	const aSection = `<mark class="conflict ours">`
-	const xSection = '</mark><mark class="conflict theirs">'
-	const bSection = `</mark>`
+	const aSection = options.useGitStyle
+		? '<<<<<<<'
+		: `<mark class="conflict ours">`
+	const xSection = options.useGitStyle
+		? '======='
+		: '</mark><mark class="conflict theirs">'
+	const bSection = options.useGitStyle ? '>>>>>>>' : `</mark>`
 
 	const regions = diff3Merge(a, o, b, options)
 	let conflict = false

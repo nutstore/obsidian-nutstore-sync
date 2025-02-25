@@ -26,6 +26,10 @@ export default {
 			name: 'Login',
 			desc: 'Click to login',
 		},
+		useGitStyle: {
+			name: 'Use Git-style Conflict Markers',
+			desc: 'Use <<<<<<< and >>>>>>> markers for conflicts instead of HTML tags',
+		},
 	},
 	sync: {
 		failed: 'Sync failed!',
