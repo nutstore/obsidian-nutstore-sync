@@ -33,7 +33,7 @@ import { BaseTask, TaskResult } from './tasks/task.interface'
 
 consola.level = LogLevels.verbose
 
-export class NutStoreSync {
+export class NutstoreSync {
 	private remoteFs: IFileSystem
 	private localFS: IFileSystem
 	private isCancelled: boolean = false

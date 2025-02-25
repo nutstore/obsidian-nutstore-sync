@@ -3,7 +3,7 @@ import { DeltaResponse } from '~/api/delta'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
 
-const DB_NAME = 'NutStore_Plugin_Cache'
+const DB_NAME = 'Nutstore_Plugin_Cache'
 
 interface DeltaCache {
 	files: StatModel[]
