@@ -24,6 +24,7 @@ export default class ConflictResolveTask extends BaseTask {
 			strategy: ConflictStrategy
 			remoteStat?: StatModel
 			localStat?: StatModel
+			useGitStyle: boolean
 		},
 	) {
 		super(options)
@@ -118,6 +119,7 @@ export default class ConflictResolveTask extends BaseTask {
 			if (solveResult.includes(false)) {
 				const diff3MergedResult = mergeDigIn(localText, baseText, remoteText, {
 					stringSeparator: '\n',
+					useGitStyle: this.options.useGitStyle,
 				})
 				mergedText = diff3MergedResult.result.join('\n')
 			}

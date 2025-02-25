@@ -1,11 +1,38 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import i18n from './i18n'
-import NutStorePlugin from './index'
+import type NutStorePlugin from './index'
+
+export interface NutstoreSettings {
+	account: string
+	credential: string
+	remoteDir: string
+	useGitStyle: boolean
+}
+
+export const DEFAULT_SETTINGS: NutstoreSettings = {
+	account: '',
+	credential: '',
+	remoteDir: '',
+	useGitStyle: false,
+}
+
+let pluginInstance: NutStorePlugin | null = null
+
+export function setPluginInstance(plugin: NutStorePlugin | null) {
+	pluginInstance = plugin
+}
+
+export function useSettings() {
+	if (!pluginInstance) {
+		throw new Error('Plugin not initialized')
+	}
+	return pluginInstance.settings
+}
 
 export class NutstoreSettingTab extends PluginSettingTab {
-	plugin: NutStorePlugin
+	plugin: any // 改为 any 类型避免循环依赖
 
-	constructor(app: App, plugin: NutStorePlugin) {
+	constructor(app: App, plugin: any) {
 		super(app, plugin)
 		this.plugin = plugin
 	}
@@ -54,6 +81,18 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.remoteDir)
 					.onChange(async (value) => {
 						this.plugin.settings.remoteDir = value
+						await this.plugin.saveSettings()
+					}),
+			)
+
+		new Setting(containerEl)
+			.setName(i18n.t('settings.useGitStyle.name'))
+			.setDesc(i18n.t('settings.useGitStyle.desc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.useGitStyle)
+					.onChange(async (value) => {
+						this.plugin.settings.useGitStyle = value
 						await this.plugin.saveSettings()
 					}),
 			)

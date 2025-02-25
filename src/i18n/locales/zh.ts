@@ -26,6 +26,10 @@ export default {
 			name: '登录',
 			desc: '点击登录',
 		},
+		useGitStyle: {
+			name: '使用Git样式的冲突标记',
+			desc: '启用后将使用 <<<<<<< 和 >>>>>>> 等标记来显示冲突，而不是HTML标记',
+		},
 	},
 	sync: {
 		failed: '同步失败!',
