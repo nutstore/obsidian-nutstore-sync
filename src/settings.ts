@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import i18n from './i18n'
-import type NutStorePlugin from './index'
+import type NutstorePlugin from './index'
 
 export interface NutstoreSettings {
 	account: string
@@ -18,9 +18,9 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	conflictStrategy: 'diff-match-patch',
 }
 
-let pluginInstance: NutStorePlugin | null = null
+let pluginInstance: NutstorePlugin | null = null
 
-export function setPluginInstance(plugin: NutStorePlugin | null) {
+export function setPluginInstance(plugin: NutstorePlugin | null) {
 	pluginInstance = plugin
 }
 

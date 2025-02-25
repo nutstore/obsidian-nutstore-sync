@@ -18,13 +18,13 @@ import {
 	NutstoreSettings,
 	setPluginInstance,
 } from './settings'
-import { NutStoreSync } from './sync'
+import { NutstoreSync } from './sync'
 import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
 import './webdav-patch'
 
-export default class NutStorePlugin extends Plugin {
+export default class NutstorePlugin extends Plugin {
 	settings: NutstoreSettings
 	private syncStatusBar: HTMLElement
 	private subscriptions: Subscription[] = []
@@ -136,7 +136,7 @@ export default class NutStorePlugin extends Plugin {
 				if (this.isSyncing) return
 
 				const startSync = async () => {
-					const sync = new NutStoreSync({
+					const sync = new NutstoreSync({
 						webdav: this.createWebDAVClient(),
 						vault: this.app.vault,
 						token: toBase64(
