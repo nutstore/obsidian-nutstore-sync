@@ -55,5 +55,8 @@ export default {
 		stopButton: '停止同步',
 		failedStatus: '同步失败',
 		cancelled: '同步已取消',
+		modalTitle: '同步进行中',
+		cancelButton: '取消同步',
+		progressText: '正在同步文件',
 	},
 }

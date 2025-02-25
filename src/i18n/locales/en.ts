@@ -55,5 +55,8 @@ export default {
 		stopButton: 'Stop Sync',
 		failedStatus: 'Sync Failed',
 		cancelled: 'Sync cancelled',
+		modalTitle: 'Syncing',
+		cancelButton: 'Cancel Sync',
+		progressText: 'Syncing files',
 	},
 }
