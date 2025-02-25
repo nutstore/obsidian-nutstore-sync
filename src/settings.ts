@@ -7,6 +7,7 @@ export interface NutstoreSettings {
 	credential: string
 	remoteDir: string
 	useGitStyle: boolean
+	conflictStrategy: 'diff-match-patch' | 'latest-timestamp'
 }
 
 export const DEFAULT_SETTINGS: NutstoreSettings = {
@@ -14,6 +15,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	credential: '',
 	remoteDir: '',
 	useGitStyle: false,
+	conflictStrategy: 'diff-match-patch',
 }
 
 let pluginInstance: NutStorePlugin | null = null
@@ -44,7 +46,6 @@ export class NutstoreSettingTab extends PluginSettingTab {
 
 		containerEl.createEl('h2', { text: i18n.t('settings.title') })
 
-		// 添加备份警告
 		new Setting(containerEl)
 			.setName(i18n.t('settings.backupWarning.name'))
 			.setDesc(i18n.t('settings.backupWarning.desc'))
@@ -117,6 +118,26 @@ export class NutstoreSettingTab extends PluginSettingTab {
 						}
 					})
 			})
+
+		new Setting(containerEl)
+			.setName(i18n.t('settings.conflictStrategy.name'))
+			.setDesc(i18n.t('settings.conflictStrategy.desc'))
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption(
+						'diff-match-patch',
+						i18n.t('settings.conflictStrategy.diffMatchPatch'),
+					)
+					.addOption(
+						'latest-timestamp',
+						i18n.t('settings.conflictStrategy.latestTimestamp'),
+					)
+					.setValue(this.plugin.settings.conflictStrategy)
+					.onChange(async (value: 'diff-match-patch' | 'latest-timestamp') => {
+						this.plugin.settings.conflictStrategy = value
+						await this.plugin.saveSettings()
+					}),
+			)
 
 		// new Setting(containerEl).addButton((button) => {
 		// 	button

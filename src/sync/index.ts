@@ -341,7 +341,10 @@ export class NutStoreSync {
 										new ConflictResolveTask({
 											...options,
 											record,
-											strategy: ConflictStrategy.DiffMatchPatch,
+											strategy:
+												settings.conflictStrategy === 'latest-timestamp'
+													? ConflictStrategy.LatestTimeStamp
+													: ConflictStrategy.DiffMatchPatch,
 											localStat: local,
 											remoteStat: remote,
 											useGitStyle: settings.useGitStyle,
