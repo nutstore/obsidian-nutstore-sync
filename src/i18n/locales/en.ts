@@ -30,6 +30,10 @@ export default {
 			name: 'Use Git-style Conflict Markers',
 			desc: 'Use <<<<<<< and >>>>>>> markers for conflicts instead of HTML tags',
 		},
+		backupWarning: {
+			name: 'Backup Warning',
+			desc: '⚠️ Note: Sync process will modify or delete local files. Please backup important files before syncing.',
+		},
 	},
 	sync: {
 		failed: 'Sync failed!',
