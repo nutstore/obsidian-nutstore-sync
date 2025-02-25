@@ -2,6 +2,7 @@ import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { createClient } from 'webdav'
+import { SyncConfirmModal } from './components/SyncConfirmModal'
 import { DAV_API } from './consts'
 import {
 	emitCancelSync,
@@ -134,17 +135,21 @@ export default class NutStorePlugin extends Plugin {
 			async () => {
 				if (this.isSyncing) return
 
-				const sync = new NutStoreSync({
-					webdav: this.createWebDAVClient(),
-					vault: this.app.vault,
-					token: toBase64(
-						`${this.settings.account}:${this.settings.credential}`,
-					),
-					remoteBaseDir: stdRemotePath(
-						this.settings.remoteDir || this.app.vault.getName(),
-					),
-				})
-				await sync.start()
+				const startSync = async () => {
+					const sync = new NutStoreSync({
+						webdav: this.createWebDAVClient(),
+						vault: this.app.vault,
+						token: toBase64(
+							`${this.settings.account}:${this.settings.credential}`,
+						),
+						remoteBaseDir: stdRemotePath(
+							this.settings.remoteDir || this.app.vault.getName(),
+						),
+					})
+					await sync.start()
+				}
+
+				new SyncConfirmModal(this.app, startSync).open()
 			},
 		)
 
