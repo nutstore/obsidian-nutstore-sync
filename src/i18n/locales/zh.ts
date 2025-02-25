@@ -34,6 +34,12 @@ export default {
 			name: '备份提醒',
 			desc: '⚠️ 请注意：同步过程会修改或删除本地文件，建议在同步前备份重要文件。',
 		},
+		conflictStrategy: {
+			name: '冲突解决策略',
+			desc: '选择解决文件冲突的方式',
+			diffMatchPatch: '智能合并(推荐)',
+			latestTimestamp: '使用最新版本',
+		},
 	},
 	sync: {
 		failed: '同步失败!',
@@ -58,5 +64,14 @@ export default {
 		modalTitle: '同步进行中',
 		cancelButton: '取消同步',
 		progressText: '正在同步文件',
+		confirmModal: {
+			title: '同步确认',
+			message:
+				'⚠️ 请注意：\n\n1. 同步操作可能会修改或删除本地文件\n2. 建议在同步前手动备份重要文件\n3. 如果出现文件冲突，可能需要手动解决\n4. 首次同步需要处理所有文件，可能会比较慢，请耐心等待\n\n确定要开始同步吗？',
+			confirm: '确认同步',
+			cancel: '取消',
+			remoteDir: '远程目录：{{dir}}',
+			strategy: '同步策略：{{strategy}}',
+		},
 	},
 }

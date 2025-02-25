@@ -34,6 +34,12 @@ export default {
 			name: 'Backup Warning',
 			desc: '⚠️ Note: Sync process will modify or delete local files. Please backup important files before syncing.',
 		},
+		conflictStrategy: {
+			name: 'Conflict Resolution Strategy',
+			desc: 'Choose how to resolve file conflicts',
+			diffMatchPatch: 'Smart Merge (Recommended)',
+			latestTimestamp: 'Use Latest Version',
+		},
 	},
 	sync: {
 		failed: 'Sync failed!',
@@ -58,5 +64,14 @@ export default {
 		modalTitle: 'Syncing',
 		cancelButton: 'Cancel Sync',
 		progressText: 'Syncing files',
+		confirmModal: {
+			title: 'Sync Confirmation',
+			message:
+				'⚠️ Please note:\n\n1. Sync operation may modify or delete local files\n2. It is recommended to backup important files before syncing\n3. In case of file conflicts, manual resolution may be required\n4. Initial sync will process all files and may take longer, please be patient\n\nAre you sure you want to start syncing?',
+			confirm: 'Confirm Sync',
+			cancel: 'Cancel',
+			remoteDir: 'Remote Directory: {{dir}}',
+			strategy: 'Sync Strategy: {{strategy}}',
+		},
 	},
 }
