@@ -1,6 +1,6 @@
 import consola, { LogLevels } from 'consola'
 import dayjs from 'dayjs'
-import { Vault } from 'obsidian'
+import { Notice, Vault } from 'obsidian'
 import path from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
@@ -17,6 +17,7 @@ import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
 import { useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/helper'
+import { is503Error } from '~/utils/is-503-error'
 import { isSub } from '~/utils/is-sub'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { statVaultItem } from '~/utils/stat-vault-item'
@@ -67,10 +68,32 @@ export class NutstoreSync {
 		try {
 			const settings = useSettings()
 			const webdav = this.options.webdav
-			await webdav.createDirectory(this.options.remoteBaseDir, {
-				recursive: true,
-			})
 			emitStartSync()
+			while (true) {
+				if (this.isCancelled) {
+					emitSyncError(new Error(i18n.t('sync.cancelled')))
+					return
+				}
+				try {
+					await webdav.createDirectory(this.options.remoteBaseDir, {
+						recursive: true,
+					})
+					break
+				} catch (e) {
+					if (is503Error(e)) {
+						const now = Date.now()
+						const startAt = now + 60000
+						new Notice(
+							i18n.t('sync.requestsTooFrequent', {
+								time: dayjs(startAt).format('HH:mm:ss'),
+							}),
+						)
+						await sleep(startAt - now)
+					} else {
+						throw e
+					}
+				}
+			}
 
 			const syncRecord = new SyncRecord(
 				this.options.vault,
@@ -573,12 +596,31 @@ export class NutstoreSync {
 		const res: TaskResult[] = []
 		let completed = 0
 		const total = tasks.length
-		for (const t of tasks) {
+		for (let i = 0; i < tasks.length; ++i) {
+			const task = tasks[i]
+			while (true) {
+				if (this.isCancelled) {
+					break
+				}
+				const taskResult = await task.exec()
+				if (taskResult.error && is503Error(taskResult.error)) {
+					const now = Date.now()
+					const startAt = now + 60000
+					new Notice(
+						i18n.t('sync.requestsTooFrequent', {
+							time: dayjs(startAt).format('HH:mm:ss'),
+						}),
+					)
+					await sleep(startAt - now)
+				} else {
+					res[i] = taskResult
+					break
+				}
+			}
 			if (this.isCancelled) {
 				emitSyncError(new Error(i18n.t('sync.cancelled')))
 				break
 			}
-			res.push(await t.exec())
 			completed++
 			emitSyncProgress(total, completed)
 		}
