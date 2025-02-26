@@ -51,7 +51,11 @@ export default {
 			failedToAutoMerge: 'Failed to auto merge',
 			failedToUploadMerged: 'Failed to upload merged content',
 			conflictsMarkedInFile: 'Conflicts found and marked in file',
+			requestsTooFrequent:
+				'Requests too frequent, please wait a few minutes and try again',
 		},
+		requestsTooFrequent:
+			'Requests too frequent, plugin will resume sync at {{time}}',
 		start: '⌛️ Sync started',
 		complete: '✅ Sync completed',
 		completeWithFailed: '❌ Sync completed with {{failedCount}} failed tasks',

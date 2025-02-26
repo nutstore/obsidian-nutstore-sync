@@ -19,6 +19,7 @@ import {
 	setPluginInstance,
 } from './settings'
 import { NutstoreSync } from './sync'
+import { is503Error } from './utils/is-503-error'
 import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
@@ -121,10 +122,16 @@ export default class NutstorePlugin extends Plugin {
 			this.updateSyncStatus({
 				text: i18n.t('sync.failedStatus'),
 				isError: true,
-				showNotice: true,
+				showNotice: false,
 				hideAfter: 3000,
 			})
-			new Notice(i18n.t('sync.failedWithError', { error: error.message }))
+			new Notice(
+				i18n.t('sync.failedWithError', {
+					error: is503Error(error)
+						? i18n.t('sync.error.requestsTooFrequent')
+						: error.message,
+				}),
+			)
 		})
 
 		this.subscriptions.push(startSub, progressSub, endSub, errorSub)
