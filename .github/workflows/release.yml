@@ -23,6 +23,14 @@ jobs:
           npm install
           npm run build
 
+      - name: Package plugin
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          mkdir ${{ github.event.repository.name }}
+          cp main.js manifest.json styles.css ${{ github.event.repository.name }}
+          zip -r ${{ github.event.repository.name }}-${tag}.zip ${{ github.event.repository.name }}
+          tar -czf ${{ github.event.repository.name }}-${tag}.tar.gz ${{ github.event.repository.name }}
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -32,4 +40,6 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --draft \
-            main.js manifest.json styles.css
+            main.js manifest.json styles.css \
+            ${{ github.event.repository.name }}-${tag}.zip \
+            ${{ github.event.repository.name }}-${tag}.tar.gz
