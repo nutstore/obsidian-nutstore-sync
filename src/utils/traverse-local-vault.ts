@@ -22,7 +22,7 @@ export async function traverseLocalVault(
 			records.has(normPath) || (isNotJunk(path) && isNotJunk(basename(path))),
 	)
 	folders = folders.filter(
-		(path) => !['.git', '.obsidian'].includes(basename(path)),
+		(path) => !['.git', vault.configDir].includes(basename(path)),
 	)
 	const contents = await Promise.all(
 		[...files, ...folders].map(partial(statVaultItem, vault)),
