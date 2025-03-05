@@ -566,9 +566,8 @@ export class NutstoreSync {
 						if (!local) {
 							return
 						}
-						if (local.isDir) {
-							var base = undefined
-						} else {
+						let base: Blob | undefined
+						if (!local.isDir) {
 							const buffer = await this.options.vault.adapter.readBinary(
 								task.localPath,
 							)
