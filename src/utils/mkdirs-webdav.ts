@@ -1,6 +1,6 @@
 import { WebDAVClient } from 'webdav'
 
-export function mkdirsWedbDAV(client: WebDAVClient, path: string) {
+export function mkdirsWebDAV(client: WebDAVClient, path: string) {
 	return client.createDirectory(path, {
 		recursive: true,
 	})
