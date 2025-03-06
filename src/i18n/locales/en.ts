@@ -16,15 +16,31 @@ export default {
 			desc: 'Click to check WebDAV connection',
 			success: 'WebDAV connection successful',
 			failure: 'WebDAV connection failed',
+			successButton: 'Connected ✓',
+			failureButton: 'Failed ×',
 		},
 		remoteDir: {
 			name: 'Remote Directory',
 			desc: 'Enter the remote directory',
 			placeholder: 'Enter the remote directory',
+			edit: 'Edit',
 		},
 		login: {
 			name: 'Login',
 			desc: 'Click to login',
+			success: 'Login successful',
+			failure: 'Login failed, please try again',
+		},
+		loginMode: {
+			name: 'Login Mode',
+			manual: 'Manual Input',
+			sso: 'Single Sign-On',
+		},
+		ssoStatus: {
+			loggedIn: 'Logged In',
+			notLoggedIn: 'Not Logged In',
+			logout: 'Logout',
+			logoutSuccess: 'Logged out successfully',
 		},
 		useGitStyle: {
 			name: 'Use Git-style Conflict Markers',
@@ -39,6 +55,17 @@ export default {
 			desc: 'Choose how to resolve file conflicts',
 			diffMatchPatch: 'Smart Merge (Recommended)',
 			latestTimestamp: 'Use Latest Version',
+		},
+		sections: {
+			account: 'Account Settings',
+			common: 'General Settings',
+		},
+		logout: {
+			confirmTitle: 'Confirm Logout',
+			confirmMessage:
+				'Are you sure you want to log out? You will need to log in again to continue syncing.',
+			confirm: 'Confirm Logout',
+			cancel: 'Cancel',
 		},
 	},
 	sync: {

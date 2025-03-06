@@ -15,16 +15,21 @@ export default {
 			name: '远程目录',
 			desc: '输入远程目录',
 			placeholder: '输入远程目录',
+			edit: '编辑',
 		},
 		checkConnection: {
 			name: '检查连接',
 			desc: '点击检查 WebDAV 连接',
 			success: 'WebDAV 连接成功',
 			failure: 'WebDAV 连接失败',
+			successButton: '连接成功 ✓',
+			failureButton: '连接失败 ×',
 		},
 		login: {
 			name: '登录',
 			desc: '点击登录',
+			success: '登录成功',
+			failure: '登录失败，请重试',
 		},
 		useGitStyle: {
 			name: '使用Git样式的冲突标记',
@@ -39,6 +44,27 @@ export default {
 			desc: '选择解决文件冲突的方式',
 			diffMatchPatch: '智能合并(推荐)',
 			latestTimestamp: '使用最新版本',
+		},
+		loginMode: {
+			name: '登录方式',
+			manual: '手动输入',
+			sso: '单点登录',
+		},
+		ssoStatus: {
+			loggedIn: '已登录',
+			notLoggedIn: '未登录',
+			logout: '退出登录',
+			logoutSuccess: '已退出登录',
+		},
+		logout: {
+			confirmTitle: '确认退出',
+			confirmMessage: '确定要退出登录吗？退出后需要重新登录才能继续同步。',
+			confirm: '确认退出',
+			cancel: '取消',
+		},
+		sections: {
+			account: '账号设置',
+			common: '通用设置',
 		},
 	},
 	sync: {

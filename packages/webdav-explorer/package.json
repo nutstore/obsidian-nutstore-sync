@@ -1,0 +1,33 @@
+{
+	"name": "webdav-explorer",
+	"version": "0.0.0",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rslib build",
+		"dev": "rslib build --watch"
+	},
+	"devDependencies": {
+		"@rsbuild/plugin-babel": "^1.0.4",
+		"@rsbuild/plugin-solid": "^1.0.5",
+		"@rslib/core": "^0.5.3",
+		"@solid-primitives/i18n": "^2.2.0",
+		"@solid-primitives/media": "^2.3.0",
+		"@unocss/postcss": "66.1.0-beta.3",
+		"typescript": "^5.8.2",
+		"unocss": "66.1.0-beta.3"
+	},
+	"dependencies": {
+		"solid-js": "^1.9.5"
+	}
+}
