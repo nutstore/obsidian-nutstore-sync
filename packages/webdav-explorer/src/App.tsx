@@ -39,6 +39,7 @@ function App(props: AppProps) {
 		<div class="flex-1 flex flex-col overflow-y-auto scrollbar-hide">
 			<Show when={showNewFolder()}>
 				<NewFolder
+					class="mt-1"
 					onCancel={() => setShowNewFolder(false)}
 					onConfirm={async (name) => {
 						const target = path.join(cwd() ?? '/', name)
@@ -74,6 +75,7 @@ function App(props: AppProps) {
 				<div class="flex-1 flex flex-col overflow-y-auto scrollbar-hide">
 					<Show when={showNewFolder()}>
 						<NewFolder
+							class="mt-1"
 							onCancel={() => setShowNewFolder(false)}
 							onConfirm={async (name) => {
 								const target = path.join(snd() ?? '/', name)
