@@ -24,6 +24,9 @@ i18n.init({
 	defaultNS,
 	resources,
 	fallbackLng: 'en',
+	interpolation: {
+		escapeValue: false,
+	},
 })
 
 export default i18n
