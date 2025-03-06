@@ -1,19 +1,17 @@
-import builtins from 'builtin-modules'
 import dotenv from 'dotenv'
 import esbuild from 'esbuild'
 import { sassPlugin } from 'esbuild-sass-plugin'
+import fs from 'fs'
 import process from 'process'
 
-import fs from 'fs'
-
-const renamePlugin = () => ({
+const renamePlugin = {
 	name: 'rename-plugin',
 	setup(build) {
 		build.onEnd(async () => {
 			fs.renameSync('./main.css', './styles.css')
 		})
 	},
-})
+}
 
 dotenv.config()
 
@@ -45,7 +43,6 @@ const context = await esbuild.context({
 		'@lezer/common',
 		'@lezer/highlight',
 		'@lezer/lr',
-		...builtins,
 	],
 	define: {
 		'process.env.NS_SSO_ENDPOINT': JSON.stringify(process.env.NS_SSO_ENDPOINT),
@@ -63,7 +60,8 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: 'main.js',
 	minify: prod,
-	plugins: [sassPlugin(), renamePlugin()],
+	platform: 'browser',
+	plugins: [sassPlugin(), renamePlugin],
 })
 
 if (prod) {
