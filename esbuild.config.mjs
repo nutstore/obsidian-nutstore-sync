@@ -15,7 +15,6 @@ const renamePlugin = () => ({
 	},
 })
 
-// 加载环境变量
 dotenv.config()
 
 const banner = `/*

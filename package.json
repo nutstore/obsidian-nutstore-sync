@@ -4,7 +4,9 @@
 	"description": "",
 	"main": "main.js",
 	"scripts": {
-		"dev": "node esbuild.config.mjs",
+		"dev": "run-p dev:*",
+		"dev:plugin": "node esbuild.config.mjs",
+		"dev:webdav-explorer": "pnpm --filter webdav-explorer dev",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
@@ -21,7 +23,9 @@
 		"consola": "^3.4.0",
 		"dayjs": "^1.11.13",
 		"diff-match-patch": "^1.0.5",
+		"dotenv": "^16.4.7",
 		"esbuild": "0.17.3",
+		"esbuild-sass-plugin": "^3.3.1",
 		"fast-xml-parser": "^4.5.1",
 		"hash-wasm": "^4.12.0",
 		"http-status-codes": "^2.3.0",
@@ -33,6 +37,7 @@
 		"lodash-es": "^4.17.21",
 		"memfs": "^4.17.0",
 		"node-diff3": "^3.1.2",
+		"npm-run-all2": "^7.0.2",
 		"obsidian": "latest",
 		"ohash": "^1.1.4",
 		"prettier": "^3.5.0",
@@ -40,6 +45,7 @@
 		"rxjs": "^7.8.1",
 		"tslib": "2.4.0",
 		"typescript": "^5",
-		"webdav": "^5.7.1"
+		"webdav": "^5.7.1",
+		"webdav-explorer": "workspace: *"
 	}
 }

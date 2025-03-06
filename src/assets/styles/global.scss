@@ -1,0 +1,101 @@
+.view-action[aria-disabled='true'] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+@keyframes nutstore-sync-spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(-360deg);
+	}
+}
+
+.nutstore-sync-spinning {
+	animation: nutstore-sync-spin 2s linear infinite;
+}
+
+.nutstore-sync-status {
+	opacity: 1;
+	transition: opacity 0.3s ease-in-out;
+}
+
+.nutstore-sync-status.hidden {
+	opacity: 0;
+	display: none;
+}
+
+.conflict.ours,
+.conflict.theirs {
+	position: relative;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.conflict.ours {
+	background-color: rgb(0, 255, 208);
+}
+
+.conflict.theirs {
+	background-color: rgb(0, 132, 255);
+}
+
+.truncate {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
+	display: block;
+}
+
+.max-w-full {
+	max-width: 100%;
+}
+
+.connection-status {
+	padding: 6px 12px;
+	border-radius: 4px;
+	margin-top: 8px;
+	transition: all 0.3s ease;
+	opacity: 0;
+}
+
+.connection-status.success {
+	background-color: var(--background-modifier-success);
+	color: var(--text-success);
+	opacity: 1;
+}
+
+.connection-status.error {
+	background-color: var(--background-modifier-error);
+	color: var(--text-error);
+	opacity: 1;
+}
+
+.connection-button.loading {
+	opacity: 0.5;
+	pointer-events: none;
+}
+
+.connection-button.success {
+	background-color: var(--background-modifier-success);
+	color: var(--background-primary);
+	border-color: var(--background-modifier-success);
+}
+
+.connection-button.error {
+	background-color: var(--background-modifier-error);
+	color: var(--background-primary);
+	border-color: var(--background-modifier-error);
+}
+
+input.error {
+	border-color: var(--background-modifier-error) !important;
+	box-shadow: none !important;
+}
+
+input.success {
+	border-color: var(--background-modifier-success) !important;
+	box-shadow: none !important;
+}
