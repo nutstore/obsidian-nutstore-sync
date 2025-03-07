@@ -1,4 +1,5 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
+import { SelectRemoteBaseDirModal } from './components/SelectRemoteBaseDirModal'
 import i18n from './i18n'
 import type NutstorePlugin from './index'
 
@@ -32,25 +33,77 @@ export function useSettings() {
 }
 
 export class NutstoreSettingTab extends PluginSettingTab {
-	plugin: any // 改为 any 类型避免循环依赖
+	plugin: NutstorePlugin
 
 	constructor(app: App, plugin: any) {
 		super(app, plugin)
 		this.plugin = plugin
 	}
 
-	display(): void {
+	async display() {
 		const { containerEl } = this
 
 		containerEl.empty()
-
-		containerEl.createEl('h2', { text: i18n.t('settings.title') })
 
 		new Setting(containerEl)
 			.setName(i18n.t('settings.backupWarning.name'))
 			.setDesc(i18n.t('settings.backupWarning.desc'))
 
-		new Setting(containerEl)
+		containerEl.createEl('h2', { text: i18n.t('settings.sections.account') })
+
+		await this.displayManualLoginSettings()
+
+		await this.displayCommonSettings()
+	}
+
+	private displayCheckConnection() {
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.checkConnection.name'))
+			.setDesc(i18n.t('settings.checkConnection.desc'))
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('settings.checkConnection.name'))
+					.onClick(async (e) => {
+						const buttonEl = e.target as HTMLElement
+						buttonEl.classList.add('connection-button', 'loading')
+						buttonEl.classList.remove('success', 'error')
+						buttonEl.textContent = i18n.t('settings.checkConnection.name')
+						try {
+							const isConnected = await this.plugin.checkWebDAVConnection()
+							buttonEl.classList.remove('loading')
+							if (isConnected) {
+								buttonEl.classList.add('success')
+								buttonEl.textContent = i18n.t(
+									'settings.checkConnection.successButton',
+								)
+								new Notice(i18n.t('settings.checkConnection.success'))
+							} else {
+								buttonEl.classList.add('error')
+								buttonEl.textContent = i18n.t(
+									'settings.checkConnection.failureButton',
+								)
+								new Notice(i18n.t('settings.checkConnection.failure'))
+							}
+						} catch {
+							buttonEl.classList.remove('loading')
+							buttonEl.classList.add('error')
+							buttonEl.textContent = i18n.t(
+								'settings.checkConnection.failureButton',
+							)
+							new Notice(i18n.t('settings.checkConnection.failure'))
+						}
+					})
+			})
+	}
+
+	private displayManualLoginSettings(): void {
+		const helper = new Setting(this.containerEl)
+		helper.descEl.innerHTML = `
+			<a href="https://help.jianguoyun.com/?p=2064" target="_blank" class="no-underline">
+				${i18n.t('settings.help.name')}
+			</a>
+			`
+		new Setting(this.containerEl)
 			.setName(i18n.t('settings.account.name'))
 			.setDesc(i18n.t('settings.account.desc'))
 			.addText((text) =>
@@ -63,12 +116,11 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					}),
 			)
 
-		new Setting(containerEl)
+		new Setting(this.containerEl)
 			.setName(i18n.t('settings.credential.name'))
 			.setDesc(i18n.t('settings.credential.desc'))
 			.addText((text) => {
 				text
-
 					.setPlaceholder(i18n.t('settings.credential.placeholder'))
 					.setValue(this.plugin.settings.credential)
 					.onChange(async (value) => {
@@ -78,48 +130,36 @@ export class NutstoreSettingTab extends PluginSettingTab {
 				text.inputEl.type = 'password'
 			})
 
-		new Setting(containerEl)
+		this.displayCheckConnection()
+	}
+
+	private displayCommonSettings(): void {
+		this.containerEl.createEl('h2', {
+			text: i18n.t('settings.sections.common'),
+		})
+		new Setting(this.containerEl)
 			.setName(i18n.t('settings.remoteDir.name'))
 			.setDesc(i18n.t('settings.remoteDir.desc'))
-			.addText((text) =>
+			.addText((text) => {
 				text
 					.setPlaceholder(i18n.t('settings.remoteDir.placeholder'))
 					.setValue(this.plugin.settings.remoteDir)
 					.onChange(async (value) => {
 						this.plugin.settings.remoteDir = value
 						await this.plugin.saveSettings()
-					}),
-			)
-
-		new Setting(containerEl)
-			.setName(i18n.t('settings.useGitStyle.name'))
-			.setDesc(i18n.t('settings.useGitStyle.desc'))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.useGitStyle)
-					.onChange(async (value) => {
-						this.plugin.settings.useGitStyle = value
-						await this.plugin.saveSettings()
-					}),
-			)
-
-		new Setting(containerEl)
-			.setName(i18n.t('settings.checkConnection.name'))
-			.setDesc(i18n.t('settings.checkConnection.desc'))
-			.addButton((button) => {
-				button
-					.setButtonText(i18n.t('settings.checkConnection.name'))
-					.onClick(async () => {
-						const isConnected = await this.plugin.checkWebDAVConnection()
-						if (isConnected) {
-							new Notice(i18n.t('settings.checkConnection.success'))
-						} else {
-							new Notice(i18n.t('settings.checkConnection.failure'))
-						}
 					})
 			})
+			.addButton((button) => {
+				button.setButtonText(i18n.t('settings.remoteDir.edit')).onClick(() => {
+					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
+						this.plugin.settings.remoteDir = path
+						await this.plugin.saveSettings()
+						this.display()
+					}).open()
+				})
+			})
 
-		new Setting(containerEl)
+		new Setting(this.containerEl)
 			.setName(i18n.t('settings.conflictStrategy.name'))
 			.setDesc(i18n.t('settings.conflictStrategy.desc'))
 			.addDropdown((dropdown) =>
@@ -139,15 +179,16 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					}),
 			)
 
-		// new Setting(containerEl).addButton((button) => {
-		// 	button
-		// 		.setButtonText(i18n.t('settings.login.name'))
-		// 		.setTooltip(i18n.t('settings.login.desc'))
-		// 		.onClick(async () => {
-		// 			window.open(
-		// 				'https://www.jianguoyun.com/d/openid/auth?client_id=ChBtB1nGO_ZMyq67-d7-mbiNEgQIARAAIiCHytIpw1adUMaa3OQ96gf2BhqyXUgtAnAiHzMFncsSZg&redirect_uri=https%3A%2F%2Fct-pomerium.jianguoyun.net.cn%2Foauth2%2Fcallback&response_type=code&scope=openid+profile+email+offline_access&state=K0ViUVRkUXpRZFVUQVEyUlJoYTh4aUQvY0tvU2J4NFdsb0VVMUR0RTNsbldNdW9MN2pkcEhEa1d6d1piM2JmS0wwVDlUeTA5QnlhZlorREpvZjc0VWc9PXwxNzM5NzU3NzUyfFtPTL0BH3Qh-Xb8QyE-2FeMoCAm1GfdzYVzdEdwKzuWTtnZD-V29UoLoeC2wTQg_tJ2XOZf7KKbEvh73D9YCTfVoDynqqHrMt-VoFl1QqGlQ3JYhZG8RpxTjQveATX-eiFIQNBWwrzwij4s3Su61C5QY5fLmyfPCotZlsWiktUFrQ1S9EKWmRze0LFGRwCBBed-tBGcyTtTAZ9NnDCg9QFQQbLDhIvjwwig6LI4PbvZNcr9P2pOthCd4wj7YzVBnTedsCwCKSIXNzpDJMWFsn1Xkt8oaR0VBdGQ6s046Fu1y4HlUn_0KGX2Vz3VrdlZ8RJMxkesmFiQuOzld_cXK9B4q-enTGHx0Bw5QtcILG-AQiiz-cqzhWYSmh29d_r_uPkproneMuVdNTfUvFt9l8b1hRvMYbFnmBBylWibvO1lhqHWB9DJyk7gOgB7C6Gr5f9vsNhyemn2XKJtM065NBFdLm4iDJS48WHcWbwRShKvXN7E8T6ni_Y8I-fZw_5GepkP5_28p1LhejFfdaCAKbtrsE8Noz1QReHc0vhJHOPESv4LWUFGV91x1NnmkrIqh0JQguJswM6sVQuxy7OHRdDv11lRsCdv8QZl6bfJrAdXaAPiejpEXuq57hXBtIBw0kldynXgd7-PwPFfAiI1vLoIx-ufYU4xvUbtim8xZda2V38obJsENGv5UY7BN7bQZVdER6IkQ6ulXydhk7Eu5Jo9Cnc8nJ4uLfhKH2TlObSlhSCvWsqr',
-		// 			)
-		// 		})
-		// })
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.useGitStyle.name'))
+			.setDesc(i18n.t('settings.useGitStyle.desc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.useGitStyle)
+					.onChange(async (value) => {
+						this.plugin.settings.useGitStyle = value
+						await this.plugin.saveSettings()
+					}),
+			)
 	}
 }
