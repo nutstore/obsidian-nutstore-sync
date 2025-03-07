@@ -169,10 +169,6 @@ export default class NutstorePlugin extends Plugin {
 		setPluginInstance(null)
 		emitCancelSync()
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
-		const styleEl = document.getElementById('nutstore-sync-styles')
-		if (styleEl) {
-			styleEl.remove()
-		}
 		if (this.stopSyncRibbonEl) {
 			this.stopSyncRibbonEl.remove()
 		}
