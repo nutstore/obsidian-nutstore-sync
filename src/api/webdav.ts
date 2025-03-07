@@ -2,7 +2,7 @@ import { isNil, partial } from 'lodash-es'
 import { requestUrl } from 'obsidian'
 import { basename, join } from 'path'
 import { FileStat } from 'webdav'
-import { DAV_API } from '~/consts'
+import { NS_DAV_ENDPOINT } from '~/consts'
 import { parseXml } from '~/utils/parse-xml'
 
 interface WebDAVResponse {
@@ -57,7 +57,7 @@ export async function getDirectoryContents(
 	if (!path.startsWith('/')) {
 		path = '/' + path
 	}
-	let currentUrl = `${DAV_API}${path}`
+	let currentUrl = `${NS_DAV_ENDPOINT}${path}`
 
 	while (true) {
 		const response = await requestUrl({
@@ -98,7 +98,7 @@ export async function getDirectoryContents(
 			break
 		}
 
-		currentUrl = nextLink
+		currentUrl = decodeURI(nextLink)
 	}
 
 	return contents
