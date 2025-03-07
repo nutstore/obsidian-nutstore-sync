@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: write
     steps:
@@ -18,10 +19,18 @@ jobs:
         with:
           node-version: '18.x'
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
       - name: Build plugin
+        env:
+          NS_NSDAV_ENDPOINT: ${{ vars.NS_NSDAV_ENDPOINT }}
+          NS_DAV_ENDPOINT: ${{ vars.NS_DAV_ENDPOINT }}
         run: |
-          npm install
-          npm run build
+          pnpm install
+          pnpm run build
 
       - name: Package plugin
         run: |
