@@ -1,4 +1,4 @@
-# 🔄 Obsidian Nutstore
+# 🔄 Nutstore Sync
 
 [English](docs/en.md) | [简体中文](docs/zh.md)
 
