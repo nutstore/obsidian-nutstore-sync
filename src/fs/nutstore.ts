@@ -4,7 +4,7 @@ import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'
 import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
-import { DAV_API } from '~/consts'
+import { NS_DAV_ENDPOINT } from '~/consts'
 import { StatModel } from '~/model/stat.model'
 import { deltaCacheKV } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
@@ -24,7 +24,7 @@ export class NutstoreFileSystem implements IFileSystem {
 			remoteBaseDir: string
 		},
 	) {
-		this.webdav = createClient(DAV_API, {
+		this.webdav = createClient(NS_DAV_ENDPOINT, {
 			headers: {
 				Authorization: `Basic ${this.options.token}`,
 			},

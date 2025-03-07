@@ -1,5 +1,5 @@
-import { NSDAV_API } from '~/consts'
+import { NS_NSDAV_ENDPOINT } from '~/consts'
 
 export function NSAPI(name: 'delta' | 'latestDeltaCursor') {
-	return `${NSDAV_API}/${name}`
+	return `${NS_NSDAV_ENDPOINT}/${name}`
 }
