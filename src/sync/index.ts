@@ -21,6 +21,7 @@ import { is503Error } from '~/utils/is-503-error'
 import { isSub } from '~/utils/is-sub'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { statVaultItem } from '~/utils/stat-vault-item'
+import { stdRemotePath } from '~/utils/std-remote-path'
 import ConflictResolveTask, {
 	ConflictStrategy,
 } from './tasks/conflict-resolve.task'
@@ -69,7 +70,8 @@ export class NutstoreSync {
 			const settings = useSettings()
 			const webdav = this.options.webdav
 			emitStartSync()
-			while (true) {
+			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
+			while (!(await webdav.exists(remoteBaseDir))) {
 				if (this.isCancelled) {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
 					return
