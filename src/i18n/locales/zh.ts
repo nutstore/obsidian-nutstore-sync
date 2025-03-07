@@ -62,6 +62,10 @@ export default {
 			confirm: '确认退出',
 			cancel: '取消',
 		},
+		help: {
+			name: '如何获取 WebDAV 账号和凭证？',
+			desc: '点击查看帮助文档',
+		},
 		sections: {
 			account: '账号设置',
 			common: '通用设置',
