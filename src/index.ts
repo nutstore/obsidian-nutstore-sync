@@ -1,9 +1,11 @@
+import './assets/styles/global.scss'
+
 import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { createClient } from 'webdav'
 import { SyncConfirmModal } from './components/SyncConfirmModal'
-import { DAV_API } from './consts'
+import { NS_DAV_ENDPOINT } from './consts'
 import {
 	emitCancelSync,
 	onEndSync,
@@ -14,8 +16,8 @@ import {
 import i18n from './i18n'
 import {
 	DEFAULT_SETTINGS,
-	NutstoreSettingTab,
 	NutstoreSettings,
+	NutstoreSettingTab,
 	setPluginInstance,
 } from './settings'
 import { NutstoreSync } from './sync'
@@ -140,22 +142,20 @@ export default class NutstorePlugin extends Plugin {
 			'refresh-ccw',
 			i18n.t('sync.startButton'),
 			async () => {
-				if (this.isSyncing) return
-
+				if (this.isSyncing) {
+					return
+				}
 				const startSync = async () => {
 					const sync = new NutstoreSync({
-						webdav: this.createWebDAVClient(),
+						webdav: await this.createWebDAVClient(),
 						vault: this.app.vault,
-						token: toBase64(
-							`${this.settings.account}:${this.settings.credential}`,
-						),
+						token: await this.getToken(),
 						remoteBaseDir: stdRemotePath(
 							this.settings.remoteDir || this.app.vault.getName(),
 						),
 					})
 					await sync.start()
 				}
-
 				new SyncConfirmModal(this.app, startSync).open()
 			},
 		)
@@ -182,8 +182,8 @@ export default class NutstorePlugin extends Plugin {
 		await this.saveData(this.settings)
 	}
 
-	createWebDAVClient() {
-		const client = createClient(DAV_API, {
+	async createWebDAVClient() {
+		const client = createClient(NS_DAV_ENDPOINT, {
 			username: this.settings.account,
 			password: this.settings.credential,
 		})
@@ -192,10 +192,15 @@ export default class NutstorePlugin extends Plugin {
 
 	async checkWebDAVConnection(): Promise<boolean> {
 		try {
-			const client = this.createWebDAVClient()
+			const client = await this.createWebDAVClient()
 			return await client.exists('/')
 		} catch (error) {
 			return false
 		}
+	}
+
+	async getToken() {
+		const token = `${this.settings.account}:${this.settings.credential}`
+		return toBase64(token)
 	}
 }
