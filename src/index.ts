@@ -32,7 +32,7 @@ export default class NutstorePlugin extends Plugin {
 	private isSyncing: boolean = false
 	private ribbonIconEl: HTMLElement
 	private stopSyncRibbonEl: HTMLElement
-	private statusHideTimer: NodeJS.Timeout | null = null
+	private statusHideTimer: number | null = null
 
 	private updateSyncStatus(status: {
 		text: string
@@ -53,7 +53,7 @@ export default class NutstorePlugin extends Plugin {
 		}
 
 		if (status.hideAfter) {
-			this.statusHideTimer = setTimeout(() => {
+			this.statusHideTimer = window.setTimeout(() => {
 				this.syncStatusBar.addClass('hidden')
 				this.statusHideTimer = null
 			}, status.hideAfter)
