@@ -1,6 +1,5 @@
 export default {
 	settings: {
-		title: 'WebDAV Settings',
 		account: {
 			name: 'Account',
 			desc: 'Enter your WebDAV account',
@@ -57,8 +56,8 @@ export default {
 			latestTimestamp: 'Use Latest Version',
 		},
 		sections: {
-			account: 'Account Settings',
-			common: 'General Settings',
+			account: 'Account',
+			common: 'General',
 		},
 		logout: {
 			confirmTitle: 'Confirm Logout',
@@ -66,6 +65,10 @@ export default {
 				'Are you sure you want to log out? You will need to log in again to continue syncing.',
 			confirm: 'Confirm Logout',
 			cancel: 'Cancel',
+		},
+		help: {
+			name: 'How to get WebDAV account and credential?',
+			desc: 'Click to view help documentation',
 		},
 	},
 	sync: {
