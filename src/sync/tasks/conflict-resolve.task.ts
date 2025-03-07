@@ -1,6 +1,6 @@
 import consola from 'consola'
-import dayjs from 'dayjs'
 import { diff_match_patch } from 'diff-match-patch'
+import {moment} from "obsidian"
 import { isEqual } from 'lodash-es'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
@@ -64,8 +64,8 @@ export default class ConflictResolveTask extends BaseTask {
 
 	async execLatestTimeStamp(local: StatModel, remote: StatModel) {
 		try {
-			const localMtime = dayjs(local.mtime)
-			const remoteMtime = dayjs(remote.mtime)
+			const localMtime = moment(local.mtime)
+			const remoteMtime = moment(remote.mtime)
 			if (remoteMtime.isSame(localMtime)) {
 				throw new Error()
 			}

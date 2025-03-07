@@ -1,6 +1,5 @@
 import consola, { LogLevels } from 'consola'
-import dayjs from 'dayjs'
-import { Notice, Vault } from 'obsidian'
+import { Notice, Vault, moment } from 'obsidian'
 import path from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
@@ -87,7 +86,7 @@ export class NutstoreSync {
 						const startAt = now + 60000
 						new Notice(
 							i18n.t('sync.requestsTooFrequent', {
-								time: dayjs(startAt).format('HH:mm:ss'),
+								time: moment(startAt).format('HH:mm:ss'),
 							}),
 						)
 						await sleep(startAt - now)
@@ -139,7 +138,7 @@ export class NutstoreSync {
 						)
 					}
 				} else if (record) {
-					const remoteChanged = !dayjs(remote.mtime).isSame(record.remote.mtime)
+					const remoteChanged = !moment(remote.mtime).isSame(record.remote.mtime)
 					if (remoteChanged) {
 						consola.debug({
 							reason: 'remote folder changed',
@@ -172,7 +171,7 @@ export class NutstoreSync {
 						const subRecord = records.get(sub.path)
 						if (
 							!subRecord ||
-							!dayjs(sub.mtime).isSame(subRecord.remote.mtime)
+							!moment(sub.mtime).isSame(subRecord.remote.mtime)
 						) {
 							removable = false
 							break
@@ -232,7 +231,7 @@ export class NutstoreSync {
 				const record = records.get(local.path)
 				if (!remote) {
 					if (record) {
-						const localChanged = !dayjs(local.mtime).isSame(record.local.mtime)
+						const localChanged = !moment(local.mtime).isSame(record.local.mtime)
 						if (localChanged) {
 							consola.debug({
 								reason: 'local folder changed',
@@ -265,7 +264,7 @@ export class NutstoreSync {
 							const subRecord = records.get(sub.path)
 							if (
 								!subRecord ||
-								!dayjs(sub.mtime).isSame(subRecord.local.mtime)
+								!moment(sub.mtime).isSame(subRecord.local.mtime)
 							) {
 								removable = false
 								break
@@ -338,11 +337,11 @@ export class NutstoreSync {
 				}
 				if (record) {
 					if (remote) {
-						const remoteChanged = !dayjs(remote.mtime).isSame(
+						const remoteChanged = !moment(remote.mtime).isSame(
 							record.remote.mtime,
 						)
 						if (local) {
-							const localChanged = !dayjs(local.mtime).isSame(
+							const localChanged = !moment(local.mtime).isSame(
 								record.local.mtime,
 							)
 							if (remoteChanged) {
@@ -447,7 +446,7 @@ export class NutstoreSync {
 						}
 					} else {
 						if (local) {
-							const localChanged = !dayjs(local.mtime).isSame(
+							const localChanged = !moment(local.mtime).isSame(
 								record.local.mtime,
 							)
 							if (localChanged) {
@@ -609,7 +608,7 @@ export class NutstoreSync {
 					const startAt = now + 60000
 					new Notice(
 						i18n.t('sync.requestsTooFrequent', {
-							time: dayjs(startAt).format('HH:mm:ss'),
+							time: moment(startAt).format('HH:mm:ss'),
 						}),
 					)
 					await sleep(startAt - now)
