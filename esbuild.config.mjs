@@ -45,13 +45,10 @@ const context = await esbuild.context({
 		'@lezer/lr',
 	],
 	define: {
-		'process.env.NS_SSO_ENDPOINT': JSON.stringify(process.env.NS_SSO_ENDPOINT),
-		'process.env.NS_SSO_RSA_PUBLIC_KEY': JSON.stringify(
-			process.env.NS_SSO_RSA_PUBLIC_KEY,
+		'process.env.NS_NSDAV_ENDPOINT': JSON.stringify(
+			process.env.NS_NSDAV_ENDPOINT,
 		),
-		'process.env.NS_SSO_TICKET_AES_KEY': JSON.stringify(
-			process.env.NS_SSO_TICKET_AES_KEY,
-		),
+		'process.env.NS_DAV_ENDPOINT': JSON.stringify(process.env.NS_DAV_ENDPOINT),
 	},
 	format: 'cjs',
 	target: 'es2018',
