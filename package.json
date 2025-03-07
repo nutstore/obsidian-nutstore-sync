@@ -26,7 +26,6 @@
 		"builtin-modules": "3.3.0",
 		"consola": "^3.4.0",
 		"crypto-browserify": "^3.12.1",
-		"dayjs": "^1.11.13",
 		"diff-match-patch": "^1.0.5",
 		"dotenv": "^16.4.7",
 		"esbuild": "0.17.3",
