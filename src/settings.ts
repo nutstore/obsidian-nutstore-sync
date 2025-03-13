@@ -274,9 +274,6 @@ export class NutstoreSettingTab extends PluginSettingTab {
 
 	handleSSO = async () => {
 		await openOAuthUrlWithoutTicket()
-		// const ticket = window.crypto.randomUUID()
-		// const oauthUrl = await sso.createOAuthUrl(ticket)
-		// window.open(oauthUrl)
 		return new Promise<boolean>((resolve, reject) => {
 			const timeout = setTimeout(
 				() => {
