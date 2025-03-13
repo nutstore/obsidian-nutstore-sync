@@ -1,4 +1,4 @@
-import { openOAuthUrlWithoutTicket } from '@nutstore/obsidian-sso'
+import { createOAuthUrl } from '@nutstore/obsidian-sso'
 import { isString } from 'lodash-es'
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import { LogoutConfirmModal } from './components/LogoutConfirmModal'
@@ -273,7 +273,10 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	}
 
 	handleSSO = async () => {
-		await openOAuthUrlWithoutTicket()
+		const url = createOAuthUrl({
+			app: 'obsidian',
+		})
+		window.open(url)
 		return new Promise<boolean>((resolve, reject) => {
 			const timeout = setTimeout(
 				() => {

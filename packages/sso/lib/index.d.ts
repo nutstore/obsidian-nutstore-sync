@@ -1,6 +1,8 @@
-/* tslint:disable */
-/* eslint-disable */
-declare function openOAuthUrlWithoutTicket(): Promise<void>;
-declare function decrypt(s: string): Promise<string>;
+declare function decrypt(s: string): string;
 
-export { decrypt, openOAuthUrlWithoutTicket };
+interface Secret {
+    app: string;
+}
+declare function createOAuthUrl(secret: Secret): string;
+
+export { type Secret, createOAuthUrl, decrypt };
