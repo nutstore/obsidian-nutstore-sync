@@ -12,6 +12,7 @@
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"devDependencies": {
+		"@deanc/esbuild-plugin-postcss": "^1.0.2",
 		"@electron/remote": "^2.1.2",
 		"@nutstore/obsidian-sso": "workspace:*",
 		"@types/diff-match-patch": "^1.0.36",
@@ -20,6 +21,7 @@
 		"@types/ramda": "^0.30.2",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
+		"@unocss/postcss": "66.1.0-beta.3",
 		"assert": "^2.1.0",
 		"bottleneck": "^2.19.5",
 		"buffer": "^6.0.3",
@@ -44,12 +46,14 @@
 		"obsidian": "latest",
 		"ohash": "^1.1.4",
 		"path-browserify": "^1.0.1",
+		"postcss-merge-rules": "^7.0.4",
 		"prettier": "^3.5.0",
 		"ramda": "^0.30.1",
 		"rxjs": "^7.8.1",
 		"stream-browserify": "^3.0.0",
 		"tslib": "2.4.0",
 		"typescript": "^5",
+		"unocss": "66.1.0-beta.3",
 		"webdav": "^5.7.1",
 		"webdav-explorer": "workspace: *"
 	},

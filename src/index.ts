@@ -1,4 +1,4 @@
-import './assets/styles/global.scss'
+import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'

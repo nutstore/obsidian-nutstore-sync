@@ -1,7 +1,9 @@
+import postcss from '@deanc/esbuild-plugin-postcss'
+import UnoCSS from '@unocss/postcss'
 import dotenv from 'dotenv'
 import esbuild from 'esbuild'
-import { sassPlugin } from 'esbuild-sass-plugin'
 import fs from 'fs'
+import postcssMergeRules from 'postcss-merge-rules'
 import process from 'process'
 
 const renamePlugin = {
@@ -58,7 +60,13 @@ const context = await esbuild.context({
 	outfile: 'main.js',
 	minify: prod,
 	platform: 'browser',
-	plugins: [sassPlugin(), renamePlugin],
+	plugins: [
+		// sassPlugin(),
+		postcss({
+			plugins: [UnoCSS(), postcssMergeRules()],
+		}),
+		renamePlugin,
+	],
 })
 
 if (prod) {
