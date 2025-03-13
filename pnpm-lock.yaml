@@ -11,6 +11,9 @@ importers:
       '@electron/remote':
         specifier: ^2.1.2
         version: 2.1.2(electron@34.2.0)
+      '@nutstore/obsidian-sso':
+        specifier: workspace:*
+        version: link:packages/sso
       '@types/diff-match-patch':
         specifier: ^1.0.36
         version: 1.0.36
@@ -125,6 +128,8 @@ importers:
       webdav-explorer:
         specifier: 'workspace: *'
         version: link:packages/webdav-explorer
+
+  packages/sso: {}
 
   packages/webdav-explorer:
     dependencies:

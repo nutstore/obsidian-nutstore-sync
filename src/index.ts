@@ -3,7 +3,7 @@ import './assets/styles/global.scss'
 import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'
 import { Subscription } from 'rxjs'
-import { createClient } from 'webdav'
+import { createClient, WebDAVClient } from 'webdav'
 import { SyncConfirmModal } from './components/SyncConfirmModal'
 import { NS_DAV_ENDPOINT } from './consts'
 import {
@@ -13,6 +13,7 @@ import {
 	onSyncError,
 	onSyncProgress,
 } from './events'
+import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
 import {
 	DEFAULT_SETTINGS,
@@ -21,6 +22,7 @@ import {
 	setPluginInstance,
 } from './settings'
 import { NutstoreSync } from './sync'
+import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { is503Error } from './utils/is-503-error'
 import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
@@ -160,8 +162,10 @@ export default class NutstorePlugin extends Plugin {
 			},
 		)
 
-		this.registerObsidianProtocolHandler('nutstore-sync/sso', () => {
-			// TODO: save access_token
+		this.registerObsidianProtocolHandler('nutstore-sync/sso', (data) => {
+			emitSsoReceive({
+				token: data?.s,
+			})
 		})
 	}
 
@@ -183,10 +187,19 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	async createWebDAVClient() {
-		const client = createClient(NS_DAV_ENDPOINT, {
-			username: this.settings.account,
-			password: this.settings.credential,
-		})
+		let client: WebDAVClient
+		if (this.settings.loginMode === 'manual') {
+			client = createClient(NS_DAV_ENDPOINT, {
+				username: this.settings.account,
+				password: this.settings.credential,
+			})
+		} else {
+			const oauth = await this.getDecryptedOAuthInfo()
+			client = createClient(NS_DAV_ENDPOINT, {
+				username: oauth.username,
+				password: oauth.access_token,
+			})
+		}
 		return createRateLimitedWebDAVClient(client)
 	}
 
@@ -199,8 +212,18 @@ export default class NutstorePlugin extends Plugin {
 		}
 	}
 
+	async getDecryptedOAuthInfo() {
+		return decryptOAuthResponse(this.settings.oauthResponseText)
+	}
+
 	async getToken() {
-		const token = `${this.settings.account}:${this.settings.credential}`
+		let token
+		if (this.settings.loginMode === 'sso') {
+			const oauth = await this.getDecryptedOAuthInfo()
+			token = `${oauth.username}:${oauth.access_token}`
+		} else {
+			token = `${this.settings.account}:${this.settings.credential}`
+		}
 		return toBase64(token)
 	}
 }
