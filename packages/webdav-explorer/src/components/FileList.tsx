@@ -15,37 +15,50 @@ export interface FileListProps {
 	onClick: (file: FileStat) => void
 }
 
-function FileList(props: FileListProps) {
-	const [items, setItems] = createSignal<FileStat[]>([])
+export function createFileList() {
+	const [version, setVersion] = createSignal(0)
+	return {
+		refresh() {
+			setVersion((v) => ++v)
+		},
+		FileList(props: FileListProps) {
+			const [items, setItems] = createSignal<FileStat[]>([])
 
-	const folders = () =>
-		items()
-			.filter((item) => item.isDir)
-			.sort((a, b) => a.basename.localeCompare(b.basename, ['zh']))
+			const folders = () =>
+				items()
+					.filter((item) => item.isDir)
+					.sort((a, b) => a.basename.localeCompare(b.basename, ['zh']))
 
-	createEffect(refresh)
-
-	async function refresh() {
-		try {
-			const items = await props.fs.ls(props.path)
-			setItems(items)
-		} catch (e) {
-			if (e instanceof Error) {
-				new Notice(e.message)
+			async function refresh() {
+				try {
+					const items = await props.fs.ls(props.path)
+					setItems(items)
+				} catch (e) {
+					if (e instanceof Error) {
+						new Notice(e.message)
+					}
+				}
 			}
-		}
-	}
-	return (
-		<For each={folders()}>
-			{(folder) => (
-				<Folder
-					name={folder.basename}
-					path={folder.path}
-					onClick={() => props.onClick(folder)}
-				/>
-			)}
-		</For>
-	)
-}
 
-export default FileList
+			createEffect(async () => {
+				if (version() === 0) {
+					await refresh()
+					return
+				}
+				setVersion(0)
+			})
+
+			return (
+				<For each={folders()}>
+					{(folder) => (
+						<Folder
+							name={folder.basename}
+							path={folder.path}
+							onClick={() => props.onClick(folder)}
+						/>
+					)}
+				</For>
+			)
+		},
+	}
+}
