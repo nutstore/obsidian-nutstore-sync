@@ -1,4 +1,4 @@
-declare function decrypt(s: string): string;
+declare function decrypt(app: string, s: string): string;
 
 interface Secret {
     app: string;

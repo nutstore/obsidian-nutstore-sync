@@ -7,6 +7,6 @@ export interface OAuthResponse {
 }
 
 export async function decryptOAuthResponse(cipherText: string) {
-	const json = await decrypt(cipherText)
+	const json = await decrypt('obsidian', cipherText)
 	return JSON.parse(json) as OAuthResponse
 }
