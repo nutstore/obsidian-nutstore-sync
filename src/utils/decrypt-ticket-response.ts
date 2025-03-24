@@ -1,4 +1,4 @@
-import { decrypt } from '@nutstore/obsidian-sso'
+import { decrypt } from '@nutstore/sso-wasm'
 
 export interface OAuthResponse {
 	username: string
