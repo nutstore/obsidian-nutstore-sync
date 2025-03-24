@@ -92,9 +92,6 @@ importers:
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21
-      memfs:
-        specifier: ^4.17.0
-        version: 4.17.0
       node-diff3:
         specifier: ^3.1.2
         version: 3.1.2
@@ -755,24 +752,6 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.25':
     resolution: {integrity: sha512-vNk6aEwybGtawWmy/PzwnGDOjCkLWSD2wqvjGGAgOAwCGWySYXfYoxt00IJkTF+8Lb57DwOb3Aa0o9CApepiYQ==}
-
-  '@jsonjoy.com/base64@1.1.2':
-    resolution: {integrity: sha512-q6XAnWQDIMA3+FTiOYajoYqySkO+JSat0ytXGSuRdq9uXE7o92gzuQwQM14xaCRlBLGq3v5miDGC4vkVTn54xA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/json-pack@1.2.0':
-    resolution: {integrity: sha512-io1zEbbYcElht3tdlqEOFxZ0dMTYrHz9iMf0gqn1pPjZFTCgM5R4R5IMA20Chb2UPYYsxjzs8CgZ7Nb5n2K2rA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/util@1.5.0':
-    resolution: {integrity: sha512-ojoNsrIuPI9g6o8UxhraZQSyF2ByJanAY4cTFbc8Mf2AXEF4aQRGY1dJxyJpuyav8r9FGflEt/Ff3u5Nt6YMPA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
@@ -2052,10 +2031,6 @@ packages:
     resolution: {integrity: sha512-V+23sDMr12Wnz7iTcDeJr3O6AIxlnvT/bmaAAAP/Xda35C90p9599p0F1eHR/N1KILWSoWVAiOMFjBBXaXSMxg==}
     engines: {node: '>=10.19.0'}
 
-  hyperdyperid@1.2.0:
-    resolution: {integrity: sha512-Y93lCzHYgGWdrJ66yIktxiaGULYc6oGiABxhcO5AufBeOyoIdZF7bIfLaOrbM0iGIOXQQgxxRrFEnb+Y6w1n4A==}
-    engines: {node: '>=10.18'}
-
   i18next@24.2.3:
     resolution: {integrity: sha512-lfbf80OzkocvX7nmZtu7nSTNbrTYR52sLWxPtlXX1zAhVw8WEnFk4puUkCR4B1dNQwbSpEHHHemcZu//7EcB7A==}
     peerDependencies:
@@ -2275,10 +2250,6 @@ packages:
 
   mdn-data@2.12.2:
     resolution: {integrity: sha512-IEn+pegP1aManZuckezWCO+XZQDplx1366JoVhTpMpBB1sPey/SbveZQUosKiKiGYjg1wH4pMlNgXbCiYgihQA==}
-
-  memfs@4.17.0:
-    resolution: {integrity: sha512-4eirfZ7thblFmqFjywlTmuWVSvccHAJbn1r8qQLzmTO11qcqpohOjmY2mFce6x7x7WtskzRqApPD0hv+Oa74jg==}
-    engines: {node: '>= 4.0.0'}
 
   memorystream@0.3.1:
     resolution: {integrity: sha512-S3UwM3yj5mtUSEfP41UZmt/0SCoVYUcU1rkXv+BQ5Ig8ndL4sPoJNBUJERafdPb5jjHJGuMgytgKvKIf58XNBw==}
@@ -2929,12 +2900,6 @@ packages:
   text-table@0.2.0:
     resolution: {integrity: sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==}
 
-  thingies@1.21.0:
-    resolution: {integrity: sha512-hsqsJsFMsV+aD4s3CWKk85ep/3I9XzYV/IXaSouJMYIoDlgyi11cBhsqYe9/geRfB0YIikBQg6raRaM+nIMP9g==}
-    engines: {node: '>=10.18'}
-    peerDependencies:
-      tslib: ^2
-
   tinyexec@0.3.2:
     resolution: {integrity: sha512-KQQR9yN7R5+OSwaK0XQoj22pwHoTlgYqmUscPYoknOoWCWfj/5/ABTMRi69FrKU5ffPVh5QcFikpWJI/P1ocHA==}
 
@@ -2953,12 +2918,6 @@ packages:
   totalist@3.0.1:
     resolution: {integrity: sha512-sf4i37nQ2LBx4m3wB74y+ubopq6W/dIzXg0FDGjsYnZHVa1Da8FH853wlL2gtUhg+xJXjfk3kUZS3BRoQeoQBQ==}
     engines: {node: '>=6'}
-
-  tree-dump@1.0.2:
-    resolution: {integrity: sha512-dpev9ABuLWdEubk+cIaI9cHwRNNDjkBBLXTwI4UCUFdQ5xXKqNXoK4FEciw/vxf+NQ7Cb7sGUyeUtORvHIdRXQ==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
 
   ts-toolbelt@9.6.0:
     resolution: {integrity: sha512-nsZd8ZeNUzukXPlJmTBwUAuABDe/9qtVDelJeT/qW0ow3ZS3BsQJtNkan1802aM9Uf68/Y8ljw86Hu0h5IUW3w==}
@@ -3679,22 +3638,6 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.0
-
-  '@jsonjoy.com/base64@1.1.2(tslib@2.4.0)':
-    dependencies:
-      tslib: 2.4.0
-
-  '@jsonjoy.com/json-pack@1.2.0(tslib@2.4.0)':
-    dependencies:
-      '@jsonjoy.com/base64': 1.1.2(tslib@2.4.0)
-      '@jsonjoy.com/util': 1.5.0(tslib@2.4.0)
-      hyperdyperid: 1.2.0
-      thingies: 1.21.0(tslib@2.4.0)
-      tslib: 2.4.0
-
-  '@jsonjoy.com/util@1.5.0(tslib@2.4.0)':
-    dependencies:
-      tslib: 2.4.0
 
   '@marijn/find-cluster-break@1.0.2': {}
 
@@ -5216,8 +5159,6 @@ snapshots:
       quick-lru: 5.1.1
       resolve-alpn: 1.2.1
 
-  hyperdyperid@1.2.0: {}
-
   i18next@24.2.3(typescript@5.8.2):
     dependencies:
       '@babel/runtime': 7.26.10
@@ -5412,13 +5353,6 @@ snapshots:
   mdn-data@2.0.14: {}
 
   mdn-data@2.12.2: {}
-
-  memfs@4.17.0:
-    dependencies:
-      '@jsonjoy.com/json-pack': 1.2.0(tslib@2.4.0)
-      '@jsonjoy.com/util': 1.5.0(tslib@2.4.0)
-      tree-dump: 1.0.2(tslib@2.4.0)
-      tslib: 2.4.0
 
   memorystream@0.3.1: {}
 
@@ -6042,10 +5976,6 @@ snapshots:
 
   text-table@0.2.0: {}
 
-  thingies@1.21.0(tslib@2.4.0):
-    dependencies:
-      tslib: 2.4.0
-
   tinyexec@0.3.2: {}
 
   tinyglobby@0.2.12:
@@ -6060,10 +5990,6 @@ snapshots:
       is-number: 7.0.0
 
   totalist@3.0.1: {}
-
-  tree-dump@1.0.2(tslib@2.4.0):
-    dependencies:
-      tslib: 2.4.0
 
   ts-toolbelt@9.6.0: {}
 
