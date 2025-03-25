@@ -3,6 +3,7 @@ import { requestUrl } from 'obsidian'
 import { basename, join } from 'path'
 import { FileStat } from 'webdav'
 import { NS_DAV_ENDPOINT } from '~/consts'
+import { is503Error } from '~/utils/is-503-error'
 import { parseXml } from '~/utils/parse-xml'
 
 interface WebDAVResponse {
@@ -60,15 +61,16 @@ export async function getDirectoryContents(
 	let currentUrl = `${NS_DAV_ENDPOINT}${path}`
 
 	while (true) {
-		const response = await requestUrl({
-			url: currentUrl,
-			method: 'PROPFIND',
-			headers: {
-				Authorization: `Basic ${token}`,
-				'Content-Type': 'application/xml',
-				Depth: '1',
-			},
-			body: `<?xml version="1.0" encoding="utf-8"?>
+		try {
+			const response = await requestUrl({
+				url: currentUrl,
+				method: 'PROPFIND',
+				headers: {
+					Authorization: `Basic ${token}`,
+					'Content-Type': 'application/xml',
+					Depth: '1',
+				},
+				body: `<?xml version="1.0" encoding="utf-8"?>
         <propfind xmlns="DAV:">
           <prop>
             <displayname/>
@@ -78,27 +80,36 @@ export async function getDirectoryContents(
             <getcontenttype/>
           </prop>
         </propfind>`,
-		})
+			})
 
-		const result = parseXml<WebDAVResponse>(response.text)
-		const items = Array.isArray(result.multistatus.response)
-			? result.multistatus.response
-			: [result.multistatus.response]
+			const result = parseXml<WebDAVResponse>(response.text)
+			const items = Array.isArray(result.multistatus.response)
+				? result.multistatus.response
+				: [result.multistatus.response]
 
-		// 跳过第一个条目（当前目录）
-		contents.push(...items.slice(1).map(partial(convertToFileStat, '/dav')))
+			// 跳过第一个条目（当前目录）
+			contents.push(...items.slice(1).map(partial(convertToFileStat, '/dav')))
 
-		const linkHeader = response.headers['link'] || response.headers['Link']
-		if (!linkHeader) {
-			break
+			const linkHeader = response.headers['link'] || response.headers['Link']
+			if (!linkHeader) {
+				break
+			}
+
+			const nextLink = extractNextLink(linkHeader)
+			if (!nextLink) {
+				break
+			}
+			const nextUrl = new URL(nextLink)
+			nextUrl.pathname = decodeURI(nextUrl.pathname)
+			currentUrl = nextUrl.toString()
+		} catch (e) {
+			if (is503Error(e)) {
+				console.log('503 error, retrying...')
+				await sleep(60_000)
+				continue
+			}
+			throw e
 		}
-
-		const nextLink = extractNextLink(linkHeader)
-		if (!nextLink) {
-			break
-		}
-
-		currentUrl = decodeURI(nextLink)
 	}
 
 	return contents
