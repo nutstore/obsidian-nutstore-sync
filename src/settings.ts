@@ -1,4 +1,4 @@
-import { createOAuthUrl } from '@nutstore/obsidian-sso'
+import { createOAuthUrl } from '@nutstore/sso-wasm'
 import { isString } from 'lodash-es'
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import { LogoutConfirmModal } from './components/LogoutConfirmModal'

@@ -14,7 +14,7 @@
 	"devDependencies": {
 		"@deanc/esbuild-plugin-postcss": "^1.0.2",
 		"@electron/remote": "^2.1.2",
-		"@nutstore/obsidian-sso": "workspace:*",
+		"@nutstore/sso-wasm": "^0.0.1",
 		"@types/diff-match-patch": "^1.0.36",
 		"@types/lodash-es": "^4.17.12",
 		"@types/node": "^16.11.6",
@@ -40,7 +40,6 @@
 		"junk": "^4.0.1",
 		"localforage": "^1.10.0",
 		"lodash-es": "^4.17.21",
-		"memfs": "^4.17.0",
 		"node-diff3": "^3.1.2",
 		"npm-run-all2": "^7.0.2",
 		"obsidian": "latest",
