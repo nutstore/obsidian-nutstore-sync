@@ -1,3 +1,9 @@
+/**
+ * Patch webdav request to use obsidian's requestUrl
+ *
+ * reference: https://github.com/remotely-save/remotely-save/blob/34db181af002f8d71ea0a87e7965abc57b294914/src/fsWebdav.ts#L25
+ */
+import consola from 'consola'
 import { getReasonPhrase } from 'http-status-codes/build/cjs/utils-functions'
 import { Platform, requestUrl, RequestUrlParam } from 'obsidian'
 import { RequestOptionsWithState } from 'webdav'
@@ -59,7 +65,7 @@ if (VALID_REQURL) {
 				!options.url.endsWith('.md') &&
 				options.method.toUpperCase() === 'PROPFIND'
 			) {
-				console.debug(`so we have 401, try appending request url with slash`)
+				consola.debug(`so we have 401, try appending request url with slash`)
 				p.url = `${options.url}/`
 				r = await requestUrl(p)
 			}
