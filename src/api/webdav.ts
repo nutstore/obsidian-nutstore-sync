@@ -1,3 +1,4 @@
+import consola from 'consola'
 import { isNil, partial } from 'lodash-es'
 import { requestUrl } from 'obsidian'
 import { basename, join } from 'path'
@@ -104,7 +105,7 @@ export async function getDirectoryContents(
 			currentUrl = nextUrl.toString()
 		} catch (e) {
 			if (is503Error(e)) {
-				console.log('503 error, retrying...')
+				consola.error('503 error, retrying...')
 				await sleep(60_000)
 				continue
 			}
