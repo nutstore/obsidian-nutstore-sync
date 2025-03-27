@@ -1,4 +1,5 @@
 import { createMediaQuery } from '@solid-primitives/media'
+import { Notice } from 'obsidian'
 import path from 'path'
 import { createSignal, Show } from 'solid-js'
 import { createFileList, FileStat } from './components/FileList'
@@ -9,7 +10,7 @@ type MaybePromise<T> = Promise<T> | T
 
 export interface fs {
 	ls: (path: string) => MaybePromise<FileStat[]>
-	mkdirs: (path: string) => void
+	mkdirs: (path: string) => MaybePromise<void>
 }
 
 export interface AppProps {
@@ -45,9 +46,16 @@ function App(props: AppProps) {
 						onCancel={() => setShowNewFolder(false)}
 						onConfirm={async (name) => {
 							const target = path.join(cwd() ?? '/', name)
-							await props.fs.mkdirs(target)
-							setShowNewFolder(false)
-							list.refresh()
+							await Promise.resolve(props.fs.mkdirs(target))
+								.then(() => {
+									setShowNewFolder(false)
+									list.refresh()
+								})
+								.catch((e) => {
+									if (e instanceof Error) {
+										new Notice(e.message)
+									}
+								})
 						}}
 					/>
 				</Show>
