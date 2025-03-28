@@ -55,6 +55,10 @@ export default {
 			diffMatchPatch: 'Smart merge (Recommended)',
 			latestTimestamp: 'Use latest version',
 		},
+		confirmBeforeSync: {
+			name: 'Confirm before sync',
+			desc: 'Show pending tasks and execute after confirmation',
+		},
 		sections: {
 			account: 'Account',
 			common: 'General',
@@ -106,6 +110,27 @@ export default {
 			cancel: 'Cancel',
 			remoteDir: 'Remote directory: {{dir}}',
 			strategy: 'Sync strategy: {{strategy}}',
+		},
+	},
+	taskList: {
+		title: 'Sync Task List',
+		instruction:
+			'Please review the tasks below. Click "Continue" to execute the selected tasks, or "Cancel" to skip this sync.',
+		execute: 'Execute',
+		action: 'Action',
+		localPath: 'Local Path',
+		remotePath: 'Remote Path',
+		continue: 'Continue',
+		cancel: 'Cancel',
+		actions: {
+			merge: 'Merge',
+			createLocalDir: 'Create Local Directory',
+			createRemoteDir: 'Create Remote Directory',
+			download: 'Download',
+			upload: 'Upload',
+			removeLocal: 'Remove Local',
+			removeRemote: 'Remove Remote',
+			sync: 'Sync',
 		},
 	},
 }

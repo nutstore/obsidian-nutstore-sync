@@ -148,7 +148,7 @@ export default class NutstorePlugin extends Plugin {
 					return
 				}
 				const startSync = async () => {
-					const sync = new NutstoreSync({
+					const sync = new NutstoreSync(this.app, {
 						webdav: await this.createWebDAVClient(),
 						vault: this.app.vault,
 						token: await this.getToken(),

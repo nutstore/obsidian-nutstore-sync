@@ -16,6 +16,7 @@ export interface NutstoreSettings {
 	conflictStrategy: 'diff-match-patch' | 'latest-timestamp'
 	oauthResponseText: string
 	loginMode: 'manual' | 'sso'
+	confirmBeforeSync: boolean
 }
 
 export const DEFAULT_SETTINGS: NutstoreSettings = {
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	conflictStrategy: 'diff-match-patch',
 	oauthResponseText: '',
 	loginMode: 'sso',
+	confirmBeforeSync: true,
 }
 
 let pluginInstance: NutstorePlugin | null = null
@@ -238,6 +240,18 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					}).open()
 				})
 			})
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.confirmBeforeSync.name'))
+			.setDesc(i18n.t('settings.confirmBeforeSync.desc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.confirmBeforeSync)
+					.onChange(async (value) => {
+						this.plugin.settings.confirmBeforeSync = value
+						await this.plugin.saveSettings()
+					}),
+			)
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.conflictStrategy.name'))

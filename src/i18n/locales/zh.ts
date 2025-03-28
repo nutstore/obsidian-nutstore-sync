@@ -70,6 +70,10 @@ export default {
 			account: '账号设置',
 			common: '通用设置',
 		},
+		confirmBeforeSync: {
+			name: '同步前确认',
+			desc: '同步前显示待执行的任务列表，确认后再执行',
+		},
 	},
 	sync: {
 		failed: '同步失败!',
@@ -104,6 +108,27 @@ export default {
 			cancel: '取消',
 			remoteDir: '远程目录：{{dir}}',
 			strategy: '同步策略：{{strategy}}',
+		},
+	},
+	taskList: {
+		title: '同步任务列表',
+		instruction:
+			'请检查以下待执行的任务。点击"继续"将执行选中的任务，点击"取消"则跳过本次同步。',
+		execute: '执行',
+		action: '行为',
+		localPath: '本地路径',
+		remotePath: '远程路径',
+		continue: '继续',
+		cancel: '取消',
+		actions: {
+			merge: '合并',
+			createLocalDir: '创建本地目录',
+			createRemoteDir: '创建远程目录',
+			download: '下载',
+			upload: '上传',
+			removeLocal: '删除本地',
+			removeRemote: '删除远程',
+			sync: '同步',
 		},
 	},
 }
