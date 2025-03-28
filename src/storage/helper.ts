@@ -33,4 +33,8 @@ export class SyncRecord {
 		const map = await syncRecordKV.get(this.key)
 		return map?.get(path)
 	}
+
+	async drop() {
+		return await syncRecordKV.unset(this.key)
+	}
 }
