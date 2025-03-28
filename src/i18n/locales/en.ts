@@ -51,7 +51,7 @@ export default {
 		},
 		conflictStrategy: {
 			name: 'Conflict resolution strategy',
-			desc: 'Choose how to resolve file conflicts',
+			desc: 'Choose how to resolve file conflicts. \nNote: It is recommended to backup important files before using auto-merge feature to prevent data loss.',
 			diffMatchPatch: 'Smart merge (Recommended)',
 			latestTimestamp: 'Use latest version',
 		},
