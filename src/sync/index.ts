@@ -72,7 +72,15 @@ export class NutstoreSync {
 			const webdav = this.options.webdav
 			emitStartSync()
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
-			while (!(await webdav.exists(remoteBaseDir))) {
+			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
+			const syncRecord = new SyncRecord(
+				this.options.vault,
+				this.options.remoteBaseDir,
+			)
+			if (!remoteBaseDirExits) {
+				await syncRecord.drop()
+			}
+			while (!remoteBaseDirExits) {
 				if (this.isCancelled) {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
 					return
@@ -92,16 +100,13 @@ export class NutstoreSync {
 							}),
 						)
 						await sleep(startAt - now)
+						remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 					} else {
 						throw e
 					}
 				}
 			}
 
-			const syncRecord = new SyncRecord(
-				this.options.vault,
-				this.options.remoteBaseDir,
-			)
 			const localStats = await this.localFS.walk()
 			const remoteStats = await this.remoteFs.walk()
 			const localStatsMap = new Map(localStats.map((item) => [item.path, item]))
