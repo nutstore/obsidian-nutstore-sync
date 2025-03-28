@@ -108,4 +108,23 @@ export default {
 			strategy: 'Sync strategy: {{strategy}}',
 		},
 	},
+	taskList: {
+		title: 'Sync Task List',
+		execute: 'Execute',
+		action: 'Action',
+		localPath: 'Local Path',
+		remotePath: 'Remote Path',
+		continue: 'Continue',
+		cancel: 'Cancel',
+		actions: {
+			merge: 'Merge',
+			createLocalDir: 'Create Local Directory',
+			createRemoteDir: 'Create Remote Directory',
+			download: 'Download',
+			upload: 'Upload',
+			removeLocal: 'Remove Local',
+			removeRemote: 'Remove Remote',
+			sync: 'Sync',
+		},
+	},
 }

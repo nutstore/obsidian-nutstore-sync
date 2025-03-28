@@ -106,4 +106,23 @@ export default {
 			strategy: '同步策略：{{strategy}}',
 		},
 	},
+	taskList: {
+		title: '同步任务列表',
+		execute: '执行',
+		action: '行为',
+		localPath: '本地路径',
+		remotePath: '远程路径',
+		continue: '继续',
+		cancel: '取消',
+		actions: {
+			merge: '合并',
+			createLocalDir: '创建本地目录',
+			createRemoteDir: '创建远程目录',
+			download: '下载',
+			upload: '上传',
+			removeLocal: '删除本地',
+			removeRemote: '删除远程',
+			sync: '同步',
+		},
+	},
 }
