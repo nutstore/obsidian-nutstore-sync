@@ -1,6 +1,7 @@
 import { Notice } from 'obsidian'
-import { createEffect, createSignal, For } from 'solid-js'
+import { createEffect, createSignal, For, Show } from 'solid-js'
 import { type fs } from '../App'
+import File from './File'
 import Folder from './Folder'
 
 export interface FileStat {
@@ -24,10 +25,17 @@ export function createFileList() {
 		FileList(props: FileListProps) {
 			const [items, setItems] = createSignal<FileStat[]>([])
 
-			const folders = () =>
-				items()
-					.filter((item) => item.isDir)
-					.sort((a, b) => a.basename.localeCompare(b.basename, ['zh']))
+			const sortedItems = () =>
+				items().sort((a, b) => {
+					if (a.isDir === b.isDir) {
+						return a.basename.localeCompare(b.basename, ['zh'])
+					}
+					if (a.isDir && !b.isDir) {
+						return -1
+					} else {
+						return 1
+					}
+				})
 
 			async function refresh() {
 				try {
@@ -49,13 +57,15 @@ export function createFileList() {
 			})
 
 			return (
-				<For each={folders()}>
-					{(folder) => (
-						<Folder
-							name={folder.basename}
-							path={folder.path}
-							onClick={() => props.onClick(folder)}
-						/>
+				<For each={sortedItems()}>
+					{(f) => (
+						<Show when={f.isDir} fallback={<File name={f.basename} />}>
+							<Folder
+								name={f.basename}
+								path={f.path}
+								onClick={() => props.onClick(f)}
+							/>
+						</Show>
 					)}
 				</For>
 			)
