@@ -57,7 +57,7 @@ export default {
 		},
 		confirmBeforeSync: {
 			name: 'Confirm before sync',
-			desc: 'Show pending tasks and wait for confirmation before syncing',
+			desc: 'Show pending tasks and execute after confirmation',
 		},
 		sections: {
 			account: 'Account',
@@ -114,6 +114,8 @@ export default {
 	},
 	taskList: {
 		title: 'Sync Task List',
+		instruction:
+			'Please review the tasks below. Click "Continue" to execute the selected tasks, or "Cancel" to skip this sync.',
 		execute: 'Execute',
 		action: 'Action',
 		localPath: 'Local Path',

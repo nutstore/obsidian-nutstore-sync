@@ -52,9 +52,11 @@ export class TaskListConfirmModal extends Modal {
 		const { contentEl } = this
 		contentEl.empty()
 
+		const instruction = contentEl.createEl('p')
+		instruction.setText(i18n.t('taskList.instruction'))
+
 		const table = contentEl.createEl('table', { cls: 'task-list-table' })
 
-		// header
 		const thead = table.createEl('thead')
 		const headerRow = thead.createEl('tr')
 		headerRow.createEl('th', { text: i18n.t('taskList.execute') })
@@ -62,7 +64,6 @@ export class TaskListConfirmModal extends Modal {
 		headerRow.createEl('th', { text: i18n.t('taskList.localPath') })
 		headerRow.createEl('th', { text: i18n.t('taskList.remotePath') })
 
-		// body
 		const tbody = table.createEl('tbody')
 		this.tasks.forEach((task, index) => {
 			const row = tbody.createEl('tr')

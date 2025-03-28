@@ -72,7 +72,7 @@ export default {
 		},
 		confirmBeforeSync: {
 			name: '同步前确认',
-			desc: '同步前显示待执行的任务列表，并等待确认',
+			desc: '同步前显示待执行的任务列表，确认后再执行',
 		},
 	},
 	sync: {
@@ -112,6 +112,8 @@ export default {
 	},
 	taskList: {
 		title: '同步任务列表',
+		instruction:
+			'请检查以下待执行的任务。点击"继续"将执行选中的任务，点击"取消"则跳过本次同步。',
 		execute: '执行',
 		action: '行为',
 		localPath: '本地路径',
