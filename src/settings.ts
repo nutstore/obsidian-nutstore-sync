@@ -131,11 +131,12 @@ export class NutstoreSettingTab extends PluginSettingTab {
 
 	private displayManualLoginSettings(): void {
 		const helper = new Setting(this.containerEl)
-		helper.descEl.innerHTML = `
-			<a href="https://help.jianguoyun.com/?p=2064" target="_blank" class="no-underline">
-				${i18n.t('settings.help.name')}
-			</a>
-			`
+		helper.descEl.createEl('a', {
+			href: 'https://help.jianguoyun.com/?p=2064',
+			cls: 'no-underline',
+			text: i18n.t('settings.help.name'),
+		})
+
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.account.name'))
 			.setDesc(i18n.t('settings.account.desc'))
