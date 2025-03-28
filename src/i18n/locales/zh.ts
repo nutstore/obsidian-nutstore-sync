@@ -70,6 +70,10 @@ export default {
 			account: '账号设置',
 			common: '通用设置',
 		},
+		confirmBeforeSync: {
+			name: '同步前确认',
+			desc: '同步前显示待执行的任务列表，并等待确认',
+		},
 	},
 	sync: {
 		failed: '同步失败!',

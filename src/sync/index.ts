@@ -543,63 +543,77 @@ export class NutstoreSync {
 				(a, b) => b.remotePath.length - a.remotePath.length,
 			)
 			tasks.splice(0, 0, ...removeFolderTasks)
-			consola.debug('tasks', tasks)
-			const confirmExec = await new TaskListConfirmModal(this.app, tasks).open()
-			let tasksResult: TaskResult[] = []
-			if (confirmExec.confirm) {
-				tasksResult = await this.execTasks(confirmExec.tasks)
-			} else {
-				emitSyncError(new Error(i18n.t('sync.cancelled')))
+			if (tasks.length === 0) {
+				emitEndSync(0)
 				return
 			}
+
+			let confirmedTasks = tasks
+			if (settings.confirmBeforeSync) {
+				const confirmExec = await new TaskListConfirmModal(
+					this.app,
+					tasks,
+				).open()
+				if (confirmExec.confirm) {
+					confirmedTasks = confirmExec.tasks
+				} else {
+					emitSyncError(new Error(i18n.t('sync.cancelled')))
+					return
+				}
+			}
+			const tasksResult = await this.execTasks(confirmedTasks)
 			const failedCount = tasksResult.filter((r) => !r.success).length
 			consola.debug('tasks result', tasksResult, 'failed:', failedCount)
-			// update mtime in records
-			if (tasks.length > 0) {
-				const latestRemoteEntities = await this.remoteFs.walk()
-				const records = await syncRecord.getRecords()
-				await Promise.all(
-					tasks.map(async (task, i) => {
-						if (!tasksResult[i]?.success) {
-							return
-						}
-						const remote = latestRemoteEntities.find(
-							(v) =>
-								remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
-								task.remotePath,
-						)
-						if (!remote) {
-							return
-						}
-						const local = await statVaultItem(
-							this.options.vault,
-							task.localPath,
-						)
-						if (!local) {
-							return
-						}
-						let base: Blob | undefined
-						if (!local.isDir) {
-							const buffer = await this.options.vault.adapter.readBinary(
-								task.localPath,
-							)
-							base = new Blob([buffer])
-						}
-						records.set(task.localPath, {
-							remote,
-							local,
-							base,
-						})
-					}),
-				)
-				await syncRecord.setRecords(records)
-			}
+			await this.updateMtimeInRecord(confirmedTasks, tasksResult)
 			emitEndSync(failedCount)
 		} catch (error) {
 			emitSyncError(error)
 			consola.error('Sync error:', error)
 		} finally {
 			this.subscriptions.forEach((sub) => sub.unsubscribe())
+		}
+	}
+
+	async updateMtimeInRecord(tasks: BaseTask[], results: TaskResult[]) {
+		const syncRecord = new SyncRecord(
+			this.options.vault,
+			this.options.remoteBaseDir,
+		)
+		if (tasks.length > 0) {
+			const latestRemoteEntities = await this.remoteFs.walk()
+			const records = await syncRecord.getRecords()
+			await Promise.all(
+				tasks.map(async (task, i) => {
+					if (!results[i]?.success) {
+						return
+					}
+					const remote = latestRemoteEntities.find(
+						(v) =>
+							remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
+							task.remotePath,
+					)
+					if (!remote) {
+						return
+					}
+					const local = await statVaultItem(this.options.vault, task.localPath)
+					if (!local) {
+						return
+					}
+					let base: Blob | undefined
+					if (!local.isDir) {
+						const buffer = await this.options.vault.adapter.readBinary(
+							task.localPath,
+						)
+						base = new Blob([buffer])
+					}
+					records.set(task.localPath, {
+						remote,
+						local,
+						base,
+					})
+				}),
+			)
+			await syncRecord.setRecords(records)
 		}
 	}
 

@@ -55,6 +55,10 @@ export default {
 			diffMatchPatch: 'Smart merge (Recommended)',
 			latestTimestamp: 'Use latest version',
 		},
+		confirmBeforeSync: {
+			name: 'Confirm before sync',
+			desc: 'Show pending tasks and wait for confirmation before syncing',
+		},
 		sections: {
 			account: 'Account',
 			common: 'General',
