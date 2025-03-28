@@ -1,8 +1,9 @@
 import consola, { LogLevels } from 'consola'
-import { Notice, Vault, moment } from 'obsidian'
+import { App, Notice, Vault, moment } from 'obsidian'
 import path from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
+import { TaskListConfirmModal } from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
 	emitStartSync,
@@ -41,6 +42,7 @@ export class NutstoreSync {
 	private subscriptions: Subscription[] = []
 
 	constructor(
+		private app: App,
 		private options: {
 			vault: Vault
 			token: string
@@ -138,7 +140,9 @@ export class NutstoreSync {
 						)
 					}
 				} else if (record) {
-					const remoteChanged = !moment(remote.mtime).isSame(record.remote.mtime)
+					const remoteChanged = !moment(remote.mtime).isSame(
+						record.remote.mtime,
+					)
 					if (remoteChanged) {
 						consola.debug({
 							reason: 'remote folder changed',
@@ -540,7 +544,14 @@ export class NutstoreSync {
 			)
 			tasks.splice(0, 0, ...removeFolderTasks)
 			consola.debug('tasks', tasks)
-			const tasksResult = await this.execTasks(tasks)
+			const confirmExec = await new TaskListConfirmModal(this.app, tasks).open()
+			let tasksResult: TaskResult[] = []
+			if (confirmExec.confirm) {
+				tasksResult = await this.execTasks(confirmExec.tasks)
+			} else {
+				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				return
+			}
 			const failedCount = tasksResult.filter((r) => !r.success).length
 			consola.debug('tasks result', tasksResult, 'failed:', failedCount)
 			// update mtime in records
