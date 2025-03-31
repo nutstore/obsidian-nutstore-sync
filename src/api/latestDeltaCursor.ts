@@ -1,7 +1,7 @@
+import { XMLParser } from 'fast-xml-parser'
 import { requestUrl } from 'obsidian'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
-import { parseXml } from '~/utils/parse-xml'
 
 interface GetLatestDeltaCursorInput {
 	folderName: string
@@ -24,11 +24,21 @@ export const getLatestDeltaCursor = apiLimiter.wrap(
 			headers,
 			body,
 		})
-		const result = parseXml<{
+		const parseXml = new XMLParser({
+			attributeNamePrefix: '',
+			removeNSPrefix: true,
+			parseTagValue: false,
+			numberParseOptions: {
+				eNotation: false,
+				hex: true,
+				leadingZeros: true,
+			},
+		})
+		const result: {
 			response: {
 				cursor: string
 			}
-		}>(response.text)
+		} = parseXml.parse(response.text)
 		return result
 	},
 )

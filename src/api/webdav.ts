@@ -1,11 +1,11 @@
 import consola from 'consola'
+import { XMLParser } from 'fast-xml-parser'
 import { isNil, partial } from 'lodash-es'
 import { requestUrl } from 'obsidian'
 import { basename, join } from 'path'
 import { FileStat } from 'webdav'
 import { NS_DAV_ENDPOINT } from '~/consts'
 import { is503Error } from '~/utils/is-503-error'
-import { parseXml } from '~/utils/parse-xml'
 
 interface WebDAVResponse {
 	multistatus: {
@@ -82,8 +82,17 @@ export async function getDirectoryContents(
           </prop>
         </propfind>`,
 			})
-
-			const result = parseXml<WebDAVResponse>(response.text)
+			const parseXml = new XMLParser({
+				attributeNamePrefix: '',
+				removeNSPrefix: true,
+				parseTagValue: false,
+				numberParseOptions: {
+					eNotation: false,
+					hex: true,
+					leadingZeros: true,
+				},
+			})
+			const result: WebDAVResponse = parseXml.parse(response.text)
 			const items = Array.isArray(result.multistatus.response)
 				? result.multistatus.response
 				: [result.multistatus.response]
