@@ -1,8 +1,8 @@
+import { XMLParser } from 'fast-xml-parser'
 import { isNil } from 'lodash-es'
 import { requestUrl } from 'obsidian'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
-import { parseXml } from '~/utils/parse-xml'
 
 export interface DeltaEntry {
 	path: string
@@ -35,7 +35,7 @@ export const getDelta = apiLimiter.wrap(
                   <s:folderName>${folderName}</s:folderName>
                   <s:cursor>${cursor ?? ''}</s:cursor>
               </s:delta>`
-		const xml = await requestUrl({
+		const response = await requestUrl({
 			url: NSAPI('delta'),
 			method: 'POST',
 			headers: {
@@ -44,7 +44,19 @@ export const getDelta = apiLimiter.wrap(
 			},
 			body,
 		})
-		const result = parseXml<{ response: DeltaResponse }>(xml.text)
+
+		const parseXml = new XMLParser({
+			attributeNamePrefix: '',
+			removeNSPrefix: true,
+			parseTagValue: false,
+			numberParseOptions: {
+				eNotation: false,
+				hex: true,
+				leadingZeros: true,
+			},
+		})
+		const result: { response: DeltaResponse } = parseXml.parse(response.text)
+
 		if (!isNil(result?.response?.cursor)) {
 			result.response.cursor = result.response.cursor.toString()
 		}
