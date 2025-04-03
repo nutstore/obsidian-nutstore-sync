@@ -1,4 +1,4 @@
-import { createOAuthUrl } from '@nutstore/sso-wasm'
+import { createOAuthUrl } from '@nutstore/sso-js'
 import { isString } from 'lodash-es'
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import { LogoutConfirmModal } from './components/LogoutConfirmModal'
@@ -288,7 +288,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	}
 
 	handleSSO = async () => {
-		const url = createOAuthUrl({
+		const url = await createOAuthUrl({
 			app: 'obsidian',
 		})
 		window.open(url)
