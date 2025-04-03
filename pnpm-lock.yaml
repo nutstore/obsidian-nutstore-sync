@@ -53,6 +53,9 @@ importers:
       consola:
         specifier: ^3.4.0
         version: 3.4.2
+      core-js:
+        specifier: ^3.41.0
+        version: 3.41.0
       crypto-browserify:
         specifier: ^3.12.1
         version: 3.12.1

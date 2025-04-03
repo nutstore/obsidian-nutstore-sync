@@ -27,6 +27,7 @@
 		"buffer": "^6.0.3",
 		"builtin-modules": "3.3.0",
 		"consola": "^3.4.0",
+		"core-js": "^3.41.0",
 		"crypto-browserify": "^3.12.1",
 		"diff-match-patch": "^1.0.5",
 		"dotenv": "^16.4.7",

@@ -1,3 +1,4 @@
+import 'core-js/actual/string/replace-all'
 import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
