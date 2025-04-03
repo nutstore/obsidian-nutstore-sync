@@ -9,6 +9,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: production
+    env:
+      GITHUB_TOKEN: ${{ secrets.GitHub_TOKEN }}
     permissions:
       contents: write
     steps:
@@ -28,7 +30,7 @@ jobs:
         env:
           NS_NSDAV_ENDPOINT: ${{ vars.NS_NSDAV_ENDPOINT }}
           NS_DAV_ENDPOINT: ${{ vars.NS_DAV_ENDPOINT }}
-          NUTSTORE_PAT: ${{ secrets.GitHub_TOKEN }}
+          NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm install
           pnpm run build
