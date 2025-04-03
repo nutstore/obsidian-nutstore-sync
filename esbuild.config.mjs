@@ -53,7 +53,7 @@ const context = await esbuild.context({
 		'process.env.NS_DAV_ENDPOINT': JSON.stringify(process.env.NS_DAV_ENDPOINT),
 	},
 	format: 'cjs',
-	target: 'es2018',
+	target: 'es2015',
 	logLevel: 'info',
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
@@ -61,7 +61,6 @@ const context = await esbuild.context({
 	minify: prod,
 	platform: 'browser',
 	plugins: [
-		// sassPlugin(),
 		postcss({
 			plugins: [UnoCSS(), postcssMergeRules()],
 		}),
