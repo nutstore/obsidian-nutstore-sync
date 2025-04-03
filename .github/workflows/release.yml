@@ -11,6 +11,7 @@ jobs:
     environment: production
     permissions:
       contents: write
+      packages: read
     steps:
       - uses: actions/checkout@v3
 

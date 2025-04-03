@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-nutstore-sync",
-	"version": "0.0.7",
+	"version": "0.1.0",
 	"main": "main.js",
 	"scripts": {
 		"dev": "run-p dev:*",
