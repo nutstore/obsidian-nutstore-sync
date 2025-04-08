@@ -1,7 +1,7 @@
 import consola from 'consola'
 import { diff_match_patch } from 'diff-match-patch'
-import {moment} from "obsidian"
 import { isEqual } from 'lodash-es'
+import { moment } from 'obsidian'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
@@ -112,8 +112,9 @@ export default class ConflictResolveTask extends BaseTask {
 			const { record } = this.options
 			const baseText = (await record?.base?.text()) ?? remoteText
 			const dmp = new diff_match_patch()
+			dmp.Match_Threshold = 0.2
+			dmp.Patch_Margin = 4
 			const diffs = dmp.diff_main(baseText, remoteText)
-			dmp.diff_cleanupSemantic(diffs)
 			const patches = dmp.patch_make(baseText, diffs)
 			let [mergedText, solveResult] = dmp.patch_apply(patches, localText)
 			if (solveResult.includes(false)) {
