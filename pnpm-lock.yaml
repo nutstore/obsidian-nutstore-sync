@@ -14,7 +14,7 @@ importers:
       '@electron/remote':
         specifier: ^2.1.2
         version: 2.1.2(electron@35.0.3)
-      '@nutstore/sso-wasm':
+      '@nutstore/sso-js':
         specifier: ^0.0.1
         version: 0.0.1
       '@types/diff-match-patch':
@@ -53,6 +53,9 @@ importers:
       consola:
         specifier: ^3.4.0
         version: 3.4.2
+      core-js:
+        specifier: ^3.41.0
+        version: 3.41.0
       crypto-browserify:
         specifier: ^3.12.1
         version: 3.12.1
@@ -783,8 +786,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@nutstore/sso-wasm@0.0.1':
-    resolution: {integrity: sha512-JU0GlH7cUvU6ybwdga/SNyMHXSMthfnuWnk/GBJASdKZG6Vi/0JmkNoOydiGRirzUIjLSrS4vy42/7jbVM0tYQ==, tarball: https://npm.pkg.github.com/download/@nutstore/sso-wasm/0.0.1/9dfa2f5de7ded10a55a69ade9aabd6a5ea0187cd}
+  '@nutstore/sso-js@0.0.1':
+    resolution: {integrity: sha512-fPXxjJZz3cC8rlmgY5zjuRIYAiGpLR1QVdgWKkjjWGCdaU4nI04+drsCOiZstnrue8C1VhcY8P8GxBM1OjldOw==, tarball: https://npm.pkg.github.com/download/@nutstore/sso-js/0.0.1/f3566bf1f951a736269ee4933527313f5e32cbde}
 
   '@parcel/watcher-android-arm64@2.5.1':
     resolution: {integrity: sha512-KF8+j9nNbUN8vzOFDpRMsaKBHZ/mcjEjMToVMJOhTozkDonQFFrRcfdLWn6yWKCmJKmdVxSgHiYvTCef4/qcBA==}
@@ -3674,7 +3677,7 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@nutstore/sso-wasm@0.0.1': {}
+  '@nutstore/sso-js@0.0.1': {}
 
   '@parcel/watcher-android-arm64@2.5.1':
     optional: true

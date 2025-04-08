@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-nutstore-sync",
-	"version": "0.0.7",
+	"version": "0.1.0",
 	"main": "main.js",
 	"scripts": {
 		"dev": "run-p dev:*",
@@ -14,7 +14,7 @@
 	"devDependencies": {
 		"@deanc/esbuild-plugin-postcss": "^1.0.2",
 		"@electron/remote": "^2.1.2",
-		"@nutstore/sso-wasm": "^0.0.1",
+		"@nutstore/sso-js": "^0.0.1",
 		"@types/diff-match-patch": "^1.0.36",
 		"@types/lodash-es": "^4.17.12",
 		"@types/node": "^16.11.6",
@@ -27,6 +27,7 @@
 		"buffer": "^6.0.3",
 		"builtin-modules": "3.3.0",
 		"consola": "^3.4.0",
+		"core-js": "^3.41.0",
 		"crypto-browserify": "^3.12.1",
 		"diff-match-patch": "^1.0.5",
 		"dotenv": "^16.4.7",
