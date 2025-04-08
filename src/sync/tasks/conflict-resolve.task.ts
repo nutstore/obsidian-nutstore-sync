@@ -112,7 +112,8 @@ export default class ConflictResolveTask extends BaseTask {
 			const { record } = this.options
 			const baseText = (await record?.base?.text()) ?? remoteText
 			const dmp = new diff_match_patch()
-			dmp.Match_Threshold = 0.1
+			dmp.Match_Threshold = 0.2
+			dmp.Patch_Margin = 4
 			const diffs = dmp.diff_main(baseText, remoteText)
 			const patches = dmp.patch_make(baseText, diffs)
 			let [mergedText, solveResult] = dmp.patch_apply(patches, localText)
