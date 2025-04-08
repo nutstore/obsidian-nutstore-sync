@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer'
 import consola from 'consola'
 import { diff_match_patch } from 'diff-match-patch'
 import { isEqual } from 'lodash-es'
