@@ -1,5 +1,4 @@
 import { createOAuthUrl } from '@nutstore/sso-js'
-import { isString } from 'lodash-es'
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
 import FilterEditorModal from './components/FilterEditorModal'
 import LogoutConfirmModal from './components/LogoutConfirmModal'
@@ -50,6 +49,10 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	plugin: NutstorePlugin
 
 	updateOAuthUrlTimer: number | null = null
+
+	subSso = onSsoReceive().subscribe(() => {
+		this.display()
+	})
 
 	constructor(app: App, plugin: any) {
 		super(app, plugin)
@@ -207,17 +210,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			new Setting(this.containerEl)
 				.setName(i18n.t('settings.ssoStatus.notLoggedIn'))
 				.addButton(async (button) => {
-					button
-						.setButtonText(i18n.t('settings.login.name'))
-						.onClick(async () => {
-							const ssoRes = await this.handleSSO()
-							if (ssoRes) {
-								new Notice(i18n.t('settings.login.success'), 5000)
-								this.display()
-							} else {
-								new Notice(i18n.t('settings.login.failure'), 5000)
-							}
-						})
+					button.setButtonText(i18n.t('settings.login.name'))
 					const anchor = document.createElement('a')
 					anchor.target = '_blank'
 					button.buttonEl.parentElement?.appendChild(anchor)
@@ -327,31 +320,6 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					).open()
 				})
 			})
-	}
-
-	handleSSO = async () => {
-		return new Promise<boolean>((resolve, reject) => {
-			const timeout = setTimeout(
-				() => {
-					returnResult(false)
-				},
-				5 * 60 * 1000,
-			)
-			const sub = onSsoReceive().subscribe(async (token) => {
-				if (isString(token?.token)) {
-					this.plugin.settings.oauthResponseText = token.token
-					await this.plugin.saveSettings()
-					returnResult(true)
-				} else {
-					returnResult(false)
-				}
-			})
-			function returnResult(val: boolean) {
-				sub.unsubscribe()
-				clearTimeout(timeout)
-				resolve(val)
-			}
-		})
 	}
 
 	hide() {

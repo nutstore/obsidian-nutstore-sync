@@ -118,7 +118,12 @@ export default class NutstorePlugin extends Plugin {
 			},
 		)
 
-		this.registerObsidianProtocolHandler('nutstore-sync/sso', (data) => {
+		this.registerObsidianProtocolHandler('nutstore-sync/sso', async (data) => {
+			if (data?.s) {
+				this.settings.oauthResponseText = data.s
+				await this.saveSettings()
+				new Notice(i18n.t('settings.login.success'), 5000)
+			}
 			emitSsoReceive({
 				token: data?.s,
 			})
