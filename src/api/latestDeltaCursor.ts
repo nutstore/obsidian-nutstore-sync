@@ -1,7 +1,7 @@
 import { XMLParser } from 'fast-xml-parser'
-import { requestUrl } from 'obsidian'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
+import requestUrl from '~/utils/request-url'
 
 interface GetLatestDeltaCursorInput {
 	folderName: string

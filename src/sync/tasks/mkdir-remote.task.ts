@@ -14,10 +14,6 @@ export default class MkdirRemoteTask extends BaseTask {
 					i18n.t('sync.error.localPathNotFound', { path: this.localPath }),
 				)
 			}
-			if (await this.webdav.exists(this.remotePath)) {
-				consola.debug('mkdir remote: already exists:', this.remotePath)
-				return { success: true }
-			}
 			await this.webdav.createDirectory(this.remotePath, {
 				recursive: true,
 			})

@@ -1,8 +1,8 @@
 import { XMLParser } from 'fast-xml-parser'
 import { isNil } from 'lodash-es'
-import { requestUrl } from 'obsidian'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
+import requestUrl from '~/utils/request-url'
 
 export interface DeltaEntry {
 	path: string
