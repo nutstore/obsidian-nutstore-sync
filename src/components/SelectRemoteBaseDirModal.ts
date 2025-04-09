@@ -6,7 +6,7 @@ import { getDirectoryContents } from '~/api/webdav'
 import { fileStatToStatModel } from '~/utils/file-stat-to-stat-model'
 import { mkdirsWebDAV } from '~/utils/mkdirs-webdav'
 
-export class SelectRemoteBaseDirModal extends Modal {
+export default class SelectRemoteBaseDirModal extends Modal {
 	constructor(
 		app: App,
 		private plugin: NutstorePlugin,

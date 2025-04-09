@@ -1,8 +1,9 @@
 import { createOAuthUrl } from '@nutstore/sso-js'
 import { isString } from 'lodash-es'
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian'
-import { LogoutConfirmModal } from './components/LogoutConfirmModal'
-import { SelectRemoteBaseDirModal } from './components/SelectRemoteBaseDirModal'
+import FilterEditorModal from './components/FilterEditorModal'
+import LogoutConfirmModal from './components/LogoutConfirmModal'
+import SelectRemoteBaseDirModal from './components/SelectRemoteBaseDirModal'
 import { onSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
 import type NutstorePlugin from './index'
@@ -17,6 +18,7 @@ export interface NutstoreSettings {
 	oauthResponseText: string
 	loginMode: 'manual' | 'sso'
 	confirmBeforeSync: boolean
+	filters: string[]
 }
 
 export const DEFAULT_SETTINGS: NutstoreSettings = {
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	oauthResponseText: '',
 	loginMode: 'sso',
 	confirmBeforeSync: true,
+	filters: ['.obsidian', '.git', '.DS_Store', '.Trash'],
 }
 
 let pluginInstance: NutstorePlugin | null = null
@@ -241,6 +244,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		this.containerEl.createEl('h2', {
 			text: i18n.t('settings.sections.common'),
 		})
+
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.remoteDir.name'))
 			.setDesc(i18n.t('settings.remoteDir.desc'))
@@ -262,18 +266,6 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					}).open()
 				})
 			})
-
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.confirmBeforeSync.name'))
-			.setDesc(i18n.t('settings.confirmBeforeSync.desc'))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.confirmBeforeSync)
-					.onChange(async (value) => {
-						this.plugin.settings.confirmBeforeSync = value
-						await this.plugin.saveSettings()
-					}),
-			)
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.conflictStrategy.name'))
@@ -306,6 +298,35 @@ export class NutstoreSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings()
 					}),
 			)
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.confirmBeforeSync.name'))
+			.setDesc(i18n.t('settings.confirmBeforeSync.desc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.confirmBeforeSync)
+					.onChange(async (value) => {
+						this.plugin.settings.confirmBeforeSync = value
+						await this.plugin.saveSettings()
+					}),
+			)
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.filters.name'))
+			.setDesc(i18n.t('settings.filters.desc'))
+			.addButton((button) => {
+				button.setButtonText(i18n.t('settings.filters.edit')).onClick(() => {
+					new FilterEditorModal(
+						this.app,
+						this.plugin.settings.filters,
+						async (filters) => {
+							this.plugin.settings.filters = filters
+							await this.plugin.saveSettings()
+							this.display()
+						},
+					).open()
+				})
+			})
 	}
 
 	handleSSO = async () => {

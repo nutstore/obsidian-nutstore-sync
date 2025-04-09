@@ -1,12 +1,13 @@
 import 'core-js/actual/array/at'
 import 'core-js/actual/string/replace-all'
 import './assets/styles/global.css'
+import './webdav-patch'
 
 import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { createClient, WebDAVClient } from 'webdav'
-import { SyncConfirmModal } from './components/SyncConfirmModal'
+import SyncConfirmModal from './components/SyncConfirmModal'
 import { NS_DAV_ENDPOINT } from './consts'
 import {
 	emitCancelSync,
@@ -29,7 +30,6 @@ import { is503Error } from './utils/is-503-error'
 import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
-import './webdav-patch'
 
 export default class NutstorePlugin extends Plugin {
 	settings: NutstoreSettings
@@ -39,52 +39,6 @@ export default class NutstorePlugin extends Plugin {
 	private ribbonIconEl: HTMLElement
 	private stopSyncRibbonEl: HTMLElement
 	private statusHideTimer: number | null = null
-
-	private updateSyncStatus(status: {
-		text: string
-		isError?: boolean
-		showNotice?: boolean
-		hideAfter?: number
-	}) {
-		if (this.statusHideTimer) {
-			clearTimeout(this.statusHideTimer)
-			this.statusHideTimer = null
-		}
-
-		this.syncStatusBar.setText(status.text)
-		this.syncStatusBar.removeClass('hidden')
-
-		if (status.showNotice) {
-			new Notice(status.text)
-		}
-
-		if (status.hideAfter) {
-			this.statusHideTimer = window.setTimeout(() => {
-				this.syncStatusBar.addClass('hidden')
-				this.statusHideTimer = null
-			}, status.hideAfter)
-		}
-	}
-
-	private toggleSyncUI(isSyncing: boolean) {
-		this.isSyncing = isSyncing
-
-		if (isSyncing) {
-			this.ribbonIconEl.setAttr('aria-disabled', 'true')
-			this.ribbonIconEl.addClass('nutstore-sync-spinning')
-			this.stopSyncRibbonEl = this.addRibbonIcon(
-				'square',
-				i18n.t('sync.stopButton'),
-				() => emitCancelSync(),
-			)
-		} else {
-			this.ribbonIconEl.removeAttribute('aria-disabled')
-			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
-			if (this.stopSyncRibbonEl) {
-				this.stopSyncRibbonEl.remove()
-			}
-		}
-	}
 
 	async onload() {
 		setPluginInstance(this)
@@ -186,6 +140,52 @@ export default class NutstorePlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings)
+	}
+
+	private updateSyncStatus(status: {
+		text: string
+		isError?: boolean
+		showNotice?: boolean
+		hideAfter?: number
+	}) {
+		if (this.statusHideTimer) {
+			clearTimeout(this.statusHideTimer)
+			this.statusHideTimer = null
+		}
+
+		this.syncStatusBar.setText(status.text)
+		this.syncStatusBar.removeClass('hidden')
+
+		if (status.showNotice) {
+			new Notice(status.text)
+		}
+
+		if (status.hideAfter) {
+			this.statusHideTimer = window.setTimeout(() => {
+				this.syncStatusBar.addClass('hidden')
+				this.statusHideTimer = null
+			}, status.hideAfter)
+		}
+	}
+
+	private toggleSyncUI(isSyncing: boolean) {
+		this.isSyncing = isSyncing
+
+		if (isSyncing) {
+			this.ribbonIconEl.setAttr('aria-disabled', 'true')
+			this.ribbonIconEl.addClass('nutstore-sync-spinning')
+			this.stopSyncRibbonEl = this.addRibbonIcon(
+				'square',
+				i18n.t('sync.stopButton'),
+				() => emitCancelSync(),
+			)
+		} else {
+			this.ribbonIconEl.removeAttribute('aria-disabled')
+			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
+			if (this.stopSyncRibbonEl) {
+				this.stopSyncRibbonEl.remove()
+			}
+		}
 	}
 
 	async createWebDAVClient() {

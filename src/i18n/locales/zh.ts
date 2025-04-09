@@ -74,6 +74,19 @@ export default {
 			name: '同步前确认',
 			desc: '同步前显示待执行的任务列表，确认后再执行',
 		},
+		filters: {
+			name: '过滤器',
+			desc: '添加同步时需要忽略文件或文件夹路径，例如: .DS_Store, .git/**',
+			add: '添加规则',
+			remove: '删除',
+			confirmRemove: '确认删除',
+			edit: '编辑规则',
+			save: '保存',
+			cancel: '取消',
+			placeholder: '例如: .DS_Store, .git/**, *.pdf',
+			description:
+				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符，** 用于递归匹配。',
+		},
 	},
 	sync: {
 		failed: '同步失败!',

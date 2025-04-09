@@ -3,7 +3,7 @@ import { App, Notice, Platform, Vault, moment } from 'obsidian'
 import path from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
-import { TaskListConfirmModal } from '~/components/TaskListConfirmModal'
+import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
 	emitStartSync,

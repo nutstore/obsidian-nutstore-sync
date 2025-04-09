@@ -1,7 +1,7 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '../i18n'
 
-export class LogoutConfirmModal extends Modal {
+export default class LogoutConfirmModal extends Modal {
 	private onConfirm: () => void
 
 	constructor(app: App, onConfirm: () => void) {

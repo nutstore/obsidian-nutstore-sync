@@ -9,7 +9,7 @@ import RemoveRemoteTask from '~/sync/tasks/remove-remote.task'
 import ConflictResolveTask from '../sync/tasks/conflict-resolve.task'
 import { BaseTask } from '../sync/tasks/task.interface'
 
-export class TaskListConfirmModal extends Modal {
+export default class TaskListConfirmModal extends Modal {
 	private result: boolean = false
 	private selectedTasks: boolean[] = []
 
