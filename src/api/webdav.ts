@@ -56,6 +56,7 @@ export async function getDirectoryContents(
 	path: string,
 ): Promise<FileStat[]> {
 	const contents: FileStat[] = []
+	path = path.split('/').map(encodeURIComponent).join('/')
 	if (!path.startsWith('/')) {
 		path = '/' + path
 	}
