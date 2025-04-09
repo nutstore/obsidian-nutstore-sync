@@ -1,5 +1,5 @@
-import consola from 'consola'
 import { normalizePath } from 'obsidian'
+import logger from '~/utils/logger'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export default class PushTask extends BaseTask {
@@ -21,7 +21,7 @@ export default class PushTask extends BaseTask {
 			})
 			return { success: res }
 		} catch (e) {
-			consola.error(this, e)
+			logger.error(this, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

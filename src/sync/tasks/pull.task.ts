@@ -1,6 +1,6 @@
-import consola from 'consola'
 import { dirname } from 'path'
 import { BufferLike } from 'webdav'
+import logger from '~/utils/logger'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { BaseTask, toTaskError } from './task.interface'
 
@@ -15,7 +15,7 @@ export default class PullTask extends BaseTask {
 			await this.vault.adapter.writeBinary(this.localPath, file)
 			return { success: true }
 		} catch (e) {
-			consola.error(this, e)
+			logger.error(this, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

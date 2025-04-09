@@ -6,9 +6,11 @@ import { getDelta } from '~/api/delta'
 import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
 import { NS_DAV_ENDPOINT } from '~/consts'
 import { StatModel } from '~/model/stat.model'
+import { useSettings } from '~/settings'
 import { deltaCacheKV } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
+import GlobMatch from '~/utils/glob-match'
 import { isSubDir } from '~/utils/is-sub-dir'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
@@ -58,6 +60,7 @@ export class NutstoreFileSystem implements IFileSystem {
 						token: this.options.token,
 						folderName: getRootFolderName(this.options.remoteBaseDir),
 					}).then((d) => d?.response?.cursor)
+					deltaCache.originCursor = cursor
 				} else if (events.response.delta.entry.length > 0) {
 					deltaCache.deltas.push(events.response)
 					if (events.response.hasMore) {
@@ -132,6 +135,18 @@ export class NutstoreFileSystem implements IFileSystem {
 				item.path = path.relative(this.options.remoteBaseDir, item.path)
 			}
 		}
-		return contents
+		const settings = useSettings()
+		const filters = GlobMatch.from(settings?.filters ?? [])
+		const ignoredContents = contents.filter((item) => {
+			const rel = path.relative(this.options.remoteBaseDir, item.path)
+			return filters.some((f) => f.test(rel))
+		})
+		return contents.filter(
+			(item) =>
+				!(
+					ignoredContents.some((ignored) => ignored.path === item.path) ||
+					ignoredContents.some((ignored) => isSubDir(ignored.path, item.path))
+				),
+		)
 	}
 }

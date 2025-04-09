@@ -74,6 +74,19 @@ export default {
 			name: 'How to get WebDAV account and credential?',
 			desc: 'Click to view help documentation',
 		},
+		filters: {
+			name: 'Sync Filters',
+			desc: 'Add paths to filter files or folders, e.g.: .DS_Store, .git/**',
+			add: 'Add Rule',
+			remove: 'Remove',
+			confirmRemove: 'Confirm Remove',
+			edit: 'Edit Rules',
+			save: 'Save',
+			cancel: 'Cancel',
+			placeholder: 'e.g.: .DS_Store, .git/**, *.pdf',
+			description:
+				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching, ** for recursive matching.',
+		},
 	},
 	sync: {
 		failed: 'Sync failed!',
@@ -99,6 +112,8 @@ export default {
 		stopButton: 'Stop sync',
 		failedStatus: 'Sync failed',
 		cancelled: 'Sync cancelled',
+		suggestUseClientForManyTasks:
+			'Tips: When there are many sync tasks, it is recommended to use Nutstore client for better performance and stability. The plugin is more suitable for mobile use!',
 		modalTitle: 'Syncing',
 		cancelButton: 'Cancel sync',
 		progressText: 'Syncing files',

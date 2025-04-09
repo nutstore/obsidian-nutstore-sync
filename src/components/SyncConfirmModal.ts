@@ -2,7 +2,7 @@ import { App, Modal, Setting } from 'obsidian'
 import i18n from '../i18n'
 import { useSettings } from '../settings'
 
-export class SyncConfirmModal extends Modal {
+export default class SyncConfirmModal extends Modal {
 	private onConfirm: () => void
 
 	constructor(app: App, onConfirm: () => void) {

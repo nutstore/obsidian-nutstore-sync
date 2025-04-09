@@ -1,9 +1,8 @@
-import consola, { LogLevels } from 'consola'
-import { App, Notice, Vault, moment } from 'obsidian'
+import { App, Notice, Platform, Vault, moment } from 'obsidian'
 import path from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
-import { TaskListConfirmModal } from '~/components/TaskListConfirmModal'
+import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
 	emitStartSync,
@@ -19,6 +18,7 @@ import { useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/helper'
 import { is503Error } from '~/utils/is-503-error'
 import { isSub } from '~/utils/is-sub'
+import logger from '~/utils/logger'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
@@ -32,8 +32,6 @@ import PushTask from './tasks/push.task'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
 import { BaseTask, TaskResult } from './tasks/task.interface'
-
-consola.level = LogLevels.verbose
 
 export class NutstoreSync {
 	private remoteFs: IFileSystem
@@ -117,8 +115,8 @@ export class NutstoreSync {
 				...localStatsMap.keys(),
 				...remoteStatsMap.keys(),
 			])
-			consola.debug('local Stats', localStats)
-			consola.debug('remote Stats', remoteStats)
+			logger.debug('local Stats', localStats)
+			logger.debug('remote Stats', remoteStats)
 
 			const taskOptions = {
 				webdav,
@@ -149,7 +147,7 @@ export class NutstoreSync {
 						record.remote.mtime,
 					)
 					if (remoteChanged) {
-						consola.debug({
+						logger.debug({
 							reason: 'remote folder changed',
 							remotePath: remotePathToAbsolute(
 								remote.path,
@@ -187,7 +185,7 @@ export class NutstoreSync {
 						}
 					}
 					if (removable) {
-						consola.debug({
+						logger.debug({
 							reason: 'remote folder is removable',
 							remotePath: remotePathToAbsolute(
 								remote.path,
@@ -209,7 +207,7 @@ export class NutstoreSync {
 						)
 					}
 				} else {
-					consola.debug({
+					logger.debug({
 						reason: 'remote folder does not exist locally',
 						remotePath: remotePathToAbsolute(
 							remote.path,
@@ -242,7 +240,7 @@ export class NutstoreSync {
 					if (record) {
 						const localChanged = !moment(local.mtime).isSame(record.local.mtime)
 						if (localChanged) {
-							consola.debug({
+							logger.debug({
 								reason: 'local folder changed',
 								remotePath: remotePathToAbsolute(
 									local.path,
@@ -280,7 +278,7 @@ export class NutstoreSync {
 							}
 						}
 						if (removable) {
-							consola.debug({
+							logger.debug({
 								reason: 'local folder is removable',
 								remotePath: remotePathToAbsolute(
 									local.path,
@@ -302,7 +300,7 @@ export class NutstoreSync {
 							)
 						}
 					} else {
-						consola.debug({
+						logger.debug({
 							reason: 'local folder does not exist remotely',
 							remotePath: remotePathToAbsolute(
 								local.path,
@@ -355,7 +353,7 @@ export class NutstoreSync {
 							)
 							if (remoteChanged) {
 								if (localChanged) {
-									consola.debug({
+									logger.debug({
 										reason: 'both local and remote files changed',
 										remotePath: remotePathToAbsolute(
 											p,
@@ -384,7 +382,7 @@ export class NutstoreSync {
 										}),
 									)
 								} else {
-									consola.debug({
+									logger.debug({
 										reason: 'remote file changed',
 										remotePath: remotePathToAbsolute(
 											p,
@@ -402,7 +400,7 @@ export class NutstoreSync {
 								}
 							} else {
 								if (localChanged) {
-									consola.debug({
+									logger.debug({
 										reason: 'local file changed',
 										remotePath: remotePathToAbsolute(
 											p,
@@ -421,7 +419,7 @@ export class NutstoreSync {
 							}
 						} else {
 							if (remoteChanged) {
-								consola.debug({
+								logger.debug({
 									reason: 'remote file changed and local file does not exist',
 									remotePath: remotePathToAbsolute(
 										p,
@@ -437,7 +435,7 @@ export class NutstoreSync {
 								})
 								tasks.push(new PullTask(options))
 							} else {
-								consola.debug({
+								logger.debug({
 									reason: 'remote file is removable',
 									remotePath: remotePathToAbsolute(
 										p,
@@ -459,7 +457,7 @@ export class NutstoreSync {
 								record.local.mtime,
 							)
 							if (localChanged) {
-								consola.debug({
+								logger.debug({
 									reason: 'local file changed and remote file does not exist',
 									remotePath: remotePathToAbsolute(
 										p,
@@ -475,7 +473,7 @@ export class NutstoreSync {
 								})
 								tasks.push(new PushTask(options))
 							} else {
-								consola.debug({
+								logger.debug({
 									reason: 'local file is removable',
 									remotePath: remotePathToAbsolute(
 										p,
@@ -495,7 +493,7 @@ export class NutstoreSync {
 				} else {
 					if (remote) {
 						if (local) {
-							consola.debug({
+							logger.debug({
 								reason: 'both local and remote files exist without a record',
 								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
 								localPath: p,
@@ -515,7 +513,7 @@ export class NutstoreSync {
 								}),
 							)
 						} else {
-							consola.debug({
+							logger.debug({
 								reason: 'remote file exists without a local file',
 								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
 								localPath: p,
@@ -529,7 +527,7 @@ export class NutstoreSync {
 						}
 					} else {
 						if (local) {
-							consola.debug({
+							logger.debug({
 								reason: 'local file exists without a remote file',
 								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
 								localPath: p,
@@ -566,14 +564,19 @@ export class NutstoreSync {
 					return
 				}
 			}
+
+			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
+				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
+			}
+
 			const tasksResult = await this.execTasks(confirmedTasks)
 			const failedCount = tasksResult.filter((r) => !r.success).length
-			consola.debug('tasks result', tasksResult, 'failed:', failedCount)
+			logger.debug('tasks result', tasksResult, 'failed:', failedCount)
 			await this.updateMtimeInRecord(confirmedTasks, tasksResult)
 			emitEndSync(failedCount)
 		} catch (error) {
 			emitSyncError(error)
-			consola.error('Sync error:', error)
+			logger.error('Sync error:', error)
 		} finally {
 			this.subscriptions.forEach((sub) => sub.unsubscribe())
 		}

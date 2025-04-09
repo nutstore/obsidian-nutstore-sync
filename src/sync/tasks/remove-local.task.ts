@@ -1,5 +1,5 @@
-import consola from 'consola'
 import i18n from '~/i18n'
+import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
@@ -28,7 +28,7 @@ export default class RemoveLocalTask extends BaseTask {
 			}
 			return { success: true }
 		} catch (e) {
-			consola.error(e)
+			logger.error(e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
