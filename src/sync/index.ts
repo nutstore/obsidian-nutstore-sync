@@ -1,5 +1,5 @@
 import consola, { LogLevels } from 'consola'
-import { App, Notice, Vault, moment } from 'obsidian'
+import { App, Notice, Platform, Vault, moment } from 'obsidian'
 import path from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
@@ -566,6 +566,11 @@ export class NutstoreSync {
 					return
 				}
 			}
+
+			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
+				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
+			}
+
 			const tasksResult = await this.execTasks(confirmedTasks)
 			const failedCount = tasksResult.filter((r) => !r.success).length
 			consola.debug('tasks result', tasksResult, 'failed:', failedCount)

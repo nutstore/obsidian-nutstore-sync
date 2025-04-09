@@ -99,6 +99,8 @@ export default {
 		stopButton: 'Stop sync',
 		failedStatus: 'Sync failed',
 		cancelled: 'Sync cancelled',
+		suggestUseClientForManyTasks:
+			'Tips: When there are many sync tasks, it is recommended to use Nutstore client for better performance and stability. The plugin is more suitable for mobile use!',
 		modalTitle: 'Syncing',
 		cancelButton: 'Cancel sync',
 		progressText: 'Syncing files',

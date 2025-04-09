@@ -97,6 +97,8 @@ export default {
 		stopButton: '停止同步',
 		failedStatus: '同步失败',
 		cancelled: '同步已取消',
+		suggestUseClientForManyTasks:
+			'Tips: 当同步任务较多时，建议使用坚果云客户端同步，可获得更好的性能和稳定性，插件更适合在移动端使用！',
 		modalTitle: '同步进行中',
 		cancelButton: '取消同步',
 		progressText: '正在同步文件',
