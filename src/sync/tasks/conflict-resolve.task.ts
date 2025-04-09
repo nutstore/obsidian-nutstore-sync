@@ -1,5 +1,4 @@
 import { Buffer } from 'buffer'
-import consola from 'consola'
 import { diff_match_patch } from 'diff-match-patch'
 import { isEqual } from 'lodash-es'
 import { moment } from 'obsidian'
@@ -8,6 +7,7 @@ import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
 import { isBinaryFile } from '~/utils/is-binary-file'
+import logger from '~/utils/logger'
 import { mergeDigIn } from '~/utils/merg-dig-in'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
@@ -55,7 +55,7 @@ export default class ConflictResolveTask extends BaseTask {
 					return await this.execLatestTimeStamp(local, remote)
 			}
 		} catch (e) {
-			consola.error(this, e)
+			logger.error(this, e)
 			return {
 				success: false,
 				error: toTaskError(e, this),
@@ -90,7 +90,7 @@ export default class ConflictResolveTask extends BaseTask {
 			}
 			return { success: true }
 		} catch (e) {
-			consola.error(e)
+			logger.error(e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
@@ -136,7 +136,7 @@ export default class ConflictResolveTask extends BaseTask {
 			await this.vault.adapter.write(this.localPath, mergedText)
 			return { success: true }
 		} catch (e) {
-			consola.error(e)
+			logger.error(e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

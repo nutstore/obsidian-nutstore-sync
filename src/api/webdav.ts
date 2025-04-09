@@ -1,10 +1,10 @@
-import consola from 'consola'
 import { XMLParser } from 'fast-xml-parser'
 import { isNil, partial } from 'lodash-es'
 import { basename, join } from 'path'
 import { FileStat } from 'webdav'
 import { NS_DAV_ENDPOINT } from '~/consts'
 import { is503Error } from '~/utils/is-503-error'
+import logger from '~/utils/logger'
 import requestUrl from '~/utils/request-url'
 
 interface WebDAVResponse {
@@ -115,7 +115,7 @@ export async function getDirectoryContents(
 			currentUrl = nextUrl.toString()
 		} catch (e) {
 			if (is503Error(e)) {
-				consola.error('503 error, retrying...')
+				logger.error('503 error, retrying...')
 				await sleep(60_000)
 				continue
 			}

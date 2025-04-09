@@ -1,9 +1,9 @@
-import consola from 'consola'
 import {
 	requestUrl as req,
 	RequestUrlParam,
 	RequestUrlResponse,
 } from 'obsidian'
+import logger from './logger'
 
 class RequestUrlError extends Error {
 	constructor(public res: RequestUrlResponse) {
@@ -29,7 +29,7 @@ export default async function requestUrl(p: RequestUrlParam | string) {
 		throwError = false
 	}
 	if (res.status >= 400) {
-		consola.error(res)
+		logger.error(res)
 		if (throwError) {
 			throw new RequestUrlError(res)
 		}
