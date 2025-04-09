@@ -1,0 +1,168 @@
+name: Generate Changelog
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write # Needed to commit the CHANGELOG.md file
+  pull-requests: read # Optional: Needed if you want to read PR data
+
+jobs:
+  generate_changelog:
+    runs-on: ubuntu-latest
+    # Prevent running on commits made by this action itself
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get Latest Tag
+        id: latest_tag
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Get Commit Messages Since Last Tag
+        id: commit_messages
+        run: |
+          if [ -z "${{ steps.latest_tag.outputs.latest_tag }}" ]; then
+            echo "No previous tag found. Getting recent commits..."
+            COMMIT_RANGE="HEAD~20..HEAD" # Adjust limit as needed
+          else
+            echo "Getting commits since tag ${{ steps.latest_tag.outputs.latest_tag }}..."
+            COMMIT_RANGE="${{ steps.latest_tag.outputs.latest_tag }}..HEAD"
+          fi
+          COMMIT_LOG=$(git log $COMMIT_RANGE --pretty=format:"- %s" --no-merges)
+          COMMIT_LOG_ESCAPED=$(echo "$COMMIT_LOG" | sed -z 's/\n/\\n/g' | sed 's/"/\\"/g') # Escape for JSON
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_LOG_ESCAPED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Raw commits fetched:"
+          echo "$COMMIT_LOG"
+
+      - name: Call Google Gemini API to Generate Changelog Entry
+        id: ai_changelog
+        # Only run if there are commit messages
+        if: steps.commit_messages.outputs.commits != ''
+        run: |
+          PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. You should write in both English and Chinese. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
+
+          # Construct the JSON payload for Gemini API
+          # Note the structure: contents -> parts -> text
+          JSON_PAYLOAD=$(cat <<EOF
+          {
+            "contents": [{
+              "parts": [{
+                "text": "$PROMPT"
+              }]
+            }]
+          }
+          EOF
+          )
+
+          echo "Sending prompt to Gemini API..."
+          # Use the v1beta endpoint for gemini-2.5-pro-exp-03-25 (check for latest stable if available)
+          API_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-exp-03-25:generateContent?key=${{ secrets.GEMINI_API_KEY }}"
+
+          API_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD")
+
+          echo "Gemini Raw Response: $API_RESPONSE"
+
+          # Extract content using jq - check Gemini response structure
+          # Response -> candidates -> content -> parts -> text
+          GENERATED_TEXT=$(echo "$API_RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty' | sed '/^$/d')
+
+          if [ -z "$GENERATED_TEXT" ]; then
+             echo "Gemini API did not return valid text or an error occurred."
+             # Attempt to extract error message if present
+             ERROR_MSG=$(echo "$API_RESPONSE" | jq -r '.error.message // empty')
+             if [ -n "$ERROR_MSG" ]; then
+               echo "Error from API: $ERROR_MSG"
+             fi
+             echo "changelog_entry=" >> $GITHUB_OUTPUT # Ensure output is empty
+          else
+             echo "Generated Changelog Text:"
+             echo "$GENERATED_TEXT"
+             echo "changelog_entry<<EOF" >> $GITHUB_OUTPUT
+             echo "$GENERATED_TEXT" >> $GITHUB_OUTPUT
+             echo "EOF" >> $GITHUB_OUTPUT
+          fi
+        env:
+           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+
+      - name: Update CHANGELOG.md
+        # Only run if AI generated text
+        if: steps.ai_changelog.outputs.changelog_entry != ''
+        run: |
+          CHANGELOG_FILE="CHANGELOG.md"
+          NEW_ENTRY_HEADING="## [Unreleased] - $(date +'%Y-%m-%d')"
+          GENERATED_CONTENT="${{ steps.ai_changelog.outputs.changelog_entry }}"
+
+          # Create file if it doesn't exist with a basic structure
+          if [ ! -f "$CHANGELOG_FILE" ]; then
+            echo "# Changelog" > "$CHANGELOG_FILE"
+            echo "" >> "$CHANGELOG_FILE"
+            echo "All notable changes to this project will be documented in this file." >> "$CHANGELOG_FILE"
+            echo "" >> "$CHANGELOG_FILE"
+          fi
+
+          # Check if [Unreleased] section exists
+          if grep -q "## \[Unreleased\]" "$CHANGELOG_FILE"; then
+            # Insert below the [Unreleased] heading
+            # Use awk for safer multi-line insertion
+            awk -v heading="$NEW_ENTRY_HEADING" -v content="$GENERATED_CONTENT" '
+            /## \[Unreleased\]/ {
+              print;
+              print ""; # Add a newline after heading
+              print content;
+              next # Skip original line printing if needed or adjust logic
+            }
+            { print }
+            ' "$CHANGELOG_FILE" > temp_changelog.md && mv temp_changelog.md "$CHANGELOG_FILE"
+          else
+            # Prepend a new [Unreleased] section at the top (after header lines)
+            # This logic might need refinement based on your exact header structure
+            {
+              head -n 3 "$CHANGELOG_FILE" # Adjust line count based on your header
+              echo ""
+              echo "$NEW_ENTRY_HEADING"
+              echo ""
+              echo "$GENERATED_CONTENT"
+              echo ""
+              tail -n +4 "$CHANGELOG_FILE" # Adjust line count
+            } > temp_changelog.md && mv temp_changelog.md "$CHANGELOG_FILE"
+          fi
+
+          echo "CHANGELOG.md updated."
+          cat $CHANGELOG_FILE # Display updated file for logs
+
+
+      - name: Commit and Push CHANGELOG.md
+        # Only run if AI generated text
+        if: steps.ai_changelog.outputs.changelog_entry != ''
+        run: |
+          # Check if there are changes to commit
+          if git diff --quiet $CHANGELOG_FILE; then
+             echo "No changes to CHANGELOG.md to commit."
+             exit 0
+          fi
+
+          git add CHANGELOG.md
+          # Add [skip ci] to prevent triggering this workflow again
+          git commit -m "chore: update changelog [skip ci]"
+          # Handle potential push conflicts/errors if needed
+          git push origin main # Or your default branch
