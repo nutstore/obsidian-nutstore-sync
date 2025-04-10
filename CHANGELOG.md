@@ -2,6 +2,14 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-10
+
+*   修复了部分旧环境下的兼容性问题 (通过 polyfill 数组方法)。
+*   修复了导致移动端无法同步的问题。
+*   Fixed compatibility issues in some older environments (by polyfilling array methods).
+*   Fixed an issue preventing synchronization on mobile devices.
+
+
 ## [0.2.1] - 2025-04-10
 
 *   Corrected handling of relative paths. / 修正了相对路径的处理。
