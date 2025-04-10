@@ -1,5 +1,5 @@
 import { App, Notice, Platform, Vault, moment } from 'obsidian'
-import path from 'path'
+import { isAbsolute, join } from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
 import TaskListConfirmModal from '~/components/TaskListConfirmModal'
@@ -133,7 +133,10 @@ export class NutstoreSync {
 				if (!remote.isDir) {
 					continue
 				}
-				const localPath = this.remotePathToLocalPath(remote.path)
+				const localPath = remotePathToLocalPath(
+					this.options.remoteBaseDir,
+					remote.path,
+				)
 				const local = localStatsMap.get(localPath)
 				const record = records.get(localPath)
 				if (local) {
@@ -659,21 +662,11 @@ export class NutstoreSync {
 		}
 		return res
 	}
-
-	remotePathToLocalPath(path: string) {
-		return remotePathToLocalPath(
-			this.options.vault,
-			this.options.remoteBaseDir,
-			path,
-		)
-	}
 }
 
 function remotePathToAbsolute(
 	remotePath: string,
 	remoteBaseDir: string,
 ): string {
-	return path.isAbsolute(remotePath)
-		? remotePath
-		: path.resolve(remoteBaseDir, remotePath)
+	return isAbsolute(remotePath) ? remotePath : join(remoteBaseDir, remotePath)
 }
