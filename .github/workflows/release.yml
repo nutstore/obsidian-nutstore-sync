@@ -1,17 +1,12 @@
 name: Release Obsidian plugin
 
 on:
-  workflow_run:
-    workflows: ["Generate Changelog"]
-    types:
-      - completed
-    branches:
-      - main
+  push:
+    tags:
+      - '*'
 
 jobs:
   build:
-    # Only run if the changelog workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
