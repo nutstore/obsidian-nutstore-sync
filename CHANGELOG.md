@@ -2,6 +2,11 @@
 
 本项目的所有重要更改都将记录在此文件中。
 
+## [Unreleased] - 2025-04-10
+
+*   Corrected handling of relative paths. / 修正了相对路径的处理。
+
+
 All notable changes to this project will be documented in this file.
 
 
