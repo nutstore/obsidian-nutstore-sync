@@ -1,0 +1,42 @@
+name: Update Changelog Version
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update version in CHANGELOG.md
+        run: |
+          # Get release version (without 'v' prefix if present)
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#v}
+          
+          # Replace [Unreleased] with the version number
+          sed -i "s/\[Unreleased\]/[$VERSION]/" CHANGELOG.md
+          
+          # Check if there are changes
+          if git diff --quiet CHANGELOG.md; then
+            echo "No changes needed in CHANGELOG.md"
+            exit 0
+          fi
+          
+          # Commit and push changes
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog version to $VERSION [skip ci]"
+          git push origin HEAD:main
