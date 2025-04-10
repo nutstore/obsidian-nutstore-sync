@@ -1,6 +1,7 @@
 import 'core-js/actual/array/at'
 import 'core-js/actual/string/replace-all'
 import './assets/styles/global.css'
+import './polyfill'
 import './webdav-patch'
 
 import { toBase64 } from 'js-base64'

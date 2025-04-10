@@ -1,5 +1,5 @@
 import { Vault } from 'obsidian'
-import path, { basename } from 'path'
+import { basename, isAbsolute } from 'path'
 import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'
@@ -131,8 +131,8 @@ export class NutstoreFileSystem implements IFileSystem {
 			.map((path) => filesMap.get(path))
 			.filter(isNotNil)
 		for (const item of contents) {
-			if (path.isAbsolute(item.path)) {
-				item.path = path.relative(this.options.remoteBaseDir, item.path)
+			if (isAbsolute(item.path)) {
+				item.path = item.path.replace(this.options.remoteBaseDir, '')
 			}
 		}
 		const settings = useSettings()

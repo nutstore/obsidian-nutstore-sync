@@ -1,5 +1,5 @@
 import { normalizePath, Vault } from 'obsidian'
-import path from 'path'
+import { isAbsolute, join } from 'path'
 import { WebDAVClient } from 'webdav'
 import { SyncRecord } from '~/storage/helper'
 
@@ -32,9 +32,9 @@ export abstract class BaseTask {
 	}
 
 	get remotePath() {
-		return path.isAbsolute(this.options.remotePath)
+		return isAbsolute(this.options.remotePath)
 			? this.options.remotePath
-			: path.resolve(this.remoteBaseDir, this.options.remotePath)
+			: join(this.remoteBaseDir, this.options.remotePath)
 	}
 
 	get localPath() {

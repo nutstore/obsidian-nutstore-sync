@@ -1,4 +1,4 @@
-import GlobToRegExp from 'glob-to-regexp'
+import GlobToRegExp, { Options } from 'glob-to-regexp'
 import { isArray } from 'lodash-es'
 import { basename } from 'path'
 import { uniq } from 'ramda'
@@ -6,19 +6,25 @@ import { uniq } from 'ramda'
 export default class GlobMatch {
 	private re: RegExp
 
-	static from(expr: string[]): GlobMatch[]
-	static from(expr: string): GlobMatch
-	static from(expr: string | string[]): GlobMatch[] | GlobMatch {
+	static from(expr: string[], options?: Options): GlobMatch[]
+	static from(expr: string, options?: Options): GlobMatch
+	static from(
+		expr: string | string[],
+		options?: Options,
+	): GlobMatch[] | GlobMatch {
 		if (isArray(expr)) {
 			return uniq(expr.filter((f) => f.trim()) ?? []).map(
-				(e) => new GlobMatch(e),
+				(e) => new GlobMatch(e, options),
 			)
 		}
-		return new GlobMatch(expr)
+		return new GlobMatch(expr, options)
 	}
 
-	constructor(private expr: string) {
-		this.re = GlobToRegExp(expr)
+	constructor(
+		private expr: string,
+		options?: Options,
+	) {
+		this.re = GlobToRegExp(expr, options)
 	}
 
 	test(path: string) {
