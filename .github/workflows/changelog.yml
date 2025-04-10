@@ -30,20 +30,24 @@ jobs:
       - name: Get Latest Tag
         id: latest_tag
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          # Get the current tag that triggered the workflow
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          # Get the previous tag
+          PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -A 1 "^$CURRENT_TAG$" | tail -n 1)
+          echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
 
       - name: Get Commit Messages Since Last Tag
         id: commit_messages
         run: |
-          if [ -z "${{ steps.latest_tag.outputs.latest_tag }}" ]; then
+          if [ -z "${{ steps.latest_tag.outputs.previous_tag }}" ]; then
             echo "No previous tag found. Getting recent commits..."
             COMMIT_RANGE="HEAD~20..HEAD" # Adjust limit as needed
           else
-            echo "Getting commits since tag ${{ steps.latest_tag.outputs.latest_tag }}..."
-            COMMIT_RANGE="${{ steps.latest_tag.outputs.latest_tag }}..HEAD"
+            echo "Getting commits between ${{ steps.latest_tag.outputs.previous_tag }} and ${{ steps.latest_tag.outputs.current_tag }}..."
+            COMMIT_RANGE="${{ steps.latest_tag.outputs.previous_tag }}..${{ steps.latest_tag.outputs.current_tag }}"
           fi
-          COMMIT_LOG=$(git log $COMMIT_RANGE --pretty=format:"- %s" --no-merges)
+          COMMIT_LOG=$(git log $COMMIT_RANGE --pretty=format:"- %s" --no-merges | grep -E "^- (feat|fix):")
           COMMIT_LOG_ESCAPED=$(echo "$COMMIT_LOG" | sed -z 's/\n/\\n/g' | sed 's/"/\\"/g') # Escape for JSON
           echo "commits<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMIT_LOG_ESCAPED" >> $GITHUB_OUTPUT
@@ -165,4 +169,4 @@ jobs:
           # Add [skip ci] to prevent triggering this workflow again
           git commit -m "chore: update changelog [skip ci]"
           # Handle potential push conflicts/errors if needed
-          git push origin main # Or your default branch
+          git push origin HEAD:refs/heads/main
