@@ -60,7 +60,7 @@ jobs:
         # Only run if there are commit messages
         if: steps.commit_messages.outputs.commits != ''
         run: |
-          PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. You should write in both English and Chinese. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
+          PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. You should write in both Chinese and English, Chinese first. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
 
           # Construct the JSON payload for Gemini API
           # Note the structure: contents -> parts -> text
