@@ -136,7 +136,9 @@ export class NutstoreFileSystem implements IFileSystem {
 			}
 		}
 		const settings = useSettings()
-		const filters = GlobMatch.from(settings?.filters ?? [])
+		const filters = GlobMatch.from(settings?.filters ?? [], {
+			flags: 'gi',
+		})
 		const ignoredContents = contents.filter((item) =>
 			filters.some((f) => f.test(item.path)),
 		)

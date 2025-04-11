@@ -176,7 +176,6 @@ export default class NutstorePlugin extends Plugin {
 
 	private toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
-
 		if (isSyncing) {
 			this.ribbonIconEl.setAttr('aria-disabled', 'true')
 			this.ribbonIconEl.addClass('nutstore-sync-spinning')
