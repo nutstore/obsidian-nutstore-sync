@@ -13,7 +13,7 @@ jobs:
   generate_changelog:
     runs-on: ubuntu-latest
     # Prevent running on commits made by this action itself
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
 
     steps:
       - name: Checkout Code
@@ -60,49 +60,85 @@ jobs:
         # Only run if there are commit messages
         if: steps.commit_messages.outputs.commits != ''
         run: |
-          PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. You should write in both Chinese and English, Chinese first. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
+          MAX_RETRIES=3
+          RETRY_DELAY=5
+          ATTEMPT=0
+          SUCCESS=false
+          FALLBACK_TEXT="* 更新内容无法自动生成，请查看提交记录\n* Failed to generate changelog automatically, please check commit messages"
+          
+          while [ $ATTEMPT -lt $MAX_RETRIES ] && [ "$SUCCESS" = "false" ]; do
+            ATTEMPT=$((ATTEMPT+1))
+            echo "Attempt $ATTEMPT of $MAX_RETRIES"
+            
+            PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. You should write in both Chinese and English, Chinese first. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
 
-          # Construct the JSON payload for Gemini API
-          # Note the structure: contents -> parts -> text
-          JSON_PAYLOAD=$(cat <<EOF
-          {
-            "contents": [{
-              "parts": [{
-                "text": "$PROMPT"
-              }]
-            }]
-          }
-          EOF
-          )
+            # Calculate dynamic max tokens based on commit message lines
+            COMMIT_LINES=$(echo "${{ steps.commit_messages.outputs.commits }}" | grep -c '^-')
+            BASE_TOKENS=300  # Base tokens for template and formatting
+            PER_LINE_TOKENS=20 # Additional tokens per commit line
+            MAX_TOKENS=$(( BASE_TOKENS + (COMMIT_LINES * PER_LINE_TOKENS) ))
+            MAX_TOKENS=$(( MAX_TOKENS > 1000 ? 1000 : MAX_TOKENS )) # Cap at 1000 tokens
+            
+            # Construct the JSON payload for Gemini API
+            JSON_PAYLOAD=$(cat <<EOF
+            {
+              "contents": [{
+                "parts": [{
+                  "text": "$PROMPT"
+                }]
+              }],
+              "generationConfig": {
+                "temperature": 0.4,
+                "topP": 0.85,
+                "maxOutputTokens": $MAX_TOKENS,
+                "stopSequences": ["##"]
+              },
+              "safetySettings": [
+                {
+                  "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                  "threshold": "BLOCK_NONE"
+                }
+              ]
+            }
+            EOF
+            )
 
-          echo "Sending prompt to Gemini API..."
-          # Use the v1beta endpoint for gemini-2.5-pro-exp-03-25 (check for latest stable if available)
-          API_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-exp-03-25:generateContent?key=${{ secrets.GEMINI_API_KEY }}"
+            echo "Sending prompt to Gemini API..."
+            API_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-exp-03-25:generateContent?key=${{ secrets.GEMINI_API_KEY }}"
 
-          API_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
-            -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD")
+            API_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
+              -H "Content-Type: application/json" \
+              -d "$JSON_PAYLOAD")
 
-          echo "Gemini Raw Response: $API_RESPONSE"
+            echo "Gemini Raw Response: $API_RESPONSE"
 
-          # Extract content using jq - check Gemini response structure
-          # Response -> candidates -> content -> parts -> text
-          GENERATED_TEXT=$(echo "$API_RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty' | sed '/^$/d')
+            # Validate JSON structure and extract content
+            if ! jq -e '.candidates[0].content.parts[0].text' <<< "$API_RESPONSE" >/dev/null 2>&1; then
+              echo "Invalid JSON response structure"
+              sleep $RETRY_DELAY
+              continue
+            fi
 
-          if [ -z "$GENERATED_TEXT" ]; then
-             echo "Gemini API did not return valid text or an error occurred."
-             # Attempt to extract error message if present
-             ERROR_MSG=$(echo "$API_RESPONSE" | jq -r '.error.message // empty')
-             if [ -n "$ERROR_MSG" ]; then
-               echo "Error from API: $ERROR_MSG"
-             fi
-             echo "changelog_entry=" >> $GITHUB_OUTPUT # Ensure output is empty
-          else
-             echo "Generated Changelog Text:"
-             echo "$GENERATED_TEXT"
-             echo "changelog_entry<<EOF" >> $GITHUB_OUTPUT
-             echo "$GENERATED_TEXT" >> $GITHUB_OUTPUT
-             echo "EOF" >> $GITHUB_OUTPUT
+            GENERATED_TEXT=$(echo "$API_RESPONSE" | jq -r '.candidates[0].content.parts[0].text? // empty' | sed '/^$/d')
+            
+            if [ -n "$GENERATED_TEXT" ]; then
+              SUCCESS=true
+              echo "Generated Changelog Text:"
+              echo "$GENERATED_TEXT"
+              echo "changelog_entry<<EOF" >> $GITHUB_OUTPUT
+              echo "$GENERATED_TEXT" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              echo "Empty response from API"
+              sleep $RETRY_DELAY
+            fi
+          done
+
+          if [ "$SUCCESS" = "false" ]; then
+            echo "Failed after $MAX_RETRIES attempts. Using fallback content."
+            echo "changelog_entry<<EOF" >> $GITHUB_OUTPUT
+            echo "$FALLBACK_TEXT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
         env:
            GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
