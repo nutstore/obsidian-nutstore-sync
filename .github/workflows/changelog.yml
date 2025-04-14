@@ -70,7 +70,7 @@ jobs:
             ATTEMPT=$((ATTEMPT+1))
             echo "Attempt $ATTEMPT of $MAX_RETRIES"
             
-            PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. You should write in both Chinese and English, Chinese first. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
+            PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. This will be running in github action, please make sure using ci compatible characters. You should write in both Chinese and English, Chinese first. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
 
             # Calculate dynamic max tokens based on commit message lines
             COMMIT_LINES=$(echo "${{ steps.commit_messages.outputs.commits }}" | grep -c '^-')
