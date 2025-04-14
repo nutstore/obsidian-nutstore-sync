@@ -87,6 +87,16 @@ export default {
 			description:
 				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching, ** for recursive matching.',
 		},
+		log: {
+			title: 'Log',
+			name: 'Log',
+			desc: 'View sync log',
+			button: 'View Log',
+			clear: 'Clear Log',
+			cleared: 'Log cleared',
+			clearName: 'Clear Log',
+			clearDesc: 'Delete all sync log records',
+		},
 	},
 	sync: {
 		failed: 'Sync failed!',
@@ -147,5 +157,10 @@ export default {
 			removeRemote: 'Remove Remote',
 			sync: 'Sync',
 		},
+	},
+	textAreaModal: {
+		copy: 'Copy',
+		close: 'Close',
+		copied: 'Text copied to clipboard',
 	},
 }

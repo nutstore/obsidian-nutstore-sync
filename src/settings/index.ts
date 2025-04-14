@@ -5,6 +5,7 @@ import type NutstorePlugin from '~/index'
 import { GlobMatchOptions } from '~/utils/glob-match'
 import AccountSettings from './account'
 import CommonSettings from './common'
+import LogSettings from './log'
 
 export interface NutstoreSettings {
 	account: string
@@ -47,6 +48,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	plugin: NutstorePlugin
 	accountSettings: AccountSettings
 	commonSettings: CommonSettings
+	logSettings: LogSettings
 
 	subSso = onSsoReceive().subscribe(() => {
 		this.display()
@@ -67,6 +69,12 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			this,
 			this.containerEl,
 		)
+		this.logSettings = new LogSettings(
+			this.app,
+			this.plugin,
+			this,
+			this.containerEl,
+		)
 	}
 
 	async display() {
@@ -77,6 +85,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			.setDesc(i18n.t('settings.backupWarning.desc'))
 		await this.accountSettings.display()
 		await this.commonSettings.display()
+		await this.logSettings.display()
 	}
 
 	get isSSO() {
