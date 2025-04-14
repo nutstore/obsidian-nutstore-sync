@@ -454,43 +454,33 @@ export class NutstoreSync {
 								tasks.push(new RemoveRemoteTask(options))
 							}
 						}
-					} else {
-						if (local) {
-							const localChanged = !moment(local.mtime).isSame(
-								record.local.mtime,
-							)
-							if (localChanged) {
-								logger.debug({
-									reason: 'local file changed and remote file does not exist',
-									remotePath: remotePathToAbsolute(
-										p,
-										this.options.remoteBaseDir,
-									),
-									localPath: p,
-									conditions: {
-										localChanged,
-										recordExists: !!record,
-										remoteExists: !!remote,
-										localExists: !!local,
-									},
-								})
-								tasks.push(new PushTask(options))
-							} else {
-								logger.debug({
-									reason: 'local file is removable',
-									remotePath: remotePathToAbsolute(
-										p,
-										this.options.remoteBaseDir,
-									),
-									localPath: p,
-									conditions: {
-										recordExists: !!record,
-										remoteExists: !!remote,
-										localExists: !!local,
-									},
-								})
-								tasks.push(new RemoveLocalTask(options))
-							}
+					} else if (local) {
+						const localChanged = !moment(local.mtime).isSame(record.local.mtime)
+						if (localChanged) {
+							logger.debug({
+								reason: 'local file changed and remote file does not exist',
+								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
+								localPath: p,
+								conditions: {
+									localChanged,
+									recordExists: !!record,
+									remoteExists: !!remote,
+									localExists: !!local,
+								},
+							})
+							tasks.push(new PushTask(options))
+						} else {
+							logger.debug({
+								reason: 'local file is removable',
+								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
+								localPath: p,
+								conditions: {
+									recordExists: !!record,
+									remoteExists: !!remote,
+									localExists: !!local,
+								},
+							})
+							tasks.push(new RemoveLocalTask(options))
 						}
 					}
 				} else {

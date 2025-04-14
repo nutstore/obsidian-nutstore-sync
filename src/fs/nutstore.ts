@@ -133,6 +133,9 @@ export class NutstoreFileSystem implements IFileSystem {
 		for (const item of contents) {
 			if (isAbsolute(item.path)) {
 				item.path = item.path.replace(this.options.remoteBaseDir, '')
+				if (item.path.startsWith('/')) {
+					item.path = item.path.slice(1)
+				}
 			}
 		}
 		const settings = useSettings()
