@@ -1,30 +1,40 @@
-import GlobToRegExp, { Options } from 'glob-to-regexp'
-import { isArray } from 'lodash-es'
+import GlobToRegExp from 'glob-to-regexp'
+import { cloneDeep } from 'lodash-es'
 import { basename } from 'path'
-import { uniq } from 'ramda'
+
+export interface GlobMatchUserOptions {
+	caseSensitive: boolean
+}
+
+export type GlobMatchOptions =
+	| {
+			expr: string
+			options: GlobMatchUserOptions
+	  }
+	| string
+
+const DEFAULT_USER_OPTIONS: GlobMatchUserOptions = {
+	caseSensitive: false,
+}
+
+function generateFlags(options: GlobMatchUserOptions) {
+	let flags = 'g'
+	if (!options.caseSensitive) {
+		flags += 'i'
+	}
+	return flags
+}
 
 export default class GlobMatch {
 	private re: RegExp
+	private expr: string
 
-	static from(expr: string[], options?: Options): GlobMatch[]
-	static from(expr: string, options?: Options): GlobMatch
-	static from(
-		expr: string | string[],
-		options?: Options,
-	): GlobMatch[] | GlobMatch {
-		if (isArray(expr)) {
-			return uniq(expr.filter((f) => f.trim()) ?? []).map(
-				(e) => new GlobMatch(e, options),
-			)
-		}
-		return new GlobMatch(expr, options)
-	}
-
-	constructor(
-		private expr: string,
-		options?: Options,
-	) {
-		this.re = GlobToRegExp(expr, options)
+	constructor(options: GlobMatchOptions) {
+		this.expr = getExpr(options)
+		const userOpt = getUserOptions(options)
+		this.re = GlobToRegExp(this.expr, {
+			flags: generateFlags(userOpt),
+		})
 	}
 
 	test(path: string) {
@@ -40,4 +50,18 @@ export default class GlobMatch {
 		}
 		return false
 	}
+}
+
+export function getExpr(opt: GlobMatchOptions) {
+	if (typeof opt === 'string') {
+		return opt
+	}
+	return opt.expr
+}
+
+export function getUserOptions(opt: GlobMatchOptions): GlobMatchUserOptions {
+	if (typeof opt === 'string') {
+		return cloneDeep(DEFAULT_USER_OPTIONS)
+	}
+	return opt.options ?? cloneDeep(DEFAULT_USER_OPTIONS)
 }

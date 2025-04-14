@@ -15,10 +15,7 @@ export class LocalVaultFileSystem implements IFileSystem {
 
 	async walk() {
 		const settings = useSettings()
-		const records = await this.options.syncRecord.getRecords()
-		const filters = GlobMatch.from(settings?.filters ?? [], {
-			flags: 'gi',
-		})
+		const filters = (settings?.filters ?? []).map((opt) => new GlobMatch(opt))
 		return traverseLocalVault(this.options.vault, filters)
 	}
 }
