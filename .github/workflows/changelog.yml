@@ -64,7 +64,6 @@ jobs:
           RETRY_DELAY=5
           ATTEMPT=0
           SUCCESS=false
-          FALLBACK_TEXT="* 更新内容无法自动生成，请查看提交记录\n* Failed to generate changelog automatically, please check commit messages"
           
           while [ $ATTEMPT -lt $MAX_RETRIES ] && [ "$SUCCESS" = "false" ]; do
             ATTEMPT=$((ATTEMPT+1))
@@ -80,10 +79,12 @@ jobs:
             MAX_TOKENS=$(( MAX_TOKENS > 1000 ? 1000 : MAX_TOKENS )) # Cap at 1000 tokens
             
             # Construct the JSON payload for Gemini API as a single line
+            # Use the stable model version instead of experimental
             JSON_PAYLOAD='{"contents":[{"parts":[{"text":"'"$PROMPT"'"}]}],"generationConfig":{"temperature":0.4,"topP":0.85,"maxOutputTokens":'$MAX_TOKENS',"stopSequences":["##"]},"safetySettings":[{"category":"HARM_CATEGORY_DANGEROUS_CONTENT","threshold":"BLOCK_NONE"}]}'
 
             echo "Sending prompt to Gemini API..."
-            API_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-exp-03-25:generateContent?key=${{ secrets.GEMINI_API_KEY }}"
+            # Use the stable model version instead of experimental
+            API_ENDPOINT="https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${{ secrets.GEMINI_API_KEY }}"
 
             API_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
               -H "Content-Type: application/json" \
@@ -91,9 +92,18 @@ jobs:
 
             echo "Gemini Raw Response: $API_RESPONSE"
 
+            # Check for error in response
+            ERROR_MSG=$(echo "$API_RESPONSE" | jq -r '.error.message // empty')
+            if [ -n "$ERROR_MSG" ]; then
+              echo "API Error: $ERROR_MSG"
+              sleep $RETRY_DELAY
+              continue
+            fi
+
             # Validate JSON structure and extract content
             if ! jq -e '.candidates[0].content.parts[0].text' <<< "$API_RESPONSE" >/dev/null 2>&1; then
               echo "Invalid JSON response structure"
+              echo "Response structure: $(echo "$API_RESPONSE" | jq -r 'keys')"
               sleep $RETRY_DELAY
               continue
             fi
@@ -114,10 +124,8 @@ jobs:
           done
 
           if [ "$SUCCESS" = "false" ]; then
-            echo "Failed after $MAX_RETRIES attempts. Using fallback content."
-            echo "changelog_entry<<EOF" >> $GITHUB_OUTPUT
-            echo "$FALLBACK_TEXT" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "Failed after $MAX_RETRIES attempts. Exiting with error."
+            exit 1
           fi
         env:
            GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -167,7 +175,6 @@ jobs:
           fi
 
           echo "CHANGELOG.md updated."
-          cat $CHANGELOG_FILE # Display updated file for logs
 
 
       - name: Commit and Push CHANGELOG.md
