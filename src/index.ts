@@ -4,12 +4,13 @@ import './assets/styles/global.css'
 import './polyfill'
 import './webdav-patch'
 
+import { LogObject } from 'consola'
 import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { createClient, WebDAVClient } from 'webdav'
 import SyncConfirmModal from './components/SyncConfirmModal'
-import { NS_DAV_ENDPOINT } from './consts'
+import { IN_DEV, NS_DAV_ENDPOINT } from './consts'
 import {
 	emitCancelSync,
 	onEndSync,
@@ -28,6 +29,7 @@ import {
 import { NutstoreSync } from './sync'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { is503Error } from './utils/is-503-error'
+import logger from './utils/logger'
 import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
@@ -40,8 +42,24 @@ export default class NutstorePlugin extends Plugin {
 	private ribbonIconEl: HTMLElement
 	private stopSyncRibbonEl: HTMLElement
 	private statusHideTimer: number | null = null
+	logs: LogObject[] = []
 
 	async onload() {
+		if (IN_DEV) {
+			logger.addReporter({
+				log: (logObj) => {
+					this.logs.push(logObj)
+				},
+			})
+		} else {
+			logger.setReporters([
+				{
+					log: (logObj) => {
+						this.logs.push(logObj)
+					},
+				},
+			])
+		}
 		setPluginInstance(this)
 		await this.loadSettings()
 		await updateLanguage()
