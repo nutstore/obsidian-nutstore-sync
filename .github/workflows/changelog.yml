@@ -79,29 +79,8 @@ jobs:
             MAX_TOKENS=$(( BASE_TOKENS + (COMMIT_LINES * PER_LINE_TOKENS) ))
             MAX_TOKENS=$(( MAX_TOKENS > 1000 ? 1000 : MAX_TOKENS )) # Cap at 1000 tokens
             
-            # Construct the JSON payload for Gemini API
-            JSON_PAYLOAD=$(cat <<EOF
-            {
-              "contents": [{
-                "parts": [{
-                  "text": "$PROMPT"
-                }]
-              }],
-              "generationConfig": {
-                "temperature": 0.4,
-                "topP": 0.85,
-                "maxOutputTokens": $MAX_TOKENS,
-                "stopSequences": ["##"]
-              },
-              "safetySettings": [
-                {
-                  "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                  "threshold": "BLOCK_NONE"
-                }
-              ]
-            }
-            EOF
-            )
+            # Construct the JSON payload for Gemini API as a single line
+            JSON_PAYLOAD='{"contents":[{"parts":[{"text":"'"$PROMPT"'"}]}],"generationConfig":{"temperature":0.4,"topP":0.85,"maxOutputTokens":'$MAX_TOKENS',"stopSequences":["##"]},"safetySettings":[{"category":"HARM_CATEGORY_DANGEROUS_CONTENT","threshold":"BLOCK_NONE"}]}'
 
             echo "Sending prompt to Gemini API..."
             API_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-exp-03-25:generateContent?key=${{ secrets.GEMINI_API_KEY }}"
