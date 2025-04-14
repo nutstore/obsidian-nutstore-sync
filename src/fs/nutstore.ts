@@ -133,10 +133,13 @@ export class NutstoreFileSystem implements IFileSystem {
 		for (const item of contents) {
 			if (isAbsolute(item.path)) {
 				item.path = item.path.replace(this.options.remoteBaseDir, '')
+				if (item.path.startsWith('/')) {
+					item.path = item.path.slice(1)
+				}
 			}
 		}
 		const settings = useSettings()
-		const filters = GlobMatch.from(settings?.filters ?? [])
+		const filters = (settings?.filters ?? []).map((opt) => new GlobMatch(opt))
 		const ignoredContents = contents.filter((item) =>
 			filters.some((f) => f.test(item.path)),
 		)

@@ -1,18 +1,18 @@
+import { cloneDeep } from 'lodash-es'
 import { App, Modal, Setting } from 'obsidian'
-import i18n from '../i18n'
+import i18n from '~/i18n'
+import { getExpr, getUserOptions, GlobMatchOptions } from '~/utils/glob-match'
 
 export default class FilterEditorModal extends Modal {
-	filters: string[]
-	onSave: (filters: string[]) => void
+	filters: GlobMatchOptions[]
 
 	constructor(
 		app: App,
-		filters: string[] = [],
-		onSave: (filters: string[]) => void,
+		filters: GlobMatchOptions[] = [],
+		private onSave: (filters: GlobMatchOptions[]) => void,
 	) {
 		super(app)
-		this.filters = [...filters]
-		this.onSave = onSave
+		this.filters = cloneDeep(filters)
 	}
 
 	onOpen() {
@@ -31,7 +31,12 @@ export default class FilterEditorModal extends Modal {
 
 		const updateList = () => {
 			listContainer.empty()
-			this.filters.forEach((filter, index) => {
+			this.filters.forEach((_filter, index) => {
+				const filter = {
+					expr: getExpr(_filter),
+					options: getUserOptions(_filter),
+				}
+				this.filters[index] = filter
 				const itemContainer = listContainer.createDiv({
 					cls: 'flex gap-2',
 				})
@@ -39,11 +44,36 @@ export default class FilterEditorModal extends Modal {
 					type: 'text',
 					cls: 'flex-1',
 					placeholder: i18n.t('settings.filters.placeholder'),
-					value: filter,
+					value: filter.expr,
 				})
 				input.spellcheck = false
 				input.addEventListener('input', () => {
-					this.filters[index] = input.value
+					filter.expr = input.value
+					this.filters[index] = filter
+				})
+				const forceCaseBtn = listContainer.createEl('button', {
+					text: 'Aa',
+					cls: 'shadow-none!',
+				})
+				function updateButtonStatus() {
+					const opt = getUserOptions(filter)
+					const activeCls = ['bg-[var(--interactive-accent)]!']
+					const inactiveCls = [
+						'background-none!',
+						'hover:bg-[--interactive-normal]!',
+					]
+					if (opt.caseSensitive) {
+						forceCaseBtn.classList.add(...activeCls)
+						forceCaseBtn.classList.remove(...inactiveCls)
+					} else {
+						forceCaseBtn.classList.remove(...activeCls)
+						forceCaseBtn.classList.add(...inactiveCls)
+					}
+				}
+				updateButtonStatus()
+				forceCaseBtn.addEventListener('click', () => {
+					filter.options.caseSensitive = !filter.options.caseSensitive
+					updateButtonStatus()
 				})
 				const trash = listContainer.createEl('button', {
 					text: i18n.t('settings.filters.remove'),
@@ -60,6 +90,7 @@ export default class FilterEditorModal extends Modal {
 					}
 				})
 				itemContainer.appendChild(input)
+				itemContainer.appendChild(forceCaseBtn)
 				itemContainer.appendChild(trash)
 			})
 		}

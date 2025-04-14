@@ -7,6 +7,7 @@ import { onSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
 import type NutstorePlugin from './index'
 import { OAuthResponse } from './utils/decrypt-ticket-response'
+import { GlobMatchOptions } from './utils/glob-match'
 
 export interface NutstoreSettings {
 	account: string
@@ -17,7 +18,7 @@ export interface NutstoreSettings {
 	oauthResponseText: string
 	loginMode: 'manual' | 'sso'
 	confirmBeforeSync: boolean
-	filters: string[]
+	filters: GlobMatchOptions[]
 }
 
 export const DEFAULT_SETTINGS: NutstoreSettings = {
@@ -29,7 +30,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	oauthResponseText: '',
 	loginMode: 'sso',
 	confirmBeforeSync: true,
-	filters: ['.obsidian', '.git', '.DS_Store', '.Trash'],
+	filters: ['.git', '.DS_Store', '.Trash'],
 }
 
 let pluginInstance: NutstorePlugin | null = null
