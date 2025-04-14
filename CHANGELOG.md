@@ -2,6 +2,11 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-14
+
+* 更新内容无法自动生成，请查看提交记录\n* Failed to generate changelog automatically, please check commit messages
+
+
 ## [0.2.2] - 2025-04-10
 
 *   修复了部分旧环境下的兼容性问题 (通过 polyfill 数组方法)。
