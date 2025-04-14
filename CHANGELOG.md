@@ -2,22 +2,29 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-04-14
+## [0.2.3] - 2025-04-14
 
-* 更新内容无法自动生成，请查看提交记录\n* Failed to generate changelog automatically, please check commit messages
+* 修复相对路径处理逻辑
+* 为过滤器添加 flag
+
+* fix relative path bug
+* allow config flag for filter
 
 
 ## [0.2.2] - 2025-04-10
 
 *   修复了部分旧环境下的兼容性问题 (通过 polyfill 数组方法)。
 *   修复了导致移动端无法同步的问题。
+
 *   Fixed compatibility issues in some older environments (by polyfilling array methods).
 *   Fixed an issue preventing synchronization on mobile devices.
 
 
 ## [0.2.1] - 2025-04-10
 
-*   Corrected handling of relative paths. / 修正了相对路径的处理。
+*   修正了相对路径的处理。
+
+*   Corrected handling of relative paths. 
 
 ## [0.2.0] - 2025-04-09
 
