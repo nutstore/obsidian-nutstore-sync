@@ -1,6 +1,8 @@
 import { Notice, Setting } from 'obsidian'
+import { isNotNil } from 'ramda'
 import TextAreaModal from '~/components/TextAreaModal'
 import i18n from '~/i18n'
+import deepStringify from '~/utils/deep-stringify'
 import BaseSettings from './settings.base'
 
 export default class LogSettings extends BaseSettings {
@@ -29,6 +31,17 @@ export default class LogSettings extends BaseSettings {
 	}
 
 	get logs() {
-		return this.plugin.logs.map((d) => JSON.stringify(d)).join('\n')
+		return this.plugin.logs
+			.map((d) => {
+				try {
+					return JSON.stringify(d)
+				} catch {
+					try {
+						return deepStringify(d)
+					} catch {}
+				}
+			})
+			.filter(isNotNil)
+			.join('\n\n')
 	}
 }
