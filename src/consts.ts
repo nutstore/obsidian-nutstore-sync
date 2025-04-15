@@ -11,3 +11,5 @@ export const API_VER_ENSURE_REQURL_OK = '1.0.0' // always bypass CORS here
 export const VALID_REQURL =
 	(!Platform.isAndroidApp && requireApiVersion(API_VER_REQURL)) ||
 	(Platform.isAndroidApp && requireApiVersion(API_VER_REQURL_ANDROID))
+
+export const IN_DEV = process.env.NODE_ENV === 'development'

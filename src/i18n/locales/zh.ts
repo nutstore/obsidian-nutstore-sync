@@ -87,6 +87,16 @@ export default {
 			description:
 				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符，** 用于递归匹配。',
 		},
+		log: {
+			title: '日志',
+			name: '日志',
+			desc: '查看同步日志',
+			button: '查看日志',
+			clear: '清除日志',
+			cleared: '日志已清除',
+			clearName: '清除日志',
+			clearDesc: '删除所有同步日志记录',
+		},
 	},
 	sync: {
 		failed: '同步失败!',
@@ -145,5 +155,10 @@ export default {
 			removeRemote: '删除远程',
 			sync: '同步',
 		},
+	},
+	textAreaModal: {
+		copy: '复制',
+		close: '关闭',
+		copied: '文本已复制到剪贴板',
 	},
 }
