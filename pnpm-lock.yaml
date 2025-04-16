@@ -15,8 +15,8 @@ importers:
         specifier: ^2.1.2
         version: 2.1.2(electron@35.0.3)
       '@nutstore/sso-js':
-        specifier: ^0.0.1
-        version: 0.0.1
+        specifier: ^0.0.3
+        version: 0.0.3
       '@types/diff-match-patch':
         specifier: ^1.0.36
         version: 1.0.36
@@ -789,8 +789,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@nutstore/sso-js@0.0.1':
-    resolution: {integrity: sha512-fPXxjJZz3cC8rlmgY5zjuRIYAiGpLR1QVdgWKkjjWGCdaU4nI04+drsCOiZstnrue8C1VhcY8P8GxBM1OjldOw==, tarball: https://npm.pkg.github.com/download/@nutstore/sso-js/0.0.1/f3566bf1f951a736269ee4933527313f5e32cbde}
+  '@nutstore/sso-js@0.0.3':
+    resolution: {integrity: sha512-zLL/sRh3qsDy3h/xc0o8xNUz/Wq8tuHoN5KP9gAzEjAWsG6tjIWHJs8lwhNLVqctQT/DtfN+ZqsSEmY2g+qzmQ==, tarball: https://npm.pkg.github.com/download/@nutstore/sso-js/0.0.3/ff5bb049c1302aaa603ec3036a351a621b1d5aaf}
 
   '@parcel/watcher-android-arm64@2.5.1':
     resolution: {integrity: sha512-KF8+j9nNbUN8vzOFDpRMsaKBHZ/mcjEjMToVMJOhTozkDonQFFrRcfdLWn6yWKCmJKmdVxSgHiYvTCef4/qcBA==}
@@ -3682,7 +3682,7 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@nutstore/sso-js@0.0.1': {}
+  '@nutstore/sso-js@0.0.3': {}
 
   '@parcel/watcher-android-arm64@2.5.1':
     optional: true
