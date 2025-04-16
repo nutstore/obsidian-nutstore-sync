@@ -23,7 +23,7 @@ export default class CommonSettings extends BaseSettings {
 					})
 			})
 			.addButton((button) => {
-				button.setButtonText(i18n.t('settings.remoteDir.edit')).onClick(() => {
+				button.setIcon('folder').onClick(() => {
 					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
 						this.plugin.settings.remoteDir = path
 						await this.plugin.saveSettings()
