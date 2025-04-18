@@ -89,6 +89,11 @@ export default class FilterEditorModal extends Modal {
 						updateList()
 					}
 				})
+				trash.addEventListener('blur', () => {
+					confirmDelete = false
+					trash.setText(i18n.t('settings.filters.remove'))
+					trash.removeClass('mod-warning')
+				})
 				itemContainer.appendChild(input)
 				itemContainer.appendChild(forceCaseBtn)
 				itemContainer.appendChild(trash)

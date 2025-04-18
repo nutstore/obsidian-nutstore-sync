@@ -1,10 +1,13 @@
 import { Notice, Setting } from 'obsidian'
+import { isNotNil } from 'ramda'
 import TextAreaModal from '~/components/TextAreaModal'
 import i18n from '~/i18n'
+import deepStringify from '~/utils/deep-stringify'
 import BaseSettings from './settings.base'
 
 export default class LogSettings extends BaseSettings {
 	async display() {
+		this.containerEl.empty()
 		this.containerEl.createEl('h2', { text: i18n.t('settings.log.title') })
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.log.name'))
@@ -29,6 +32,17 @@ export default class LogSettings extends BaseSettings {
 	}
 
 	get logs() {
-		return this.plugin.logs.map((d) => JSON.stringify(d)).join('\n')
+		return this.plugin.logs
+			.map((d) => {
+				try {
+					return JSON.stringify(d)
+				} catch {
+					try {
+						return deepStringify(d)
+					} catch {}
+				}
+			})
+			.filter(isNotNil)
+			.join('\n\n')
 	}
 }

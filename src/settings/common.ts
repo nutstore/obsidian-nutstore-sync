@@ -6,6 +6,7 @@ import BaseSettings from './settings.base'
 
 export default class CommonSettings extends BaseSettings {
 	async display() {
+		this.containerEl.empty()
 		this.containerEl.createEl('h2', {
 			text: i18n.t('settings.sections.common'),
 		})
@@ -21,9 +22,13 @@ export default class CommonSettings extends BaseSettings {
 						this.plugin.settings.remoteDir = value
 						await this.plugin.saveSettings()
 					})
+				text.inputEl.addEventListener('blur', () => {
+					this.plugin.settings.remoteDir = this.plugin.remoteBaseDir
+					this.display()
+				})
 			})
 			.addButton((button) => {
-				button.setButtonText(i18n.t('settings.remoteDir.edit')).onClick(() => {
+				button.setIcon('folder').onClick(() => {
 					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
 						this.plugin.settings.remoteDir = path
 						await this.plugin.saveSettings()
@@ -87,7 +92,7 @@ export default class CommonSettings extends BaseSettings {
 						async (filters) => {
 							this.plugin.settings.filters = filters
 							await this.plugin.saveSettings()
-							this.settings.display()
+							this.display()
 						},
 					).open()
 				})

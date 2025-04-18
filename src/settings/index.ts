@@ -4,6 +4,7 @@ import i18n from '~/i18n'
 import type NutstorePlugin from '~/index'
 import { GlobMatchOptions } from '~/utils/glob-match'
 import AccountSettings from './account'
+import CacheSettings from './cache'
 import CommonSettings from './common'
 import LogSettings from './log'
 
@@ -11,6 +12,7 @@ export interface NutstoreSettings {
 	account: string
 	credential: string
 	remoteDir: string
+	remoteCacheDir?: string
 	useGitStyle: boolean
 	conflictStrategy: 'diff-match-patch' | 'latest-timestamp'
 	oauthResponseText: string
@@ -23,6 +25,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	account: '',
 	credential: '',
 	remoteDir: '',
+	remoteCacheDir: '',
 	useGitStyle: false,
 	conflictStrategy: 'diff-match-patch',
 	oauthResponseText: '',
@@ -49,6 +52,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	accountSettings: AccountSettings
 	commonSettings: CommonSettings
 	logSettings: LogSettings
+	cacheSettings: CacheSettings
 
 	subSso = onSsoReceive().subscribe(() => {
 		this.display()
@@ -57,34 +61,39 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: NutstorePlugin) {
 		super(app, plugin)
 		this.plugin = plugin
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.backupWarning.name'))
+			.setDesc(i18n.t('settings.backupWarning.desc'))
 		this.accountSettings = new AccountSettings(
 			this.app,
 			this.plugin,
 			this,
-			this.containerEl,
+			this.containerEl.createDiv(),
 		)
 		this.commonSettings = new CommonSettings(
 			this.app,
 			this.plugin,
 			this,
-			this.containerEl,
+			this.containerEl.createDiv(),
+		)
+		this.cacheSettings = new CacheSettings(
+			this.app,
+			this.plugin,
+			this,
+			this.containerEl.createDiv(),
 		)
 		this.logSettings = new LogSettings(
 			this.app,
 			this.plugin,
 			this,
-			this.containerEl,
+			this.containerEl.createDiv(),
 		)
 	}
 
 	async display() {
-		const { containerEl } = this
-		containerEl.empty()
-		new Setting(containerEl)
-			.setName(i18n.t('settings.backupWarning.name'))
-			.setDesc(i18n.t('settings.backupWarning.desc'))
 		await this.accountSettings.display()
 		await this.commonSettings.display()
+		await this.cacheSettings.display()
 		await this.logSettings.display()
 	}
 

@@ -30,5 +30,6 @@
 
 	"[markdown]": {
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
-	}
+	},
+	"cSpell.words": ["Nutstore", "webdav"]
 }

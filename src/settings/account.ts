@@ -3,12 +3,14 @@ import { Notice, Setting } from 'obsidian'
 import LogoutConfirmModal from '~/components/LogoutConfirmModal'
 import i18n from '~/i18n'
 import { OAuthResponse } from '~/utils/decrypt-ticket-response'
+import logger from '~/utils/logger'
 import BaseSettings from './settings.base'
 
 export default class AccountSettings extends BaseSettings {
 	private updateOAuthUrlTimer: number | null = null
 
 	async display() {
+		this.containerEl.empty()
 		this.containerEl.createEl('h2', {
 			text: i18n.t('settings.sections.account'),
 		})
@@ -23,7 +25,7 @@ export default class AccountSettings extends BaseSettings {
 					.onChange(async (value: 'manual' | 'sso') => {
 						this.plugin.settings.loginMode = value
 						await this.plugin.saveSettings()
-						this.settings.display()
+						this.display()
 					}),
 			)
 
@@ -86,7 +88,8 @@ export default class AccountSettings extends BaseSettings {
 		if (isLoggedIn) {
 			try {
 				oauth = await this.plugin.getDecryptedOAuthInfo()
-			} catch {
+			} catch (e) {
+				logger.error(e)
 				isLoggedIn = false
 			}
 		}
@@ -103,7 +106,7 @@ export default class AccountSettings extends BaseSettings {
 								this.plugin.settings.oauthResponseText = ''
 								await this.plugin.saveSettings()
 								new Notice(i18n.t('settings.ssoStatus.logoutSuccess'))
-								this.settings.display()
+								this.display()
 							}).open()
 						})
 				})

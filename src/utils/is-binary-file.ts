@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer'
+
 /**
  * fork: https://github.com/gjtorikian/isBinaryFile/blob/main/src/index.ts
  *
@@ -103,13 +105,19 @@ function isBinaryProto(fileBuffer: Buffer, totalBytes: number): boolean {
 }
 
 export async function isBinaryFile(
-	file: Buffer,
+	file: Buffer | ArrayBuffer,
 	size?: number,
 ): Promise<boolean> {
-	if (size === undefined) {
-		size = file.length
+	let fileBuffer: Buffer
+	if (file instanceof ArrayBuffer) {
+		fileBuffer = Buffer.from(file)
+	} else {
+		fileBuffer = file
 	}
-	return isBinaryCheck(file, size)
+	if (size === undefined) {
+		size = fileBuffer.length
+	}
+	return isBinaryCheck(fileBuffer, size)
 }
 
 function isBinaryCheck(fileBuffer: Buffer, bytesRead: number): boolean {
