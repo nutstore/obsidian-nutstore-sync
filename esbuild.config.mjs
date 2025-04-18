@@ -42,7 +42,7 @@ const context = await esbuild.context({
 			process.env.NS_NSDAV_ENDPOINT,
 		),
 		'process.env.NS_DAV_ENDPOINT': JSON.stringify(process.env.NS_DAV_ENDPOINT),
-		'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
+		'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || ''),
 	},
 	format: 'cjs',
 	target: 'es2015',
