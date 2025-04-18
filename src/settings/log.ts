@@ -7,6 +7,7 @@ import BaseSettings from './settings.base'
 
 export default class LogSettings extends BaseSettings {
 	async display() {
+		this.containerEl.empty()
 		this.containerEl.createEl('h2', { text: i18n.t('settings.log.title') })
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.log.name'))

@@ -26,18 +26,58 @@ export const syncRecordKV = useStorage<Map<string, SyncRecordModel>>(
 )
 
 function useStorage<T = any>(instance: LocalForage) {
+	function set(key: string, value: T) {
+		return instance.setItem(key, value)
+	}
+
+	function get(key: string) {
+		return instance.getItem<T>(key)
+	}
+
+	function unset(key: string) {
+		return instance.removeItem(key)
+	}
+
+	function clear() {
+		return instance.clear()
+	}
+
+	async function dump() {
+		const keys = await instance.keys()
+		const data: Record<string, T> = {}
+		for (const key of keys) {
+			const val = await instance.getItem<T>(key)
+			if (val) {
+				data[key] = val
+			}
+		}
+		return data
+	}
+
+	async function restore(data: Record<string, any>) {
+		if (!data || typeof data !== 'object') {
+			throw new Error('Invalid data format for restore')
+		}
+		const temp = await dump()
+		try {
+			await instance.clear()
+			for (const key in data) {
+				await instance.setItem(key, data[key])
+			}
+		} catch {
+			await instance.clear()
+			for (const key in temp) {
+				await instance.setItem(key, temp[key])
+			}
+		}
+	}
+
 	return {
-		set(key: string, value: T) {
-			return instance.setItem(key, value)
-		},
-		get(key: string) {
-			return instance.getItem<T>(key)
-		},
-		unset(key: string) {
-			return instance.removeItem(key)
-		},
-		clear() {
-			return instance.clear()
-		},
+		set,
+		get,
+		unset,
+		clear,
+		dump,
+		restore,
 	}
 }
