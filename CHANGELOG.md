@@ -2,6 +2,28 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-18
+
+* **功能改进:**
+    * 实现了 Indexed DB 缓存数据的导入导出功能，并支持保存到坚果云盘。
+    * 使用图标代替了选择文件夹的文本。
+    * 添加了日志界面。
+* **问题修复:**
+    * 修复了 stringify 导致的错误。
+* **其他改进:**
+    * 为生产模式添加了日志记录功能。
+    * 将设置模块重构为类。
+* **Features:**
+    * Implemented import and export of Indexed DB cache data, with support for saving to Nutstore Cloud.
+    * Replaced folder selection text with an icon.
+    * Added a log interface.
+* **Bug Fixes:**
+    * Fixed an error caused by stringify.
+* **Other Improvements:**
+    * Added logging functionality for production mode.
+    * Refactored the settings module as a class.
+
+
 ## [0.2.3] - 2025-04-14
 
 * 修复相对路径处理逻辑
