@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-04-18
+## [0.3.0] - 2025-04-18
 
 * **功能改进:**
     * 实现了 Indexed DB 缓存数据的导入导出功能，并支持保存到坚果云盘。
