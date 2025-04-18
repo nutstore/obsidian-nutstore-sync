@@ -27,7 +27,7 @@ export default class CacheSaveModal extends Modal {
 			cls: 'setting-item-description',
 		})
 
-		const defaultFilename = moment().format('YYYY-MM-DD HH_mm_ss')
+		const defaultFilename = `sync_cache_${moment().format('YYYY-MM-DD HH_mm_ss')}`
 
 		const inputContainer = contentEl.createDiv()
 		const filenameInput = inputContainer.createEl('input', {

@@ -68,7 +68,7 @@ export default class CacheRestoreModal extends Modal {
 
 				fileItem.createSpan({
 					text: basename,
-					cls: 'flex-1 overflow-hidden text-ellipsis whitespace-nowrap mr-10px',
+					cls: 'flex-1 break-all mr-2',
 				})
 
 				const actionContainer = fileItem.createDiv({
