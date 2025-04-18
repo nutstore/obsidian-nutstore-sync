@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer'
 import { diff_match_patch } from 'diff-match-patch'
 import { isEqual } from 'lodash-es'
 import { moment } from 'obsidian'
@@ -68,7 +67,10 @@ export default class ConflictResolveTask extends BaseTask {
 			const localMtime = moment(local.mtime)
 			const remoteMtime = moment(remote.mtime)
 			if (remoteMtime.isSame(localMtime)) {
-				throw new Error()
+				// If local and remote timestamps are identical, no conflict resolution is needed.
+				return {
+					success: true,
+				}
 			}
 			const localContent = await this.vault.adapter.readBinary(this.localPath)
 			const useRemote = remoteMtime.isAfter(localMtime)
@@ -105,7 +107,7 @@ export default class ConflictResolveTask extends BaseTask {
 			if (await isEqual(localBuffer, remoteBuffer)) {
 				return { success: true }
 			}
-			if (await isBinaryFile(Buffer.from(localBuffer))) {
+			if (await isBinaryFile(localBuffer)) {
 				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
 			}
 			const localText = await new Blob([localBuffer]).text()
@@ -124,6 +126,14 @@ export default class ConflictResolveTask extends BaseTask {
 					useGitStyle: this.options.useGitStyle,
 				})
 				mergedText = diff3MergedResult.result.join('\n')
+			}
+			if (mergedText === remoteText) {
+				if (mergedText !== localText) {
+					await this.vault.adapter.write(this.localPath, mergedText)
+				}
+				return {
+					success: true,
+				}
 			}
 			const putResult = await this.webdav.putFileContents(
 				this.remotePath,

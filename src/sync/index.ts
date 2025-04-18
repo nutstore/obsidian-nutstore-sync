@@ -14,7 +14,7 @@ import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
-import { useSettings } from '~/settings'
+import { SyncMode, useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/helper'
 import { is503Error } from '~/utils/is-503-error'
 import { isSub } from '~/utils/is-sub'
@@ -126,6 +126,7 @@ export class NutstoreSync {
 
 			const tasks: BaseTask[] = []
 			const records = await syncRecord.getRecords()
+			const isFirstSync = records.size === 0
 
 			// sync folder: remote -> local
 			const removeFolderTasks: RemoveRemoteTask[] = []
@@ -486,6 +487,15 @@ export class NutstoreSync {
 				} else {
 					if (remote) {
 						if (local) {
+							if (
+								settings.syncMode === SyncMode.LOOSE &&
+								isFirstSync &&
+								!remote.isDeleted &&
+								!remote.isDir &&
+								remote.size === local.size
+							) {
+								continue
+							}
 							logger.debug({
 								reason: 'both local and remote files exist without a record',
 								remotePath: remotePathToAbsolute(p, this.options.remoteBaseDir),
