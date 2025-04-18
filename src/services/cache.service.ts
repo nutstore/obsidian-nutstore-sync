@@ -25,6 +25,9 @@ export default class CacheService {
 	 */
 	async saveCache(filename: string) {
 		try {
+			if (!filename.endsWith('.v1')) {
+				filename += '.v1'
+			}
 			const webdav = await this.plugin.createWebDAVClient()
 			const deltaCache = await deltaCacheKV.dump()
 			const exportedStorage: ExportedStorage = {
