@@ -2,6 +2,24 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-21
+
+* 修复：
+    * 仅导出当前 vault 的缓存
+    * 修复 delta 响应中的类型解析错误
+* 功能：
+    * 使用标准远程路径处理选择的远程路径，确保路径一致性
+    * 添加空操作任务以优化任务执行流程
+    * 添加松散同步模式，跳过同名且大小相同的文件
+* Bug fixes:
+    * Only export the cache of the current vault.
+    * Fixed a type parsing error in delta responses.
+* Features:
+    * Use standardized remote paths to ensure path consistency.
+    * Added a no-op task to optimize task execution flow.
+    * Added a loose synchronization mode to skip files with the same name and size.
+
+
 ## [0.3.0] - 2025-04-18
 
 * **功能改进:**
