@@ -27,6 +27,7 @@ import ConflictResolveTask, {
 } from './tasks/conflict-resolve.task'
 import MkdirLocalTask from './tasks/mkdir-local.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
+import NoopTask from './tasks/noop.task'
 import PullTask from './tasks/pull.task'
 import PushTask from './tasks/push.task'
 import RemoveLocalTask from './tasks/remove-local.task'
@@ -230,6 +231,7 @@ export class NutstoreSync {
 							remotePath: remote.path,
 						}),
 					)
+					continue
 				}
 			}
 
@@ -323,6 +325,7 @@ export class NutstoreSync {
 								remotePath: local.path,
 							}),
 						)
+						continue
 					}
 					continue
 				}
@@ -385,6 +388,7 @@ export class NutstoreSync {
 											useGitStyle: settings.useGitStyle,
 										}),
 									)
+									continue
 								} else {
 									logger.debug({
 										reason: 'remote file changed',
@@ -401,6 +405,7 @@ export class NutstoreSync {
 										},
 									})
 									tasks.push(new PullTask(options))
+									continue
 								}
 							} else {
 								if (localChanged) {
@@ -419,6 +424,7 @@ export class NutstoreSync {
 										},
 									})
 									tasks.push(new PushTask(options))
+									continue
 								}
 							}
 						} else {
@@ -438,6 +444,7 @@ export class NutstoreSync {
 									},
 								})
 								tasks.push(new PullTask(options))
+								continue
 							} else {
 								logger.debug({
 									reason: 'remote file is removable',
@@ -453,6 +460,7 @@ export class NutstoreSync {
 									},
 								})
 								tasks.push(new RemoveRemoteTask(options))
+								continue
 							}
 						}
 					} else if (local) {
@@ -470,6 +478,7 @@ export class NutstoreSync {
 								},
 							})
 							tasks.push(new PushTask(options))
+							continue
 						} else {
 							logger.debug({
 								reason: 'local file is removable',
@@ -482,6 +491,7 @@ export class NutstoreSync {
 								},
 							})
 							tasks.push(new RemoveLocalTask(options))
+							continue
 						}
 					}
 				} else {
@@ -494,6 +504,11 @@ export class NutstoreSync {
 								!remote.isDir &&
 								remote.size === local.size
 							) {
+								tasks.push(
+									new NoopTask({
+										...options,
+									}),
+								)
 								continue
 							}
 							logger.debug({
@@ -515,6 +530,7 @@ export class NutstoreSync {
 									useGitStyle: settings.useGitStyle,
 								}),
 							)
+							continue
 						} else {
 							logger.debug({
 								reason: 'remote file exists without a local file',
@@ -527,6 +543,7 @@ export class NutstoreSync {
 								},
 							})
 							tasks.push(new PullTask(options))
+							continue
 						}
 					} else {
 						if (local) {
@@ -541,6 +558,7 @@ export class NutstoreSync {
 								},
 							})
 							tasks.push(new PushTask(options))
+							continue
 						}
 					}
 				}
@@ -554,11 +572,11 @@ export class NutstoreSync {
 				return
 			}
 
-			let confirmedTasks = tasks
-			if (settings.confirmBeforeSync) {
+			let confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
+			if (settings.confirmBeforeSync && confirmedTasks.length > 0) {
 				const confirmExec = await new TaskListConfirmModal(
 					this.app,
-					tasks,
+					confirmedTasks,
 				).open()
 				if (confirmExec.confirm) {
 					confirmedTasks = confirmExec.tasks
@@ -567,15 +585,19 @@ export class NutstoreSync {
 					return
 				}
 			}
-
-			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
+			const confirmedTasksUniq = Array.from(
+				new Set([
+					...confirmedTasks,
+					...tasks.filter((t) => t instanceof NoopTask),
+				]),
+			)
+			if (confirmedTasksUniq.length > 500 && Platform.isDesktopApp) {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
-
-			const tasksResult = await this.execTasks(confirmedTasks)
+			const tasksResult = await this.execTasks(confirmedTasksUniq)
 			const failedCount = tasksResult.filter((r) => !r.success).length
 			logger.debug('tasks result', tasksResult, 'failed:', failedCount)
-			await this.updateMtimeInRecord(confirmedTasks, tasksResult)
+			await this.updateMtimeInRecord(confirmedTasksUniq, tasksResult)
 			emitEndSync(failedCount)
 		} catch (error) {
 			emitSyncError(error)
