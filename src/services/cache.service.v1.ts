@@ -8,28 +8,33 @@ import i18n from '~/i18n'
 import { ExportedStorage } from '~/settings/cache'
 import { deltaCacheKV } from '~/storage/kv'
 import { fileStatToStatModel } from '~/utils/file-stat-to-stat-model'
+import { getDBKey } from '~/utils/get-db-key'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
 /**
  * Service for handling cache operations (save, restore, delete, list)
  */
-export default class CacheService {
+export default class CacheServiceV1 {
 	constructor(
 		private plugin: NutstorePlugin,
 		private remoteCacheDir: string,
 	) {}
 
+	get key() {
+		const kvKey = getDBKey(
+			this.plugin.app.vault.getName(),
+			this.plugin.settings.remoteDir,
+		)
+		return kvKey
+	}
 	/**
 	 * Save the current cache to a file in the remote cache directory
 	 */
 	async saveCache(filename: string) {
 		try {
-			if (!filename.endsWith('.v1')) {
-				filename += '.v1'
-			}
 			const webdav = await this.plugin.createWebDAVClient()
-			const deltaCache = await deltaCacheKV.dump()
+			const deltaCache = await deltaCacheKV.get(this.key)
 			const exportedStorage: ExportedStorage = {
 				deltaCache: superjson.stringify(deltaCache),
 				exportedAt: new Date().toISOString(),
@@ -79,7 +84,7 @@ export default class CacheService {
 				decoder.decode(inflatedFileContent),
 			)
 			const { deltaCache } = exportedStorage
-			await deltaCacheKV.restore(superjson.parse(deltaCache))
+			await deltaCacheKV.set(this.key, superjson.parse(deltaCache))
 
 			new Notice(i18n.t('settings.cache.restoreModal.success'))
 			return Promise.resolve()
@@ -123,7 +128,6 @@ export default class CacheService {
 	async loadCacheFileList() {
 		try {
 			const webdav = await this.plugin.createWebDAVClient()
-
 			const dirExists = await webdav
 				.exists(this.remoteCacheDir)
 				.catch(() => false)
@@ -131,7 +135,6 @@ export default class CacheService {
 				await webdav.createDirectory(this.remoteCacheDir, { recursive: true })
 				return []
 			}
-
 			const files = await getDirectoryContents(
 				await this.plugin.getToken(),
 				this.remoteCacheDir,
