@@ -8,6 +8,11 @@ import CacheSettings from './cache'
 import CommonSettings from './common'
 import LogSettings from './log'
 
+export enum SyncMode {
+	STRICT = 'strict',
+	LOOSE = 'loose',
+}
+
 export interface NutstoreSettings {
 	account: string
 	credential: string
@@ -18,6 +23,7 @@ export interface NutstoreSettings {
 	oauthResponseText: string
 	loginMode: 'manual' | 'sso'
 	confirmBeforeSync: boolean
+	syncMode: SyncMode
 	filters: GlobMatchOptions[]
 }
 
@@ -31,6 +37,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	oauthResponseText: '',
 	loginMode: 'sso',
 	confirmBeforeSync: true,
+	syncMode: SyncMode.LOOSE,
 	filters: ['.git', '.DS_Store', '.Trash'],
 }
 

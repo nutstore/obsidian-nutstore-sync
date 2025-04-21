@@ -2,6 +2,7 @@ import { Setting } from 'obsidian'
 import FilterEditorModal from '~/components/FilterEditorModal'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
+import { SyncMode } from './index'
 import BaseSettings from './settings.base'
 
 export default class CommonSettings extends BaseSettings {
@@ -77,6 +78,20 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.confirmBeforeSync)
 					.onChange(async (value) => {
 						this.plugin.settings.confirmBeforeSync = value
+						await this.plugin.saveSettings()
+					}),
+			)
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.syncMode.name'))
+			.setDesc(i18n.t('settings.syncMode.desc'))
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption(SyncMode.STRICT, i18n.t('settings.syncMode.strict'))
+					.addOption(SyncMode.LOOSE, i18n.t('settings.syncMode.loose'))
+					.setValue(this.plugin.settings.syncMode)
+					.onChange(async (value: string) => {
+						this.plugin.settings.syncMode = value as SyncMode
 						await this.plugin.saveSettings()
 					}),
 			)

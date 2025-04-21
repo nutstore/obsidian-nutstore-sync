@@ -1,8 +1,11 @@
 import { normalize } from 'path'
 
-export function stdRemotePath(remoteBaseDir: string): `/${string}` {
-	if (remoteBaseDir.startsWith('/')) {
-		return normalize(remoteBaseDir) as `/${string}`
+export function stdRemotePath(remotePath: string): `/${string}/` {
+	if (!remotePath.startsWith('/')) {
+		remotePath = `/${remotePath}`
 	}
-	return `/${remoteBaseDir}`
+	if (!remotePath.endsWith('/')) {
+		remotePath = `${remotePath}/`
+	}
+	return normalize(remotePath) as `/${string}/`
 }

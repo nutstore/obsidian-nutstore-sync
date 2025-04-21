@@ -1,18 +1,17 @@
-import { App, Modal, Setting, moment } from 'obsidian'
+import { Modal, Setting, moment } from 'obsidian'
 import i18n from '~/i18n'
-import CacheService from '~/services/cache.service'
+import CacheService from '~/services/cache.service.v1'
 import NutstorePlugin from '..'
 
 export default class CacheSaveModal extends Modal {
 	private cacheService: CacheService
 
 	constructor(
-		app: App,
 		private plugin: NutstorePlugin,
 		private remoteCacheDir: string,
 		private onSuccess?: () => void,
 	) {
-		super(app)
+		super(plugin.app)
 		this.cacheService = new CacheService(plugin, remoteCacheDir)
 	}
 
@@ -27,7 +26,7 @@ export default class CacheSaveModal extends Modal {
 			cls: 'setting-item-description',
 		})
 
-		const defaultFilename = `sync_cache_${moment().format('YYYY-MM-DD HH_mm_ss')}`
+		const defaultFilename = `${this.plugin.app.vault.getName()}.${moment().format('YYYY-MM-DD HH_mm_ss')}.SyncCache`
 
 		const inputContainer = contentEl.createDiv()
 		const filenameInput = inputContainer.createEl('input', {
@@ -43,7 +42,11 @@ export default class CacheSaveModal extends Modal {
 					.setCta()
 					.onClick(async () => {
 						try {
-							await this.cacheService.saveCache(filenameInput.value)
+							let filename = filenameInput.value
+							if (!filename.endsWith('.v1')) {
+								filename += '.v1'
+							}
+							await this.cacheService.saveCache(filename)
 							this.onSuccess?.()
 							this.close()
 						} catch (error) {

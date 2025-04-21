@@ -48,7 +48,6 @@ export const getDelta = apiLimiter.wrap(
 		const parseXml = new XMLParser({
 			attributeNamePrefix: '',
 			removeNSPrefix: true,
-			parseTagValue: false,
 			numberParseOptions: {
 				eNotation: false,
 				hex: true,

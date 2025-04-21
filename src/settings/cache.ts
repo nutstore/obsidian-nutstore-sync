@@ -54,18 +54,15 @@ export default class CacheSettings extends BaseSettings {
 			.setDesc(i18n.t('settings.cache.dumpDesc'))
 			.addButton((button) => {
 				button.setButtonText(i18n.t('settings.cache.dump')).onClick(() => {
-					new CacheSaveModal(this.app, this.plugin, this.remoteCacheDir, () =>
+					new CacheSaveModal(this.plugin, this.remoteCacheDir, () =>
 						this.display(),
 					).open()
 				})
 			})
 			.addButton((button) => {
 				button.setButtonText(i18n.t('settings.cache.restore')).onClick(() => {
-					new CacheRestoreModal(
-						this.app,
-						this.plugin,
-						this.remoteCacheDir,
-						() => this.display(),
+					new CacheRestoreModal(this.plugin, this.remoteCacheDir, () =>
+						this.display(),
 					).open()
 				})
 			})

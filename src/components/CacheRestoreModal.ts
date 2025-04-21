@@ -1,7 +1,7 @@
-import { App, Modal, Setting } from 'obsidian'
+import { Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
-import CacheService from '~/services/cache.service'
+import CacheService from '~/services/cache.service.v1'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
@@ -11,12 +11,11 @@ export default class CacheRestoreModal extends Modal {
 	private cacheService: CacheService
 
 	constructor(
-		app: App,
 		private plugin: NutstorePlugin,
 		private remoteCacheDir: string,
 		private onSuccess?: () => void,
 	) {
-		super(app)
+		super(plugin.app)
 		this.cacheService = new CacheService(plugin, remoteCacheDir)
 	}
 
