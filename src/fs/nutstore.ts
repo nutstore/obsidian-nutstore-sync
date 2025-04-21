@@ -1,3 +1,4 @@
+import { isArray } from 'lodash-es'
 import { Vault } from 'obsidian'
 import { basename, isAbsolute } from 'path'
 import { isNotNil } from 'ramda'
@@ -42,15 +43,15 @@ export class NutstoreFileSystem implements IFileSystem {
 		if (deltaCache) {
 			let cursor = deltaCache.deltas.at(-1)?.cursor ?? deltaCache.originCursor
 			while (true) {
-				const events = await getDelta({
+				const { response } = await getDelta({
 					token: this.options.token,
 					cursor,
 					folderName: getRootFolderName(this.options.remoteBaseDir),
 				})
-				if (events.response.cursor === cursor) {
+				if (response.cursor === cursor) {
 					break
 				}
-				if (events.response.reset) {
+				if (response.reset) {
 					deltaCache.deltas = []
 					deltaCache.files = await traverseWebDAV(
 						this.options.token,
@@ -61,10 +62,15 @@ export class NutstoreFileSystem implements IFileSystem {
 						folderName: getRootFolderName(this.options.remoteBaseDir),
 					}).then((d) => d?.response?.cursor)
 					deltaCache.originCursor = cursor
-				} else if (events.response.delta.entry.length > 0) {
-					deltaCache.deltas.push(events.response)
-					if (events.response.hasMore) {
-						cursor = events.response.cursor
+				} else if (response.delta.entry) {
+					if (!isArray(response.delta.entry)) {
+						response.delta.entry = [response.delta.entry]
+					}
+					if (response.delta.entry.length > 0) {
+						deltaCache.deltas.push(response)
+					}
+					if (response.hasMore) {
+						cursor = response.cursor
 					} else {
 						break
 					}
