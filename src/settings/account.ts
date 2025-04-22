@@ -153,7 +153,8 @@ export default class AccountSettings extends BaseSettings {
 						buttonEl.classList.remove('success', 'error')
 						buttonEl.textContent = i18n.t('settings.checkConnection.name')
 						try {
-							const isConnected = await this.plugin.checkWebDAVConnection()
+							const isConnected =
+								await this.plugin.webDAVService.checkWebDAVConnection()
 							buttonEl.classList.remove('loading')
 							if (isConnected) {
 								buttonEl.classList.add('success')

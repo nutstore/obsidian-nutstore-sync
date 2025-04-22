@@ -8,10 +8,9 @@ import { LogObject } from 'consola'
 import { toBase64 } from 'js-base64'
 import { Notice, Plugin } from 'obsidian'
 import { Subscription } from 'rxjs'
-import { createClient, WebDAVClient } from 'webdav'
 import SyncConfirmModal from './components/SyncConfirmModal'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
-import { IN_DEV, NS_DAV_ENDPOINT } from './consts'
+import { IN_DEV } from './consts'
 import {
 	emitCancelSync,
 	onEndSync,
@@ -22,6 +21,7 @@ import {
 import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
 import { ProgressService } from './services/progress.service'
+import { WebDAVService } from './services/webdav.service'
 import {
 	DEFAULT_SETTINGS,
 	NutstoreSettings,
@@ -32,7 +32,6 @@ import { NutstoreSync } from './sync'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { is503Error } from './utils/is-503-error'
 import logger from './utils/logger'
-import { createRateLimitedWebDAVClient } from './utils/rate-limited-client'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
 
@@ -45,8 +44,10 @@ export default class NutstorePlugin extends Plugin {
 	public statusHideTimer: number | null = null
 	public subscriptions: Subscription[] = []
 	public syncStatusBar: HTMLElement
+	public webDAVService: WebDAVService
 
 	async onload() {
+		this.webDAVService = new WebDAVService(this)
 		if (IN_DEV) {
 			logger.addReporter({
 				log: (logObj) => {
@@ -130,7 +131,7 @@ export default class NutstorePlugin extends Plugin {
 				}
 				const startSync = async () => {
 					const sync = new NutstoreSync(this.app, {
-						webdav: await this.createWebDAVClient(),
+						webdav: await this.webDAVService.createWebDAVClient(),
 						vault: this.app.vault,
 						token: await this.getToken(),
 						remoteBaseDir: this.remoteBaseDir,
@@ -224,29 +225,7 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	async createWebDAVClient() {
-		let client: WebDAVClient
-		if (this.settings.loginMode === 'manual') {
-			client = createClient(NS_DAV_ENDPOINT, {
-				username: this.settings.account,
-				password: this.settings.credential,
-			})
-		} else {
-			const oauth = await this.getDecryptedOAuthInfo()
-			client = createClient(NS_DAV_ENDPOINT, {
-				username: oauth.username,
-				password: oauth.access_token,
-			})
-		}
-		return createRateLimitedWebDAVClient(client)
-	}
-
-	async checkWebDAVConnection(): Promise<boolean> {
-		try {
-			const client = await this.createWebDAVClient()
-			return await client.exists('/')
-		} catch (error) {
-			return false
-		}
+		return this.webDAVService.createWebDAVClient()
 	}
 
 	async getDecryptedOAuthInfo() {
