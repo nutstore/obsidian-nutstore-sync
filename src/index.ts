@@ -21,6 +21,7 @@ import {
 import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
 import { ProgressService } from './services/progress.service'
+import { StatusService } from './services/status.service'
 import { WebDAVService } from './services/webdav.service'
 import {
 	DEFAULT_SETTINGS,
@@ -41,13 +42,12 @@ export default class NutstorePlugin extends Plugin {
 	public progressService = new ProgressService(this)
 	public ribbonManager = new SyncRibbonManager(this)
 	public settings: NutstoreSettings
-	public statusHideTimer: number | null = null
 	public subscriptions: Subscription[] = []
 	public syncStatusBar: HTMLElement
-	public webDAVService: WebDAVService
+	public statusService = new StatusService(this)
+	public webDAVService = new WebDAVService(this)
 
 	async onload() {
-		this.webDAVService = new WebDAVService(this)
 		if (IN_DEV) {
 			logger.addReporter({
 				log: (logObj) => {
@@ -74,7 +74,7 @@ export default class NutstorePlugin extends Plugin {
 
 		const startSub = onStartSync().subscribe(() => {
 			this.toggleSyncUI(true)
-			this.updateSyncStatus({
+			this.statusService.updateSyncStatus({
 				text: i18n.t('sync.start'),
 				showNotice: true,
 			})
@@ -84,7 +84,7 @@ export default class NutstorePlugin extends Plugin {
 		const progressSub = onSyncProgress().subscribe((progress) => {
 			const percent =
 				Math.round((progress.completed.length / progress.total) * 10000) / 100
-			this.updateSyncStatus({
+			this.statusService.updateSyncStatus({
 				text: i18n.t('sync.progress', { percent }),
 			})
 			this.progressService.updateProgress(progress)
@@ -92,7 +92,7 @@ export default class NutstorePlugin extends Plugin {
 
 		const endSub = onEndSync().subscribe((failedCount) => {
 			this.toggleSyncUI(false)
-			this.updateSyncStatus({
+			this.statusService.updateSyncStatus({
 				text:
 					failedCount > 0
 						? i18n.t('sync.completeWithFailed', { failedCount })
@@ -104,7 +104,7 @@ export default class NutstorePlugin extends Plugin {
 
 		const errorSub = onSyncError().subscribe((error) => {
 			this.toggleSyncUI(false)
-			this.updateSyncStatus({
+			this.statusService.updateSyncStatus({
 				text: i18n.t('sync.failedStatus'),
 				isError: true,
 				showNotice: false,
@@ -183,6 +183,7 @@ export default class NutstorePlugin extends Plugin {
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
 		this.ribbonManager.unload()
 		this.progressService.unload()
+		this.statusService.unload()
 	}
 
 	async loadSettings() {
@@ -191,32 +192,6 @@ export default class NutstorePlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings)
-	}
-
-	private updateSyncStatus(status: {
-		text: string
-		isError?: boolean
-		showNotice?: boolean
-		hideAfter?: number
-	}) {
-		if (this.statusHideTimer) {
-			clearTimeout(this.statusHideTimer)
-			this.statusHideTimer = null
-		}
-
-		this.syncStatusBar.setText(status.text)
-		this.syncStatusBar.removeClass('hidden')
-
-		if (status.showNotice) {
-			new Notice(status.text)
-		}
-
-		if (status.hideAfter) {
-			this.statusHideTimer = window.setTimeout(() => {
-				this.syncStatusBar.addClass('hidden')
-				this.statusHideTimer = null
-			}, status.hideAfter)
-		}
 	}
 
 	private toggleSyncUI(isSyncing: boolean) {
