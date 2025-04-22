@@ -16,6 +16,7 @@ import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
 import { SyncMode, useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/helper'
+import breakableSleep from '~/utils/breakable-sleep'
 import { is503Error } from '~/utils/is-503-error'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
@@ -32,7 +33,7 @@ import PullTask from './tasks/pull.task'
 import PushTask from './tasks/push.task'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
-import { BaseTask, TaskResult } from './tasks/task.interface'
+import { BaseTask, TaskError, TaskResult } from './tasks/task.interface'
 
 export class NutstoreSync {
 	private remoteFs: IFileSystem
@@ -91,14 +92,11 @@ export class NutstoreSync {
 					break
 				} catch (e) {
 					if (is503Error(e)) {
-						const now = Date.now()
-						const startAt = now + 60000
-						new Notice(
-							i18n.t('sync.requestsTooFrequent', {
-								time: moment(startAt).format('HH:mm:ss'),
-							}),
-						)
-						await sleep(startAt - now)
+						await this.handle503Error(60000)
+						if (this.isCancelled) {
+							emitSyncError(new Error(i18n.t('sync.cancelled')))
+							return
+						}
 						remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 					} else {
 						throw e
@@ -650,37 +648,56 @@ export class NutstoreSync {
 		}
 	}
 
+	private async handle503Error(waitMs: number) {
+		const now = Date.now()
+		const startAt = now + waitMs
+		new Notice(
+			i18n.t('sync.requestsTooFrequent', {
+				time: moment(startAt).format('HH:mm:ss'),
+			}),
+		)
+		await breakableSleep(onCancelSync(), startAt - now)
+	}
+
+	/**
+	 * 自动处理503错误并重试的任务执行
+	 */
+	private async executeWithRetry(task: BaseTask): Promise<TaskResult> {
+		while (true) {
+			if (this.isCancelled) {
+				return {
+					success: false,
+					error: new TaskError(i18n.t('sync.cancelled'), task),
+				}
+			}
+			const taskResult = await task.exec()
+			if (taskResult.error && is503Error(taskResult.error)) {
+				await this.handle503Error(60000)
+				if (this.isCancelled) {
+					return {
+						success: false,
+						error: new TaskError(i18n.t('sync.cancelled'), task),
+					}
+				}
+				continue
+			}
+			return taskResult
+		}
+	}
+
 	private async execTasks(tasks: BaseTask[]) {
 		const res: TaskResult[] = []
 		let completed = 0
 		const total = tasks.length
 		for (let i = 0; i < tasks.length; ++i) {
 			const task = tasks[i]
-			while (true) {
-				if (this.isCancelled) {
-					break
-				}
-				const taskResult = await task.exec()
-				if (taskResult.error && is503Error(taskResult.error)) {
-					const now = Date.now()
-					const startAt = now + 60000
-					new Notice(
-						i18n.t('sync.requestsTooFrequent', {
-							time: moment(startAt).format('HH:mm:ss'),
-						}),
-					)
-					await sleep(startAt - now)
-				} else {
-					res[i] = taskResult
-					break
-				}
-			}
 			if (this.isCancelled) {
-				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				emitSyncError(new TaskError(i18n.t('sync.cancelled'), task))
 				break
 			}
-			completed++
-			emitSyncProgress(total, completed)
+			const taskResult = await this.executeWithRetry(task)
+			res[i] = taskResult
+			emitSyncProgress(total, ++completed)
 		}
 		return res
 	}
