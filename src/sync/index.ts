@@ -687,8 +687,8 @@ export class NutstoreSync {
 
 	private async execTasks(tasks: BaseTask[]) {
 		const res: TaskResult[] = []
-		let completed = 0
 		const total = tasks.length
+		const completed: BaseTask[] = []
 		for (let i = 0; i < tasks.length; ++i) {
 			const task = tasks[i]
 			if (this.isCancelled) {
@@ -697,7 +697,8 @@ export class NutstoreSync {
 			}
 			const taskResult = await this.executeWithRetry(task)
 			res[i] = taskResult
-			emitSyncProgress(total, ++completed)
+			completed.push(task)
+			emitSyncProgress(total, completed)
 		}
 		return res
 	}

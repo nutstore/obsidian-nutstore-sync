@@ -1,8 +1,17 @@
 import { Subject } from 'rxjs'
-import { SyncProgress } from './types'
+import { BaseTask } from '~/sync/tasks/task.interface'
 
-const syncProgress = new Subject<SyncProgress>()
+export interface UpdateSyncProgress {
+	total: number
+	completed: BaseTask[]
+}
+
+const syncProgress = new Subject<UpdateSyncProgress>()
 
 export const onSyncProgress = () => syncProgress.asObservable()
-export const emitSyncProgress = (total: number, completed: number) =>
-	syncProgress.next({ total, completed })
+
+export const emitSyncProgress = (total: number, completed: BaseTask[]) =>
+	syncProgress.next({
+		total,
+		completed,
+	})

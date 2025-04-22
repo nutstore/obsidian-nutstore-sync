@@ -178,6 +178,15 @@ export default {
 		progress: '同步进度: {{percent}}%',
 		startButton: '开始同步',
 		stopButton: '停止同步',
+		showProgressButton: '显示同步进度',
+		notSyncing: '尚未开始同步',
+		percentComplete: '{{percent}}%',
+		currentFile: '{{path}}',
+		filePath: '{{path}}',
+		progressTitle: '同步进度',
+		progressStats: '已完成: {{completed}} / {{total}} 个任务',
+		completedFilesTitle: '已完成的任务',
+		syncingFiles: '正在同步文件...',
 		failedStatus: '同步失败',
 		cancelled: '同步已取消',
 		suggestUseClientForManyTasks:
@@ -185,6 +194,14 @@ export default {
 		modalTitle: '同步进行中',
 		cancelButton: '取消同步',
 		progressText: '正在同步文件',
+		fileOp: {
+			pull: '下载',
+			push: '上传',
+			mkdir: '创建文件夹',
+			remove: '删除',
+			conflict: '冲突解决',
+			sync: '同步',
+		},
 		confirmModal: {
 			title: '同步确认',
 			message:

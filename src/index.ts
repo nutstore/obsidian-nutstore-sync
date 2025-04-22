@@ -21,6 +21,7 @@ import {
 } from './events'
 import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
+import { ProgressService } from './services/progress.service'
 import {
 	DEFAULT_SETTINGS,
 	NutstoreSettings,
@@ -36,13 +37,14 @@ import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
 
 export default class NutstorePlugin extends Plugin {
-	settings: NutstoreSettings
-	private syncStatusBar: HTMLElement
-	private subscriptions: Subscription[] = []
-	isSyncing: boolean = false
-	private ribbonManager: SyncRibbonManager | undefined
-	private statusHideTimer: number | null = null
-	logs: LogObject[] = []
+	public isSyncing: boolean = false
+	public logs: LogObject[] = []
+	public progressService = new ProgressService(this)
+	public ribbonManager = new SyncRibbonManager(this)
+	public settings: NutstoreSettings
+	public statusHideTimer: number | null = null
+	public subscriptions: Subscription[] = []
+	public syncStatusBar: HTMLElement
 
 	async onload() {
 		if (IN_DEV) {
@@ -69,21 +71,22 @@ export default class NutstorePlugin extends Plugin {
 		this.syncStatusBar = this.addStatusBarItem()
 		this.syncStatusBar.addClass('nutstore-sync-status', 'hidden')
 
-		this.ribbonManager = new SyncRibbonManager(this)
-
 		const startSub = onStartSync().subscribe(() => {
 			this.toggleSyncUI(true)
 			this.updateSyncStatus({
 				text: i18n.t('sync.start'),
 				showNotice: true,
 			})
+			this.progressService.resetProgress()
 		})
 
-		const progressSub = onSyncProgress().subscribe(({ total, completed }) => {
-			const percent = Math.round((completed / total) * 10000) / 100
+		const progressSub = onSyncProgress().subscribe((progress) => {
+			const percent =
+				Math.round((progress.completed.length / progress.total) * 10000) / 100
 			this.updateSyncStatus({
 				text: i18n.t('sync.progress', { percent }),
 			})
+			this.progressService.updateProgress(progress)
 		})
 
 		const endSub = onEndSync().subscribe((failedCount) => {
@@ -152,6 +155,15 @@ export default class NutstorePlugin extends Plugin {
 			},
 		})
 
+		// Add command to show sync progress modal
+		this.addCommand({
+			id: 'show-sync-progress',
+			name: i18n.t('sync.showProgressButton'),
+			callback: () => {
+				this.progressService.showProgressModal()
+			},
+		})
+
 		this.registerObsidianProtocolHandler('nutstore-sync/sso', async (data) => {
 			if (data?.s) {
 				this.settings.oauthResponseText = data.s
@@ -168,7 +180,8 @@ export default class NutstorePlugin extends Plugin {
 		setPluginInstance(null)
 		emitCancelSync()
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
-		this.ribbonManager?.unload()
+		this.ribbonManager.unload()
+		this.progressService.unload()
 	}
 
 	async loadSettings() {
@@ -207,7 +220,7 @@ export default class NutstorePlugin extends Plugin {
 
 	private toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
-		this.ribbonManager?.update()
+		this.ribbonManager.update()
 	}
 
 	async createWebDAVClient() {
