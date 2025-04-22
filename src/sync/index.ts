@@ -18,6 +18,7 @@ import { SyncMode, useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/helper'
 import breakableSleep from '~/utils/breakable-sleep'
 import { is503Error } from '~/utils/is-503-error'
+import { isBinaryFile } from '~/utils/is-binary-file'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
@@ -125,7 +126,6 @@ export class NutstoreSync {
 
 			const tasks: BaseTask[] = []
 			const records = await syncRecord.getRecords()
-			const isFirstSync = records.size === 0
 
 			// sync folder: remote -> local
 			const removeFolderTasks: RemoveRemoteTask[] = []
@@ -497,7 +497,6 @@ export class NutstoreSync {
 						if (local) {
 							if (
 								settings.syncMode === SyncMode.LOOSE &&
-								isFirstSync &&
 								!remote.isDeleted &&
 								!remote.isDir &&
 								remote.size === local.size
@@ -610,42 +609,44 @@ export class NutstoreSync {
 			this.options.vault,
 			this.options.remoteBaseDir,
 		)
-		if (tasks.length > 0) {
-			const latestRemoteEntities = await this.remoteFs.walk()
-			const records = await syncRecord.getRecords()
-			await Promise.all(
-				tasks.map(async (task, i) => {
-					if (!results[i]?.success) {
-						return
-					}
-					const remote = latestRemoteEntities.find(
-						(v) =>
-							remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
-							task.remotePath,
-					)
-					if (!remote) {
-						return
-					}
-					const local = await statVaultItem(this.options.vault, task.localPath)
-					if (!local) {
-						return
-					}
-					let base: Blob | undefined
-					if (!local.isDir) {
-						const buffer = await this.options.vault.adapter.readBinary(
-							task.localPath,
-						)
-						base = new Blob([buffer])
-					}
-					records.set(task.localPath, {
-						remote,
-						local,
-						base,
-					})
-				}),
-			)
-			await syncRecord.setRecords(records)
+		if (tasks.length === 0) {
+			return
 		}
+		const latestRemoteEntities = await this.remoteFs.walk()
+		const records = await syncRecord.getRecords()
+		for (let i = 0; i < tasks.length; ++i) {
+			const task = tasks[i]
+			if (!results[i]?.success) {
+				continue
+			}
+			const remote = latestRemoteEntities.find(
+				(v) =>
+					remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
+					task.remotePath,
+			)
+			if (!remote) {
+				continue
+			}
+			const local = await statVaultItem(this.options.vault, task.localPath)
+			if (!local) {
+				continue
+			}
+			let base: Blob | undefined
+			if (!local.isDir) {
+				const buffer = await this.options.vault.adapter.readBinary(
+					task.localPath,
+				)
+				if (!(await isBinaryFile(buffer))) {
+					base = new Blob([buffer])
+				}
+			}
+			records.set(task.localPath, {
+				remote,
+				local,
+				base,
+			})
+		}
+		await syncRecord.setRecords(records)
 	}
 
 	private async handle503Error(waitMs: number) {
