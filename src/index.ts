@@ -10,6 +10,7 @@ import { Notice, Plugin } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { createClient, WebDAVClient } from 'webdav'
 import SyncConfirmModal from './components/SyncConfirmModal'
+import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { IN_DEV, NS_DAV_ENDPOINT } from './consts'
 import {
 	emitCancelSync,
@@ -38,9 +39,8 @@ export default class NutstorePlugin extends Plugin {
 	settings: NutstoreSettings
 	private syncStatusBar: HTMLElement
 	private subscriptions: Subscription[] = []
-	private isSyncing: boolean = false
-	private ribbonIconEl: HTMLElement
-	private stopSyncRibbonEl: HTMLElement
+	isSyncing: boolean = false
+	private ribbonManager: SyncRibbonManager | undefined
 	private statusHideTimer: number | null = null
 	logs: LogObject[] = []
 
@@ -68,6 +68,8 @@ export default class NutstorePlugin extends Plugin {
 
 		this.syncStatusBar = this.addStatusBarItem()
 		this.syncStatusBar.addClass('nutstore-sync-status', 'hidden')
+
+		this.ribbonManager = new SyncRibbonManager(this)
 
 		const startSub = onStartSync().subscribe(() => {
 			this.toggleSyncUI(true)
@@ -115,10 +117,11 @@ export default class NutstorePlugin extends Plugin {
 
 		this.subscriptions.push(startSub, progressSub, endSub, errorSub)
 
-		this.ribbonIconEl = this.addRibbonIcon(
-			'refresh-ccw',
-			i18n.t('sync.startButton'),
-			async () => {
+		// Add commands for starting and stopping sync
+		this.addCommand({
+			id: 'start-sync',
+			name: i18n.t('sync.startButton'),
+			callback: async () => {
 				if (this.isSyncing) {
 					return
 				}
@@ -133,7 +136,21 @@ export default class NutstorePlugin extends Plugin {
 				}
 				new SyncConfirmModal(this.app, startSync).open()
 			},
-		)
+		})
+
+		this.addCommand({
+			id: 'stop-sync',
+			name: i18n.t('sync.stopButton'),
+			checkCallback: (checking) => {
+				if (this.isSyncing) {
+					if (!checking) {
+						emitCancelSync()
+					}
+					return true
+				}
+				return false
+			},
+		})
 
 		this.registerObsidianProtocolHandler('nutstore-sync/sso', async (data) => {
 			if (data?.s) {
@@ -151,9 +168,7 @@ export default class NutstorePlugin extends Plugin {
 		setPluginInstance(null)
 		emitCancelSync()
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
-		if (this.stopSyncRibbonEl) {
-			this.stopSyncRibbonEl.remove()
-		}
+		this.ribbonManager?.unload()
 	}
 
 	async loadSettings() {
@@ -192,21 +207,7 @@ export default class NutstorePlugin extends Plugin {
 
 	private toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
-		if (isSyncing) {
-			this.ribbonIconEl.setAttr('aria-disabled', 'true')
-			this.ribbonIconEl.addClass('nutstore-sync-spinning')
-			this.stopSyncRibbonEl = this.addRibbonIcon(
-				'square',
-				i18n.t('sync.stopButton'),
-				() => emitCancelSync(),
-			)
-		} else {
-			this.ribbonIconEl.removeAttribute('aria-disabled')
-			this.ribbonIconEl.removeClass('nutstore-sync-spinning')
-			if (this.stopSyncRibbonEl) {
-				this.stopSyncRibbonEl.remove()
-			}
-		}
+		this.ribbonManager?.update()
 	}
 
 	async createWebDAVClient() {
