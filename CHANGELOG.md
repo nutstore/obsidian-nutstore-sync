@@ -2,6 +2,24 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-23
+
+* 恢复同步记录后显示同步完成提示。
+* 完善了同步记录功能，自动补充缺失文件夹的同步记录。
+* 新增内存文件系统。
+* 新增同步完成标记功能。
+* 新增同步进度弹窗。
+* 新增同步和终止命令。
+* 优化了同步机制，包括可中断的 503 重试机制和睡眠函数，修复了大量任务并发读取文件时闪退的问题。
+* Synchronization complete message is now displayed after synchronization records are restored.
+* Enhanced synchronization record functionality by automatically adding missing folder records.
+* Implemented an in-memory file system (memfs).
+* Added a synchronization completion marker.
+* Added a synchronization progress popup.
+* Added commands for starting and stopping synchronization.
+* Improved synchronization mechanism with interruptible 503 retry and sleep functions, fixing the crash issue when concurrently reading files with a large number of tasks.
+
+
 ## [0.3.1] - 2025-04-21
 
 * 修复：
