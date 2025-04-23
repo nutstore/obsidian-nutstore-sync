@@ -54,13 +54,17 @@ export default class SyncProgressModal extends Modal {
 		)
 
 		if (progress.completed.length > 0) {
-			const lastFile = progress.completed.at(-1)
-			if (lastFile) {
-				this.currentFile.setText(
-					i18n.t('sync.currentFile', {
-						path: lastFile.localPath,
-					}),
-				)
+			if (progress.completed.length === progress.total) {
+				this.currentFile.setText(i18n.t('sync.complete'))
+			} else {
+				const lastFile = progress.completed.at(-1)
+				if (lastFile) {
+					this.currentFile.setText(
+						i18n.t('sync.currentFile', {
+							path: lastFile.localPath,
+						}),
+					)
+				}
 			}
 		}
 

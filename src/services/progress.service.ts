@@ -21,35 +21,31 @@ export class ProgressService {
 		}
 	}
 
-	// Reset progress data
-	public resetProgress(): void {
+	public resetProgress() {
 		this.syncProgress = {
 			total: 0,
 			completed: [],
 		}
 	}
 
-	public showProgressModal(): void {
+	public showProgressModal() {
 		if (!this.plugin.isSyncing) {
 			new Notice(i18n.t('sync.notSyncing'))
 			return
 		}
-
-		// Close existing modal if it's open
 		this.closeProgressModal()
-
 		this.progressModal = new SyncProgressModal(this.plugin)
 		this.progressModal.open()
 	}
 
-	public closeProgressModal(): void {
+	public closeProgressModal() {
 		if (this.progressModal) {
 			this.progressModal.close()
 			this.progressModal = null
 		}
 	}
 
-	public unload(): void {
+	public unload() {
 		this.closeProgressModal()
 	}
 }
