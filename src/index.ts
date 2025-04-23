@@ -78,7 +78,6 @@ export default class NutstorePlugin extends Plugin {
 				text: i18n.t('sync.start'),
 				showNotice: true,
 			})
-			this.progressService.resetProgress()
 		})
 
 		const progressSub = onSyncProgress().subscribe((progress) => {
@@ -87,7 +86,6 @@ export default class NutstorePlugin extends Plugin {
 			this.statusService.updateSyncStatus({
 				text: i18n.t('sync.progress', { percent }),
 			})
-			this.progressService.updateProgress(progress)
 		})
 
 		const endSub = onEndSync().subscribe((failedCount) => {

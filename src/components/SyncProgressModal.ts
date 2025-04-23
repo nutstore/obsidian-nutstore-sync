@@ -54,7 +54,7 @@ export default class SyncProgressModal extends Modal {
 		)
 
 		if (progress.completed.length > 0) {
-			if (progress.completed.length === progress.total) {
+			if (this.plugin.progressService.syncEnd) {
 				this.currentFile.setText(i18n.t('sync.complete'))
 			} else {
 				const lastFile = progress.completed.at(-1)
@@ -73,19 +73,11 @@ export default class SyncProgressModal extends Modal {
 		const recentFiles = progress.completed.reverse()
 
 		recentFiles.forEach((file) => {
-			const item = this.filesList.createDiv()
-			item.addClass(
-				'flex',
-				'items-center',
-				'p-1',
-				'rounded',
-				'text-3',
-				'gap-2',
-				'hover:bg-[var(--background-secondary)]',
-			)
+			const item = this.filesList.createDiv({
+				cls: 'flex items-center p-1 rounded text-3 gap-2 hover:bg-[var(--background-secondary)]',
+			})
 
-			const icon = item.createSpan()
-			icon.addClass('text-[var(--text-muted)]')
+			const icon = item.createSpan({ cls: 'text-[var(--text-muted)]' })
 
 			if (file instanceof PullTask) {
 				setIcon(icon, 'arrow-down-narrow-wide')
@@ -107,13 +99,9 @@ export default class SyncProgressModal extends Modal {
 				setIcon(icon, 'file')
 			}
 
-			const typeLabel = item.createSpan()
-			typeLabel.addClass(
-				'flex-none',
-				'w-15',
-				'text-[var(--text-normal)]',
-				'font-500',
-			)
+			const typeLabel = item.createSpan({
+				cls: 'flex-none w-15 text-[var(--text-normal)] font-500',
+			})
 
 			if (file instanceof PullTask) {
 				typeLabel.setText(i18n.t('sync.fileOp.pull'))
@@ -135,13 +123,9 @@ export default class SyncProgressModal extends Modal {
 				typeLabel.setText(i18n.t('sync.fileOp.sync'))
 			}
 
-			const filePath = item.createSpan()
-			filePath.addClass(
-				'flex-1',
-				'truncate',
-				'overflow-hidden',
-				'whitespace-nowrap',
-			)
+			const filePath = item.createSpan({
+				cls: 'flex-1 truncate overflow-hidden whitespace-nowrap',
+			})
 			filePath.setText(
 				i18n.t('sync.filePath', {
 					path: file.localPath,
@@ -154,98 +138,61 @@ export default class SyncProgressModal extends Modal {
 		const { contentEl } = this
 		contentEl.empty()
 
-		const container = contentEl.createDiv()
-		container.addClass('flex', 'flex-col', 'gap-4', 'h-50vh', 'max-h-50vh')
+		const container = contentEl.createDiv({
+			cls: 'flex flex-col gap-4 h-50vh max-h-50vh',
+		})
 
-		const header = container.createDiv()
-		header.addClass('border-b', 'border-[var(--background-modifier-border)]')
+		const header = container.createDiv({
+			cls: 'border-b border-[var(--background-modifier-border)]',
+		})
 
-		const title = header.createEl('h3')
+		const title = header.createEl('h2', {
+			cls: 'm-0',
+		})
 		title.setText(i18n.t('sync.progressTitle'))
-		title.addClass('m-0', 'text-4', 'font-600')
 
-		const statusSection = container.createDiv()
-		statusSection.addClass('flex', 'flex-col', 'gap-1')
+		const statusSection = container.createDiv({
+			cls: 'flex flex-col gap-1',
+		})
 
 		const currentOperation = statusSection.createDiv()
-		currentOperation.addClass('font-500')
 		currentOperation.setText(i18n.t('sync.syncingFiles'))
 
-		const currentFile = statusSection.createDiv()
-		currentFile.addClass(
-			'text-3',
-			'text-[var(--text-muted)]',
-			'truncate',
-			'overflow-hidden',
-			'whitespace-nowrap',
-		)
-		currentFile.setText('')
+		const currentFile = statusSection.createDiv({
+			cls: 'text-3 text-[var(--text-muted)] truncate overflow-hidden whitespace-nowrap',
+		})
 
-		const progressSection = container.createDiv()
-		progressSection.addClass('flex', 'flex-col', 'gap-2')
+		const progressSection = container.createDiv({
+			cls: 'flex flex-col gap-2',
+		})
 
-		const progressStats = progressSection.createDiv()
-		progressStats.addClass('text-3.25')
+		const progressStats = progressSection.createDiv({
+			cls: 'text-3.25',
+		})
 
-		const progressBarContainer = progressSection.createDiv()
-		progressBarContainer.addClass(
-			'relative',
-			'h-5',
-			'bg-[var(--background-secondary)]',
-			'rounded',
-			'overflow-hidden',
-		)
+		const progressBarContainer = progressSection.createDiv({
+			cls: 'relative h-5 bg-[var(--background-secondary)] rounded overflow-hidden',
+		})
 
-		const progressBar = progressBarContainer.createDiv()
-		progressBar.addClass(
-			'absolute',
-			'h-full',
-			'bg-[var(--interactive-accent)]',
-			'w-0',
-			'transition-width',
-		)
+		const progressBar = progressBarContainer.createDiv({
+			cls: 'absolute h-full bg-[var(--interactive-accent)] w-0 transition-width',
+		})
 
-		const progressText = progressBarContainer.createDiv()
-		progressText.addClass(
-			'absolute',
-			'w-full',
-			'text-center',
-			'text-3',
-			'leading-5',
-			'text-[var(--text-on-accent)]',
-			'mix-blend-difference',
-		)
+		const progressText = progressBarContainer.createDiv({
+			cls: 'absolute w-full text-center text-3 leading-5 text-[var(--text-on-accent)] mix-blend-difference',
+		})
+		const filesSection = container.createDiv({
+			cls: 'flex flex-col flex-1 gap-2 mt-2 overflow-y-auto',
+		})
 
-		const filesSection = container.createDiv()
-		filesSection.addClass(
-			'flex',
-			'flex-col',
-			'flex-1',
-			'gap-2',
-			'mt-2',
-			'overflow-y-auto',
-		)
-
-		const filesHeader = filesSection.createDiv()
-		filesHeader.addClass(
-			'font-500',
-			'text-3.5',
-			'pb-1',
-			'border-b',
-			'border-[var(--background-modifier-border)]',
-		)
+		const filesHeader = filesSection.createDiv({
+			cls: 'font-500 text-3.5 pb-1 border-b border-[var(--background-modifier-border)]',
+		})
 		filesHeader.setText(i18n.t('sync.completedFilesTitle'))
 
-		const filesList = filesSection.createDiv()
-		filesList.addClass(
-			'flex-1',
-			'overflow-y-auto',
-			'border',
-			'border-[var(--background-modifier-border)]',
-			'border-solid',
-			'rounded',
-			'p-1',
-		)
+		const filesList = filesSection.createDiv({
+			cls: 'flex-1 overflow-y-auto border border-[var(--background-modifier-border)] border-solid rounded p-1',
+		})
 
 		this.progressBar = progressBar
 		this.progressText = progressText

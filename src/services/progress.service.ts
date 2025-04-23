@@ -1,7 +1,12 @@
 import { throttle } from 'lodash-es'
 import { Notice } from 'obsidian'
 import SyncProgressModal from '../components/SyncProgressModal'
-import { UpdateSyncProgress } from '../events'
+import {
+	onEndSync,
+	onStartSync,
+	onSyncProgress,
+	UpdateSyncProgress,
+} from '../events'
 import i18n from '../i18n'
 import NutstorePlugin from '../index'
 
@@ -13,10 +18,26 @@ export class ProgressService {
 		completed: [],
 	}
 
+	syncEnd = false
+
+	private subscriptions = [
+		onStartSync().subscribe(() => {
+			this.syncEnd = false
+			this.resetProgress()
+		}),
+		onEndSync().subscribe(() => {
+			this.syncEnd = true
+			this.updateModal()
+		}),
+		onSyncProgress().subscribe((p) => {
+			this.syncProgress = p
+			this.updateModal()
+		}),
+	]
+
 	constructor(private plugin: NutstorePlugin) {}
 
-	updateProgress = throttle((progress: UpdateSyncProgress): void => {
-		this.syncProgress = progress
+	updateModal = throttle(() => {
 		if (this.progressModal) {
 			this.progressModal.update()
 		}
@@ -47,6 +68,7 @@ export class ProgressService {
 	}
 
 	public unload() {
+		this.subscriptions.forEach((sub) => sub.unsubscribe())
 		this.closeProgressModal()
 	}
 }
