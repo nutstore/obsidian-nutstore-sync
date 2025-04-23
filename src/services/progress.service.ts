@@ -1,3 +1,4 @@
+import { throttle } from 'lodash-es'
 import { Notice } from 'obsidian'
 import SyncProgressModal from '../components/SyncProgressModal'
 import { UpdateSyncProgress } from '../events'
@@ -14,12 +15,12 @@ export class ProgressService {
 
 	constructor(private plugin: NutstorePlugin) {}
 
-	public updateProgress(progress: UpdateSyncProgress): void {
+	updateProgress = throttle((progress: UpdateSyncProgress): void => {
 		this.syncProgress = progress
 		if (this.progressModal) {
 			this.progressModal.update()
 		}
-	}
+	}, 200)
 
 	public resetProgress() {
 		this.syncProgress = {
