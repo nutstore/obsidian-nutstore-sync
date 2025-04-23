@@ -12,6 +12,7 @@ import {
 } from '~/events'
 import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
+import memfs from '~/fs/memfs'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
 import { SyncMode, useSettings } from '~/settings'
@@ -78,6 +79,7 @@ export class NutstoreSync {
 				this.options.vault,
 				this.options.remoteBaseDir,
 			)
+			const records = await syncRecord.getRecords()
 			if (!remoteBaseDirExits) {
 				await syncRecord.drop()
 			}
@@ -125,216 +127,13 @@ export class NutstoreSync {
 			}
 
 			const tasks: BaseTask[] = []
-			const records = await syncRecord.getRecords()
+			const removeRemoteFolderTasks: RemoveRemoteTask[] = []
+			const removeLocalFolderTasks: RemoveLocalTask[] = []
+			const mkdirLocalTasks: MkdirLocalTask[] = []
+			const mkdirRemoteTasks: MkdirRemoteTask[] = []
+			const noopFolderTasks: NoopTask[] = []
 
-			// sync folder: remote -> local
-			const removeFolderTasks: RemoveRemoteTask[] = []
-			for (const remote of remoteStats) {
-				if (!remote.isDir) {
-					continue
-				}
-				const localPath = remotePathToLocalPath(
-					this.options.remoteBaseDir,
-					remote.path,
-				)
-				const local = localStatsMap.get(localPath)
-				const record = records.get(localPath)
-				if (local) {
-					if (!local.isDir) {
-						throw new Error(
-							i18n.t('sync.error.folderButFile', { path: remote.path }),
-						)
-					}
-				} else if (record) {
-					const remoteChanged = !moment(remote.mtime).isSame(
-						record.remote.mtime,
-					)
-					if (remoteChanged) {
-						logger.debug({
-							reason: 'remote folder changed',
-							remotePath: remotePathToAbsolute(
-								remote.path,
-								this.options.remoteBaseDir,
-							),
-							localPath: localPath,
-							conditions: {
-								remoteChanged,
-								localExists: !!local,
-								recordExists: !!record,
-							},
-						})
-						tasks.push(
-							new MkdirLocalTask({
-								...taskOptions,
-								localPath,
-								remotePath: remote.path,
-							}),
-						)
-						continue
-					}
-					// 如果远程文件夹里没有修改过的文件 或者没有不在syncRecord里的路径 那就可以把整个文件夹都删咯!
-					let removable = true
-					for (const sub of remoteStats) {
-						if (!isSub(remote.path, sub.path)) {
-							continue
-						}
-						const subRecord = records.get(sub.path)
-						if (
-							!subRecord ||
-							!moment(sub.mtime).isSame(subRecord.remote.mtime)
-						) {
-							removable = false
-							break
-						}
-					}
-					if (removable) {
-						logger.debug({
-							reason: 'remote folder is removable',
-							remotePath: remotePathToAbsolute(
-								remote.path,
-								this.options.remoteBaseDir,
-							),
-							localPath: localPath,
-							conditions: {
-								removable,
-								localExists: !!local,
-								recordExists: !!record,
-							},
-						})
-						removeFolderTasks.push(
-							new RemoveRemoteTask({
-								...taskOptions,
-								localPath: remote.path,
-								remotePath: remote.path,
-							}),
-						)
-					}
-				} else {
-					logger.debug({
-						reason: 'remote folder does not exist locally',
-						remotePath: remotePathToAbsolute(
-							remote.path,
-							this.options.remoteBaseDir,
-						),
-						localPath: localPath,
-						conditions: {
-							localExists: !!local,
-							recordExists: !!record,
-						},
-					})
-					tasks.push(
-						new MkdirLocalTask({
-							...taskOptions,
-							localPath,
-							remotePath: remote.path,
-						}),
-					)
-					continue
-				}
-			}
-
-			// sync folder: local -> remote
-			for (const local of localStats) {
-				if (!local.isDir) {
-					continue
-				}
-				const remote = remoteStatsMap.get(local.path)
-				const record = records.get(local.path)
-				if (!remote) {
-					if (record) {
-						const localChanged = !moment(local.mtime).isSame(record.local.mtime)
-						if (localChanged) {
-							logger.debug({
-								reason: 'local folder changed',
-								remotePath: remotePathToAbsolute(
-									local.path,
-									this.options.remoteBaseDir,
-								),
-								localPath: local.path,
-								conditions: {
-									localChanged,
-									remoteExists: !!remote,
-									recordExists: !!record,
-								},
-							})
-							tasks.push(
-								new MkdirRemoteTask({
-									...taskOptions,
-									localPath: local.path,
-									remotePath: local.path,
-								}),
-							)
-							continue
-						}
-						// 远程以前有文件夹 现在没了 如果本地这个文件夹里没没有发生修改 那么也应该删除本地的文件夹!
-						let removable = true
-						for (const sub of localStats) {
-							if (!isSub(local.path, sub.path)) {
-								continue
-							}
-							const subRecord = records.get(sub.path)
-							if (
-								!subRecord ||
-								!moment(sub.mtime).isSame(subRecord.local.mtime)
-							) {
-								removable = false
-								break
-							}
-						}
-						if (removable) {
-							logger.debug({
-								reason: 'local folder is removable',
-								remotePath: remotePathToAbsolute(
-									local.path,
-									this.options.remoteBaseDir,
-								),
-								localPath: local.path,
-								conditions: {
-									removable,
-									remoteExists: !!remote,
-									recordExists: !!record,
-								},
-							})
-							removeFolderTasks.push(
-								new RemoveLocalTask({
-									...taskOptions,
-									localPath: local.path,
-									remotePath: local.path,
-								}),
-							)
-						}
-					} else {
-						logger.debug({
-							reason: 'local folder does not exist remotely',
-							remotePath: remotePathToAbsolute(
-								local.path,
-								this.options.remoteBaseDir,
-							),
-							localPath: local.path,
-							conditions: {
-								remoteExists: !!remote,
-								recordExists: !!record,
-							},
-						})
-						tasks.push(
-							new MkdirRemoteTask({
-								...taskOptions,
-								localPath: local.path,
-								remotePath: local.path,
-							}),
-						)
-						continue
-					}
-					continue
-				}
-				if (!remote.isDir) {
-					throw new Error(
-						i18n.t('sync.error.folderButFile', { path: remote.path }),
-					)
-				}
-			}
-
-			// sync files
+			// * sync files
 			for (const p of mixedPath) {
 				const remote = remoteStatsMap.get(p)
 				const local = localStatsMap.get(p)
@@ -560,10 +359,252 @@ export class NutstoreSync {
 					}
 				}
 			}
-			removeFolderTasks.sort(
-				(a, b) => b.remotePath.length - a.remotePath.length,
+
+			// * sync folder: remote -> local
+			for (const remote of remoteStats) {
+				if (!remote.isDir) {
+					continue
+				}
+				const localPath = remotePathToLocalPath(
+					this.options.remoteBaseDir,
+					remote.path,
+				)
+				const local = localStatsMap.get(localPath)
+				const record = records.get(localPath)
+				if (local) {
+					if (!local.isDir) {
+						throw new Error(
+							i18n.t('sync.error.folderButFile', { path: remote.path }),
+						)
+					}
+					if (!record) {
+						noopFolderTasks.push(
+							new NoopTask({
+								...taskOptions,
+								localPath: localPath,
+								remotePath: remote.path,
+							}),
+						)
+						continue
+					}
+				} else if (record) {
+					const remoteChanged = !moment(remote.mtime).isSame(
+						record.remote.mtime,
+					)
+					if (remoteChanged) {
+						logger.debug({
+							reason: 'remote folder changed',
+							remotePath: remotePathToAbsolute(
+								remote.path,
+								this.options.remoteBaseDir,
+							),
+							localPath: localPath,
+							conditions: {
+								remoteChanged,
+								localExists: !!local,
+								recordExists: !!record,
+							},
+						})
+						mkdirLocalTasks.push(
+							new MkdirLocalTask({
+								...taskOptions,
+								localPath,
+								remotePath: remote.path,
+							}),
+						)
+						continue
+					}
+					// 如果远程文件夹里没有修改过的文件 或者没有不在syncRecord里的路径 那就可以把整个文件夹都删咯!
+					let removable = true
+					for (const sub of remoteStats) {
+						if (!isSub(remote.path, sub.path)) {
+							continue
+						}
+						const subRecord = records.get(sub.path)
+						if (
+							!subRecord ||
+							!moment(sub.mtime).isSame(subRecord.remote.mtime)
+						) {
+							removable = false
+							break
+						}
+					}
+					if (removable) {
+						logger.debug({
+							reason: 'remote folder is removable',
+							remotePath: remotePathToAbsolute(
+								remote.path,
+								this.options.remoteBaseDir,
+							),
+							localPath: localPath,
+							conditions: {
+								removable,
+								localExists: !!local,
+								recordExists: !!record,
+							},
+						})
+						removeRemoteFolderTasks.push(
+							new RemoveRemoteTask({
+								...taskOptions,
+								localPath: remote.path,
+								remotePath: remote.path,
+							}),
+						)
+					}
+				} else {
+					logger.debug({
+						reason: 'remote folder does not exist locally',
+						remotePath: remotePathToAbsolute(
+							remote.path,
+							this.options.remoteBaseDir,
+						),
+						localPath: localPath,
+						conditions: {
+							localExists: !!local,
+							recordExists: !!record,
+						},
+					})
+					mkdirLocalTasks.push(
+						new MkdirLocalTask({
+							...taskOptions,
+							localPath,
+							remotePath: remote.path,
+						}),
+					)
+					continue
+				}
+			}
+
+			// * sync folder: local -> remote
+			for (const local of localStats) {
+				if (!local.isDir) {
+					continue
+				}
+				const remote = remoteStatsMap.get(local.path)
+				const record = records.get(local.path)
+				if (remote) {
+					if (!record) {
+						noopFolderTasks.push(
+							new NoopTask({
+								...taskOptions,
+								localPath: local.path,
+								remotePath: remote.path,
+							}),
+						)
+						continue
+					}
+				} else {
+					if (record) {
+						const localChanged = !moment(local.mtime).isSame(record.local.mtime)
+						if (localChanged) {
+							logger.debug({
+								reason: 'local folder changed',
+								remotePath: remotePathToAbsolute(
+									local.path,
+									this.options.remoteBaseDir,
+								),
+								localPath: local.path,
+								conditions: {
+									localChanged,
+									remoteExists: !!remote,
+									recordExists: !!record,
+								},
+							})
+							mkdirRemoteTasks.push(
+								new MkdirRemoteTask({
+									...taskOptions,
+									localPath: local.path,
+									remotePath: local.path,
+								}),
+							)
+							continue
+						}
+						// 远程以前有文件夹 现在没了 如果本地这个文件夹里没没有发生修改 那么也应该删除本地的文件夹!
+						let removable = true
+						for (const sub of localStats) {
+							if (!isSub(local.path, sub.path)) {
+								continue
+							}
+							const subRecord = records.get(sub.path)
+							if (
+								!subRecord ||
+								!moment(sub.mtime).isSame(subRecord.local.mtime)
+							) {
+								removable = false
+								break
+							}
+						}
+						if (removable) {
+							logger.debug({
+								reason: 'local folder is removable',
+								remotePath: remotePathToAbsolute(
+									local.path,
+									this.options.remoteBaseDir,
+								),
+								localPath: local.path,
+								conditions: {
+									removable,
+									remoteExists: !!remote,
+									recordExists: !!record,
+								},
+							})
+							removeLocalFolderTasks.push(
+								new RemoveLocalTask({
+									...taskOptions,
+									localPath: local.path,
+									remotePath: local.path,
+								}),
+							)
+						}
+					} else {
+						logger.debug({
+							reason: 'local folder does not exist remotely',
+							remotePath: remotePathToAbsolute(
+								local.path,
+								this.options.remoteBaseDir,
+							),
+							localPath: local.path,
+							conditions: {
+								remoteExists: !!remote,
+								recordExists: !!record,
+							},
+						})
+						mkdirRemoteTasks.push(
+							new MkdirRemoteTask({
+								...taskOptions,
+								localPath: local.path,
+								remotePath: local.path,
+							}),
+						)
+						continue
+					}
+					continue
+				}
+				if (!remote.isDir) {
+					throw new Error(
+						i18n.t('sync.error.folderButFile', { path: remote.path }),
+					)
+				}
+			}
+
+			removeRemoteFolderTasks.sort(
+				(a: RemoveRemoteTask, b: RemoveRemoteTask) =>
+					b.remotePath.length - a.remotePath.length,
 			)
-			tasks.splice(0, 0, ...removeFolderTasks)
+			removeLocalFolderTasks.sort(
+				(a: RemoveLocalTask, b: RemoveLocalTask) =>
+					b.localPath.length - a.localPath.length,
+			)
+			const allFolderTasks = [
+				...removeRemoteFolderTasks,
+				...removeLocalFolderTasks,
+				...mkdirLocalTasks,
+				...mkdirRemoteTasks,
+				...noopFolderTasks,
+			]
+
+			tasks.splice(0, 0, ...allFolderTasks)
+
 			if (tasks.length === 0) {
 				emitEndSync(0)
 				return
@@ -605,25 +646,23 @@ export class NutstoreSync {
 	}
 
 	async updateMtimeInRecord(tasks: BaseTask[], results: TaskResult[]) {
-		const syncRecord = new SyncRecord(
-			this.options.vault,
-			this.options.remoteBaseDir,
-		)
 		if (tasks.length === 0) {
 			return
 		}
 		const latestRemoteEntities = await this.remoteFs.walk()
+		const latestRemoteMemfs = new memfs(latestRemoteEntities)
+		const syncRecord = new SyncRecord(
+			this.options.vault,
+			this.options.remoteBaseDir,
+		)
 		const records = await syncRecord.getRecords()
+		const startAt = Date.now()
 		for (let i = 0; i < tasks.length; ++i) {
 			const task = tasks[i]
 			if (!results[i]?.success) {
 				continue
 			}
-			const remote = latestRemoteEntities.find(
-				(v) =>
-					remotePathToAbsolute(v.path, this.options.remoteBaseDir) ===
-					task.remotePath,
-			)
+			const remote = latestRemoteMemfs.stat(task.localPath)
 			if (!remote) {
 				continue
 			}
@@ -647,6 +686,7 @@ export class NutstoreSync {
 			})
 		}
 		await syncRecord.setRecords(records)
+		logger.info(`write into record in ${Date.now() - startAt}ms`)
 	}
 
 	private async handle503Error(waitMs: number) {
