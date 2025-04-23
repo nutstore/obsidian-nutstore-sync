@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-04-23
+## [0.3.2] - 2025-04-23
 
 * 恢复同步记录后显示同步完成提示。
 * 完善了同步记录功能，自动补充缺失文件夹的同步记录。
