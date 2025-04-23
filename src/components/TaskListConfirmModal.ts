@@ -55,7 +55,10 @@ export default class TaskListConfirmModal extends Modal {
 		const instruction = contentEl.createEl('p')
 		instruction.setText(i18n.t('taskList.instruction'))
 
-		const table = contentEl.createEl('table', { cls: 'task-list-table' })
+		const tableContainer = contentEl.createDiv({
+			cls: 'max-h-50vh overflow-y-auto',
+		})
+		const table = tableContainer.createEl('table', { cls: 'task-list-table' })
 
 		const thead = table.createEl('thead')
 		const headerRow = thead.createEl('tr')

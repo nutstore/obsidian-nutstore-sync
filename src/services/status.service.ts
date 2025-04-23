@@ -1,0 +1,47 @@
+import { Notice } from 'obsidian'
+import NutstorePlugin from '../index'
+
+export class StatusService {
+	private statusHideTimer: number | null = null
+
+	constructor(private plugin: NutstorePlugin) {}
+
+	/**
+	 * Updates the sync status display in the status bar
+	 */
+	public updateSyncStatus(status: {
+		text: string
+		isError?: boolean
+		showNotice?: boolean
+		hideAfter?: number
+	}): void {
+		if (this.statusHideTimer) {
+			clearTimeout(this.statusHideTimer)
+			this.statusHideTimer = null
+		}
+
+		this.plugin.syncStatusBar.setText(status.text)
+		this.plugin.syncStatusBar.removeClass('hidden')
+
+		if (status.showNotice) {
+			new Notice(status.text)
+		}
+
+		if (status.hideAfter) {
+			this.statusHideTimer = window.setTimeout(() => {
+				this.plugin.syncStatusBar.addClass('hidden')
+				this.statusHideTimer = null
+			}, status.hideAfter)
+		}
+	}
+
+	/**
+	 * Clean up timers when unloading
+	 */
+	public unload(): void {
+		if (this.statusHideTimer) {
+			clearTimeout(this.statusHideTimer)
+			this.statusHideTimer = null
+		}
+	}
+}

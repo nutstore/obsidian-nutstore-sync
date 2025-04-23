@@ -37,8 +37,6 @@ export class SyncRibbonManager {
 	}
 
 	public update() {
-		console.log(this.stopRibbonEl, this.startRibbonEl)
-
 		if (this.plugin.isSyncing) {
 			this.startRibbonEl.setAttr('aria-disabled', 'true')
 			this.startRibbonEl.addClass('nutstore-sync-spinning')

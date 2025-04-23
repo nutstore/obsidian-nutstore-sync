@@ -9,7 +9,8 @@
 		"build": "run-s build:webdav-explorer build:plugin",
 		"build:webdav-explorer": "pnpm --filter webdav-explorer build",
 		"build:plugin": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"test": "vitest"
 	},
 	"devDependencies": {
 		"@deanc/esbuild-plugin-postcss": "^1.0.2",
@@ -24,6 +25,7 @@
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"@unocss/postcss": "66.1.0-beta.3",
+		"@vitest/coverage-v8": "^3.1.2",
 		"assert": "^2.1.0",
 		"bottleneck": "^2.19.5",
 		"buffer": "^6.0.3",
@@ -58,6 +60,7 @@
 		"tslib": "2.4.0",
 		"typescript": "^5",
 		"unocss": "66.1.0-beta.3",
+		"vitest": "^3.1.2",
 		"webdav": "^5.7.1",
 		"webdav-explorer": "workspace: *"
 	},

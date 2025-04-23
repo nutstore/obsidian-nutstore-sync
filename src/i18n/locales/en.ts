@@ -180,6 +180,15 @@ export default {
 		progress: 'Sync progress: {{percent}}%',
 		startButton: 'Start sync',
 		stopButton: 'Stop sync',
+		showProgressButton: 'Show sync progress',
+		notSyncing: 'No sync currently in progress',
+		percentComplete: '{{percent}}%',
+		currentFile: '{{path}}',
+		filePath: '{{path}}',
+		progressTitle: 'Sync Progress',
+		progressStats: 'Completed: {{completed}} / {{total}} tasks',
+		completedFilesTitle: 'Completed Tasks',
+		syncingFiles: 'Syncing files...',
 		failedStatus: 'Sync failed',
 		cancelled: 'Sync cancelled',
 		suggestUseClientForManyTasks:
@@ -187,6 +196,14 @@ export default {
 		modalTitle: 'Syncing',
 		cancelButton: 'Cancel sync',
 		progressText: 'Syncing files',
+		fileOp: {
+			pull: 'Download',
+			push: 'Upload',
+			mkdir: 'Create Folder',
+			remove: 'Delete',
+			conflict: 'Conflict Resolution',
+			sync: 'Sync',
+		},
 		confirmModal: {
 			title: 'Sync confirmation',
 			message:
