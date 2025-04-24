@@ -33,7 +33,7 @@ export default class CacheServiceV1 {
 	 */
 	async saveCache(filename: string) {
 		try {
-			const webdav = await this.plugin.createWebDAVClient()
+			const webdav = await this.plugin.webDAVService.createWebDAVClient()
 			const deltaCache = await deltaCacheKV.get(this.key)
 			const exportedStorage: ExportedStorage = {
 				deltaCache: superjson.stringify(deltaCache),
@@ -66,7 +66,7 @@ export default class CacheServiceV1 {
 	 */
 	async restoreCache(filename: string) {
 		try {
-			const webdav = await this.plugin.createWebDAVClient()
+			const webdav = await this.plugin.webDAVService.createWebDAVClient()
 			const filePath = join(this.remoteCacheDir, filename)
 
 			const fileExists = await webdav.exists(filePath).catch(() => false)
@@ -104,7 +104,7 @@ export default class CacheServiceV1 {
 	 */
 	async deleteCache(filename: string): Promise<void> {
 		try {
-			const webdav = await this.plugin.createWebDAVClient()
+			const webdav = await this.plugin.webDAVService.createWebDAVClient()
 			const filePath = join(this.remoteCacheDir, filename)
 
 			await webdav.deleteFile(filePath)
@@ -127,7 +127,7 @@ export default class CacheServiceV1 {
 	 */
 	async loadCacheFileList() {
 		try {
-			const webdav = await this.plugin.createWebDAVClient()
+			const webdav = await this.plugin.webDAVService.createWebDAVClient()
 			const dirExists = await webdav
 				.exists(this.remoteCacheDir)
 				.catch(() => false)

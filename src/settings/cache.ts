@@ -121,7 +121,7 @@ export default class CacheSettings extends BaseSettings {
 	}
 
 	async createRemoteCacheDir() {
-		const webdav = await this.plugin.createWebDAVClient()
+		const webdav = await this.plugin.webDAVService.createWebDAVClient()
 		return await webdav.createDirectory(this.remoteCacheDir, {
 			recursive: true,
 		})

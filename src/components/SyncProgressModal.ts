@@ -1,4 +1,5 @@
 import { Modal, setIcon } from 'obsidian'
+import getTaskName from '~/utils/get-task-name'
 import NutstorePlugin from '..'
 import i18n from '../i18n'
 import ConflictResolveTask from '../sync/tasks/conflict-resolve.task'
@@ -103,25 +104,7 @@ export default class SyncProgressModal extends Modal {
 				cls: 'flex-none w-15 text-[var(--text-normal)] font-500',
 			})
 
-			if (file instanceof PullTask) {
-				typeLabel.setText(i18n.t('sync.fileOp.pull'))
-			} else if (file instanceof PushTask) {
-				typeLabel.setText(i18n.t('sync.fileOp.push'))
-			} else if (
-				file instanceof MkdirLocalTask ||
-				file instanceof MkdirRemoteTask
-			) {
-				typeLabel.setText(i18n.t('sync.fileOp.mkdir'))
-			} else if (
-				file instanceof RemoveLocalTask ||
-				file instanceof RemoveRemoteTask
-			) {
-				typeLabel.setText(i18n.t('sync.fileOp.remove'))
-			} else if (file instanceof ConflictResolveTask) {
-				typeLabel.setText(i18n.t('sync.fileOp.conflict'))
-			} else {
-				typeLabel.setText(i18n.t('sync.fileOp.sync'))
-			}
+			typeLabel.setText(getTaskName(file))
 
 			const filePath = item.createSpan({
 				cls: 'flex-1 truncate overflow-hidden whitespace-nowrap',

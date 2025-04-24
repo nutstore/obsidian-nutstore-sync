@@ -4,9 +4,9 @@ import './assets/styles/global.css'
 import './polyfill'
 import './webdav-patch'
 
-import { LogObject } from 'consola'
 import { toBase64 } from 'js-base64'
-import { Notice, Plugin } from 'obsidian'
+import { moment, Notice, Plugin } from 'obsidian'
+import { isNotNil } from 'ramda'
 import { Subscription } from 'rxjs'
 import SyncConfirmModal from './components/SyncConfirmModal'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
@@ -29,16 +29,18 @@ import {
 	NutstoreSettingTab,
 	setPluginInstance,
 } from './settings'
+import { useLogsStorage } from './storage/logs'
 import { NutstoreSync } from './sync'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { is503Error } from './utils/is-503-error'
 import logger from './utils/logger'
+import logsStringify from './utils/logs-stringify'
 import { stdRemotePath } from './utils/std-remote-path'
 import { updateLanguage } from './utils/update-language'
 
 export default class NutstorePlugin extends Plugin {
 	public isSyncing: boolean = false
-	public logs: LogObject[] = []
+	public logs: any[] = []
 	public progressService = new ProgressService(this)
 	public ribbonManager = new SyncRibbonManager(this)
 	public settings: NutstoreSettings
@@ -46,12 +48,19 @@ export default class NutstorePlugin extends Plugin {
 	public syncStatusBar: HTMLElement
 	public statusService = new StatusService(this)
 	public webDAVService = new WebDAVService(this)
+	public logsFileName = moment().format('YYYY-MM-DD_HH-mm-ss') + '.log'
+	public logsStorage = useLogsStorage(this)
 
 	async onload() {
 		if (IN_DEV) {
 			logger.addReporter({
 				log: (logObj) => {
-					this.logs.push(logObj)
+					const log = [
+						moment(logObj.date).format('YYYY-MM-DD HH:mm:ss'),
+						logObj.type,
+						logObj.args,
+					]
+					this.logs.push(log)
 				},
 			})
 		} else {
@@ -88,7 +97,7 @@ export default class NutstorePlugin extends Plugin {
 			})
 		})
 
-		const endSub = onEndSync().subscribe((failedCount) => {
+		const endSub = onEndSync().subscribe(async (failedCount) => {
 			this.toggleSyncUI(false)
 			this.statusService.updateSyncStatus({
 				text:
@@ -98,6 +107,7 @@ export default class NutstorePlugin extends Plugin {
 				showNotice: true,
 				hideAfter: 3000,
 			})
+			await this.saveLogs()
 		})
 
 		const errorSub = onSyncError().subscribe((error) => {
@@ -128,7 +138,7 @@ export default class NutstorePlugin extends Plugin {
 					return
 				}
 				const startSync = async () => {
-					const sync = new NutstoreSync(this.app, {
+					const sync = new NutstoreSync(this, {
 						webdav: await this.webDAVService.createWebDAVClient(),
 						vault: this.app.vault,
 						token: await this.getToken(),
@@ -197,10 +207,6 @@ export default class NutstorePlugin extends Plugin {
 		this.ribbonManager.update()
 	}
 
-	async createWebDAVClient() {
-		return this.webDAVService.createWebDAVClient()
-	}
-
 	async getDecryptedOAuthInfo() {
 		return decryptOAuthResponse(this.settings.oauthResponseText)
 	}
@@ -214,6 +220,16 @@ export default class NutstorePlugin extends Plugin {
 			token = `${this.settings.account}:${this.settings.credential}`
 		}
 		return toBase64(token)
+	}
+
+	async saveLogs() {
+		try {
+			const logs = this.logs.map(logsStringify).filter(isNotNil)
+			this.logs = logs
+			await this.logsStorage.set(this.logsFileName, logs.join('\n\n'))
+		} catch (e) {
+			logger.error('Error saving logs:', e)
+		}
 	}
 
 	get remoteBaseDir() {

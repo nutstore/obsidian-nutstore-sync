@@ -117,8 +117,22 @@ export class NutstoreSync {
 				...localStatsMap.keys(),
 				...remoteStatsMap.keys(),
 			])
-			logger.debug('local Stats', localStats)
-			logger.debug('remote Stats', remoteStats)
+			logger.debug(
+				'local Stats',
+				localStats.map((d) => ({
+					path: d.path,
+					size: d.size,
+					isDir: d.isDir,
+				})),
+			)
+			logger.debug(
+				'remote Stats',
+				remoteStats.map((d) => ({
+					path: d.path,
+					size: d.size,
+					isDir: d.isDir,
+				})),
+			)
 
 			const taskOptions = {
 				webdav,
