@@ -1,4 +1,5 @@
 import 'core-js/actual/array'
+import 'core-js/actual/string/pad-start'
 import 'core-js/actual/string/replace-all'
 import './assets/styles/global.css'
 import './polyfill'

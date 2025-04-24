@@ -25,3 +25,10 @@ export const syncRecordKV = useStorage<Map<string, SyncRecordModel>>(
 		storeName: 'sync_record',
 	}),
 )
+
+export const blobKV = useStorage<Blob>(
+	localforage.createInstance({
+		name: DB_NAME,
+		storeName: 'base_blob_store',
+	}),
+)
