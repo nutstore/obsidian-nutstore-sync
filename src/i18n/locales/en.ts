@@ -119,6 +119,27 @@ export default {
 			clear: 'Clear',
 			confirm: 'Confirm Clear',
 			cleared: 'Cache cleared successfully',
+			clearModal: {
+				title: 'Clear Cache',
+				description:
+					'Select which cache types to clear. This action cannot be undone.',
+				cancel: 'Cancel',
+				confirm: 'Confirm Clear',
+				deltaCache: {
+					name: 'Delta Cache',
+					desc: 'Stores information about incremental file changes.',
+				},
+				syncRecordCache: {
+					name: 'Sync Record Cache',
+					desc: 'Tracks synchronization status for each file.',
+				},
+				blobCache: {
+					name: 'File Snapshot Cache',
+					desc: 'Stores file snapshots needed for comparing changes during sync.',
+				},
+				clearedType: 'Cleared: {{types}}',
+				nothingSelected: 'Please select at least one cache type to clear.',
+			},
 			exportSuccess: 'Cache saved to plugin data file successfully',
 			exportError: 'Error saving cache: {{message}}',
 			noDataToRestore: 'No saved cache data found',
