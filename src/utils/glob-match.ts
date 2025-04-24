@@ -17,6 +17,13 @@ const DEFAULT_USER_OPTIONS: GlobMatchUserOptions = {
 	caseSensitive: false,
 }
 
+export function isVoidGlobMatchOptions(options: GlobMatchOptions): boolean {
+	if (typeof options === 'string') {
+		return options.trim() === ''
+	}
+	return options.expr.trim() === ''
+}
+
 function generateFlags(options: GlobMatchUserOptions) {
 	let flags = 'g'
 	if (!options.caseSensitive) {

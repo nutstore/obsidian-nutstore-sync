@@ -11,7 +11,7 @@ import { useSettings } from '~/settings'
 import { deltaCacheKV } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
-import GlobMatch from '~/utils/glob-match'
+import GlobMatch, { isVoidGlobMatchOptions } from '~/utils/glob-match'
 import { isSubDir } from '~/utils/is-sub-dir'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
@@ -145,7 +145,9 @@ export class NutstoreFileSystem implements IFileSystem {
 			}
 		}
 		const settings = useSettings()
-		const filters = (settings?.filters ?? []).map((opt) => new GlobMatch(opt))
+		const filters = (settings?.filters ?? [])
+			.filter((opt) => !isVoidGlobMatchOptions(opt))
+			.map((opt) => new GlobMatch(opt))
 		const ignoredContents = contents.filter((item) =>
 			filters.some((f) => f.test(item.path)),
 		)
