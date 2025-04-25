@@ -39,6 +39,20 @@ export default class CommonSettings extends BaseSettings {
 			})
 
 		new Setting(this.containerEl)
+			.setName(i18n.t('settings.skipLargeFiles.name'))
+			.setDesc(i18n.t('settings.skipLargeFiles.desc'))
+			.addText((text) => {
+				const currentValue = this.plugin.settings.skipLargeFiles.maxSize.trim()
+				text
+					.setPlaceholder(i18n.t('settings.skipLargeFiles.placeholder'))
+					.setValue(currentValue)
+					.onChange(async (value) => {
+						this.plugin.settings.skipLargeFiles.maxSize = value.trim()
+						await this.plugin.saveSettings()
+					})
+			})
+
+		new Setting(this.containerEl)
 			.setName(i18n.t('settings.conflictStrategy.name'))
 			.setDesc(i18n.t('settings.conflictStrategy.desc'))
 			.addDropdown((dropdown) =>

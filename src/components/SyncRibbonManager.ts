@@ -17,8 +17,8 @@ export class SyncRibbonManager {
 					return
 				}
 				const startSync = async () => {
-					const sync = new NutstoreSync(this.plugin.app, {
-						webdav: await this.plugin.createWebDAVClient(),
+					const sync = new NutstoreSync(this.plugin, {
+						webdav: await this.plugin.webDAVService.createWebDAVClient(),
 						vault: this.plugin.app.vault,
 						token: await this.plugin.getToken(),
 						remoteBaseDir: this.plugin.remoteBaseDir,

@@ -5,6 +5,7 @@ import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
+import { useBlobStore } from '~/storage/blob'
 import { isBinaryFile } from '~/utils/is-binary-file'
 import logger from '~/utils/logger'
 import { mergeDigIn } from '~/utils/merg-dig-in'
@@ -16,6 +17,8 @@ export enum ConflictStrategy {
 	DiffMatchPatch,
 	LatestTimeStamp,
 }
+
+const blobStore = useBlobStore()
 
 export default class ConflictResolveTask extends BaseTask {
 	constructor(
@@ -113,7 +116,16 @@ export default class ConflictResolveTask extends BaseTask {
 			const localText = await new Blob([localBuffer]).text()
 			const remoteText = await new Blob([remoteBuffer]).text()
 			const { record } = this.options
-			const baseText = (await record?.base?.text()) ?? remoteText
+			let baseBlob: Blob | null = null
+			if (record?.base instanceof Blob) {
+				baseBlob = record.base
+			} else {
+				const baseKey = record?.base?.key
+				if (baseKey) {
+					baseBlob = await blobStore.get(baseKey)
+				}
+			}
+			const baseText = (await baseBlob?.text()) ?? remoteText
 			const dmp = new diff_match_patch()
 			dmp.Match_Threshold = 0.2
 			dmp.Patch_Margin = 4

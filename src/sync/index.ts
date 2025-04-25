@@ -1,4 +1,6 @@
-import { App, Notice, Platform, Vault, moment } from 'obsidian'
+import { parse as bytesParse } from 'bytes-iec'
+import { cloneDeep, isNil } from 'lodash-es'
+import { Notice, Platform, Vault, moment } from 'obsidian'
 import { isAbsolute, join } from 'path'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
@@ -15,9 +17,11 @@ import { LocalVaultFileSystem } from '~/fs/local-vault'
 import memfs from '~/fs/memfs'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
-import { SyncMode, useSettings } from '~/settings'
+import { SyncMode } from '~/settings'
+import { useBlobStore } from '~/storage/blob'
 import { SyncRecord } from '~/storage/helper'
 import breakableSleep from '~/utils/breakable-sleep'
+import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
 import { isBinaryFile } from '~/utils/is-binary-file'
 import { isSub } from '~/utils/is-sub'
@@ -25,6 +29,7 @@ import logger from '~/utils/logger'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
+import NutstorePlugin from '..'
 import ConflictResolveTask, {
 	ConflictStrategy,
 } from './tasks/conflict-resolve.task'
@@ -44,7 +49,7 @@ export class NutstoreSync {
 	private subscriptions: Subscription[] = []
 
 	constructor(
-		private app: App,
+		private plugin: NutstorePlugin,
 		private options: {
 			vault: Vault
 			token: string
@@ -68,9 +73,19 @@ export class NutstoreSync {
 		)
 	}
 
+	get app() {
+		return this.plugin.app
+	}
+
 	async start() {
 		try {
-			const settings = useSettings()
+			const settings = cloneDeep(this.plugin.settings)
+
+			let maxFileSize = Infinity
+			if (settings.skipLargeFiles.maxSize.trim() !== '') {
+				maxFileSize = bytesParse(settings.skipLargeFiles.maxSize) ?? Infinity
+			}
+
 			const webdav = this.options.webdav
 			emitStartSync()
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
@@ -117,8 +132,22 @@ export class NutstoreSync {
 				...localStatsMap.keys(),
 				...remoteStatsMap.keys(),
 			])
-			logger.debug('local Stats', localStats)
-			logger.debug('remote Stats', remoteStats)
+			logger.debug(
+				'local Stats',
+				localStats.map((d) => ({
+					path: d.path,
+					size: d.size,
+					isDir: d.isDir,
+				})),
+			)
+			logger.debug(
+				'remote Stats',
+				remoteStats.map((d) => ({
+					path: d.path,
+					size: d.size,
+					isDir: d.isDir,
+				})),
+			)
 
 			const taskOptions = {
 				webdav,
@@ -172,6 +201,9 @@ export class NutstoreSync {
 											localExists: !!local,
 										},
 									})
+									if (remote.size > maxFileSize || local.size > maxFileSize) {
+										continue
+									}
 									tasks.push(
 										new ConflictResolveTask({
 											...options,
@@ -201,6 +233,9 @@ export class NutstoreSync {
 											localExists: !!local,
 										},
 									})
+									if (remote.size > maxFileSize) {
+										continue
+									}
 									tasks.push(new PullTask(options))
 									continue
 								}
@@ -220,6 +255,9 @@ export class NutstoreSync {
 											localExists: !!local,
 										},
 									})
+									if (local.size > maxFileSize) {
+										continue
+									}
 									tasks.push(new PushTask(options))
 									continue
 								}
@@ -240,6 +278,9 @@ export class NutstoreSync {
 										localExists: !!local,
 									},
 								})
+								if (remote.size > maxFileSize) {
+									continue
+								}
 								tasks.push(new PullTask(options))
 								continue
 							} else {
@@ -274,6 +315,9 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+							if (local.size > maxFileSize) {
+								continue
+							}
 							tasks.push(new PushTask(options))
 							continue
 						} else {
@@ -317,6 +361,10 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+
+							if (remote.size > maxFileSize || local.size > maxFileSize) {
+								continue
+							}
 							tasks.push(
 								new ConflictResolveTask({
 									...options,
@@ -338,6 +386,10 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+
+							if (remote.size > maxFileSize) {
+								continue
+							}
 							tasks.push(new PullTask(options))
 							continue
 						}
@@ -353,6 +405,10 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+
+							if (local.size > maxFileSize) {
+								continue
+							}
 							tasks.push(new PushTask(options))
 							continue
 						}
@@ -414,7 +470,7 @@ export class NutstoreSync {
 						)
 						continue
 					}
-					// 如果远程文件夹里没有修改过的文件 或者没有不在syncRecord里的路径 那就可以把整个文件夹都删咯!
+					// If there are no modified files in the remote folder or no paths that aren't in syncRecord, then the entire folder can be deleted!
 					let removable = true
 					for (const sub of remoteStats) {
 						if (!isSub(remote.path, sub.path)) {
@@ -519,7 +575,7 @@ export class NutstoreSync {
 							)
 							continue
 						}
-						// 远程以前有文件夹 现在没了 如果本地这个文件夹里没没有发生修改 那么也应该删除本地的文件夹!
+						// The folder existed remotely before but now it's gone. If there are no modifications in this local folder, then the local folder should be deleted too!
 						let removable = true
 						for (const sub of localStats) {
 							if (!isSub(local.path, sub.path)) {
@@ -632,6 +688,9 @@ export class NutstoreSync {
 			if (confirmedTasksUniq.length > 500 && Platform.isDesktopApp) {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
+
+			await this.saveLogs()
+			this.plugin.progressService.showProgressModal()
 			const tasksResult = await this.execTasks(confirmedTasksUniq)
 			const failedCount = tasksResult.filter((r) => !r.success).length
 			logger.debug('tasks result', tasksResult, 'failed:', failedCount)
@@ -656,6 +715,7 @@ export class NutstoreSync {
 			this.options.remoteBaseDir,
 		)
 		const records = await syncRecord.getRecords()
+		const blobStore = useBlobStore()
 		const startAt = Date.now()
 		for (let i = 0; i < tasks.length; ++i) {
 			const task = tasks[i]
@@ -670,23 +730,45 @@ export class NutstoreSync {
 			if (!local) {
 				continue
 			}
-			let base: Blob | undefined
+			let baseKey: string | undefined
 			if (!local.isDir) {
+				logger.debug(`Preparing to read file ${task.localPath}`, {
+					taskIndex: i,
+					taskPath: task.localPath,
+					taskType: getTaskName(task),
+					size: local.size,
+				})
 				const buffer = await this.options.vault.adapter.readBinary(
 					task.localPath,
 				)
-				if (!(await isBinaryFile(buffer))) {
-					base = new Blob([buffer])
+				logger.debug(`File reading completed ${task.localPath}`, {
+					bufferSize: buffer?.byteLength,
+					taskPath: task.localPath,
+				})
+				if (await isBinaryFile(buffer)) {
+					baseKey = undefined
+				} else {
+					const { key } = await blobStore.store(buffer)
+					baseKey = key
 				}
 			}
 			records.set(task.localPath, {
 				remote,
 				local,
-				base,
+				base: isNil(baseKey) ? undefined : { key: baseKey },
 			})
+			await this.saveLogs()
 		}
+		logger.debug(`Preparing to save records`, {
+			recordsSize: records.size,
+		})
+		await this.saveLogs()
 		await syncRecord.setRecords(records)
-		logger.info(`write into record in ${Date.now() - startAt}ms`)
+		logger.debug(`Records saving completed`, {
+			recordsSize: records.size,
+			elapsedMs: Date.now() - startAt,
+		})
+		await this.saveLogs()
 	}
 
 	private async handle503Error(waitMs: number) {
@@ -701,7 +783,7 @@ export class NutstoreSync {
 	}
 
 	/**
-	 * 自动处理503错误并重试的任务执行
+	 * Automatically handle 503 errors and retry task execution
 	 */
 	private async executeWithRetry(task: BaseTask): Promise<TaskResult> {
 		while (true) {
@@ -730,18 +812,51 @@ export class NutstoreSync {
 		const res: TaskResult[] = []
 		const total = tasks.length
 		const completed: BaseTask[] = []
+
+		logger.debug(`Starting to execute sync tasks`, {
+			totalTasks: total,
+		})
+
 		for (let i = 0; i < tasks.length; ++i) {
 			const task = tasks[i]
 			if (this.isCancelled) {
 				emitSyncError(new TaskError(i18n.t('sync.cancelled'), task))
 				break
 			}
+
+			logger.debug(`Executing task [${i + 1}/${total}] ${task.localPath}`, {
+				taskName: getTaskName(task),
+				taskPath: task.localPath,
+			})
+
+			await this.saveLogs()
 			const taskResult = await this.executeWithRetry(task)
+
+			logger.debug(`Task completed [${i + 1}/${total}] ${task.localPath}`, {
+				taskName: getTaskName(task),
+				taskPath: task.localPath,
+				result: taskResult,
+			})
+
 			res[i] = taskResult
 			completed.push(task)
 			emitSyncProgress(total, completed)
 		}
+
+		const successCount = res.filter((r) => r.success).length
+		logger.debug(`All tasks execution completed`, {
+			totalTasks: total,
+			successCount: successCount,
+			failedCount: total - successCount,
+		})
+
+		await this.saveLogs()
+
 		return res
+	}
+
+	async saveLogs() {
+		await this.plugin.saveLogs()
 	}
 }
 

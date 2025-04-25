@@ -93,6 +93,11 @@ export default {
 			description:
 				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符，** 用于递归匹配。',
 		},
+		skipLargeFiles: {
+			name: '跳过大文件',
+			desc: '同步时将跳过超过此大小的文件。如遇同步崩溃，可尝试降低此值。留空表示不限制。',
+			placeholder: '例如：10 MiB 或 500 KiB',
+		},
 		log: {
 			title: '调试日志',
 			name: '控制台日志',
@@ -119,6 +124,26 @@ export default {
 			clear: '清除',
 			confirm: '确认清除',
 			cleared: '缓存已成功清除',
+			clearModal: {
+				title: '清除缓存',
+				description: '选择需要清除的缓存类型。此操作无法撤销。',
+				cancel: '取消',
+				confirm: '确认清除',
+				deltaCache: {
+					name: '增量同步缓存',
+					desc: '存储文件增量变化的相关信息。',
+				},
+				syncRecordCache: {
+					name: '同步记录缓存',
+					desc: '跟踪每个文件的同步状态。',
+				},
+				blobCache: {
+					name: '文件快照缓存',
+					desc: '存储用于同步时对比变化的文件快照。',
+				},
+				clearedType: '已清除: {{types}}',
+				nothingSelected: '请至少选择一种缓存类型进行清除。',
+			},
 			exportSuccess: '缓存已成功保存到插件数据文件',
 			exportError: '保存缓存出错: {{message}}',
 			noDataToRestore: '未找到已保存的缓存数据',
@@ -178,6 +203,7 @@ export default {
 		progress: '同步进度: {{percent}}%',
 		startButton: '开始同步',
 		stopButton: '停止同步',
+		hideButton: '隐藏',
 		showProgressButton: '显示同步进度',
 		notSyncing: '尚未开始同步',
 		percentComplete: '{{percent}}%',

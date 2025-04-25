@@ -1,10 +1,11 @@
 import { Notice, Setting } from 'obsidian'
 import { join } from 'path'
+import CacheClearModal from '~/components/CacheClearModal'
 import CacheRestoreModal from '~/components/CacheRestoreModal'
 import CacheSaveModal from '~/components/CacheSaveModal'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
-import { deltaCacheKV, syncRecordKV } from '~/storage/kv'
+import { blobKV, deltaCacheKV, syncRecordKV } from '~/storage/kv'
 import { getDBKey } from '~/utils/get-db-key'
 import logger from '~/utils/logger'
 import { stdRemotePath } from '~/utils/std-remote-path'
@@ -72,36 +73,26 @@ export default class CacheSettings extends BaseSettings {
 			.setName(i18n.t('settings.cache.clearName'))
 			.setDesc(i18n.t('settings.cache.clearDesc'))
 			.addButton((button) => {
-				let confirmed = false
 				button
 					.setButtonText(i18n.t('settings.cache.clear'))
 					.onClick(async () => {
-						if (confirmed) {
+						new CacheClearModal(this.plugin, async (options) => {
 							try {
-								await this.clearCache()
-								new Notice(i18n.t('settings.cache.cleared'))
+								const cleared =
+									await CacheClearModal.clearSelectedCaches(options)
+								if (cleared.length > 0) {
+									new Notice(i18n.t('settings.cache.cleared'))
+								} else {
+									new Notice(
+										i18n.t('settings.cache.clearModal.nothingSelected'),
+									)
+								}
 							} catch (error) {
 								logger.error('Error clearing cache:', error)
 								new Notice(`Error clearing cache: ${error.message}`)
-							} finally {
-								button.setButtonText(i18n.t('settings.cache.clear'))
-								button.buttonEl.classList.remove('mod-warning')
-								confirmed = false
 							}
-						} else {
-							confirmed = true
-							button
-								.setButtonText(i18n.t('settings.cache.confirm'))
-								.setWarning()
-						}
+						}).open()
 					})
-				button.buttonEl.addEventListener('blur', () => {
-					if (confirmed) {
-						confirmed = false
-						button.setButtonText(i18n.t('settings.cache.clear'))
-						button.buttonEl.classList.remove('mod-warning')
-					}
-				})
 			})
 	}
 
@@ -121,7 +112,7 @@ export default class CacheSettings extends BaseSettings {
 	}
 
 	async createRemoteCacheDir() {
-		const webdav = await this.plugin.createWebDAVClient()
+		const webdav = await this.plugin.webDAVService.createWebDAVClient()
 		return await webdav.createDirectory(this.remoteCacheDir, {
 			recursive: true,
 		})
@@ -129,9 +120,23 @@ export default class CacheSettings extends BaseSettings {
 
 	/**
 	 * Clear the local cache
+	 * @param options Options specifying which caches to clear
 	 */
-	async clearCache() {
-		await deltaCacheKV.clear()
-		await syncRecordKV.clear()
+	async clearCache({
+		deltaCacheEnabled = true,
+		syncRecordEnabled = true,
+		blobEnabled = true,
+	} = {}) {
+		if (deltaCacheEnabled) {
+			await deltaCacheKV.clear()
+		}
+
+		if (syncRecordEnabled) {
+			await syncRecordKV.clear()
+		}
+
+		if (blobEnabled) {
+			await blobKV.clear()
+		}
 	}
 }

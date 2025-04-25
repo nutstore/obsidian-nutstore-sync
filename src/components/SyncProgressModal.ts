@@ -1,5 +1,8 @@
-import { Modal, setIcon } from 'obsidian'
+import { Modal, setIcon, Setting } from 'obsidian'
+import { Subscription } from 'rxjs'
+import getTaskName from '~/utils/get-task-name'
 import NutstorePlugin from '..'
+import { emitCancelSync, onCancelSync } from '../events'
 import i18n from '../i18n'
 import ConflictResolveTask from '../sync/tasks/conflict-resolve.task'
 import MkdirLocalTask from '../sync/tasks/mkdir-local.task'
@@ -15,12 +18,18 @@ export default class SyncProgressModal extends Modal {
 	private progressStats: HTMLDivElement
 	private currentFile: HTMLDivElement
 	private filesList: HTMLDivElement
+	private syncCancelled = false
+	private cancelSubscription: Subscription
 
 	constructor(
 		private plugin: NutstorePlugin,
 		private closeCallback?: () => void,
 	) {
 		super(plugin.app)
+		this.cancelSubscription = onCancelSync().subscribe(() => {
+			this.syncCancelled = true
+			this.update()
+		})
 	}
 
 	public update(): void {
@@ -56,6 +65,8 @@ export default class SyncProgressModal extends Modal {
 		if (progress.completed.length > 0) {
 			if (this.plugin.progressService.syncEnd) {
 				this.currentFile.setText(i18n.t('sync.complete'))
+			} else if (this.syncCancelled) {
+				this.currentFile.setText(i18n.t('sync.cancelled'))
 			} else {
 				const lastFile = progress.completed.at(-1)
 				if (lastFile) {
@@ -96,32 +107,14 @@ export default class SyncProgressModal extends Modal {
 			} else if (file instanceof ConflictResolveTask) {
 				setIcon(icon, 'git-merge')
 			} else {
-				setIcon(icon, 'file')
+				setIcon(icon, 'arrow-left-right')
 			}
 
 			const typeLabel = item.createSpan({
 				cls: 'flex-none w-15 text-[var(--text-normal)] font-500',
 			})
 
-			if (file instanceof PullTask) {
-				typeLabel.setText(i18n.t('sync.fileOp.pull'))
-			} else if (file instanceof PushTask) {
-				typeLabel.setText(i18n.t('sync.fileOp.push'))
-			} else if (
-				file instanceof MkdirLocalTask ||
-				file instanceof MkdirRemoteTask
-			) {
-				typeLabel.setText(i18n.t('sync.fileOp.mkdir'))
-			} else if (
-				file instanceof RemoveLocalTask ||
-				file instanceof RemoveRemoteTask
-			) {
-				typeLabel.setText(i18n.t('sync.fileOp.remove'))
-			} else if (file instanceof ConflictResolveTask) {
-				typeLabel.setText(i18n.t('sync.fileOp.conflict'))
-			} else {
-				typeLabel.setText(i18n.t('sync.fileOp.sync'))
-			}
+			typeLabel.setText(getTaskName(file))
 
 			const filePath = item.createSpan({
 				cls: 'flex-1 truncate overflow-hidden whitespace-nowrap',
@@ -201,9 +194,29 @@ export default class SyncProgressModal extends Modal {
 		this.filesList = filesList
 
 		this.update()
+
+		const footerButtons = container.createDiv({
+			cls: 'border-t border-[var(--background-modifier-border)]',
+		})
+
+		new Setting(footerButtons)
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('sync.hideButton'))
+					.onClick(() => this.close())
+			})
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('sync.stopButton'))
+					.setWarning()
+					.onClick(() => {
+						emitCancelSync()
+					})
+			})
 	}
 
 	onClose(): void {
+		this.cancelSubscription.unsubscribe()
 		const { contentEl } = this
 		contentEl.empty()
 		if (this.closeCallback) {

@@ -93,6 +93,11 @@ export default {
 			description:
 				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching, ** for recursive matching.',
 		},
+		skipLargeFiles: {
+			name: 'Skip large files',
+			desc: 'Files exceeding this size will be skipped during synchronization. If sync crashes occur, try lowering this value. Leave empty for no limit.',
+			placeholder: 'e.g., 10 MiB or 500 KiB',
+		},
 		log: {
 			title: 'Debug Logs',
 			name: 'Console Logs',
@@ -119,6 +124,27 @@ export default {
 			clear: 'Clear',
 			confirm: 'Confirm Clear',
 			cleared: 'Cache cleared successfully',
+			clearModal: {
+				title: 'Clear Cache',
+				description:
+					'Select which cache types to clear. This action cannot be undone.',
+				cancel: 'Cancel',
+				confirm: 'Confirm Clear',
+				deltaCache: {
+					name: 'Delta Cache',
+					desc: 'Stores information about incremental file changes.',
+				},
+				syncRecordCache: {
+					name: 'Sync Record Cache',
+					desc: 'Tracks synchronization status for each file.',
+				},
+				blobCache: {
+					name: 'File Snapshot Cache',
+					desc: 'Stores file snapshots needed for comparing changes during sync.',
+				},
+				clearedType: 'Cleared: {{types}}',
+				nothingSelected: 'Please select at least one cache type to clear.',
+			},
 			exportSuccess: 'Cache saved to plugin data file successfully',
 			exportError: 'Error saving cache: {{message}}',
 			noDataToRestore: 'No saved cache data found',
@@ -180,6 +206,7 @@ export default {
 		progress: 'Sync progress: {{percent}}%',
 		startButton: 'Start sync',
 		stopButton: 'Stop sync',
+		hideButton: 'Hide',
 		showProgressButton: 'Show sync progress',
 		notSyncing: 'No sync currently in progress',
 		percentComplete: '{{percent}}%',
