@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-04-25
+## [0.4.0] - 2025-04-25
 
 * 可以配置跳过大文件，避免 OOM；同步进度窗口可以取消同步和隐藏窗口；可选择性清除缓存。
 * 串行保存 blob 数据，日志持久化。
