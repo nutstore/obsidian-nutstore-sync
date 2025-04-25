@@ -1,6 +1,8 @@
-import { Modal, setIcon } from 'obsidian'
+import { Modal, setIcon, Setting } from 'obsidian'
+import { Subscription } from 'rxjs'
 import getTaskName from '~/utils/get-task-name'
 import NutstorePlugin from '..'
+import { emitCancelSync, onCancelSync } from '../events'
 import i18n from '../i18n'
 import ConflictResolveTask from '../sync/tasks/conflict-resolve.task'
 import MkdirLocalTask from '../sync/tasks/mkdir-local.task'
@@ -16,12 +18,18 @@ export default class SyncProgressModal extends Modal {
 	private progressStats: HTMLDivElement
 	private currentFile: HTMLDivElement
 	private filesList: HTMLDivElement
+	private syncCancelled = false
+	private cancelSubscription: Subscription
 
 	constructor(
 		private plugin: NutstorePlugin,
 		private closeCallback?: () => void,
 	) {
 		super(plugin.app)
+		this.cancelSubscription = onCancelSync().subscribe(() => {
+			this.syncCancelled = true
+			this.update()
+		})
 	}
 
 	public update(): void {
@@ -57,6 +65,8 @@ export default class SyncProgressModal extends Modal {
 		if (progress.completed.length > 0) {
 			if (this.plugin.progressService.syncEnd) {
 				this.currentFile.setText(i18n.t('sync.complete'))
+			} else if (this.syncCancelled) {
+				this.currentFile.setText(i18n.t('sync.cancelled'))
 			} else {
 				const lastFile = progress.completed.at(-1)
 				if (lastFile) {
@@ -97,7 +107,7 @@ export default class SyncProgressModal extends Modal {
 			} else if (file instanceof ConflictResolveTask) {
 				setIcon(icon, 'git-merge')
 			} else {
-				setIcon(icon, 'file')
+				setIcon(icon, 'arrow-left-right')
 			}
 
 			const typeLabel = item.createSpan({
@@ -184,9 +194,29 @@ export default class SyncProgressModal extends Modal {
 		this.filesList = filesList
 
 		this.update()
+
+		const footerButtons = container.createDiv({
+			cls: 'border-t border-[var(--background-modifier-border)]',
+		})
+
+		new Setting(footerButtons)
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('sync.hideButton'))
+					.onClick(() => this.close())
+			})
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('sync.stopButton'))
+					.setWarning()
+					.onClick(() => {
+						emitCancelSync()
+					})
+			})
 	}
 
 	onClose(): void {
+		this.cancelSubscription.unsubscribe()
 		const { contentEl } = this
 		contentEl.empty()
 		if (this.closeCallback) {

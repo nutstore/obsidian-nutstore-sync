@@ -93,6 +93,11 @@ export default {
 			description:
 				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符，** 用于递归匹配。',
 		},
+		skipLargeFiles: {
+			name: '跳过大文件',
+			desc: '同步时将跳过超过此大小的文件。如遇同步崩溃，可尝试降低此值。留空表示不限制。',
+			placeholder: '例如：10 MiB 或 500 KiB',
+		},
 		log: {
 			title: '调试日志',
 			name: '控制台日志',
@@ -198,6 +203,7 @@ export default {
 		progress: '同步进度: {{percent}}%',
 		startButton: '开始同步',
 		stopButton: '停止同步',
+		hideButton: '隐藏',
 		showProgressButton: '显示同步进度',
 		notSyncing: '尚未开始同步',
 		percentComplete: '{{percent}}%',

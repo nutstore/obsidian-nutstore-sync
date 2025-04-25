@@ -93,6 +93,11 @@ export default {
 			description:
 				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching, ** for recursive matching.',
 		},
+		skipLargeFiles: {
+			name: 'Skip large files',
+			desc: 'Files exceeding this size will be skipped during synchronization. If sync crashes occur, try lowering this value. Leave empty for no limit.',
+			placeholder: 'e.g., 10 MiB or 500 KiB',
+		},
 		log: {
 			title: 'Debug Logs',
 			name: 'Console Logs',
@@ -201,6 +206,7 @@ export default {
 		progress: 'Sync progress: {{percent}}%',
 		startButton: 'Start sync',
 		stopButton: 'Stop sync',
+		hideButton: 'Hide',
 		showProgressButton: 'Show sync progress',
 		notSyncing: 'No sync currently in progress',
 		percentComplete: '{{percent}}%',
