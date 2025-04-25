@@ -25,6 +25,9 @@ export interface NutstoreSettings {
 	confirmBeforeSync: boolean
 	syncMode: SyncMode
 	filters: GlobMatchOptions[]
+	skipLargeFiles: {
+		maxSize: string
+	}
 }
 
 export const DEFAULT_SETTINGS: NutstoreSettings = {
@@ -39,6 +42,9 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	confirmBeforeSync: true,
 	syncMode: SyncMode.LOOSE,
 	filters: ['.git', '.DS_Store', '.Trash'],
+	skipLargeFiles: {
+		maxSize: '30 MB',
+	},
 }
 
 let pluginInstance: NutstorePlugin | null = null

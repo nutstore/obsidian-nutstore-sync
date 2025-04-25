@@ -1,3 +1,4 @@
+import { parse as bytesParse } from 'bytes-iec'
 import { cloneDeep, isNil } from 'lodash-es'
 import { Notice, Platform, Vault, moment } from 'obsidian'
 import { isAbsolute, join } from 'path'
@@ -79,6 +80,12 @@ export class NutstoreSync {
 	async start() {
 		try {
 			const settings = cloneDeep(this.plugin.settings)
+
+			let maxFileSize = Infinity
+			if (settings.skipLargeFiles.maxSize.trim() !== '') {
+				maxFileSize = bytesParse(settings.skipLargeFiles.maxSize) ?? Infinity
+			}
+
 			const webdav = this.options.webdav
 			emitStartSync()
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
@@ -194,6 +201,9 @@ export class NutstoreSync {
 											localExists: !!local,
 										},
 									})
+									if (remote.size > maxFileSize || local.size > maxFileSize) {
+										continue
+									}
 									tasks.push(
 										new ConflictResolveTask({
 											...options,
@@ -223,6 +233,9 @@ export class NutstoreSync {
 											localExists: !!local,
 										},
 									})
+									if (remote.size > maxFileSize) {
+										continue
+									}
 									tasks.push(new PullTask(options))
 									continue
 								}
@@ -242,6 +255,9 @@ export class NutstoreSync {
 											localExists: !!local,
 										},
 									})
+									if (local.size > maxFileSize) {
+										continue
+									}
 									tasks.push(new PushTask(options))
 									continue
 								}
@@ -262,6 +278,9 @@ export class NutstoreSync {
 										localExists: !!local,
 									},
 								})
+								if (remote.size > maxFileSize) {
+									continue
+								}
 								tasks.push(new PullTask(options))
 								continue
 							} else {
@@ -296,6 +315,9 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+							if (local.size > maxFileSize) {
+								continue
+							}
 							tasks.push(new PushTask(options))
 							continue
 						} else {
@@ -339,6 +361,10 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+
+							if (remote.size > maxFileSize || local.size > maxFileSize) {
+								continue
+							}
 							tasks.push(
 								new ConflictResolveTask({
 									...options,
@@ -360,6 +386,10 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+
+							if (remote.size > maxFileSize) {
+								continue
+							}
 							tasks.push(new PullTask(options))
 							continue
 						}
@@ -375,6 +405,10 @@ export class NutstoreSync {
 									localExists: !!local,
 								},
 							})
+
+							if (local.size > maxFileSize) {
+								continue
+							}
 							tasks.push(new PushTask(options))
 							continue
 						}
@@ -656,6 +690,7 @@ export class NutstoreSync {
 			}
 
 			await this.saveLogs()
+			this.plugin.progressService.showProgressModal()
 			const tasksResult = await this.execTasks(confirmedTasksUniq)
 			const failedCount = tasksResult.filter((r) => !r.success).length
 			logger.debug('tasks result', tasksResult, 'failed:', failedCount)
