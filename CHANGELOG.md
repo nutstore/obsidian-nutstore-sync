@@ -2,6 +2,14 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-25
+
+* 可以配置跳过大文件，避免 OOM；同步进度窗口可以取消同步和隐藏窗口；可选择性清除缓存。
+* 串行保存 blob 数据，日志持久化。
+* Configure skip large files to avoid OOM; The sync progress window can cancel sync and hide the window; Selectable cache clearing modal.
+* Serialize blob saving; Logs are now persistent.
+
+
 ## [0.3.2] - 2025-04-23
 
 * 恢复同步记录后显示同步完成提示。
