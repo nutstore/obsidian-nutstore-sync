@@ -125,7 +125,7 @@ export default class ConflictResolveTask extends BaseTask {
 					baseBlob = await blobStore.get(baseKey)
 				}
 			}
-			const baseText = (await baseBlob?.text()) ?? remoteText
+			const baseText = (await baseBlob?.text()) ?? localText
 			const dmp = new diff_match_patch()
 			dmp.Match_Threshold = 0.2
 			dmp.Patch_Margin = 4
