@@ -1,20 +1,25 @@
-# 🔄 Obsidian Nutstore
+# 🔄 Nutstore Sync
 
 This plugin enables two-way synchronization between Obsidian notes and Nutstore via WebDAV protocol.
 
 ## ✨ Key Features
 
-- **Two-way Sync Algorithm**: Keep notes in sync across devices
-- **Single Sign-On (SSO)**: No need to manually input WebDAV server address, account, and keys - just authorize and go
-- **Remote Folder Selection Tool**: Choose remote folders through a graphical interface to avoid manual input errors
+- **Two-way Sync**: Efficiently synchronize your notes across devices
+- **Incremental Sync**: Fast updates that only transfer changed files, making large vaults sync quickly
+- **Single Sign-On**: Connect to Nutstore with simple authorization instead of manually entering WebDAV credentials
+- **WebDAV Explorer**: Visual file browser for remote file management
 - **Smart Conflict Resolution**:
-  - Auto-merge algorithm: Automatically merges changed files through character-level comparison for seamless multi-client sync
-  - When automatic merging is not possible, file contents are annotated for manual conflict resolution
+  - Character-level comparison to automatically merge changes when possible
+  - Option to use timestamp-based resolution (newest file wins)
+- **Loose Sync Mode**: Optimize performance for vaults with thousands of notes
+- **Large File Handling**: Set size limits to skip large files for better performance
+- **Sync Status Tracking**: Clear visual indicators of sync progress and completion
+- **Detailed Logging**: Comprehensive logs for troubleshooting
 
 ## ⚠️ Important Notes
 
 - ⏳ Initial sync may take longer (especially with many files)
-- 💾 Backing up important notes before syncing is recommended
+- 💾 Please backup before syncing
 
 ## 🔍 Sync Algorithm
 
