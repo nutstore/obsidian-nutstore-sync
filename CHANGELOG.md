@@ -2,6 +2,16 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-28
+
+* 修复：优化实时保存同步记录功能，避免同步大量文件中断后需要重新读写。
+* 修复：处理空目录或根目录情况。
+* 修复：改进了 WebDAV 连接检查功能，现在可以处理 503 错误并提供相应的通知。
+* Fixed: Optimized real-time saving of sync records to prevent rereading and rewriting after interruptions during large file synchronizations.
+* Fixed: Handled cases with empty or root directories.
+* Fixed: Improved WebDAV connection check to handle 503 errors and provide corresponding notifications.
+
+
 ## [0.4.1] - 2025-04-27
 
 * 修复了首次同步时本地数据会覆盖远程数据的问题，现在会进行合并。
