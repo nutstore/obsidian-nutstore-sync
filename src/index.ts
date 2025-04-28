@@ -25,10 +25,10 @@ import { ProgressService } from './services/progress.service'
 import { StatusService } from './services/status.service'
 import { WebDAVService } from './services/webdav.service'
 import {
-	DEFAULT_SETTINGS,
 	NutstoreSettings,
 	NutstoreSettingTab,
 	setPluginInstance,
+	SyncMode,
 } from './settings'
 import { useLogsStorage } from './storage/logs'
 import { NutstoreSync } from './sync'
@@ -196,6 +196,23 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	async loadSettings() {
+		const DEFAULT_SETTINGS: NutstoreSettings = {
+			account: '',
+			credential: '',
+			remoteDir: '',
+			remoteCacheDir: '',
+			useGitStyle: false,
+			conflictStrategy: 'diff-match-patch',
+			oauthResponseText: '',
+			loginMode: 'sso',
+			confirmBeforeSync: true,
+			syncMode: SyncMode.LOOSE,
+			filters: ['.git', '.DS_Store', '.Trash', this.app.vault.configDir],
+			skipLargeFiles: {
+				maxSize: '30 MB',
+			},
+		}
+
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
 	}
 

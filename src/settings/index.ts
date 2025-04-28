@@ -30,23 +30,6 @@ export interface NutstoreSettings {
 	}
 }
 
-export const DEFAULT_SETTINGS: NutstoreSettings = {
-	account: '',
-	credential: '',
-	remoteDir: '',
-	remoteCacheDir: '',
-	useGitStyle: false,
-	conflictStrategy: 'diff-match-patch',
-	oauthResponseText: '',
-	loginMode: 'sso',
-	confirmBeforeSync: true,
-	syncMode: SyncMode.LOOSE,
-	filters: ['.git', '.DS_Store', '.Trash'],
-	skipLargeFiles: {
-		maxSize: '30 MB',
-	},
-}
-
 let pluginInstance: NutstorePlugin | null = null
 
 export function setPluginInstance(plugin: NutstorePlugin | null) {
