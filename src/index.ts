@@ -6,7 +6,7 @@ import './polyfill'
 import './webdav-patch'
 
 import { toBase64 } from 'js-base64'
-import { moment, Notice, Plugin } from 'obsidian'
+import { moment, normalizePath, Notice, Plugin } from 'obsidian'
 import { isNotNil } from 'ramda'
 import { Subscription } from 'rxjs'
 import SyncConfirmModal from './components/SyncConfirmModal'
@@ -234,8 +234,10 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	get remoteBaseDir() {
-		return stdRemotePath(
-			(this.settings.remoteDir || this.app.vault.getName()).trim(),
-		)
+		let remoteDir = normalizePath(this.settings.remoteDir.trim())
+		if (remoteDir === '' || remoteDir === '/') {
+			remoteDir = this.app.vault.getName()
+		}
+		return stdRemotePath(remoteDir)
 	}
 }

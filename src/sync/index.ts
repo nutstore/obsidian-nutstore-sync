@@ -732,19 +732,9 @@ export class NutstoreSync {
 			}
 			let baseKey: string | undefined
 			if (!local.isDir) {
-				logger.debug(`Preparing to read file ${task.localPath}`, {
-					taskIndex: i,
-					taskPath: task.localPath,
-					taskType: getTaskName(task),
-					size: local.size,
-				})
 				const buffer = await this.options.vault.adapter.readBinary(
 					task.localPath,
 				)
-				logger.debug(`File reading completed ${task.localPath}`, {
-					bufferSize: buffer?.byteLength,
-					taskPath: task.localPath,
-				})
 				if (await isBinaryFile(buffer)) {
 					baseKey = undefined
 				} else {
@@ -757,13 +747,8 @@ export class NutstoreSync {
 				local,
 				base: isNil(baseKey) ? undefined : { key: baseKey },
 			})
-			await this.saveLogs()
+			await syncRecord.setRecords(records)
 		}
-		logger.debug(`Preparing to save records`, {
-			recordsSize: records.size,
-		})
-		await this.saveLogs()
-		await syncRecord.setRecords(records)
 		logger.debug(`Records saving completed`, {
 			recordsSize: records.size,
 			elapsedMs: Date.now() - startAt,
