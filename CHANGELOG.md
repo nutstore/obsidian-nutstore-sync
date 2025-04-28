@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-04-28
+## [0.4.2] - 2025-04-28
 
 * 修复：优化实时保存同步记录功能，避免同步大量文件中断后需要重新读写。
 * 修复：处理空目录或根目录情况。
