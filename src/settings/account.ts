@@ -3,6 +3,7 @@ import { Notice, Setting } from 'obsidian'
 import LogoutConfirmModal from '~/components/LogoutConfirmModal'
 import i18n from '~/i18n'
 import { OAuthResponse } from '~/utils/decrypt-ticket-response'
+import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
 import BaseSettings from './settings.base'
 
@@ -153,15 +154,19 @@ export default class AccountSettings extends BaseSettings {
 						buttonEl.classList.remove('success', 'error')
 						buttonEl.textContent = i18n.t('settings.checkConnection.name')
 						try {
-							const isConnected =
+							const { success, error } =
 								await this.plugin.webDAVService.checkWebDAVConnection()
 							buttonEl.classList.remove('loading')
-							if (isConnected) {
+							if (success) {
 								buttonEl.classList.add('success')
 								buttonEl.textContent = i18n.t(
 									'settings.checkConnection.successButton',
 								)
 								new Notice(i18n.t('settings.checkConnection.success'))
+							} else if (error && is503Error(error)) {
+								buttonEl.classList.add('error')
+								buttonEl.textContent = i18n.t('sync.error.requestsTooFrequent')
+								new Notice(i18n.t('sync.error.requestsTooFrequent'))
 							} else {
 								buttonEl.classList.add('error')
 								buttonEl.textContent = i18n.t(
