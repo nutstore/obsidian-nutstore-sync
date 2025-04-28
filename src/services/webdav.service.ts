@@ -23,12 +23,15 @@ export class WebDAVService {
 		return createRateLimitedWebDAVClient(client)
 	}
 
-	async checkWebDAVConnection(): Promise<boolean> {
+	async checkWebDAVConnection(): Promise<{ error?: Error; success: boolean }> {
 		try {
 			const client = await this.createWebDAVClient()
-			return await client.exists('/')
+			return { success: await client.exists('/') }
 		} catch (error) {
-			return false
+			return {
+				error,
+				success: false,
+			}
 		}
 	}
 }
