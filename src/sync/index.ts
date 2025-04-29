@@ -291,7 +291,7 @@ export class NutstoreSync {
 	}
 
 	async saveLogs() {
-		await this.plugin.saveLogs()
+		await this.plugin.loggerService.saveLogs()
 	}
 
 	get app() {
