@@ -4,6 +4,9 @@
 
 ## [Unreleased] - 2025-04-30
 
+* 修复：修复了 NutstorePlugin 类型不存在 'logs' 属性的问题。
+* Fixed: Resolved an issue where the 'logs' property was missing from the NutstorePlugin type.
+
 * **功能改进:**
     * 实现了实时同步服务，并添加了相应的设置选项。
     * 添加了 BaseSyncDecision 抽象类以支持同步决策逻辑。
