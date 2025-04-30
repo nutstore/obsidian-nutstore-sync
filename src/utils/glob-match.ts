@@ -25,7 +25,7 @@ export function isVoidGlobMatchOptions(options: GlobMatchOptions): boolean {
 }
 
 function generateFlags(options: GlobMatchUserOptions) {
-	let flags = 'g'
+	let flags = ''
 	if (!options.caseSensitive) {
 		flags += 'i'
 	}
@@ -41,6 +41,7 @@ export default class GlobMatch {
 		const userOpt = getUserOptions(options)
 		this.re = GlobToRegExp(this.expr, {
 			flags: generateFlags(userOpt),
+			extended: true,
 		})
 	}
 
