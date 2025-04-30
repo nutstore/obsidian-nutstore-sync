@@ -86,16 +86,16 @@ export default {
 		},
 		filters: {
 			name: '过滤器',
-			desc: '添加同步时需要忽略文件或文件夹路径，例如: .DS_Store, .git/**',
+			desc: '添加同步时需要忽略文件或文件夹路径，例如: .DS_Store, .git',
 			add: '添加规则',
 			remove: '删除',
 			confirmRemove: '确认删除',
 			edit: '编辑规则',
 			save: '保存',
 			cancel: '取消',
-			placeholder: '例如: .DS_Store, .git/**, *.pdf',
+			placeholder: '例如: .DS_Store, *.pdf',
 			description:
-				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符，** 用于递归匹配。',
+				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符。',
 		},
 		skipLargeFiles: {
 			name: '跳过大文件',

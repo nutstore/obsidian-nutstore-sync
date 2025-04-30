@@ -86,16 +86,16 @@ export default {
 		},
 		filters: {
 			name: 'Sync Filters',
-			desc: 'Add paths to filter files or folders, e.g.: .DS_Store, .git/**',
+			desc: 'Add paths to filter files or folders, e.g.: .DS_Store, .git',
 			add: 'Add Rule',
 			remove: 'Remove',
 			confirmRemove: 'Confirm Remove',
 			edit: 'Edit Rules',
 			save: 'Save',
 			cancel: 'Cancel',
-			placeholder: 'e.g.: .DS_Store, .git/**, *.pdf',
+			placeholder: 'e.g.: .DS_Store, *.pdf',
 			description:
-				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching, ** for recursive matching.',
+				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching.',
 		},
 		skipLargeFiles: {
 			name: 'Skip large files',
