@@ -2,6 +2,24 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-04-30
+
+* **功能改进:**
+    * 实现了实时同步服务，并添加了相应的设置选项。
+    * 添加了 BaseSyncDecision 抽象类以支持同步决策逻辑。
+* **错误修复:**
+    * 更新了过滤器描述，移除了关于 globstar 的描述。
+    * 修复了生成的正则表达式标志，移除了默认的全局标志。
+    * 将 configDir 添加到过滤器规则中。
+* **Features:**
+    * Implemented a real-time synchronization service and added corresponding settings.
+    * Added a BaseSyncDecision abstract class to support synchronization decision logic.
+* **Bug Fixes:**
+    * Updated the filter description, removing the description about globstar.
+    * Fixed the generated regular expression flags, removing the default global flag.
+    * Added configDir to the filter rules.
+
+
 ## [0.4.2] - 2025-04-28
 
 * 修复：优化实时保存同步记录功能，避免同步大量文件中断后需要重新读写。
