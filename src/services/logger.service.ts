@@ -43,4 +43,8 @@ export default class LoggerService {
 			logger.error('Error saving logs:', e)
 		}
 	}
+
+	clear() {
+		this.logs = []
+	}
 }

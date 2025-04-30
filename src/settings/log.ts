@@ -25,13 +25,16 @@ export default class LogSettings extends BaseSettings {
 			.setDesc(i18n.t('settings.log.clearDesc'))
 			.addButton((button) => {
 				button.setButtonText(i18n.t('settings.log.clear')).onClick(() => {
-					this.plugin.logs = []
+					this.plugin.loggerService.clear()
 					new Notice(i18n.t('settings.log.cleared'))
 				})
 			})
 	}
 
 	get logs() {
-		return this.plugin.logs.map(logsStringify).filter(isNotNil).join('\n\n')
+		return this.plugin.loggerService.logs
+			.map(logsStringify)
+			.filter(isNotNil)
+			.join('\n\n')
 	}
 }
