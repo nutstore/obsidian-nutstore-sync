@@ -59,6 +59,10 @@ export default {
 			name: 'Confirm before sync',
 			desc: 'Show pending tasks and execute after confirmation',
 		},
+		realtimeSync: {
+			name: 'Real-time sync',
+			desc: 'Automatically sync changes as soon as files are modified',
+		},
 		syncMode: {
 			name: 'Sync Mode',
 			desc: 'Choose between strict or loose sync mode. Loose mode is recommended for users with many files to achieve faster sync speed. In loose mode, files with the same name and equal size will be ignored during the first sync.',
@@ -82,16 +86,16 @@ export default {
 		},
 		filters: {
 			name: 'Sync Filters',
-			desc: 'Add paths to filter files or folders, e.g.: .DS_Store, .git/**',
+			desc: 'Add paths to filter files or folders, e.g.: .DS_Store, .git',
 			add: 'Add Rule',
 			remove: 'Remove',
 			confirmRemove: 'Confirm Remove',
 			edit: 'Edit Rules',
 			save: 'Save',
 			cancel: 'Cancel',
-			placeholder: 'e.g.: .DS_Store, .git/**, *.pdf',
+			placeholder: 'e.g.: .DS_Store, *.pdf',
 			description:
-				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching, ** for recursive matching.',
+				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching.',
 		},
 		skipLargeFiles: {
 			name: 'Skip large files',

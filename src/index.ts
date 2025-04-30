@@ -6,173 +6,46 @@ import './polyfill'
 import './webdav-patch'
 
 import { toBase64 } from 'js-base64'
-import { moment, normalizePath, Notice, Plugin } from 'obsidian'
-import { isNotNil } from 'ramda'
-import { Subscription } from 'rxjs'
-import SyncConfirmModal from './components/SyncConfirmModal'
+import { normalizePath, Notice, Plugin } from 'obsidian'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
-import { IN_DEV } from './consts'
-import {
-	emitCancelSync,
-	onEndSync,
-	onStartSync,
-	onSyncError,
-	onSyncProgress,
-} from './events'
+import { emitCancelSync } from './events'
 import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
+import CommandService from './services/command.service'
+import EventsService from './services/events.service'
+import I18nService from './services/i18n.service'
+import LoggerService from './services/logger.service'
 import { ProgressService } from './services/progress.service'
+import RealtimeSyncService from './services/realtime-sync.service'
 import { StatusService } from './services/status.service'
 import { WebDAVService } from './services/webdav.service'
 import {
-	DEFAULT_SETTINGS,
 	NutstoreSettings,
 	NutstoreSettingTab,
 	setPluginInstance,
+	SyncMode,
 } from './settings'
-import { useLogsStorage } from './storage/logs'
-import { NutstoreSync } from './sync'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
-import { is503Error } from './utils/is-503-error'
-import logger from './utils/logger'
-import logsStringify from './utils/logs-stringify'
 import { stdRemotePath } from './utils/std-remote-path'
-import { updateLanguage } from './utils/update-language'
 
 export default class NutstorePlugin extends Plugin {
 	public isSyncing: boolean = false
-	public logs: any[] = []
+	public lastSyncAt: number = -Infinity
+	public settings: NutstoreSettings
+
+	public commandService = new CommandService(this)
+	public eventsService = new EventsService(this)
+	public i18nService = new I18nService(this)
+	public loggerService = new LoggerService(this)
 	public progressService = new ProgressService(this)
 	public ribbonManager = new SyncRibbonManager(this)
-	public settings: NutstoreSettings
-	public subscriptions: Subscription[] = []
-	public syncStatusBar: HTMLElement
 	public statusService = new StatusService(this)
 	public webDAVService = new WebDAVService(this)
-	public logsFileName = moment().format('YYYY-MM-DD_HH-mm-ss') + '.log'
-	public logsStorage = useLogsStorage(this)
+	public realtimeSyncService = new RealtimeSyncService(this)
 
 	async onload() {
-		if (IN_DEV) {
-			logger.addReporter({
-				log: (logObj) => {
-					const log = [
-						moment(logObj.date).format('YYYY-MM-DD HH:mm:ss'),
-						logObj.type,
-						logObj.args,
-					]
-					this.logs.push(log)
-				},
-			})
-		} else {
-			logger.setReporters([
-				{
-					log: (logObj) => {
-						this.logs.push(logObj)
-					},
-				},
-			])
-		}
-		setPluginInstance(this)
 		await this.loadSettings()
-		await updateLanguage()
-		this.registerInterval(window.setInterval(updateLanguage, 60000))
 		this.addSettingTab(new NutstoreSettingTab(this.app, this))
-
-		this.syncStatusBar = this.addStatusBarItem()
-		this.syncStatusBar.addClass('nutstore-sync-status', 'hidden')
-
-		const startSub = onStartSync().subscribe(() => {
-			this.toggleSyncUI(true)
-			this.statusService.updateSyncStatus({
-				text: i18n.t('sync.start'),
-				showNotice: true,
-			})
-		})
-
-		const progressSub = onSyncProgress().subscribe((progress) => {
-			const percent =
-				Math.round((progress.completed.length / progress.total) * 10000) / 100
-			this.statusService.updateSyncStatus({
-				text: i18n.t('sync.progress', { percent }),
-			})
-		})
-
-		const endSub = onEndSync().subscribe(async (failedCount) => {
-			this.toggleSyncUI(false)
-			this.statusService.updateSyncStatus({
-				text:
-					failedCount > 0
-						? i18n.t('sync.completeWithFailed', { failedCount })
-						: i18n.t('sync.complete'),
-				showNotice: true,
-				hideAfter: 3000,
-			})
-			await this.saveLogs()
-		})
-
-		const errorSub = onSyncError().subscribe((error) => {
-			this.toggleSyncUI(false)
-			this.statusService.updateSyncStatus({
-				text: i18n.t('sync.failedStatus'),
-				isError: true,
-				showNotice: false,
-				hideAfter: 3000,
-			})
-			new Notice(
-				i18n.t('sync.failedWithError', {
-					error: is503Error(error)
-						? i18n.t('sync.error.requestsTooFrequent')
-						: error.message,
-				}),
-			)
-		})
-
-		this.subscriptions.push(startSub, progressSub, endSub, errorSub)
-
-		// Add commands for starting and stopping sync
-		this.addCommand({
-			id: 'start-sync',
-			name: i18n.t('sync.startButton'),
-			callback: async () => {
-				if (this.isSyncing) {
-					return
-				}
-				const startSync = async () => {
-					const sync = new NutstoreSync(this, {
-						webdav: await this.webDAVService.createWebDAVClient(),
-						vault: this.app.vault,
-						token: await this.getToken(),
-						remoteBaseDir: this.remoteBaseDir,
-					})
-					await sync.start()
-				}
-				new SyncConfirmModal(this.app, startSync).open()
-			},
-		})
-
-		this.addCommand({
-			id: 'stop-sync',
-			name: i18n.t('sync.stopButton'),
-			checkCallback: (checking) => {
-				if (this.isSyncing) {
-					if (!checking) {
-						emitCancelSync()
-					}
-					return true
-				}
-				return false
-			},
-		})
-
-		// Add command to show sync progress modal
-		this.addCommand({
-			id: 'show-sync-progress',
-			name: i18n.t('sync.showProgressButton'),
-			callback: () => {
-				this.progressService.showProgressModal()
-			},
-		})
 
 		this.registerObsidianProtocolHandler('nutstore-sync/sso', async (data) => {
 			if (data?.s) {
@@ -184,18 +57,37 @@ export default class NutstorePlugin extends Plugin {
 				token: data?.s,
 			})
 		})
+		setPluginInstance(this)
 	}
 
 	async onunload() {
 		setPluginInstance(null)
 		emitCancelSync()
-		this.subscriptions.forEach((sub) => sub.unsubscribe())
 		this.ribbonManager.unload()
 		this.progressService.unload()
 		this.statusService.unload()
+		this.eventsService.unload()
 	}
 
 	async loadSettings() {
+		const DEFAULT_SETTINGS: NutstoreSettings = {
+			account: '',
+			credential: '',
+			remoteDir: '',
+			remoteCacheDir: '',
+			useGitStyle: false,
+			conflictStrategy: 'diff-match-patch',
+			oauthResponseText: '',
+			loginMode: 'sso',
+			confirmBeforeSync: true,
+			syncMode: SyncMode.LOOSE,
+			filters: ['.git', '.DS_Store', '.Trash', this.app.vault.configDir],
+			skipLargeFiles: {
+				maxSize: '30 MB',
+			},
+			realtimeSync: false,
+		}
+
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
 	}
 
@@ -203,8 +95,11 @@ export default class NutstorePlugin extends Plugin {
 		await this.saveData(this.settings)
 	}
 
-	private toggleSyncUI(isSyncing: boolean) {
+	toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
+		if (!isSyncing) {
+			this.lastSyncAt = Date.now()
+		}
 		this.ribbonManager.update()
 	}
 
@@ -221,16 +116,6 @@ export default class NutstorePlugin extends Plugin {
 			token = `${this.settings.account}:${this.settings.credential}`
 		}
 		return toBase64(token)
-	}
-
-	async saveLogs() {
-		try {
-			const logs = this.logs.map(logsStringify).filter(isNotNil)
-			this.logs = logs
-			await this.logsStorage.set(this.logsFileName, logs.join('\n\n'))
-		} catch (e) {
-			logger.error('Error saving logs:', e)
-		}
 	}
 
 	get remoteBaseDir() {

@@ -2,9 +2,13 @@ import { Notice } from 'obsidian'
 import NutstorePlugin from '../index'
 
 export class StatusService {
+	public syncStatusBar: HTMLElement
 	private statusHideTimer: number | null = null
 
-	constructor(private plugin: NutstorePlugin) {}
+	constructor(private plugin: NutstorePlugin) {
+		this.syncStatusBar = plugin.addStatusBarItem()
+		this.syncStatusBar.addClass('nutstore-sync-status', 'hidden')
+	}
 
 	/**
 	 * Updates the sync status display in the status bar
@@ -20,8 +24,8 @@ export class StatusService {
 			this.statusHideTimer = null
 		}
 
-		this.plugin.syncStatusBar.setText(status.text)
-		this.plugin.syncStatusBar.removeClass('hidden')
+		this.syncStatusBar.setText(status.text)
+		this.syncStatusBar.removeClass('hidden')
 
 		if (status.showNotice) {
 			new Notice(status.text)
@@ -29,7 +33,7 @@ export class StatusService {
 
 		if (status.hideAfter) {
 			this.statusHideTimer = window.setTimeout(() => {
-				this.plugin.syncStatusBar.addClass('hidden')
+				this.syncStatusBar.addClass('hidden')
 				this.statusHideTimer = null
 			}, status.hideAfter)
 		}

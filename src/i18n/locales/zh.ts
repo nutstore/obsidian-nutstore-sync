@@ -74,6 +74,10 @@ export default {
 			name: '同步前确认',
 			desc: '同步前显示待执行的任务列表，确认后再执行',
 		},
+		realtimeSync: {
+			name: '实时同步',
+			desc: '文件修改后自动进行同步',
+		},
 		syncMode: {
 			name: '同步模式',
 			desc: '建议在文件较多的情况下选择宽松模式，可以获得更快的同步速度。宽松模式在首次同步时会忽略同名且大小相等的文件。',
@@ -82,16 +86,16 @@ export default {
 		},
 		filters: {
 			name: '过滤器',
-			desc: '添加同步时需要忽略文件或文件夹路径，例如: .DS_Store, .git/**',
+			desc: '添加同步时需要忽略文件或文件夹路径，例如: .DS_Store, .git',
 			add: '添加规则',
 			remove: '删除',
 			confirmRemove: '确认删除',
 			edit: '编辑规则',
 			save: '保存',
 			cancel: '取消',
-			placeholder: '例如: .DS_Store, .git/**, *.pdf',
+			placeholder: '例如: .DS_Store, *.pdf',
 			description:
-				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符，** 用于递归匹配。',
+				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符。',
 		},
 		skipLargeFiles: {
 			name: '跳过大文件',

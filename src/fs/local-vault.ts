@@ -14,7 +14,7 @@ export class LocalVaultFileSystem implements IFileSystem {
 	) {}
 
 	async walk() {
-		const settings = useSettings()
+		const settings = await useSettings()
 		const filters = (settings?.filters ?? [])
 			.filter((opt) => !isVoidGlobMatchOptions(opt))
 			.map((opt) => new GlobMatch(opt))

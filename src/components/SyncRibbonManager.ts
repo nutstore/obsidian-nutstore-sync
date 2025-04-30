@@ -23,7 +23,9 @@ export class SyncRibbonManager {
 						token: await this.plugin.getToken(),
 						remoteBaseDir: this.plugin.remoteBaseDir,
 					})
-					await sync.start()
+					await sync.start({
+						noNotice: false,
+					})
 				}
 				new SyncConfirmModal(this.plugin.app, startSync).open()
 			},

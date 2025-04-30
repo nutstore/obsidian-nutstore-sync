@@ -18,7 +18,7 @@ export default class CommonSettings extends BaseSettings {
 			.addText((text) => {
 				text
 					.setPlaceholder(i18n.t('settings.remoteDir.placeholder'))
-					.setValue(this.plugin.settings.remoteDir)
+					.setValue(this.plugin.remoteBaseDir)
 					.onChange(async (value) => {
 						this.plugin.settings.remoteDir = value
 						await this.plugin.saveSettings()
@@ -92,6 +92,18 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.confirmBeforeSync)
 					.onChange(async (value) => {
 						this.plugin.settings.confirmBeforeSync = value
+						await this.plugin.saveSettings()
+					}),
+			)
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.realtimeSync.name'))
+			.setDesc(i18n.t('settings.realtimeSync.desc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.realtimeSync)
+					.onChange(async (value) => {
+						this.plugin.settings.realtimeSync = value
 						await this.plugin.saveSettings()
 					}),
 			)

@@ -3,6 +3,7 @@ import { onSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'
 import type NutstorePlugin from '~/index'
 import { GlobMatchOptions } from '~/utils/glob-match'
+import waitUntil from '~/utils/wait-until'
 import AccountSettings from './account'
 import CacheSettings from './cache'
 import CommonSettings from './common'
@@ -28,23 +29,7 @@ export interface NutstoreSettings {
 	skipLargeFiles: {
 		maxSize: string
 	}
-}
-
-export const DEFAULT_SETTINGS: NutstoreSettings = {
-	account: '',
-	credential: '',
-	remoteDir: '',
-	remoteCacheDir: '',
-	useGitStyle: false,
-	conflictStrategy: 'diff-match-patch',
-	oauthResponseText: '',
-	loginMode: 'sso',
-	confirmBeforeSync: true,
-	syncMode: SyncMode.LOOSE,
-	filters: ['.git', '.DS_Store', '.Trash'],
-	skipLargeFiles: {
-		maxSize: '30 MB',
-	},
+	realtimeSync: boolean
 }
 
 let pluginInstance: NutstorePlugin | null = null
@@ -53,11 +38,13 @@ export function setPluginInstance(plugin: NutstorePlugin | null) {
 	pluginInstance = plugin
 }
 
-export function useSettings() {
-	if (!pluginInstance) {
-		throw new Error('Plugin not initialized')
-	}
-	return pluginInstance.settings
+export function waitUntilPluginInstance() {
+	return waitUntil(() => !!pluginInstance, 100)
+}
+
+export async function useSettings() {
+	await waitUntilPluginInstance()
+	return pluginInstance!.settings
 }
 
 export class NutstoreSettingTab extends PluginSettingTab {
