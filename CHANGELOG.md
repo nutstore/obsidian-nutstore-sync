@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-04-30
+## [0.5.1] - 2025-04-30
 
 * 修复：修复了 NutstorePlugin 类型不存在 'logs' 属性的问题。
 * Fixed: Resolved an issue where the 'logs' property was missing from the NutstorePlugin type.
