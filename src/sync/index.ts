@@ -1,4 +1,4 @@
-import { cloneDeep, isNil } from 'lodash-es'
+import { isNil } from 'lodash-es'
 import { Notice, Platform, Vault, moment } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
@@ -15,7 +15,7 @@ import { LocalVaultFileSystem } from '~/fs/local-vault'
 import memfs from '~/fs/memfs'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
-import { useBlobStore } from '~/storage/blob'
+import { blobStore } from '~/storage/blob'
 import { SyncRecord } from '~/storage/helper'
 import breakableSleep from '~/utils/breakable-sleep'
 import getTaskName from '~/utils/get-task-name'
@@ -61,12 +61,12 @@ export class NutstoreSync {
 		)
 	}
 
-	async start() {
+	async start({ noNotice }: { noNotice: boolean }) {
 		try {
 			emitStartSync()
 
-			const settings = cloneDeep(this.plugin.settings)
-			const webdav = this.options.webdav
+			const settings = this.settings
+			const webdav = this.webdav
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
 			const syncRecord = new SyncRecord(this.vault, this.remoteBaseDir)
 
@@ -107,19 +107,24 @@ export class NutstoreSync {
 				return
 			}
 
-			let confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
-			if (settings.confirmBeforeSync && confirmedTasks.length > 0) {
-				const confirmExec = await new TaskListConfirmModal(
-					this.app,
-					confirmedTasks,
-				).open()
-				if (confirmExec.confirm) {
-					confirmedTasks = confirmExec.tasks
-				} else {
-					emitSyncError(new Error(i18n.t('sync.cancelled')))
-					return
+			let confirmedTasks = tasks
+
+			if (noNotice === false) {
+				confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
+				if (settings.confirmBeforeSync && confirmedTasks.length > 0) {
+					const confirmExec = await new TaskListConfirmModal(
+						this.app,
+						confirmedTasks,
+					).open()
+					if (confirmExec.confirm) {
+						confirmedTasks = confirmExec.tasks
+					} else {
+						emitSyncError(new Error(i18n.t('sync.cancelled')))
+						return
+					}
 				}
 			}
+
 			const confirmedTasksUniq = Array.from(
 				new Set([
 					...confirmedTasks,
@@ -130,7 +135,9 @@ export class NutstoreSync {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
 
-			this.plugin.progressService.showProgressModal()
+			if (!noNotice) {
+				this.plugin.progressService.showProgressModal()
+			}
 
 			await this.saveLogs()
 
@@ -234,7 +241,6 @@ export class NutstoreSync {
 			this.options.remoteBaseDir,
 		)
 		const records = await syncRecord.getRecords()
-		const blobStore = useBlobStore()
 		const startAt = Date.now()
 		const BATCH_SIZE = 10
 		for (let i = 0; i < tasks.length; i += BATCH_SIZE) {

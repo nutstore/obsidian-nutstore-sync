@@ -1,6 +1,5 @@
 import { StatModel } from '~/model/stat.model'
-
-export type MaybePromise<T> = Promise<T> | T
+import { MaybePromise } from '~/utils/types'
 
 export default abstract class IFileSystem {
 	abstract walk(): MaybePromise<StatModel[]>

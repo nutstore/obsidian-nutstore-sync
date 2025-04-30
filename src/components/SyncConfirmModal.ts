@@ -10,9 +10,9 @@ export default class SyncConfirmModal extends Modal {
 		this.onConfirm = onConfirm
 	}
 
-	onOpen() {
+	async onOpen() {
 		const { contentEl } = this
-		const settings = useSettings()
+		const settings = await useSettings()
 
 		contentEl.createEl('h2', { text: i18n.t('sync.confirmModal.title') })
 		const infoDiv = contentEl.createDiv({ cls: 'sync-info' })

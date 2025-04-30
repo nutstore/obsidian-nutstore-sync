@@ -25,3 +25,5 @@ export function useBlobStore() {
 		store,
 	}
 }
+
+export const blobStore = useBlobStore()

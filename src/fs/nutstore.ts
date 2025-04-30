@@ -12,7 +12,7 @@ import { deltaCacheKV } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
 import GlobMatch, { isVoidGlobMatchOptions } from '~/utils/glob-match'
-import { isSubDir } from '~/utils/is-sub-dir'
+import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
 import IFileSystem from './fs.interface'
@@ -129,7 +129,7 @@ export class NutstoreFileSystem implements IFileSystem {
 			if (!path.startsWith('/')) {
 				path = `/${path}`
 			}
-			if (isSubDir(base, path)) {
+			if (isSub(base, path)) {
 				subPath.add(path)
 			}
 		}
@@ -144,7 +144,7 @@ export class NutstoreFileSystem implements IFileSystem {
 				}
 			}
 		}
-		const settings = useSettings()
+		const settings = await useSettings()
 		const filters = (settings?.filters ?? [])
 			.filter((opt) => !isVoidGlobMatchOptions(opt))
 			.map((opt) => new GlobMatch(opt))
@@ -155,7 +155,7 @@ export class NutstoreFileSystem implements IFileSystem {
 			(item) =>
 				!(
 					ignoredContents.some((ignored) => ignored.path === item.path) ||
-					ignoredContents.some((ignored) => isSubDir(ignored.path, item.path))
+					ignoredContents.some((ignored) => isSub(ignored.path, item.path))
 				),
 		)
 	}

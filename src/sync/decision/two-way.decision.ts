@@ -1,7 +1,9 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { moment } from 'obsidian'
+import { isEqual } from 'ohash'
 import i18n from '~/i18n'
 import { SyncMode } from '~/settings'
+import { blobStore } from '~/storage/blob'
 import { SyncRecord } from '~/storage/helper'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
@@ -91,7 +93,16 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						record.remote.mtime,
 					)
 					if (local) {
-						const localChanged = !moment(local.mtime).isSame(record.local.mtime)
+						let localChanged = !moment(local.mtime).isSame(record.local.mtime)
+						if (localChanged && record.base?.key) {
+							const blob = await blobStore.get(record.base.key)
+							if (blob) {
+								localChanged = !isEqual(
+									await blob.arrayBuffer(),
+									await this.vault.adapter.readBinary(local.path),
+								)
+							}
+						}
 						if (remoteChanged) {
 							if (localChanged) {
 								logger.debug({

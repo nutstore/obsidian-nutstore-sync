@@ -20,7 +20,9 @@ export default class CommandService {
 						token: await plugin.getToken(),
 						remoteBaseDir: plugin.remoteBaseDir,
 					})
-					await sync.start()
+					await sync.start({
+						noNotice: false,
+					})
 				}
 				new SyncConfirmModal(plugin.app, startSync).open()
 			},
