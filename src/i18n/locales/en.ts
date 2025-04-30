@@ -59,6 +59,10 @@ export default {
 			name: 'Confirm before sync',
 			desc: 'Show pending tasks and execute after confirmation',
 		},
+		realtimeSync: {
+			name: 'Real-time sync',
+			desc: 'Automatically sync changes as soon as files are modified',
+		},
 		syncMode: {
 			name: 'Sync Mode',
 			desc: 'Choose between strict or loose sync mode. Loose mode is recommended for users with many files to achieve faster sync speed. In loose mode, files with the same name and equal size will be ignored during the first sync.',
