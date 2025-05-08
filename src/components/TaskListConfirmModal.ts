@@ -1,12 +1,6 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
-import MkdirLocalTask from '~/sync/tasks/mkdir-local.task'
-import MkdirRemoteTask from '~/sync/tasks/mkdir-remote.task'
-import PullTask from '~/sync/tasks/pull.task'
-import PushTask from '~/sync/tasks/push.task'
-import RemoveLocalTask from '~/sync/tasks/remove-local.task'
-import RemoveRemoteTask from '~/sync/tasks/remove-remote.task'
-import ConflictResolveTask from '../sync/tasks/conflict-resolve.task'
+import getTaskName from '~/utils/get-task-name'
 import { BaseTask } from '../sync/tasks/task.interface'
 
 export default class TaskListConfirmModal extends Modal {
@@ -19,31 +13,6 @@ export default class TaskListConfirmModal extends Modal {
 	) {
 		super(app)
 		this.selectedTasks = new Array(tasks.length).fill(true)
-	}
-
-	private getTaskAction(task: BaseTask): string {
-		if (task instanceof ConflictResolveTask) {
-			return i18n.t('taskList.actions.merge')
-		}
-		if (task instanceof MkdirLocalTask) {
-			return i18n.t('taskList.actions.createLocalDir')
-		}
-		if (task instanceof MkdirRemoteTask) {
-			return i18n.t('taskList.actions.createRemoteDir')
-		}
-		if (task instanceof PullTask) {
-			return i18n.t('taskList.actions.download')
-		}
-		if (task instanceof PushTask) {
-			return i18n.t('taskList.actions.upload')
-		}
-		if (task instanceof RemoveLocalTask) {
-			return i18n.t('taskList.actions.removeLocal')
-		}
-		if (task instanceof RemoveRemoteTask) {
-			return i18n.t('taskList.actions.removeRemote')
-		}
-		return i18n.t('taskList.actions.sync')
 	}
 
 	onOpen() {
@@ -86,7 +55,7 @@ export default class TaskListConfirmModal extends Modal {
 				this.selectedTasks[index] = checkbox.checked
 				e.stopPropagation()
 			})
-			row.createEl('td', { text: this.getTaskAction(task) })
+			row.createEl('td', { text: getTaskName(task) })
 			row.createEl('td', { text: task.localPath })
 			row.createEl('td', { text: task.remotePath })
 		})

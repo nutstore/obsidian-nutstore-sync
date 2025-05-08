@@ -2,6 +2,7 @@ import { normalizePath, Vault } from 'obsidian'
 import { isAbsolute, join } from 'path'
 import { WebDAVClient } from 'webdav'
 import { SyncRecord } from '~/storage/helper'
+import { MaybePromise } from '~/utils/types'
 
 export interface BaseTaskOptions {
 	vault: Vault
@@ -45,7 +46,7 @@ export abstract class BaseTask {
 		return new SyncRecord(this.vault, this.options.remoteBaseDir)
 	}
 
-	abstract exec(): Promise<TaskResult>
+	abstract exec(): MaybePromise<TaskResult>
 }
 
 export class TaskError extends Error {
