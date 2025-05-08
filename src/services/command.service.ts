@@ -21,7 +21,7 @@ export default class CommandService {
 						remoteBaseDir: plugin.remoteBaseDir,
 					})
 					await sync.start({
-						noNotice: false,
+						showNotice: true,
 					})
 				}
 				new SyncConfirmModal(plugin.app, startSync).open()

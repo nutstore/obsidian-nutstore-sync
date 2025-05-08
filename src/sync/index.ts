@@ -61,9 +61,9 @@ export class NutstoreSync {
 		)
 	}
 
-	async start({ noNotice }: { noNotice: boolean }) {
+	async start({ showNotice }: { showNotice: boolean }) {
 		try {
-			emitStartSync()
+			emitStartSync({ showNotice })
 
 			const settings = this.settings
 			const webdav = this.webdav
@@ -103,13 +103,13 @@ export class NutstoreSync {
 			const tasks = await new TwoWaySyncDecision(this).decide()
 
 			if (tasks.length === 0) {
-				emitEndSync(0)
+				emitEndSync({ showNotice, failedCount: 0 })
 				return
 			}
 
 			let confirmedTasks = tasks
 
-			if (noNotice === false) {
+			if (showNotice) {
 				confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
 				if (settings.confirmBeforeSync && confirmedTasks.length > 0) {
 					const confirmExec = await new TaskListConfirmModal(
@@ -135,7 +135,7 @@ export class NutstoreSync {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
 
-			if (!noNotice) {
+			if (showNotice) {
 				this.plugin.progressService.showProgressModal()
 			}
 
@@ -148,7 +148,7 @@ export class NutstoreSync {
 
 			await this.updateMtimeInRecord(confirmedTasksUniq, tasksResult)
 
-			emitEndSync(failedCount)
+			emitEndSync({ failedCount, showNotice })
 		} catch (error) {
 			emitSyncError(error)
 			logger.error('Sync error:', error)

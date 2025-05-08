@@ -1,6 +1,10 @@
 import { Subject } from 'rxjs'
 
-const startSync = new Subject<void>()
+interface SyncStartProps {
+	showNotice: boolean
+}
+
+const startSync = new Subject<SyncStartProps>()
 
 export const onStartSync = () => startSync.asObservable()
-export const emitStartSync = () => startSync.next()
+export const emitStartSync = (props: SyncStartProps) => startSync.next(props)
