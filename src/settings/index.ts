@@ -7,6 +7,7 @@ import waitUntil from '~/utils/wait-until'
 import AccountSettings from './account'
 import CacheSettings from './cache'
 import CommonSettings from './common'
+import FilterSettings from './filter'
 import LogSettings from './log'
 
 export enum SyncMode {
@@ -25,7 +26,10 @@ export interface NutstoreSettings {
 	loginMode: 'manual' | 'sso'
 	confirmBeforeSync: boolean
 	syncMode: SyncMode
-	filters: GlobMatchOptions[]
+	filterRules: {
+		exclusionRules: GlobMatchOptions[]
+		inclusionRules: GlobMatchOptions[]
+	}
 	skipLargeFiles: {
 		maxSize: string
 	}
@@ -51,6 +55,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	plugin: NutstorePlugin
 	accountSettings: AccountSettings
 	commonSettings: CommonSettings
+	filterSettings: FilterSettings
 	logSettings: LogSettings
 	cacheSettings: CacheSettings
 
@@ -76,6 +81,12 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			this,
 			this.containerEl.createDiv(),
 		)
+		this.filterSettings = new FilterSettings(
+			this.app,
+			this.plugin,
+			this,
+			this.containerEl.createDiv(),
+		)
 		this.cacheSettings = new CacheSettings(
 			this.app,
 			this.plugin,
@@ -93,6 +104,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	async display() {
 		await this.accountSettings.display()
 		await this.commonSettings.display()
+		await this.filterSettings.display()
 		await this.cacheSettings.display()
 		await this.logSettings.display()
 	}

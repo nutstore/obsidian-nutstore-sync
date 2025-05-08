@@ -69,6 +69,7 @@ export default {
 		sections: {
 			account: '账号设置',
 			common: '通用设置',
+			filters: '过滤规则',
 		},
 		confirmBeforeSync: {
 			name: '同步前确认',
@@ -96,6 +97,14 @@ export default {
 			placeholder: '例如: .DS_Store, *.pdf',
 			description:
 				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符。',
+			exclude: {
+				name: '排除规则',
+				desc: '符合规则的文件/文件夹将不会被同步',
+			},
+			include: {
+				name: '包含规则',
+				desc: '符合规则的文件/文件夹会被同步, 如果和排除规则有冲突, 会优先选择包含规则.',
+			},
 		},
 		skipLargeFiles: {
 			name: '跳过大文件',

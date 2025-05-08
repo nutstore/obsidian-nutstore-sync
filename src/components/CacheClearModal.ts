@@ -12,9 +12,9 @@ export interface CacheClearOptions {
 
 export default class CacheClearModal extends Modal {
 	private options: CacheClearOptions = {
-		deltaCacheEnabled: true,
-		syncRecordEnabled: true,
-		blobEnabled: true,
+		deltaCacheEnabled: false,
+		syncRecordEnabled: false,
+		blobEnabled: false,
 	}
 
 	constructor(
@@ -32,7 +32,7 @@ export default class CacheClearModal extends Modal {
 			.setDesc(i18n.t('settings.cache.clearModal.description'))
 
 		const optionsContainer = contentEl.createDiv({
-			cls: 'cache-clear-options py-2',
+			cls: 'py-2',
 		})
 
 		// Delta Cache Option

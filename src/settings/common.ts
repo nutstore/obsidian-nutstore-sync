@@ -1,5 +1,4 @@
 import { Setting } from 'obsidian'
-import FilterEditorModal from '~/components/FilterEditorModal'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
 import { SyncMode } from './index'
@@ -121,22 +120,5 @@ export default class CommonSettings extends BaseSettings {
 						await this.plugin.saveSettings()
 					}),
 			)
-
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.filters.name'))
-			.setDesc(i18n.t('settings.filters.desc'))
-			.addButton((button) => {
-				button.setButtonText(i18n.t('settings.filters.edit')).onClick(() => {
-					new FilterEditorModal(
-						this.app,
-						this.plugin.settings.filters,
-						async (filters) => {
-							this.plugin.settings.filters = filters
-							await this.plugin.saveSettings()
-							this.display()
-						},
-					).open()
-				})
-			})
 	}
 }

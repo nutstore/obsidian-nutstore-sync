@@ -72,6 +72,7 @@ export default {
 		sections: {
 			account: 'Account',
 			common: 'General',
+			filters: 'Filter Rules',
 		},
 		logout: {
 			confirmTitle: 'Confirm logout',
@@ -96,6 +97,14 @@ export default {
 			placeholder: 'e.g.: .DS_Store, *.pdf',
 			description:
 				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching.',
+			exclude: {
+				name: 'Exclusion Rules',
+				desc: 'Files/folders matching these patterns will NOT be synced.',
+			},
+			include: {
+				name: 'Inclusion Rules',
+				desc: 'Files/folders matching these patterns WILL be synced (if defined).',
+			},
 		},
 		skipLargeFiles: {
 			name: 'Skip large files',

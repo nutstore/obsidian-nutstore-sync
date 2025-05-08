@@ -1,17 +1,18 @@
 import { cloneDeep } from 'lodash-es'
-import { App, Modal, Setting } from 'obsidian'
+import { Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
-import { getExpr, getUserOptions, GlobMatchOptions } from '~/utils/glob-match'
+import { getUserOptions, GlobMatchOptions } from '~/utils/glob-match'
+import NutstorePlugin from '..'
 
 export default class FilterEditorModal extends Modal {
 	filters: GlobMatchOptions[]
 
 	constructor(
-		app: App,
+		private plugin: NutstorePlugin,
 		filters: GlobMatchOptions[] = [],
 		private onSave: (filters: GlobMatchOptions[]) => void,
 	) {
-		super(app)
+		super(plugin.app)
 		this.filters = cloneDeep(filters)
 	}
 
@@ -31,12 +32,7 @@ export default class FilterEditorModal extends Modal {
 
 		const updateList = () => {
 			listContainer.empty()
-			this.filters.forEach((_filter, index) => {
-				const filter = {
-					expr: getExpr(_filter),
-					options: getUserOptions(_filter),
-				}
-				this.filters[index] = filter
+			this.filters.forEach((filter, index) => {
 				const itemContainer = listContainer.createDiv({
 					cls: 'flex gap-2',
 				})
@@ -104,7 +100,12 @@ export default class FilterEditorModal extends Modal {
 
 		new Setting(contentEl).addButton((button) => {
 			button.setButtonText(i18n.t('settings.filters.add')).onClick(() => {
-				this.filters.push('')
+				this.filters.push({
+					expr: '',
+					options: {
+						caseSensitive: false,
+					},
+				})
 				updateList()
 			})
 		})

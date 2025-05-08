@@ -6,21 +6,16 @@ export interface GlobMatchUserOptions {
 	caseSensitive: boolean
 }
 
-export type GlobMatchOptions =
-	| {
-			expr: string
-			options: GlobMatchUserOptions
-	  }
-	| string
+export interface GlobMatchOptions {
+	expr: string
+	options: GlobMatchUserOptions
+}
 
 const DEFAULT_USER_OPTIONS: GlobMatchUserOptions = {
 	caseSensitive: false,
 }
 
 export function isVoidGlobMatchOptions(options: GlobMatchOptions): boolean {
-	if (typeof options === 'string') {
-		return options.trim() === ''
-	}
 	return options.expr.trim() === ''
 }
 
@@ -33,14 +28,13 @@ function generateFlags(options: GlobMatchUserOptions) {
 }
 
 export default class GlobMatch {
-	private re: RegExp
-	private expr: string
+	re: RegExp
+	expr: string
 
-	constructor(options: GlobMatchOptions) {
-		this.expr = getExpr(options)
-		const userOpt = getUserOptions(options)
+	constructor({ expr, options }: GlobMatchOptions) {
+		this.expr = expr
 		this.re = GlobToRegExp(this.expr, {
-			flags: generateFlags(userOpt),
+			flags: generateFlags(options),
 			extended: true,
 		})
 	}
@@ -60,16 +54,27 @@ export default class GlobMatch {
 	}
 }
 
-export function getExpr(opt: GlobMatchOptions) {
-	if (typeof opt === 'string') {
-		return opt
-	}
-	return opt.expr
-}
-
 export function getUserOptions(opt: GlobMatchOptions): GlobMatchUserOptions {
 	if (typeof opt === 'string') {
 		return cloneDeep(DEFAULT_USER_OPTIONS)
 	}
 	return opt.options ?? cloneDeep(DEFAULT_USER_OPTIONS)
+}
+
+export function needIncludeFromGlobRules(
+	path: string,
+	inclusion: GlobMatch[],
+	exclusion: GlobMatch[],
+) {
+	for (const rule of inclusion) {
+		if (rule.test(path)) {
+			return true
+		}
+	}
+	for (const rule of exclusion) {
+		if (rule.test(path)) {
+			return false
+		}
+	}
+	return true
 }
