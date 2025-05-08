@@ -18,16 +18,6 @@
 	animation: nutstore-sync-spin 2s linear infinite;
 }
 
-.nutstore-sync-status {
-	opacity: 1;
-	transition: opacity 0.3s ease-in-out;
-}
-
-.nutstore-sync-status.hidden {
-	opacity: 0;
-	display: none;
-}
-
 .conflict.ours,
 .conflict.theirs {
 	position: relative;
@@ -41,18 +31,6 @@
 
 .conflict.theirs {
 	background-color: rgb(0, 132, 255);
-}
-
-.truncate {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 100%;
-	display: block;
-}
-
-.max-w-full {
-	max-width: 100%;
 }
 
 .connection-status {
