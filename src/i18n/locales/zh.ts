@@ -69,6 +69,7 @@ export default {
 		sections: {
 			account: '账号设置',
 			common: '通用设置',
+			filters: '过滤规则',
 		},
 		confirmBeforeSync: {
 			name: '同步前确认',
@@ -96,6 +97,14 @@ export default {
 			placeholder: '例如: .DS_Store, *.pdf',
 			description:
 				'符合这些规则的文件或文件夹在同步时会被忽略。使用 * 作为通配符。',
+			exclude: {
+				name: '排除规则',
+				desc: '符合规则的文件/文件夹将不会被同步',
+			},
+			include: {
+				name: '包含规则',
+				desc: '符合规则的文件/文件夹会被同步, 如果和排除规则有冲突, 会优先选择包含规则.',
+			},
 		},
 		skipLargeFiles: {
 			name: '跳过大文件',
@@ -225,12 +234,15 @@ export default {
 		cancelButton: '取消同步',
 		progressText: '正在同步文件',
 		fileOp: {
-			pull: '下载',
-			push: '上传',
-			mkdir: '创建文件夹',
-			remove: '删除',
-			conflict: '冲突解决',
+			createLocalDir: '创建本地目录',
+			createRemoteDir: '创建远程目录',
+			download: '下载',
+			filenameError: '路径含无效字符',
+			merge: '合并',
+			removeLocal: '删除本地',
+			removeRemote: '删除远程',
 			sync: '同步',
+			upload: '上传',
 		},
 		confirmModal: {
 			title: '同步确认',
@@ -252,16 +264,6 @@ export default {
 		remotePath: '远程路径',
 		continue: '继续',
 		cancel: '取消',
-		actions: {
-			merge: '合并',
-			createLocalDir: '创建本地目录',
-			createRemoteDir: '创建远程目录',
-			download: '下载',
-			upload: '上传',
-			removeLocal: '删除本地',
-			removeRemote: '删除远程',
-			sync: '同步',
-		},
 	},
 	textAreaModal: {
 		copy: '复制',

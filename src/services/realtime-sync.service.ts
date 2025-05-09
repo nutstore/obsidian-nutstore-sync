@@ -18,7 +18,7 @@ export default class RealtimeSyncService {
 			webdav: await this.plugin.webDAVService.createWebDAVClient(),
 		})
 		await sync.start({
-			noNotice: true,
+			showNotice: false,
 		})
 	}
 

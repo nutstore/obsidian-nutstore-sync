@@ -72,6 +72,7 @@ export default {
 		sections: {
 			account: 'Account',
 			common: 'General',
+			filters: 'Filter Rules',
 		},
 		logout: {
 			confirmTitle: 'Confirm logout',
@@ -96,6 +97,14 @@ export default {
 			placeholder: 'e.g.: .DS_Store, *.pdf',
 			description:
 				'Files or folders matching these patterns will be ignored during sync. Use * for wildcard matching.',
+			exclude: {
+				name: 'Exclusion Rules',
+				desc: 'Files/folders matching these patterns will NOT be synced.',
+			},
+			include: {
+				name: 'Inclusion Rules',
+				desc: 'Files/folders matching these patterns WILL be synced (if defined).',
+			},
 		},
 		skipLargeFiles: {
 			name: 'Skip large files',
@@ -228,12 +237,15 @@ export default {
 		cancelButton: 'Cancel sync',
 		progressText: 'Syncing files',
 		fileOp: {
-			pull: 'Download',
-			push: 'Upload',
-			mkdir: 'Create Folder',
-			remove: 'Delete',
-			conflict: 'Conflict Resolution',
+			createLocalDir: 'Create Local Directory',
+			createRemoteDir: 'Create Remote Directory',
+			download: 'Download',
+			filenameError: 'Invalid Path Characters',
+			merge: 'Merge',
+			removeLocal: 'Remove Local',
+			removeRemote: 'Remove Remote',
 			sync: 'Sync',
+			upload: 'Upload',
 		},
 		confirmModal: {
 			title: 'Sync confirmation',
@@ -255,16 +267,6 @@ export default {
 		remotePath: 'Remote Path',
 		continue: 'Continue',
 		cancel: 'Cancel',
-		actions: {
-			merge: 'Merge',
-			createLocalDir: 'Create Local Directory',
-			createRemoteDir: 'Create Remote Directory',
-			download: 'Download',
-			upload: 'Upload',
-			removeLocal: 'Remove Local',
-			removeRemote: 'Remove Remote',
-			sync: 'Sync',
-		},
 	},
 	textAreaModal: {
 		copy: 'Copy',

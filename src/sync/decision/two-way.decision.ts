@@ -5,6 +5,7 @@ import i18n from '~/i18n'
 import { SyncMode } from '~/settings'
 import { blobStore } from '~/storage/blob'
 import { SyncRecord } from '~/storage/helper'
+import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
@@ -12,6 +13,7 @@ import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import ConflictResolveTask, {
 	ConflictStrategy,
 } from '../tasks/conflict-resolve.task'
+import FilenameErrorTask from '../tasks/filename-error.task'
 import MkdirLocalTask from '../tasks/mkdir-local.task'
 import MkdirRemoteTask from '../tasks/mkdir-remote.task'
 import NoopTask from '../tasks/noop.task'
@@ -120,19 +122,25 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 								if (remote.size > maxFileSize || local.size > maxFileSize) {
 									continue
 								}
-								tasks.push(
-									new ConflictResolveTask({
-										...options,
-										record,
-										strategy:
-											settings.conflictStrategy === 'latest-timestamp'
-												? ConflictStrategy.LatestTimeStamp
-												: ConflictStrategy.DiffMatchPatch,
-										localStat: local,
-										remoteStat: remote,
-										useGitStyle: settings.useGitStyle,
-									}),
-								)
+
+								if (hasInvalidChar(local.path)) {
+									tasks.push(new FilenameErrorTask(options))
+								} else {
+									tasks.push(
+										new ConflictResolveTask({
+											...options,
+											record,
+											strategy:
+												settings.conflictStrategy === 'latest-timestamp'
+													? ConflictStrategy.LatestTimeStamp
+													: ConflictStrategy.DiffMatchPatch,
+											localStat: local,
+											remoteStat: remote,
+											useGitStyle: settings.useGitStyle,
+										}),
+									)
+								}
+
 								continue
 							} else {
 								logger.debug({
@@ -168,7 +176,11 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 								if (local.size > maxFileSize) {
 									continue
 								}
-								tasks.push(new PushTask(options))
+								if (hasInvalidChar(local.path)) {
+									tasks.push(new FilenameErrorTask(options))
+								} else {
+									tasks.push(new PushTask(options))
+								}
 								continue
 							}
 						}
@@ -222,7 +234,11 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						if (local.size > maxFileSize) {
 							continue
 						}
-						tasks.push(new PushTask(options))
+						if (hasInvalidChar(local.path)) {
+							tasks.push(new FilenameErrorTask(options))
+						} else {
+							tasks.push(new PushTask(options))
+						}
 						continue
 					} else {
 						logger.debug({
@@ -269,15 +285,21 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						if (remote.size > maxFileSize || local.size > maxFileSize) {
 							continue
 						}
-						tasks.push(
-							new ConflictResolveTask({
-								...options,
-								strategy: ConflictStrategy.DiffMatchPatch,
-								localStat: local,
-								remoteStat: remote,
-								useGitStyle: settings.useGitStyle,
-							}),
-						)
+
+						if (hasInvalidChar(local.path)) {
+							tasks.push(new FilenameErrorTask(options))
+						} else {
+							tasks.push(
+								new ConflictResolveTask({
+									...options,
+									strategy: ConflictStrategy.DiffMatchPatch,
+									localStat: local,
+									remoteStat: remote,
+									useGitStyle: settings.useGitStyle,
+								}),
+							)
+						}
+
 						continue
 					} else {
 						logger.debug({
@@ -313,7 +335,11 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						if (local.size > maxFileSize) {
 							continue
 						}
-						tasks.push(new PushTask(options))
+						if (hasInvalidChar(local.path)) {
+							tasks.push(new FilenameErrorTask(options))
+						} else {
+							tasks.push(new PushTask(options))
+						}
 						continue
 					}
 				}
@@ -357,13 +383,25 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 							recordExists: !!record,
 						},
 					})
-					mkdirLocalTasks.push(
-						new MkdirLocalTask({
-							...taskOptions,
-							localPath,
-							remotePath: remote.path,
-						}),
-					)
+
+					if (hasInvalidChar(localPath)) {
+						tasks.push(
+							new FilenameErrorTask({
+								...taskOptions,
+								localPath,
+								remotePath: remote.path,
+							}),
+						)
+					} else {
+						mkdirLocalTasks.push(
+							new MkdirLocalTask({
+								...taskOptions,
+								localPath,
+								remotePath: remote.path,
+							}),
+						)
+					}
+
 					continue
 				}
 				// If there are no modified files in the remote folder or no paths that aren't in syncRecord, then the entire folder can be deleted!
@@ -407,13 +445,25 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						recordExists: !!record,
 					},
 				})
-				mkdirLocalTasks.push(
-					new MkdirLocalTask({
-						...taskOptions,
-						localPath,
-						remotePath: remote.path,
-					}),
-				)
+
+				if (hasInvalidChar(localPath)) {
+					tasks.push(
+						new FilenameErrorTask({
+							...taskOptions,
+							localPath,
+							remotePath: remote.path,
+						}),
+					)
+				} else {
+					mkdirLocalTasks.push(
+						new MkdirLocalTask({
+							...taskOptions,
+							localPath,
+							remotePath: remote.path,
+						}),
+					)
+				}
+
 				continue
 			}
 		}

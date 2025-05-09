@@ -10,11 +10,11 @@ export default class EventsService {
 
 	constructor(private plugin: NutstorePlugin) {
 		this.subscriptions = [
-			onStartSync().subscribe(() => {
+			onStartSync().subscribe(({ showNotice }) => {
 				plugin.toggleSyncUI(true)
 				plugin.statusService.updateSyncStatus({
 					text: i18n.t('sync.start'),
-					showNotice: true,
+					showNotice,
 				})
 			}),
 
@@ -26,15 +26,14 @@ export default class EventsService {
 				})
 			}),
 
-			onEndSync().subscribe(async (failedCount) => {
+			onEndSync().subscribe(async ({ failedCount, showNotice }) => {
 				plugin.toggleSyncUI(false)
 				plugin.statusService.updateSyncStatus({
 					text:
 						failedCount > 0
 							? i18n.t('sync.completeWithFailed', { failedCount })
 							: i18n.t('sync.complete'),
-					showNotice: true,
-					hideAfter: 3000,
+					showNotice,
 				})
 			}),
 
@@ -44,7 +43,6 @@ export default class EventsService {
 					text: i18n.t('sync.failedStatus'),
 					isError: true,
 					showNotice: false,
-					hideAfter: 3000,
 				})
 				new Notice(
 					i18n.t('sync.failedWithError', {

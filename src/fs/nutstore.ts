@@ -1,3 +1,4 @@
+import { decode as decodeHtmlEntity } from 'html-entities'
 import { isArray } from 'lodash-es'
 import { Vault } from 'obsidian'
 import { basename, isAbsolute } from 'path'
@@ -11,7 +12,10 @@ import { useSettings } from '~/settings'
 import { deltaCacheKV } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
-import GlobMatch, { isVoidGlobMatchOptions } from '~/utils/glob-match'
+import GlobMatch, {
+	isVoidGlobMatchOptions,
+	needIncludeFromGlobRules,
+} from '~/utils/glob-match'
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
@@ -96,6 +100,14 @@ export class NutstoreFileSystem implements IFileSystem {
 			}
 		}
 		await deltaCacheKV.set(kvKey, deltaCache)
+		deltaCache.deltas.forEach((delta) => {
+			delta.delta.entry.forEach((entry) => {
+				entry.path = decodeHtmlEntity(entry.path)
+			})
+		})
+		deltaCache.files.forEach((file) => {
+			file.path = decodeHtmlEntity(file.path)
+		})
 		const deltasMap = new Map(
 			deltaCache.deltas.flatMap((d) => d.delta.entry.map((d) => [d.path, d])),
 		)
@@ -145,11 +157,14 @@ export class NutstoreFileSystem implements IFileSystem {
 			}
 		}
 		const settings = await useSettings()
-		const filters = (settings?.filters ?? [])
+		const exclusions = (settings?.filterRules.exclusionRules ?? [])
 			.filter((opt) => !isVoidGlobMatchOptions(opt))
 			.map((opt) => new GlobMatch(opt))
-		const ignoredContents = contents.filter((item) =>
-			filters.some((f) => f.test(item.path)),
+		const inclusion = (settings?.filterRules.inclusionRules ?? [])
+			.filter((opt) => !isVoidGlobMatchOptions(opt))
+			.map((opt) => new GlobMatch(opt))
+		const ignoredContents = contents.filter(
+			(item) => !needIncludeFromGlobRules(item.path, inclusion, exclusions),
 		)
 		return contents.filter(
 			(item) =>
