@@ -2,6 +2,20 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+*   **新功能**
+    *   解码文件路径中的 HTML Entity 编码
+    *   添加文件名错误任务，处理不支持的特殊字符
+    *   自动同步时不显示通知
+    *   添加过滤规则设置，支持包含和排除规则
+
+*   **Features**
+    *   Decode HTML entities in file paths
+    *   Add task for filename errors to handle unsupported special characters
+    *   Suppress notifications during automatic synchronization
+    *   Add filter rule settings with support for include and exclude rules
+
 ## [0.5.1] - 2025-04-30
 
 * 修复：修复了 NutstorePlugin 类型不存在 'logs' 属性的问题。
