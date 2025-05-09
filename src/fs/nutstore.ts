@@ -1,3 +1,4 @@
+import { decode as decodeHtmlEntity } from 'html-entities'
 import { isArray } from 'lodash-es'
 import { Vault } from 'obsidian'
 import { basename, isAbsolute } from 'path'
@@ -99,6 +100,14 @@ export class NutstoreFileSystem implements IFileSystem {
 			}
 		}
 		await deltaCacheKV.set(kvKey, deltaCache)
+		deltaCache.deltas.forEach((delta) => {
+			delta.delta.entry.forEach((entry) => {
+				entry.path = decodeHtmlEntity(entry.path)
+			})
+		})
+		deltaCache.files.forEach((file) => {
+			file.path = decodeHtmlEntity(file.path)
+		})
 		const deltasMap = new Map(
 			deltaCache.deltas.flatMap((d) => d.delta.entry.map((d) => [d.path, d])),
 		)
