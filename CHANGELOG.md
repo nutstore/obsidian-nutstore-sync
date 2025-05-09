@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [0.6.0]
+## [0.6.0] - 2025-05-09
 
 *   **新功能**
     *   解码文件路径中的 HTML Entity 编码
