@@ -55,7 +55,7 @@ jobs:
           echo "Raw commits fetched:"
           echo "$COMMIT_LOG"
 
-      - name: Call Google Gemini API to Generate Changelog Entry
+      - name: Call OpenAI API to Generate Changelog Entry
         id: ai_changelog
         # Only run if there are commit messages
         if: steps.commit_messages.outputs.commits != ''
@@ -69,46 +69,71 @@ jobs:
             ATTEMPT=$((ATTEMPT+1))
             echo "Attempt $ATTEMPT of $MAX_RETRIES"
             
-            PROMPT="Based on the following commit messages, generate a concise and user-friendly changelog entry in Markdown bullet points. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. This will be running in github action, please make sure using ci compatible characters. You should write in both Chinese and English, Chinese first. Do not include a header, just the bullet points:\n\n${{ steps.commit_messages.outputs.commits }}"
+            # System prompt defines the AI's role and overall instructions
+            SYSTEM_PROMPT="You are a helpful assistant that generates changelog entries. Generate a concise and user-friendly changelog entry in Markdown bullet points based on the provided commit messages. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. This will be running in a GitHub Action, please make sure to use CI compatible characters. You should write in both Chinese and English, with Chinese first. Do not include a header, just the bullet points."
+            
+            # User prompt contains the specific data for this run
+            USER_PROMPT="Commit messages:\n\n${{ steps.commit_messages.outputs.commits }}"
 
             # Calculate dynamic max tokens based on commit message lines
+            # This is an estimate for the output, OpenAI's max_tokens is for the completion only
             COMMIT_LINES=$(echo "${{ steps.commit_messages.outputs.commits }}" | grep -c '^-')
             BASE_TOKENS=300  # Base tokens for template and formatting
             PER_LINE_TOKENS=20 # Additional tokens per commit line
-            MAX_TOKENS=$(( BASE_TOKENS + (COMMIT_LINES * PER_LINE_TOKENS) ))
-            MAX_TOKENS=$(( MAX_TOKENS > 1000 ? 1000 : MAX_TOKENS )) # Cap at 1000 tokens
+            MAX_OUTPUT_TOKENS=$(( BASE_TOKENS + (COMMIT_LINES * PER_LINE_TOKENS) ))
+            # Cap max_tokens for the completion. Consider gpt-3.5-turbo's context window if input is very large.
+            # For gpt-3.5-turbo, a common max_tokens limit for output is around 1000-2000.
+            MAX_OUTPUT_TOKENS=$(( MAX_OUTPUT_TOKENS > 1000 ? 1000 : MAX_OUTPUT_TOKENS )) 
             
-            # Construct the JSON payload for Gemini API as a single line
-            # Use the stable model version instead of experimental
-            JSON_PAYLOAD='{"contents":[{"parts":[{"text":"'"$PROMPT"'"}]}],"generationConfig":{"temperature":0.4,"topP":0.85,"maxOutputTokens":'$MAX_TOKENS',"stopSequences":["##"]},"safetySettings":[{"category":"HARM_CATEGORY_DANGEROUS_CONTENT","threshold":"BLOCK_NONE"}]}'
+            # Construct the JSON payload for OpenAI API
+            # Using gpt-3.5-turbo as an economical choice
+            JSON_PAYLOAD=$(jq -n --arg system_prompt "$SYSTEM_PROMPT" --arg user_prompt "$USER_PROMPT" --argjson max_tokens "$MAX_OUTPUT_TOKENS" \
+            '{
+              "model": "gpt-3.5-turbo",
+              "messages": [
+                {"role": "system", "content": $system_prompt},
+                {"role": "user", "content": $user_prompt}
+              ],
+              "temperature": 0.5,
+              "max_tokens": $max_tokens,
+              "top_p": 0.9
+            }')
 
-            echo "Sending prompt to Gemini API..."
-            # Use the stable model version instead of experimental
-            API_ENDPOINT="https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${{ secrets.GEMINI_API_KEY }}"
+            echo "Sending prompt to OpenAI API..."
+            API_ENDPOINT="https://api.openai.com/v1/chat/completions"
 
             API_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
+              -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
               -H "Content-Type: application/json" \
               -d "$JSON_PAYLOAD")
 
-            echo "Gemini Raw Response: $API_RESPONSE"
+            echo "OpenAI Raw Response: $API_RESPONSE"
 
             # Check for error in response
             ERROR_MSG=$(echo "$API_RESPONSE" | jq -r '.error.message // empty')
             if [ -n "$ERROR_MSG" ]; then
               echo "API Error: $ERROR_MSG"
-              sleep $RETRY_DELAY
+              # Check for specific rate limit error
+              if echo "$ERROR_MSG" | grep -q "Rate limit reached"; then
+                echo "Rate limit error detected. Waiting longer before retry..."
+                sleep 60 # Wait longer for rate limit errors
+              else
+                sleep $RETRY_DELAY
+              fi
               continue
             fi
 
             # Validate JSON structure and extract content
-            if ! jq -e '.candidates[0].content.parts[0].text' <<< "$API_RESPONSE" >/dev/null 2>&1; then
-              echo "Invalid JSON response structure"
-              echo "Response structure: $(echo "$API_RESPONSE" | jq -r 'keys')"
+            # OpenAI response: .choices[0].message.content
+            if ! jq -e '.choices[0].message.content' <<< "$API_RESPONSE" >/dev/null 2>&1; then
+              echo "Invalid JSON response structure or empty content"
+              echo "Response structure: $(echo "$API_RESPONSE" | jq -r 'keys | @json')"
+              echo "Full response for debugging: $API_RESPONSE"
               sleep $RETRY_DELAY
               continue
             fi
 
-            GENERATED_TEXT=$(echo "$API_RESPONSE" | jq -r '.candidates[0].content.parts[0].text? // empty' | sed '/^$/d')
+            GENERATED_TEXT=$(echo "$API_RESPONSE" | jq -r '.choices[0].message.content // empty' | sed '/^$/d') # Remove empty lines
             
             if [ -n "$GENERATED_TEXT" ]; then
               SUCCESS=true
@@ -118,7 +143,7 @@ jobs:
               echo "$GENERATED_TEXT" >> $GITHUB_OUTPUT
               echo "EOF" >> $GITHUB_OUTPUT
             else
-              echo "Empty response from API"
+              echo "Empty response content from API"
               sleep $RETRY_DELAY
             fi
           done
@@ -128,7 +153,7 @@ jobs:
             exit 1
           fi
         env:
-           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 
       - name: Update CHANGELOG.md
