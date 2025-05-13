@@ -2,6 +2,11 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-05-13
+
+*   改进 Glob 匹配逻辑和性能 (重构文件系统结构)
+*   Improve glob matching logic and performance (Refactored filesystem structure)
+
 ## [0.6.0] - 2025-05-09
 
 *   **新功能**
