@@ -9,7 +9,11 @@ export default class I18nService {
 	}
 
 	update = () => {
-		const code = getLanguage().split('-')[0]
-		i18n.changeLanguage(code)
+		let code = navigator.language.split('-')[0]
+		try {
+			code = getLanguage().split('-')[0]
+		} finally {
+			i18n.changeLanguage(code.toLowerCase())
+		}
 	}
 }
