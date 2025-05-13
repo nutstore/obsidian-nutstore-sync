@@ -95,7 +95,7 @@ export default class NutstorePlugin extends Plugin {
 					'.git',
 					'.DS_Store',
 					'.trash',
-					`${this.app.vault.configDir}/*`,
+					`${this.app.vault.configDir}`,
 				].map(createGlobMathOptions),
 				inclusionRules: [
 					normalizePath(join(this.app.vault.configDir, 'bookmarks.json')),

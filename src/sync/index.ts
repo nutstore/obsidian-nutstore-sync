@@ -12,7 +12,6 @@ import {
 } from '~/events'
 import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
-import memfs from '~/fs/memfs'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
 import { blobStore } from '~/storage/blob'
@@ -135,7 +134,7 @@ export class NutstoreSync {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
 
-			if (showNotice) {
+			if (showNotice && confirmedTasksUniq.length > 0) {
 				this.plugin.progressService.showProgressModal()
 			}
 
@@ -235,7 +234,6 @@ export class NutstoreSync {
 			return
 		}
 		const latestRemoteEntities = await this.remoteFs.walk()
-		const latestRemoteMemfs = new memfs(latestRemoteEntities)
 		const syncRecord = new SyncRecord(
 			this.options.vault,
 			this.options.remoteBaseDir,
@@ -249,7 +247,9 @@ export class NutstoreSync {
 				if (!results[idx]?.success) {
 					return
 				}
-				const remote = latestRemoteMemfs.stat(task.localPath)
+				const remote = latestRemoteEntities.find(
+					(entity) => entity.path === task.localPath,
+				)
 				if (!remote) {
 					return
 				}

@@ -13,15 +13,17 @@ import { deltaCacheKV } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
 import GlobMatch, {
+	extendRules,
 	isVoidGlobMatchOptions,
 	needIncludeFromGlobRules,
 } from '~/utils/glob-match'
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { traverseWebDAV } from '~/utils/traverse-webdav'
-import IFileSystem from './fs.interface'
+import AbstractFileSystem from './fs.interface'
+import completeLossDir from './utils/complete-loss-dir'
 
-export class NutstoreFileSystem implements IFileSystem {
+export class NutstoreFileSystem implements AbstractFileSystem {
 	private webdav: WebDAVClient
 
 	constructor(
@@ -157,21 +159,19 @@ export class NutstoreFileSystem implements IFileSystem {
 			}
 		}
 		const settings = await useSettings()
-		const exclusions = (settings?.filterRules.exclusionRules ?? [])
-			.filter((opt) => !isVoidGlobMatchOptions(opt))
-			.map((opt) => new GlobMatch(opt))
-		const inclusion = (settings?.filterRules.inclusionRules ?? [])
-			.filter((opt) => !isVoidGlobMatchOptions(opt))
-			.map((opt) => new GlobMatch(opt))
-		const ignoredContents = contents.filter(
-			(item) => !needIncludeFromGlobRules(item.path, inclusion, exclusions),
+		const exclusions = extendRules(
+			(settings?.filterRules.exclusionRules ?? [])
+				.filter((opt) => !isVoidGlobMatchOptions(opt))
+				.map(({ expr, options }) => new GlobMatch(expr, options)),
 		)
-		return contents.filter(
-			(item) =>
-				!(
-					ignoredContents.some((ignored) => ignored.path === item.path) ||
-					ignoredContents.some((ignored) => isSub(ignored.path, item.path))
-				),
+		const inclusion = extendRules(
+			(settings?.filterRules.inclusionRules ?? [])
+				.filter((opt) => !isVoidGlobMatchOptions(opt))
+				.map(({ expr, options }) => new GlobMatch(expr, options)),
 		)
+		const filteredContents = contents.filter((item) =>
+			needIncludeFromGlobRules(item.path, inclusion, exclusions),
+		)
+		return completeLossDir(contents, filteredContents)
 	}
 }

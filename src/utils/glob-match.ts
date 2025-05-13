@@ -29,10 +29,11 @@ function generateFlags(options: GlobMatchUserOptions) {
 
 export default class GlobMatch {
 	re: RegExp
-	expr: string
 
-	constructor({ expr, options }: GlobMatchOptions) {
-		this.expr = expr
+	constructor(
+		public expr: string,
+		public options: GlobMatchUserOptions,
+	) {
 		this.re = GlobToRegExp(this.expr, {
 			flags: generateFlags(options),
 			extended: true,
@@ -77,4 +78,24 @@ export function needIncludeFromGlobRules(
 		}
 	}
 	return true
+}
+
+/**
+ * 如果忽略/包含了某文件夹，例如：.git，那也应该忽略/包含里面的所有文件。
+ *
+ * 即: .git = .git + .git/*
+ */
+export function extendRules(rules: GlobMatch[]) {
+	rules = [...rules]
+	for (const { expr, options } of rules) {
+		if (expr.endsWith('*')) {
+			continue
+		}
+		const newRule = new GlobMatch(
+			`${expr.endsWith('/') ? expr : expr + '/'}*`,
+			options,
+		)
+		rules.push(newRule)
+	}
+	return rules
 }
