@@ -47,7 +47,7 @@ jobs:
             echo "Getting commits between ${{ steps.latest_tag.outputs.previous_tag }} and ${{ steps.latest_tag.outputs.current_tag }}..."
             COMMIT_RANGE="${{ steps.latest_tag.outputs.previous_tag }}..${{ steps.latest_tag.outputs.current_tag }}"
           fi
-          COMMIT_LOG=$(git log $COMMIT_RANGE --pretty=format:"- %s" --no-merges | grep -E "^- (feat|fix):")
+          COMMIT_LOG=$(git log $COMMIT_RANGE --pretty=format:"- %s" --no-merges | grep -E "^- (feat|fix|refactor):")
           COMMIT_LOG_ESCAPED=$(echo "$COMMIT_LOG" | sed -z 's/\n/\\n/g' | sed 's/"/\\"/g') # Escape for JSON
           echo "commits<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMIT_LOG_ESCAPED" >> $GITHUB_OUTPUT
