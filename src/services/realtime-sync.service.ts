@@ -1,7 +1,6 @@
 import { debounce } from 'lodash-es'
 import { useSettings } from '~/settings'
 import { NutstoreSync } from '~/sync'
-import sleep from '~/utils/sleep'
 import waitUntil from '~/utils/wait-until'
 import NutstorePlugin from '..'
 
@@ -27,7 +26,7 @@ export default class RealtimeSyncService {
 
 		constructor(public realtimeSyncService: RealtimeSyncService) {}
 
-		submit = debounce(async () => {
+		submitDirectly = async () => {
 			if (this.waiting) {
 				return
 			}
@@ -38,7 +37,9 @@ export default class RealtimeSyncService {
 			)
 			this.waiting = false
 			await this.realtimeSyncService.realtimeSync()
-		}, 8000)
+		}
+
+		submit = debounce(this.submitDirectly, 8000)
 	})(this)
 
 	constructor(private plugin: NutstorePlugin) {
@@ -63,20 +64,13 @@ export default class RealtimeSyncService {
 			}),
 		)
 
-		this.startIntervalSync()
-	}
-
-	async startIntervalSync() {
-		while (true) {
-			await sleep(30000)
-			await waitUntil(
-				async () =>
-					this.plugin.isSyncing === false &&
-					Date.now() - this.plugin.lastSyncAt > 10 * 60 * 1000,
-				1000,
-			)
-			await this.realtimeSync()
-		}
+		useSettings().then(({ startupSyncDelaySeconds }) => {
+			if (startupSyncDelaySeconds > 0) {
+				window.setTimeout(() => {
+					this.submitSyncRequest.submitDirectly()
+				}, startupSyncDelaySeconds * 1000)
+			}
+		})
 	}
 
 	get vault() {

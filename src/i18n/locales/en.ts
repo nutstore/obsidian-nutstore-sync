@@ -69,6 +69,11 @@ export default {
 			strict: 'Strict',
 			loose: 'Loose',
 		},
+		startupSyncDelay: {
+			name: 'Auto-sync on Startup',
+			desc: 'Set the number of seconds after startup to automatically perform a sync. Set to 0 to disable auto-sync on startup.',
+			placeholder: 'Enter seconds (e.g., 5, 0 to disable)',
+		},
 		sections: {
 			account: 'Account',
 			common: 'General',

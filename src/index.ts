@@ -32,7 +32,6 @@ import { stdRemotePath } from './utils/std-remote-path'
 
 export default class NutstorePlugin extends Plugin {
 	public isSyncing: boolean = false
-	public lastSyncAt: number = -Infinity
 	public settings: NutstoreSettings
 
 	public commandService = new CommandService(this)
@@ -105,6 +104,7 @@ export default class NutstorePlugin extends Plugin {
 				maxSize: '30 MB',
 			},
 			realtimeSync: false,
+			startupSyncDelaySeconds: 0,
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
@@ -116,9 +116,6 @@ export default class NutstorePlugin extends Plugin {
 
 	toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
-		if (!isSyncing) {
-			this.lastSyncAt = Date.now()
-		}
 		this.ribbonManager.update()
 	}
 

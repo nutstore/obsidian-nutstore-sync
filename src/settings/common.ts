@@ -108,6 +108,33 @@ export default class CommonSettings extends BaseSettings {
 			)
 
 		new Setting(this.containerEl)
+			.setName(i18n.t('settings.startupSyncDelay.name'))
+			.setDesc(i18n.t('settings.startupSyncDelay.desc'))
+			.addText((text) => {
+				text
+					.setPlaceholder(i18n.t('settings.startupSyncDelay.placeholder'))
+					.setValue(this.plugin.settings.startupSyncDelaySeconds.toString())
+					.onChange(async (value) => {
+						const numValue = parseFloat(value)
+						if (!isNaN(numValue)) {
+							this.plugin.settings.startupSyncDelaySeconds = numValue
+							await this.plugin.saveSettings()
+						}
+					})
+				text.inputEl.addEventListener('blur', () => {
+					const value = text.getValue()
+					const numValue = parseFloat(value)
+					if (Number.isNaN(numValue) || numValue < 0) {
+						text.setValue('0')
+					} else {
+						text.setValue(numValue.toString())
+					}
+				})
+				text.inputEl.type = 'number'
+				text.inputEl.min = '0'
+			})
+
+		new Setting(this.containerEl)
 			.setName(i18n.t('settings.syncMode.name'))
 			.setDesc(i18n.t('settings.syncMode.desc'))
 			.addDropdown((dropdown) =>

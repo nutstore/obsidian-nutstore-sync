@@ -34,6 +34,7 @@ export interface NutstoreSettings {
 		maxSize: string
 	}
 	realtimeSync: boolean
+	startupSyncDelaySeconds: number
 }
 
 let pluginInstance: NutstorePlugin | null = null
