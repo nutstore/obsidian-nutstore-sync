@@ -2,6 +2,7 @@ import { normalizePath, Vault } from 'obsidian'
 import { isAbsolute, join } from 'path'
 import { WebDAVClient } from 'webdav'
 import { SyncRecord } from '~/storage/helper'
+import getTaskName from '~/utils/get-task-name'
 import { MaybePromise } from '~/utils/types'
 
 export interface BaseTaskOptions {
@@ -47,6 +48,17 @@ export abstract class BaseTask {
 	}
 
 	abstract exec(): MaybePromise<TaskResult>
+
+	toJSON() {
+		const { localPath, remoteBaseDir, remotePath } = this
+		const taskName = getTaskName(this)
+		return {
+			taskName,
+			localPath,
+			remoteBaseDir,
+			remotePath,
+		}
+	}
 }
 
 export class TaskError extends Error {
