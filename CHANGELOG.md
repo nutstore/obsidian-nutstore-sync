@@ -2,6 +2,22 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-05-14
+
+*   **特性**
+    *   增强智能合并策略，提升冲突解决效率。
+    *   新增启动后自动同步选项，允许配置同步延迟。
+*   **修复**
+    *   为 `updateMtimeInRecord` 方法增加错误处理，提高稳定性。
+    *   兼容 1.8.x 及更早版本。
+---
+*   **Features**
+    *   Enhanced intelligent merge strategy for more efficient conflict resolution.
+    *   Added an option for automatic synchronization after startup, with configurable delay.
+*   **Bug Fixes**
+    *   Improved stability of the `updateMtimeInRecord` method by adding error handling.
+    *   Ensured compatibility with versions 1.8.x and earlier.
+
 ## [0.6.1] - 2025-05-13
 
 *   改进 Glob 匹配逻辑和性能 (重构文件系统结构)
