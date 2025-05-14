@@ -85,6 +85,11 @@ export default {
 			strict: '严格',
 			loose: '宽松',
 		},
+		startupSyncDelay: {
+			name: '启动后自动同步',
+			desc: '设置启动后第几秒自动执行一次同步。设置为 0 则禁用启动时自动同步。',
+			placeholder: '输入秒数 (例如 5, 0 则禁用)',
+		},
 		filters: {
 			name: '过滤器',
 			desc: '添加同步时需要忽略文件或文件夹路径，例如: .DS_Store, .git',

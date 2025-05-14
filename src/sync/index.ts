@@ -243,37 +243,48 @@ export class NutstoreSync {
 		const BATCH_SIZE = 10
 		for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
 			const batch = tasks.slice(i, i + BATCH_SIZE).map(async (task, j) => {
-				const idx = i + j
-				if (!results[idx]?.success) {
-					return
-				}
-				const remote = latestRemoteEntities.find(
-					(entity) => entity.path === task.localPath,
-				)
-				if (!remote) {
-					return
-				}
-				const local = await statVaultItem(this.options.vault, task.localPath)
-				if (!local) {
-					return
-				}
-				let baseKey: string | undefined
-				if (!local.isDir) {
-					const buffer = await this.options.vault.adapter.readBinary(
-						task.localPath,
-					)
-					if (await isBinaryFile(buffer)) {
-						baseKey = undefined
-					} else {
-						const { key } = await blobStore.store(buffer)
-						baseKey = key
+				try {
+					const idx = i + j
+					if (!results[idx]?.success) {
+						return
 					}
+					const remote = latestRemoteEntities.find(
+						(entity) => entity.path === task.localPath,
+					)
+					if (!remote) {
+						return
+					}
+					const local = await statVaultItem(this.options.vault, task.localPath)
+					if (!local) {
+						return
+					}
+					let baseKey: string | undefined
+					if (!local.isDir) {
+						const buffer = await this.options.vault.adapter.readBinary(
+							task.localPath,
+						)
+						if (await isBinaryFile(buffer)) {
+							baseKey = undefined
+						} else {
+							const { key } = await blobStore.store(buffer)
+							baseKey = key
+						}
+					}
+					records.set(task.localPath, {
+						remote,
+						local,
+						base: isNil(baseKey) ? undefined : { key: baseKey },
+					})
+				} catch (e) {
+					logger.error(
+						'updateMtimeInRecord',
+						{
+							errorName: e.name,
+							errorMsg: e.message,
+						},
+						task.toJSON(),
+					)
 				}
-				records.set(task.localPath, {
-					remote,
-					local,
-					base: isNil(baseKey) ? undefined : { key: baseKey },
-				})
 			})
 			await Promise.all(batch)
 			await syncRecord.setRecords(records)

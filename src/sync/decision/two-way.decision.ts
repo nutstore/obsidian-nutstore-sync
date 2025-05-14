@@ -133,7 +133,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 											strategy:
 												settings.conflictStrategy === 'latest-timestamp'
 													? ConflictStrategy.LatestTimeStamp
-													: ConflictStrategy.DiffMatchPatch,
+													: ConflictStrategy.IntelligentMerge,
 											localStat: local,
 											remoteStat: remote,
 											useGitStyle: settings.useGitStyle,
@@ -292,7 +292,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 							tasks.push(
 								new ConflictResolveTask({
 									...options,
-									strategy: ConflictStrategy.DiffMatchPatch,
+									strategy: ConflictStrategy.IntelligentMerge,
 									localStat: local,
 									remoteStat: remote,
 									useGitStyle: settings.useGitStyle,
