@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-05-14
+## [0.7.0] - 2025-05-14
 
 *   **特性**
     *   增强智能合并策略，提升冲突解决效率。
