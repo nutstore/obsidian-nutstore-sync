@@ -5,19 +5,19 @@ export default function <T>(ob: Observable<T>, ms: number) {
 		const sub = ob.subscribe({
 			next: () => finish(),
 			error: (err) => {
-				clearTimeout(timer)
+				window.clearTimeout(timer)
 				sub.unsubscribe()
 				reject(err)
 			},
 		})
 
 		function finish() {
-			clearTimeout(timer)
+			window.clearTimeout(timer)
 			sub.unsubscribe()
 			resolve()
 		}
 
-		const timer = setTimeout(() => {
+		const timer = window.setTimeout(() => {
 			finish()
 		}, ms)
 	})
