@@ -39,7 +39,7 @@ export default class AccountSettings extends BaseSettings {
 
 	async hide() {
 		if (this.updateOAuthUrlTimer !== null) {
-			clearInterval(this.updateOAuthUrlTimer)
+			window.clearInterval(this.updateOAuthUrlTimer)
 			this.updateOAuthUrlTimer = null
 		}
 	}
@@ -133,7 +133,7 @@ export default class AccountSettings extends BaseSettings {
 								app: 'obsidian',
 							})
 						} else {
-							clearInterval(this.updateOAuthUrlTimer!)
+							window.clearInterval(this.updateOAuthUrlTimer!)
 							this.updateOAuthUrlTimer = null
 						}
 					}, 60 * 1000)
