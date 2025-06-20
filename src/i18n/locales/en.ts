@@ -234,6 +234,8 @@ export default {
 		progressStats: 'Completed: {{completed}} / {{total}} tasks',
 		completedFilesTitle: 'Completed Tasks',
 		syncingFiles: 'Syncing files...',
+		updatingCache: 'Updating local cache...',
+		cacheUpdated: 'Local cache updated.',
 		failedStatus: 'Sync failed',
 		cancelled: 'Sync cancelled',
 		suggestUseClientForManyTasks:

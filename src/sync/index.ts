@@ -8,6 +8,7 @@ import {
 	emitStartSync,
 	emitSyncError,
 	emitSyncProgress,
+	emitSyncUpdateMtimeProgress,
 	onCancelSync,
 } from '~/events'
 import IFileSystem from '~/fs/fs.interface'
@@ -241,6 +242,7 @@ export class NutstoreSync {
 		const records = await syncRecord.getRecords()
 		const startAt = Date.now()
 		const BATCH_SIZE = 10
+		let completedCount = 0
 		for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
 			const batch = tasks.slice(i, i + BATCH_SIZE).map(async (task, j) => {
 				try {
@@ -248,6 +250,7 @@ export class NutstoreSync {
 					if (!results[idx]?.success) {
 						return
 					}
+					completedCount++
 					const remote = latestRemoteEntities.find(
 						(entity) => entity.path === task.localPath,
 					)
@@ -287,6 +290,7 @@ export class NutstoreSync {
 				}
 			})
 			await Promise.all(batch)
+			emitSyncUpdateMtimeProgress(tasks.length, completedCount)
 			await syncRecord.setRecords(records)
 		}
 		logger.debug(`Records saving completed`, {

@@ -1,8 +1,12 @@
-import { Modal, setIcon, Setting } from 'obsidian'
+import { ButtonComponent, Modal, setIcon, Setting } from 'obsidian'
 import { Subscription } from 'rxjs'
 import getTaskName from '~/utils/get-task-name'
 import NutstorePlugin from '..'
-import { emitCancelSync, onCancelSync } from '../events'
+import {
+	emitCancelSync,
+	onCancelSync,
+	onSyncUpdateMtimeProgress,
+} from '../events'
 import i18n from '../i18n'
 import ConflictResolveTask from '../sync/tasks/conflict-resolve.task'
 import MkdirLocalTask from '../sync/tasks/mkdir-local.task'
@@ -20,6 +24,13 @@ export default class SyncProgressModal extends Modal {
 	private filesList: HTMLDivElement
 	private syncCancelled = false
 	private cancelSubscription: Subscription
+	private updateMtimeSubscription: Subscription
+	private stopButtonComponent: ButtonComponent
+
+	private cacheProgressBar: HTMLDivElement
+	private cacheProgressText: HTMLDivElement
+	private cacheProgressStats: HTMLDivElement
+	private cacheCurrentOperation: HTMLDivElement
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -30,6 +41,11 @@ export default class SyncProgressModal extends Modal {
 			this.syncCancelled = true
 			this.update()
 		})
+		this.updateMtimeSubscription = onSyncUpdateMtimeProgress().subscribe(
+			(progress) => {
+				this.updateCacheProgress(progress.total, progress.completed)
+			},
+		)
 	}
 
 	public update(): void {
@@ -43,7 +59,7 @@ export default class SyncProgressModal extends Modal {
 			return
 		}
 
-		let progress = this.plugin.progressService.syncProgress
+		const progress = this.plugin.progressService.syncProgress
 
 		const percent =
 			Math.round((progress.completed.length / progress.total) * 100) || 0
@@ -64,8 +80,10 @@ export default class SyncProgressModal extends Modal {
 
 		if (progress.completed.length > 0) {
 			if (this.plugin.progressService.syncEnd) {
+				this.stopButtonComponent.buttonEl.addClass('hidden')
 				this.currentFile.setText(i18n.t('sync.complete'))
 			} else if (this.syncCancelled) {
+				this.stopButtonComponent.buttonEl.addClass('hidden')
 				this.currentFile.setText(i18n.t('sync.cancelled'))
 			} else {
 				const lastFile = progress.completed.at(-1)
@@ -81,7 +99,7 @@ export default class SyncProgressModal extends Modal {
 
 		this.filesList.empty()
 
-		const recentFiles = progress.completed.reverse()
+		const recentFiles = progress.completed.slice().reverse()
 
 		recentFiles.forEach((file) => {
 			const item = this.filesList.createDiv({
@@ -174,6 +192,33 @@ export default class SyncProgressModal extends Modal {
 		const progressText = progressBarContainer.createDiv({
 			cls: 'absolute w-full text-center text-3 leading-5 text-[var(--text-on-accent)] mix-blend-difference',
 		})
+
+		// Cache progress section
+		const cacheProgressSection = container.createDiv({
+			cls: 'flex flex-col gap-1',
+		})
+		this.cacheCurrentOperation = cacheProgressSection.createDiv()
+		this.cacheCurrentOperation.setText(i18n.t('sync.updatingCache'))
+		this.cacheCurrentOperation.hide()
+
+		const cacheProgressStats = cacheProgressSection.createDiv({
+			cls: 'text-3.25',
+		})
+		this.cacheProgressStats = cacheProgressStats
+		this.cacheProgressStats.hide()
+
+		const cacheProgressBarContainer = cacheProgressSection.createDiv({
+			cls: 'relative h-5 bg-[var(--background-secondary)] rounded overflow-hidden',
+		})
+		cacheProgressBarContainer.hide()
+
+		this.cacheProgressBar = cacheProgressBarContainer.createDiv({
+			cls: 'absolute h-full bg-[var(--interactive-accent)] w-0 transition-width',
+		})
+		this.cacheProgressText = cacheProgressBarContainer.createDiv({
+			cls: 'absolute w-full text-center text-3 leading-5 text-[var(--text-on-accent)] mix-blend-difference',
+		})
+
 		const filesSection = container.createDiv({
 			cls: 'flex flex-col flex-1 gap-2 mt-2 overflow-y-auto',
 		})
@@ -212,15 +257,51 @@ export default class SyncProgressModal extends Modal {
 					.onClick(() => {
 						emitCancelSync()
 					})
+				this.stopButtonComponent = button
 			})
 	}
 
 	onClose(): void {
 		this.cancelSubscription.unsubscribe()
+		this.updateMtimeSubscription.unsubscribe()
 		const { contentEl } = this
 		contentEl.empty()
 		if (this.closeCallback) {
 			this.closeCallback()
+		}
+	}
+
+	private updateCacheProgress(total: number, completed: number): void {
+		if (
+			!this.cacheProgressBar ||
+			!this.cacheProgressText ||
+			!this.cacheProgressStats
+		) {
+			return
+		}
+
+		this.cacheCurrentOperation.show()
+		this.cacheProgressStats.show()
+		this.cacheProgressBar.parentElement?.show()
+
+		const percent = Math.round((completed / total) * 100) || 0
+
+		this.cacheProgressBar.style.width = `${percent}%`
+		this.cacheProgressText.setText(
+			i18n.t('sync.percentComplete', {
+				percent,
+			}),
+		)
+
+		this.cacheProgressStats.setText(
+			i18n.t('sync.progressStats', {
+				completed,
+				total,
+			}),
+		)
+
+		if (completed === total) {
+			this.cacheCurrentOperation.setText(i18n.t('sync.cacheUpdated'))
 		}
 	}
 }
