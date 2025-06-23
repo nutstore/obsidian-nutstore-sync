@@ -6,9 +6,9 @@ import BaseSettings from './settings.base'
 export default class FilterSettings extends BaseSettings {
 	async display() {
 		this.containerEl.empty()
-		this.containerEl.createEl('h2', {
-			text: i18n.t('settings.sections.filters'),
-		})
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.sections.filters'))
+			.setHeading()
 
 		// Inclusion
 		new Setting(this.containerEl)

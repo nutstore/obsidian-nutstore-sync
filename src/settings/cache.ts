@@ -19,7 +19,9 @@ export interface ExportedStorage {
 export default class CacheSettings extends BaseSettings {
 	async display() {
 		this.containerEl.empty()
-		this.containerEl.createEl('h2', { text: i18n.t('settings.cache.title') })
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.cache.title'))
+			.setHeading()
 
 		// set remote cache directory
 		new Setting(this.containerEl)
