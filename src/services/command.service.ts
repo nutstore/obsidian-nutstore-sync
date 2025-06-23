@@ -9,9 +9,12 @@ export default class CommandService {
 		plugin.addCommand({
 			id: 'start-sync',
 			name: i18n.t('sync.startButton'),
-			callback: async () => {
+			checkCallback: (checking) => {
 				if (plugin.isSyncing) {
-					return
+					return false
+				}
+				if (checking) {
+					return true
 				}
 				const startSync = async () => {
 					const sync = new NutstoreSync(plugin, {
@@ -25,6 +28,7 @@ export default class CommandService {
 					})
 				}
 				new SyncConfirmModal(plugin.app, startSync).open()
+				return true
 			},
 		})
 
