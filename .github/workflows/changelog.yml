@@ -146,10 +146,11 @@ jobs:
       - name: Update CHANGELOG.md
         # Only run if AI generated text
         if: steps.ai_changelog.outputs.changelog_entry != ''
+        env:
+          GENERATED_CONTENT: ${{ steps.ai_changelog.outputs.changelog_entry }}
         run: |
           CHANGELOG_FILE="CHANGELOG.md"
           NEW_ENTRY_HEADING="## [Unreleased] - $(date +'%Y-%m-%d')"
-          GENERATED_CONTENT="${{ steps.ai_changelog.outputs.changelog_entry }}"
 
           # Create file if it doesn't exist with a basic structure
           if [ ! -f "$CHANGELOG_FILE" ]; then
@@ -163,7 +164,7 @@ jobs:
           if grep -q "## \[Unreleased\]" "$CHANGELOG_FILE"; then
             # Insert below the [Unreleased] heading
             # Use awk for safer multi-line insertion
-            awk -v heading="$NEW_ENTRY_HEADING" -v content="$GENERATED_CONTENT" '
+            awk -v heading="$NEW_ENTRY_HEADING" -v content="${GENERATED_CONTENT}" '
             /## \[Unreleased\]/ {
               print;
               print ""; # Add a newline after heading
@@ -180,7 +181,7 @@ jobs:
               echo ""
               echo "$NEW_ENTRY_HEADING"
               echo ""
-              echo "$GENERATED_CONTENT"
+              echo "${GENERATED_CONTENT}"
               echo ""
               tail -n +4 "$CHANGELOG_FILE" # Adjust line count
             } > temp_changelog.md && mv temp_changelog.md "$CHANGELOG_FILE"
