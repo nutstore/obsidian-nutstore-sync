@@ -81,7 +81,17 @@ export default class ConflictResolveTask extends BaseTask {
 				return { success: true }
 			}
 
-			const localContent = await this.vault.adapter.readBinary(this.localPath)
+			const file = this.vault.getFileByPath(this.localPath)
+			if (!file) {
+				return {
+					success: false,
+					error: toTaskError(
+						new Error('cannot find file in local fs: ' + this.localPath),
+						this,
+					),
+				}
+			}
+			const localContent = await this.vault.readBinary(file)
 			const remoteContent = (await this.webdav.getFileContents(
 				this.remotePath,
 				{
@@ -99,7 +109,7 @@ export default class ConflictResolveTask extends BaseTask {
 
 			switch (result.status) {
 				case LatestTimestampResolution.UseRemote:
-					await this.vault.adapter.writeBinary(this.localPath, result.content)
+					await this.vault.modifyBinary(file, result.content)
 					break
 				case LatestTimestampResolution.UseLocal:
 					await this.webdav.putFileContents(this.remotePath, result.content, {
@@ -120,7 +130,11 @@ export default class ConflictResolveTask extends BaseTask {
 
 	async execIntelligentMerge() {
 		try {
-			const localBuffer = await this.vault.adapter.readBinary(this.localPath)
+			const file = this.vault.getFileByPath(this.localPath)
+			if (!file) {
+				throw new Error('cannot find file in local fs: ' + this.localPath)
+			}
+			const localBuffer = await this.vault.readBinary(file)
 			const remoteBuffer = (await this.webdav.getFileContents(this.remotePath, {
 				format: 'binary',
 				details: false,
@@ -174,7 +188,7 @@ export default class ConflictResolveTask extends BaseTask {
 				)
 
 				if (putResult) {
-					await this.vault.adapter.write(this.localPath, mergedDmpText)
+					await this.vault.modify(file, mergedDmpText)
 					return { success: true }
 				} else {
 					throw new Error(i18n.t('sync.error.failedToUploadMerged'))
@@ -192,7 +206,7 @@ export default class ConflictResolveTask extends BaseTask {
 			// If mergedText is the same as remoteText, we only need to update localText if it's different.
 			if (mergedText === remoteText) {
 				if (mergedText !== localText) {
-					await this.vault.adapter.write(this.localPath, mergedText)
+					await this.vault.modify(file, mergedText)
 				}
 				return { success: true }
 			}
@@ -209,7 +223,7 @@ export default class ConflictResolveTask extends BaseTask {
 			}
 
 			if (localText !== mergedText) {
-				await this.vault.adapter.write(this.localPath, mergedText)
+				await this.vault.modify(file, mergedText)
 			}
 
 			return { success: true }

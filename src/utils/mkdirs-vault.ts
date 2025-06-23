@@ -7,17 +7,22 @@ export async function mkdirsVault(vault: Vault, path: string) {
 	if (currentPath === '/' || currentPath === '.') {
 		return
 	}
-	if (await vault.adapter.exists(currentPath)) {
+	if (vault.getAbstractFileByPath(currentPath)) {
 		return
 	}
-	while (true) {
-		if (await vault.adapter.exists(currentPath)) {
-			break
-		}
+	while (
+		currentPath !== '' &&
+		currentPath !== '/' &&
+		!vault.getAbstractFileByPath(currentPath)
+	) {
 		stack.push(currentPath)
 		currentPath = dirname(currentPath)
 	}
 	while (stack.length) {
-		await vault.adapter.mkdir(stack.pop()!)
+		const pop = stack.pop()
+		if (!pop) {
+			continue
+		}
+		await vault.createFolder(pop)
 	}
 }

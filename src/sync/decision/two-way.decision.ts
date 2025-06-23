@@ -99,9 +99,13 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						if (localChanged && record.base?.key) {
 							const blob = await blobStore.get(record.base.key)
 							if (blob) {
+								const file = this.vault.getFileByPath(local.path)
+								if (!file) {
+									continue
+								}
 								localChanged = !isEqual(
 									await blob.arrayBuffer(),
-									await this.vault.adapter.readBinary(local.path),
+									await this.vault.readBinary(file),
 								)
 							}
 						}

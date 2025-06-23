@@ -263,9 +263,11 @@ export class NutstoreSync {
 					}
 					let baseKey: string | undefined
 					if (!local.isDir) {
-						const buffer = await this.options.vault.adapter.readBinary(
-							task.localPath,
-						)
+						const file = this.options.vault.getFileByPath(task.localPath)
+						if (!file) {
+							return
+						}
+						const buffer = await this.options.vault.readBinary(file)
 						if (await isBinaryFile(buffer)) {
 							baseKey = undefined
 						} else {
