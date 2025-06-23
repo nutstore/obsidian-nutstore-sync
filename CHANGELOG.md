@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-06-23
+## [0.8.0] - 2025-06-23
 
 * **改进:**
     * 优化同步流程，避免同步进度条被意外清空。
