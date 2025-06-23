@@ -2,6 +2,30 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-06-23
+
+* **改进:**
+    * 优化同步流程，避免同步进度条被意外清空。
+    * 修复开始同步指令逻辑，使其更可靠。
+    * 统一英文翻译大小写格式，提升用户体验。
+    * 同步数据库时显示进度条，提升用户感知。
+* **底层优化:**
+    * 使用 Vault API 重构部分代码，提升效率和稳定性。
+    * 使用 `Setting` 组件替换 `h2` 元素，统一设置界面样式。
+    * 移除未使用的代码，精简代码库。
+    * 使用 `window.clearTimeout` 和 `window.setTimeout` 优化计时器管理。
+* **Improvements:**
+    * Optimized sync process to prevent unexpected clearing of the progress bar.
+    * Fixed the logic of the start sync command for better reliability.
+    * Unified capitalization in English translations for improved user experience.
+    * Added a progress bar during database synchronization for better user feedback.
+* **Under the hood:**
+    * Refactored parts of the code using the Vault API for improved efficiency and stability.
+    * Replaced `h2` elements with the `Setting` component for consistent settings interface styling.
+    * Removed unused code to streamline the codebase.
+    * Optimized timer management using `window.clearTimeout` and `window.setTimeout`.
+
+
 ## [0.7.0] - 2025-05-14
 
 *   **特性**
