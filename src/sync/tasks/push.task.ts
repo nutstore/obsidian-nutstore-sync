@@ -1,4 +1,3 @@
-import { normalizePath } from 'obsidian'
 import logger from '~/utils/logger'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
@@ -13,9 +12,12 @@ export default class PushTask extends BaseTask {
 
 	async exec() {
 		try {
-			const content = await this.vault.adapter.readBinary(
-				normalizePath(this.localPath),
-			)
+			const file = this.vault.getFileByPath(this.localPath)
+			if (!file) {
+				throw new Error('cannot find file in local fs: ' + this.localPath)
+			}
+
+			const content = await this.vault.readBinary(file)
 			const res = await this.webdav.putFileContents(this.remotePath, content, {
 				overwrite: this.options.overwrite ?? false,
 			})

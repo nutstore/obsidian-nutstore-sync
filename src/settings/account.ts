@@ -12,9 +12,9 @@ export default class AccountSettings extends BaseSettings {
 
 	async display() {
 		this.containerEl.empty()
-		this.containerEl.createEl('h2', {
-			text: i18n.t('settings.sections.account'),
-		})
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.sections.account'))
+			.setHeading()
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.loginMode.name'))
@@ -39,7 +39,7 @@ export default class AccountSettings extends BaseSettings {
 
 	async hide() {
 		if (this.updateOAuthUrlTimer !== null) {
-			clearInterval(this.updateOAuthUrlTimer)
+			window.clearInterval(this.updateOAuthUrlTimer)
 			this.updateOAuthUrlTimer = null
 		}
 	}
@@ -133,7 +133,7 @@ export default class AccountSettings extends BaseSettings {
 								app: 'obsidian',
 							})
 						} else {
-							clearInterval(this.updateOAuthUrlTimer!)
+							window.clearInterval(this.updateOAuthUrlTimer!)
 							this.updateOAuthUrlTimer = null
 						}
 					}, 60 * 1000)

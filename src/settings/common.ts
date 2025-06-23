@@ -7,9 +7,9 @@ import BaseSettings from './settings.base'
 export default class CommonSettings extends BaseSettings {
 	async display() {
 		this.containerEl.empty()
-		this.containerEl.createEl('h2', {
-			text: i18n.t('settings.sections.common'),
-		})
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.sections.common'))
+			.setHeading()
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.remoteDir.name'))

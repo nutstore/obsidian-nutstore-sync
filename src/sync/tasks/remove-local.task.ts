@@ -18,14 +18,11 @@ export default class RemoveLocalTask extends BaseTask {
 			if (!stat) {
 				throw new Error(i18n.t('sync.error.notFound', { path: this.localPath }))
 			}
-			if (stat.isDir) {
-				await this.vault.adapter.rmdir(
-					this.localPath,
-					this.options.recursive ?? false,
-				)
-			} else {
-				await this.vault.adapter.remove(this.localPath)
+			const file = this.vault.getFileByPath(this.localPath)
+			if (!file) {
+				throw new Error('cannot find file in local fs: ' + this.localPath)
 			}
+			await this.vault.trash(file, false)
 			return { success: true }
 		} catch (e) {
 			logger.error(e)

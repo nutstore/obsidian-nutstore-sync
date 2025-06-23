@@ -231,6 +231,8 @@ export default {
 		progressStats: '已完成: {{completed}} / {{total}} 个任务',
 		completedFilesTitle: '已完成的任务',
 		syncingFiles: '正在同步文件...',
+		updatingCache: '正在更新本地缓存...',
+		cacheUpdated: '本地缓存已更新。',
 		failedStatus: '同步失败',
 		cancelled: '同步已取消',
 		suggestUseClientForManyTasks:

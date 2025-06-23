@@ -1,4 +1,3 @@
-import { createMediaQuery } from '@solid-primitives/media'
 import { Notice } from 'obsidian'
 import path from 'path'
 import { createSignal, Show } from 'solid-js'
@@ -23,8 +22,6 @@ function App(props: AppProps) {
 	const [stack, setStack] = createSignal<string[]>(['/'])
 	const [showNewFolder, setShowNewFolder] = createSignal(false)
 	const cwd = () => stack().at(-1)
-	// @ts-ignore
-	const isSmall = createMediaQuery('(max-width: 767px)')
 
 	function enter(path: string) {
 		setStack((stack) => [...stack, path])

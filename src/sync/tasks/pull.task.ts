@@ -12,7 +12,7 @@ export default class PullTask extends BaseTask {
 				format: 'binary',
 				details: false,
 			})) as BufferLike
-			await this.vault.adapter.writeBinary(this.localPath, file)
+			await this.vault.createBinary(this.localPath, file)
 			return { success: true }
 		} catch (e) {
 			logger.error(this, e)

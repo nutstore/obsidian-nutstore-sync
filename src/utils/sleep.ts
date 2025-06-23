@@ -1,3 +1,3 @@
 export default async function sleep(ms: number) {
-	await new Promise((resolve) => setTimeout(resolve, ms))
+	await new Promise((resolve) => window.setTimeout(resolve, ms))
 }
