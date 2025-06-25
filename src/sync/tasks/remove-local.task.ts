@@ -18,7 +18,7 @@ export default class RemoveLocalTask extends BaseTask {
 			if (!stat) {
 				throw new Error(i18n.t('sync.error.notFound', { path: this.localPath }))
 			}
-			const file = this.vault.getFileByPath(this.localPath)
+			const file = this.vault.getAbstractFileByPath(this.localPath)
 			if (!file) {
 				throw new Error('cannot find file in local fs: ' + this.localPath)
 			}
