@@ -1,3 +1,4 @@
+import { isNil } from 'lodash-es'
 import { Vault } from 'obsidian'
 import { dirname, normalize } from 'path'
 
@@ -13,7 +14,8 @@ export async function mkdirsVault(vault: Vault, path: string) {
 	while (
 		currentPath !== '' &&
 		currentPath !== '/' &&
-		!vault.getAbstractFileByPath(currentPath)
+		currentPath !== '.' &&
+		isNil(vault.getAbstractFileByPath(currentPath))
 	) {
 		stack.push(currentPath)
 		currentPath = dirname(currentPath)
