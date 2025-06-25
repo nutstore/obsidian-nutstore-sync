@@ -11,7 +11,7 @@ export default class I18nService {
 	update = () => {
 		let code = navigator.language.split('-')[0]
 		try {
-			code = getLanguage().split('-')[0]
+			code = getLanguage?.().split('-')[0]
 		} finally {
 			i18n.changeLanguage(code.toLowerCase())
 		}
