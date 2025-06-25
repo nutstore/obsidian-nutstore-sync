@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-06-25
+## [0.8.1] - 2025-06-25
 
 * **改进与修复:**
     * 更新了文件检索方法，提高了效率和稳定性。
