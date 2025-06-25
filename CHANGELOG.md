@@ -2,6 +2,18 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-06-25
+
+* **改进与修复:**
+    * 更新了文件检索方法，提高了效率和稳定性。
+    * 优化了文件夹创建逻辑，减少了潜在错误。
+    * 增强了语言获取方法的健壮性，避免了潜在的运行时错误。
+* **Improvements and Fixes:**
+    * Updated file retrieval method for improved efficiency and stability.
+    * Improved folder creation logic to reduce potential errors.
+    * Enhanced robustness of language retrieval method to prevent potential runtime errors.
+
+
 ## [0.8.0] - 2025-06-23
 
 * **改进:**
