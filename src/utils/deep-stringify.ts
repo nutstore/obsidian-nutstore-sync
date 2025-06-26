@@ -2,6 +2,7 @@ import {
 	isArray,
 	isBoolean,
 	isDate,
+	isError,
 	isFinite,
 	isFunction,
 	isNull,
@@ -61,6 +62,12 @@ export default function deepStringify(
 		} else {
 			return 'null' // Invalid date becomes null
 		}
+	}
+	if (isError(value)) {
+		return JSON.stringify({
+			type: 'Error',
+			value: value?.toString() ?? { name: value.name, message: value.message },
+		})
 	}
 
 	// --- Value should be an Array or an Object-like entity ---
