@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-06-26
+## [0.8.2] - 2025-06-26
 
 * **改进:** 提升了文件处理的稳定性，修复了 `PullTask` 执行方法中的错误。
 * **改进:**  改进了 `deepStringify` 函数的错误处理，使其能够更好地处理 `Error` 对象。
