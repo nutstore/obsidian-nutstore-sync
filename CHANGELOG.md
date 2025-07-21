@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-07-21
+## [0.8.3] - 2025-07-21
 
 * 优化二进制文件检测：通过扩展名检查优化了二进制文件的检测。
 * Optimized binary file detection: Improved binary file detection with extension checking.
