@@ -2,6 +2,12 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-07-21
+
+* 优化二进制文件检测：通过扩展名检查优化了二进制文件的检测。
+* Optimized binary file detection: Improved binary file detection with extension checking.
+
+
 ## [0.8.2] - 2025-06-26
 
 * **改进:** 提升了文件处理的稳定性，修复了 `PullTask` 执行方法中的错误。
