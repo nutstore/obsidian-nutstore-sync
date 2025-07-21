@@ -245,12 +245,12 @@ export class NutstoreSync {
 		let completedCount = 0
 		for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
 			const batch = tasks.slice(i, i + BATCH_SIZE).map(async (task, j) => {
+				completedCount++
 				try {
 					const idx = i + j
 					if (!results[idx]?.success) {
 						return
 					}
-					completedCount++
 					const remote = latestRemoteEntities.find(
 						(entity) => entity.path === task.localPath,
 					)
@@ -267,8 +267,13 @@ export class NutstoreSync {
 						if (!file) {
 							return
 						}
+
 						const buffer = await this.options.vault.readBinary(file)
-						if (await isBinaryFile(buffer)) {
+						const isText = ['.md', '.txt'].some((ext) =>
+							file.path.endsWith(ext),
+						)
+						const isBinary = isText ? false : await isBinaryFile(buffer)
+						if (isBinary) {
 							baseKey = undefined
 						} else {
 							const { key } = await blobStore.store(buffer)

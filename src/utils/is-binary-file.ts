@@ -105,19 +105,15 @@ function isBinaryProto(fileBuffer: Buffer, totalBytes: number): boolean {
 }
 
 export async function isBinaryFile(
-	file: Buffer | ArrayBuffer,
+	file: ArrayBuffer | Buffer,
 	size?: number,
 ): Promise<boolean> {
-	let fileBuffer: Buffer
 	if (file instanceof ArrayBuffer) {
-		fileBuffer = Buffer.from(file)
-	} else {
-		fileBuffer = file
+		const buf = Buffer.from(file)
+		return isBinaryCheck(buf, size ?? file.byteLength)
 	}
-	if (size === undefined) {
-		size = fileBuffer.length
-	}
-	return isBinaryCheck(fileBuffer, size)
+
+	return isBinaryCheck(file, size ?? file.length)
 }
 
 function isBinaryCheck(fileBuffer: Buffer, bytesRead: number): boolean {
@@ -256,8 +252,4 @@ function isBinaryCheck(fileBuffer: Buffer, bytesRead: number): boolean {
 	}
 
 	return false
-}
-
-function isString(x: any): x is string {
-	return typeof x === 'string'
 }
