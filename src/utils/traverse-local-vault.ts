@@ -1,5 +1,5 @@
 import { isNil, partial } from 'lodash-es'
-import { normalizePath, Vault } from 'obsidian'
+import { normalizePath, TFolder, Vault } from 'obsidian'
 import { isNotNil } from 'ramda'
 import { StatModel } from '~/model/stat.model'
 import GlobMatch from './glob-match'
@@ -26,7 +26,16 @@ export async function traverseLocalVault(vault: Vault, from: string) {
 		if (isNil(from)) {
 			continue
 		}
-		let { files, folders } = await vault.adapter.list(from)
+		const folder = vault.getAbstractFileByPath(normalizePath(from))
+		if (!folder || !(folder instanceof TFolder)) {
+			continue
+		}
+		const files = folder.children
+			.filter((f) => !(f instanceof TFolder))
+			.map((f) => f.path)
+		let folders = folder.children
+			.filter((f) => f instanceof TFolder)
+			.map((f) => f.path)
 		folders = folders.filter(folderFilter)
 		q.push(...folders)
 		const contents = await Promise.all(

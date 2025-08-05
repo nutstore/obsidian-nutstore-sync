@@ -50,7 +50,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 			'local Stats',
 			localStats.map((d) => ({
 				path: d.path,
-				size: d.size,
+				size: d.isDir ? undefined : d.size,
 				isDir: d.isDir,
 			})),
 		)
@@ -58,7 +58,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 			'remote Stats',
 			remoteStats.map((d) => ({
 				path: d.path,
-				size: d.size,
+				size: d.isDir ? undefined : d.size,
 				isDir: d.isDir,
 			})),
 		)
@@ -375,7 +375,10 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 					continue
 				}
 			} else if (record) {
-				const remoteChanged = !moment(remote.mtime).isSame(record.remote.mtime)
+				const remoteChanged =
+					remote.mtime && record.remote.mtime
+						? !moment(remote.mtime).isSame(record.remote.mtime)
+						: false
 				if (remoteChanged) {
 					logger.debug({
 						reason: 'remote folder changed',
@@ -415,7 +418,12 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						continue
 					}
 					const subRecord = records.get(sub.path)
-					if (!subRecord || !moment(sub.mtime).isSame(subRecord.remote.mtime)) {
+					if (
+						!subRecord ||
+						(sub.mtime &&
+							subRecord.remote.mtime &&
+							!moment(sub.mtime).isSame(subRecord.remote.mtime))
+					) {
 						removable = false
 						break
 					}
@@ -522,7 +530,9 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						const subRecord = records.get(sub.path)
 						if (
 							!subRecord ||
-							!moment(sub.mtime).isSame(subRecord.local.mtime)
+							(sub.mtime &&
+								subRecord.local.mtime &&
+								!moment(sub.mtime).isSame(subRecord.local.mtime))
 						) {
 							removable = false
 							break

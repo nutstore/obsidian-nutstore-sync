@@ -51,12 +51,7 @@ export class SyncRibbonManager {
 	}
 
 	public unload() {
-		if (this.startRibbonEl) {
-			this.startRibbonEl.remove()
-		}
-
-		if (this.stopRibbonEl) {
-			this.stopRibbonEl.remove()
-		}
+		this.startRibbonEl.remove()
+		this.stopRibbonEl.remove()
 	}
 }

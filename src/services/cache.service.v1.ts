@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer'
 import { Notice } from 'obsidian'
 import { deflate, inflate } from 'pako'
 import { join } from 'path'
@@ -44,7 +45,7 @@ export default class CacheServiceV1 {
 			await webdav.createDirectory(this.remoteCacheDir, { recursive: true })
 
 			const filePath = join(this.remoteCacheDir, filename)
-			await webdav.putFileContents(filePath, deflatedStorage.buffer, {
+			await webdav.putFileContents(filePath, Buffer.from(deflatedStorage), {
 				overwrite: true,
 			})
 
