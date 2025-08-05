@@ -15,7 +15,7 @@
 	"devDependencies": {
 		"@deanc/esbuild-plugin-postcss": "^1.0.2",
 		"@electron/remote": "^2.1.2",
-		"@nutstore/sso-js": "^0.0.3",
+		"@nutstore/sso-js": "^0.0.8",
 		"@types/diff-match-patch": "^1.0.36",
 		"@types/glob-to-regexp": "^0.4.4",
 		"@types/lodash-es": "^4.17.12",
