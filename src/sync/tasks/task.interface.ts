@@ -1,7 +1,7 @@
 import { normalizePath, Vault } from 'obsidian'
 import { isAbsolute, join } from 'path'
 import { WebDAVClient } from 'webdav'
-import { SyncRecord } from '~/storage/helper'
+import { SyncRecord } from '~/storage/sync-record'
 import getTaskName from '~/utils/get-task-name'
 import { MaybePromise } from '~/utils/types'
 
