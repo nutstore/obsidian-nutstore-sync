@@ -1,6 +1,6 @@
 import { Vault } from 'obsidian'
 import { useSettings } from '~/settings'
-import { SyncRecord } from '~/storage/helper'
+import { SyncRecord } from '~/storage/sync-record'
 import GlobMatch, {
 	extendRules,
 	isVoidGlobMatchOptions,

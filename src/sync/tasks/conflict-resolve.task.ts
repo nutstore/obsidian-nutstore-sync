@@ -18,8 +18,8 @@ import {
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export enum ConflictStrategy {
-	IntelligentMerge,
-	LatestTimeStamp,
+	DiffMatchPatch = 'diff-match-patch',
+	LatestTimeStamp = 'latest-timestamp',
 }
 
 export default class ConflictResolveTask extends BaseTask {
@@ -53,12 +53,16 @@ export default class ConflictResolveTask extends BaseTask {
 				throw new Error('Remote path is a directory: ' + this.remotePath)
 			}
 
+			if (local.isDir) {
+				throw new Error('Local path is a directory: ' + this.localPath)
+			}
+
 			if (local.size === 0 && remote.size === 0) {
 				return { success: true }
 			}
 
 			switch (this.options.strategy) {
-				case ConflictStrategy.IntelligentMerge:
+				case ConflictStrategy.DiffMatchPatch:
 					return await this.execIntelligentMerge()
 				case ConflictStrategy.LatestTimeStamp:
 					return await this.execLatestTimeStamp(local, remote)
@@ -74,8 +78,10 @@ export default class ConflictResolveTask extends BaseTask {
 
 	async execLatestTimeStamp(local: StatModel, remote: StatModel) {
 		try {
-			const localMtime = local.mtime
-			const remoteMtime = remote.mtime
+			// At this point we know both local and remote are files (not directories)
+			// so mtime is guaranteed to exist
+			const localMtime = local.mtime!
+			const remoteMtime = remote.mtime!
 
 			if (remoteMtime === localMtime) {
 				return { success: true }
@@ -109,7 +115,11 @@ export default class ConflictResolveTask extends BaseTask {
 
 			switch (result.status) {
 				case LatestTimestampResolution.UseRemote:
-					await this.vault.modifyBinary(file, result.content)
+					const arrayBuffer =
+						result.content instanceof ArrayBuffer
+							? result.content
+							: new Uint8Array(result.content).buffer
+					await this.vault.modifyBinary(file, arrayBuffer)
 					break
 				case LatestTimestampResolution.UseLocal:
 					await this.webdav.putFileContents(this.remotePath, result.content, {
@@ -161,8 +171,8 @@ export default class ConflictResolveTask extends BaseTask {
 				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
 			}
 
-			const localText = await new Blob([localBuffer]).text()
-			const remoteText = await new Blob([remoteBuffer]).text()
+			const localText = await new Blob([new Uint8Array(localBuffer)]).text()
+			const remoteText = await new Blob([new Uint8Array(remoteBuffer)]).text()
 			const baseText = (await baseBlob?.text()) ?? localText
 
 			const mergeResult = await resolveByIntelligentMerge({

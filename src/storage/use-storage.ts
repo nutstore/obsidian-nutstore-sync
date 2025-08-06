@@ -6,6 +6,8 @@ export abstract class StorageInterface<T = any> {
 	abstract clear(): Promise<void>
 }
 
+export type UseStorageType<T = any> = ReturnType<typeof useStorage<T>>
+
 export default function useStorage<T = any>(instance: StorageInterface<T>) {
 	function set(key: string, value: T) {
 		return instance.setItem(key, value)

@@ -1,4 +1,4 @@
-import { dirname } from 'path'
+import { dirname } from 'path-browserify'
 import { StatModel } from '~/model/stat.model'
 import isRoot from './is-root'
 
@@ -26,7 +26,7 @@ export default function completeLossDir(
 				continue
 			}
 			const dirStat = statsMap.get(path)
-			if (!dirStat) {
+			if (!dirStat || !dirStat.isDir) {
 				continue
 			}
 			filteredFolderMap.set(path, dirStat)

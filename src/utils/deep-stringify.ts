@@ -107,8 +107,8 @@ export default function deepStringify(
 				let stringifiedValue: string | undefined
 				try {
 					// *** Access the property inside try block ***
-					// Use `any` assertion as TS doesn't know about arbitrary keys/getters
-					const currentValue = (value as any)[key]
+					// Use Record<string, unknown> assertion as TS doesn't know about arbitrary keys/getters
+					const currentValue = (value as Record<string, unknown>)[key]
 					stringifiedValue = deepStringify(currentValue, visited) // Recurse
 				} catch (error: unknown) {
 					// *** Handle getter error: stringify the error message ***

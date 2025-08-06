@@ -1,6 +1,5 @@
 import GlobToRegExp from 'glob-to-regexp'
 import { cloneDeep } from 'lodash-es'
-import { basename } from 'path'
 
 export interface GlobMatchUserOptions {
 	caseSensitive: boolean
@@ -37,6 +36,7 @@ export default class GlobMatch {
 		this.re = GlobToRegExp(this.expr, {
 			flags: generateFlags(options),
 			extended: true,
+			globstar: true,
 		})
 	}
 
@@ -44,11 +44,7 @@ export default class GlobMatch {
 		if (path === this.expr) {
 			return true
 		}
-		const name = basename(path)
-		if (name === this.expr) {
-			return true
-		}
-		if (this.re.test(path) || this.re.test(name)) {
+		if (this.re.test(path)) {
 			return true
 		}
 		return false
@@ -88,11 +84,11 @@ export function needIncludeFromGlobRules(
 export function extendRules(rules: GlobMatch[]) {
 	rules = [...rules]
 	for (const { expr, options } of rules) {
-		if (expr.endsWith('*')) {
+		if (expr.endsWith('**')) {
 			continue
 		}
 		const newRule = new GlobMatch(
-			`${expr.endsWith('/') ? expr : expr + '/'}*`,
+			`${expr.endsWith('/') ? expr : expr + '/'}**`,
 			options,
 		)
 		rules.push(newRule)

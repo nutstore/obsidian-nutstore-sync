@@ -15,9 +15,11 @@ import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
+import { syncRecordKV } from '~/storage'
 import { blobStore } from '~/storage/blob'
-import { SyncRecord } from '~/storage/helper'
+import { SyncRecord } from '~/storage/sync-record'
 import breakableSleep from '~/utils/breakable-sleep'
+import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
 import { isBinaryFile } from '~/utils/is-binary-file'
@@ -25,7 +27,7 @@ import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import NutstorePlugin from '..'
-import TwoWaySyncDecision from './decision/two-way.decision'
+import TwoWaySyncDecider from './decision/two-way.decider'
 import NoopTask from './tasks/noop.task'
 import { BaseTask, TaskError, TaskResult } from './tasks/task.interface'
 
@@ -50,8 +52,8 @@ export class NutstoreSync {
 		this.localFS = new LocalVaultFileSystem({
 			vault: this.options.vault,
 			syncRecord: new SyncRecord(
-				this.options.vault,
-				this.options.remoteBaseDir,
+				getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
+				syncRecordKV,
 			),
 		})
 		this.subscriptions.push(
@@ -68,7 +70,10 @@ export class NutstoreSync {
 			const settings = this.settings
 			const webdav = this.webdav
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
-			const syncRecord = new SyncRecord(this.vault, this.remoteBaseDir)
+			const syncRecord = new SyncRecord(
+				getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
+				syncRecordKV,
+			)
 
 			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 
@@ -100,7 +105,7 @@ export class NutstoreSync {
 				}
 			}
 
-			const tasks = await new TwoWaySyncDecision(this).decide()
+			const tasks = await new TwoWaySyncDecider(this, syncRecord).decide()
 
 			if (tasks.length === 0) {
 				emitEndSync({ showNotice, failedCount: 0 })
@@ -236,8 +241,8 @@ export class NutstoreSync {
 		}
 		const latestRemoteEntities = await this.remoteFs.walk()
 		const syncRecord = new SyncRecord(
-			this.options.vault,
-			this.options.remoteBaseDir,
+			getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
+			syncRecordKV,
 		)
 		const records = await syncRecord.getRecords()
 		const startAt = Date.now()

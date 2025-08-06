@@ -1,5 +1,5 @@
 import { Notice } from 'obsidian'
-import path from 'path'
+import path from 'path-browserify'
 import { createSignal, Show } from 'solid-js'
 import { createFileList, FileStat } from './components/FileList'
 import NewFolder from './components/NewFolder'

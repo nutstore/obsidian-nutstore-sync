@@ -1,7 +1,7 @@
 import { normalizePath, Vault } from 'obsidian'
-import { isAbsolute, join } from 'path'
+import { isAbsolute, join } from 'path-browserify'
 import { WebDAVClient } from 'webdav'
-import { SyncRecord } from '~/storage/helper'
+import { SyncRecord } from '~/storage/sync-record'
 import getTaskName from '~/utils/get-task-name'
 import { MaybePromise } from '~/utils/types'
 
@@ -11,6 +11,7 @@ export interface BaseTaskOptions {
 	remoteBaseDir: string
 	remotePath: string
 	localPath: string
+	syncRecord: SyncRecord
 }
 
 export interface TaskResult {
@@ -23,6 +24,10 @@ export abstract class BaseTask {
 
 	get vault() {
 		return this.options.vault
+	}
+
+	get syncRecord() {
+		return this.options.syncRecord
 	}
 
 	get webdav() {
@@ -41,10 +46,6 @@ export abstract class BaseTask {
 
 	get localPath() {
 		return normalizePath(this.options.localPath)
-	}
-
-	get syncRecord() {
-		return new SyncRecord(this.vault, this.options.remoteBaseDir)
 	}
 
 	abstract exec(): MaybePromise<TaskResult>

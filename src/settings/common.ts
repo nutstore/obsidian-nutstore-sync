@@ -1,6 +1,7 @@
 import { Setting } from 'obsidian'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
+import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { SyncMode } from './index'
 import BaseSettings from './settings.base'
 
@@ -57,15 +58,15 @@ export default class CommonSettings extends BaseSettings {
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption(
-						'diff-match-patch',
+						ConflictStrategy.DiffMatchPatch,
 						i18n.t('settings.conflictStrategy.diffMatchPatch'),
 					)
 					.addOption(
-						'latest-timestamp',
+						ConflictStrategy.LatestTimeStamp,
 						i18n.t('settings.conflictStrategy.latestTimestamp'),
 					)
 					.setValue(this.plugin.settings.conflictStrategy)
-					.onChange(async (value: 'diff-match-patch' | 'latest-timestamp') => {
+					.onChange(async (value: ConflictStrategy) => {
 						this.plugin.settings.conflictStrategy = value
 						await this.plugin.saveSettings()
 					}),
@@ -147,5 +148,45 @@ export default class CommonSettings extends BaseSettings {
 						await this.plugin.saveSettings()
 					}),
 			)
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.autoSyncInterval.name'))
+			.setDesc(i18n.t('settings.autoSyncInterval.desc'))
+			.addText((text) => {
+				text
+					.setPlaceholder(i18n.t('settings.autoSyncInterval.placeholder'))
+					.setValue(
+						Math.round(
+							this.plugin.settings.autoSyncIntervalSeconds / 60,
+						).toString(),
+					)
+					.onChange(async (value) => {
+						const numValue = parseFloat(value)
+						if (!isNaN(numValue) && numValue > 0) {
+							this.plugin.settings.autoSyncIntervalSeconds = numValue * 60
+							await this.plugin.saveSettings()
+							await this.plugin.autoSyncService.updateInterval()
+						}
+					})
+				text.inputEl.addEventListener('blur', async () => {
+					const value = text.getValue()
+					const numValue = parseFloat(value)
+					if (Number.isNaN(numValue) || numValue <= 0) {
+						text.setValue('1')
+						this.plugin.settings.autoSyncIntervalSeconds = 60
+						await this.plugin.saveSettings()
+						await this.plugin.autoSyncService.updateInterval()
+					} else {
+						text.setValue(Math.round(numValue).toString())
+						this.plugin.settings.autoSyncIntervalSeconds =
+							Math.round(numValue) * 60
+						await this.plugin.saveSettings()
+						await this.plugin.autoSyncService.updateInterval()
+					}
+				})
+				text.inputEl.type = 'number'
+				text.inputEl.min = '1'
+				text.inputEl.step = '1'
+			})
 	}
 }

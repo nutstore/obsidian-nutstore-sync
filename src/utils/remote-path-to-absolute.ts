@@ -1,4 +1,4 @@
-import { isAbsolute, join } from 'path'
+import { isAbsolute, join } from 'path-browserify'
 
 export default function remotePathToAbsolute(
 	remoteBaseDir: string,

@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import { isNil, partial } from 'lodash-es'
-import { basename, join } from 'path'
+import { basename, join } from 'path-browserify'
 import { FileStat } from 'webdav'
 import { NS_DAV_ENDPOINT } from '~/consts'
 import { is503Error } from '~/utils/is-503-error'

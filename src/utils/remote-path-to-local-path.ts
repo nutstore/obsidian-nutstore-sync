@@ -1,4 +1,4 @@
-import { isAbsolute, normalize } from 'path'
+import { isAbsolute, normalize } from 'path-browserify'
 
 export function remotePathToLocalPath(
 	remoteBaseDir: string,

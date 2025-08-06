@@ -7,11 +7,11 @@ import './webdav-patch'
 
 import { toBase64 } from 'js-base64'
 import { normalizePath, Notice, Plugin } from 'obsidian'
-import { join } from 'path'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
+import AutoSyncService from './services/auto-sync.service'
 import CommandService from './services/command.service'
 import EventsService from './services/events.service'
 import I18nService from './services/i18n.service'
@@ -19,6 +19,7 @@ import LoggerService from './services/logger.service'
 import { ProgressService } from './services/progress.service'
 import RealtimeSyncService from './services/realtime-sync.service'
 import { StatusService } from './services/status.service'
+import SyncExecutorService from './services/sync-executor.service'
 import { WebDAVService } from './services/webdav.service'
 import {
 	NutstoreSettings,
@@ -26,6 +27,7 @@ import {
 	setPluginInstance,
 	SyncMode,
 } from './settings'
+import { ConflictStrategy } from './sync/tasks/conflict-resolve.task'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { GlobMatchOptions } from './utils/glob-match'
 import { stdRemotePath } from './utils/std-remote-path'
@@ -42,7 +44,12 @@ export default class NutstorePlugin extends Plugin {
 	public ribbonManager = new SyncRibbonManager(this)
 	public statusService = new StatusService(this)
 	public webDAVService = new WebDAVService(this)
-	public realtimeSyncService = new RealtimeSyncService(this)
+	public syncExecutorService = new SyncExecutorService(this)
+	public realtimeSyncService = new RealtimeSyncService(
+		this,
+		this.syncExecutorService,
+	)
+	public autoSyncService = new AutoSyncService(this, this.syncExecutorService)
 
 	async onload() {
 		await this.loadSettings()
@@ -59,11 +66,14 @@ export default class NutstorePlugin extends Plugin {
 			})
 		})
 		setPluginInstance(this)
+
+		await this.autoSyncService.start()
 	}
 
 	async onunload() {
 		setPluginInstance(null)
 		emitCancelSync()
+		this.autoSyncService.unload()
 		this.ribbonManager.unload()
 		this.progressService.unload()
 		this.eventsService.unload()
@@ -84,27 +94,26 @@ export default class NutstorePlugin extends Plugin {
 			remoteDir: '',
 			remoteCacheDir: '',
 			useGitStyle: false,
-			conflictStrategy: 'diff-match-patch',
+			conflictStrategy: ConflictStrategy.DiffMatchPatch,
 			oauthResponseText: '',
 			loginMode: 'sso',
 			confirmBeforeSync: true,
 			syncMode: SyncMode.LOOSE,
 			filterRules: {
 				exclusionRules: [
-					'.git',
-					'.DS_Store',
-					'.trash',
-					`${this.app.vault.configDir}`,
+					'**/.git',
+					'**/.DS_Store',
+					'**/.trash',
+					this.app.vault.configDir,
 				].map(createGlobMathOptions),
-				inclusionRules: [
-					normalizePath(join(this.app.vault.configDir, 'bookmarks.json')),
-				].map(createGlobMathOptions),
+				inclusionRules: [],
 			},
 			skipLargeFiles: {
 				maxSize: '30 MB',
 			},
 			realtimeSync: false,
 			startupSyncDelaySeconds: 0,
+			autoSyncIntervalSeconds: 300,
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
