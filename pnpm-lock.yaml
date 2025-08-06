@@ -868,7 +868,7 @@ packages:
     engines: {node: '>= 8'}
 
   '@nutstore/sso-js@0.0.8':
-    resolution: {integrity: sha512-jGs2OqHvYM0ChbJRyQItlN+WSgav3N4kaTntctOw9Dh/ok9+2PFuejy0nbwaDQgDlnt9jvjm6JeyGwzrgzUG4Q==, tarball: https://npm.pkg.github.com/download/@nutstore/sso-js/0.0.8/2230384dc1b22f51a24ce4dc25176b8cb6a53ded}
+    resolution: {integrity: sha512-mby3hzfVuE0Ch/nbe/PsvoR5h4bHHHSHTOycDDOLGrbFqO1mTn7L5LcvaPHskjBHxCeN2Y3PotOZOJiy5eRZmQ==}
 
   '@parcel/watcher-android-arm64@2.5.1':
     resolution: {integrity: sha512-KF8+j9nNbUN8vzOFDpRMsaKBHZ/mcjEjMToVMJOhTozkDonQFFrRcfdLWn6yWKCmJKmdVxSgHiYvTCef4/qcBA==}
