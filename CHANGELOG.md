@@ -5,6 +5,13 @@
 ## [Unreleased] - 2025-08-06
 
 * **改进:**  实现了可配置的自动同步间隔。
+* **修复:**  删除了孤立的记录。
+* **内部优化:**  重构了同步决策架构，并添加了全面的 glob 匹配测试；对 `SyncRecord` 类进行了解耦和重构，提升了代码可维护性；改进了 `StatModel` 的类型安全性和修复了相关的类型问题；使用了 `path-browserify` 提升兼容性。
+* **Improvements:** Implemented configurable auto-sync interval.
+* **Fixes:** Removed orphaned record.
+* **Internal Improvements:** Refactored sync decision architecture and added comprehensive glob matching tests; Decoupled and refactored the `SyncRecord` class for improved maintainability; Improved `StatModel` type safety and fixed related type issues; Used `path-browserify` for better compatibility.
+
+* **改进:**  实现了可配置的自动同步间隔。
 * **修复:** 删除了孤立记录。
 * **内部改进:**  改进了同步决策架构并添加了全面的 glob 匹配测试；重构了 `SyncRecord` 类，提高了代码可维护性和可读性；提升了 `StatModel` 的类型安全性并修复了相关类型问题。
 * **Enhancements:** Implemented configurable auto-sync interval.
