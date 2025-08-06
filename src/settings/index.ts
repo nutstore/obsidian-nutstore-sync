@@ -36,6 +36,7 @@ export interface NutstoreSettings {
 	}
 	realtimeSync: boolean
 	startupSyncDelaySeconds: number
+	autoSyncIntervalSeconds: number
 }
 
 let pluginInstance: NutstorePlugin | null = null

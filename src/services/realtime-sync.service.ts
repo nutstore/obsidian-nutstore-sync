@@ -1,12 +1,8 @@
 import { debounce } from 'lodash-es'
 import { useSettings } from '~/settings'
-import { syncRecordKV } from '~/storage'
-import { SyncRecord } from '~/storage/sync-record'
-import { NutstoreSync } from '~/sync'
-import TwoWaySyncDecider from '~/sync/decision/two-way.decider'
-import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
 import waitUntil from '~/utils/wait-until'
 import NutstorePlugin from '..'
+import type SyncExecutorService from './sync-executor.service'
 
 export default class RealtimeSyncService {
 	async realtimeSync() {
@@ -14,24 +10,7 @@ export default class RealtimeSyncService {
 		if (!settings.realtimeSync) {
 			return
 		}
-		const sync = new NutstoreSync(this.plugin, {
-			vault: this.vault,
-			token: await this.plugin.getToken(),
-			remoteBaseDir: this.plugin.remoteBaseDir,
-			webdav: await this.plugin.webDAVService.createWebDAVClient(),
-		})
-		const syncRecord = new SyncRecord(
-			getSyncRecordNamespace(this.vault.getName(), this.plugin.remoteBaseDir),
-			syncRecordKV,
-		)
-		const decider = new TwoWaySyncDecider(sync, syncRecord)
-		const decided = await decider.decide()
-		if (decided.length === 0) {
-			return
-		}
-		await sync.start({
-			showNotice: false,
-		})
+		await this.syncExecutor.executeSync({ showNotice: false })
 	}
 
 	submitSyncRequest = new (class {
@@ -55,7 +34,10 @@ export default class RealtimeSyncService {
 		submit = debounce(this.submitDirectly, 8000)
 	})(this)
 
-	constructor(private plugin: NutstorePlugin) {
+	constructor(
+		private plugin: NutstorePlugin,
+		private syncExecutor: SyncExecutorService,
+	) {
 		this.plugin.registerEvent(
 			this.vault.on('create', async () => {
 				await this.submitSyncRequest.submit()

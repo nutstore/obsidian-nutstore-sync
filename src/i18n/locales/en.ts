@@ -74,6 +74,11 @@ export default {
 			desc: 'Set the number of seconds after startup to automatically perform a sync. Set to 0 to disable auto-sync on startup.',
 			placeholder: 'Enter seconds (e.g., 5, 0 to disable)',
 		},
+		autoSyncInterval: {
+			name: 'Auto-sync interval',
+			desc: 'Set the interval for automatic background synchronization (in minutes)',
+			placeholder: 'Enter minutes (e.g., 5)',
+		},
 		sections: {
 			account: 'Account',
 			common: 'General',

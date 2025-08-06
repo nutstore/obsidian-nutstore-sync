@@ -11,6 +11,7 @@ import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
+import AutoSyncService from './services/auto-sync.service'
 import CommandService from './services/command.service'
 import EventsService from './services/events.service'
 import I18nService from './services/i18n.service'
@@ -18,6 +19,7 @@ import LoggerService from './services/logger.service'
 import { ProgressService } from './services/progress.service'
 import RealtimeSyncService from './services/realtime-sync.service'
 import { StatusService } from './services/status.service'
+import SyncExecutorService from './services/sync-executor.service'
 import { WebDAVService } from './services/webdav.service'
 import {
 	NutstoreSettings,
@@ -42,7 +44,12 @@ export default class NutstorePlugin extends Plugin {
 	public ribbonManager = new SyncRibbonManager(this)
 	public statusService = new StatusService(this)
 	public webDAVService = new WebDAVService(this)
-	public realtimeSyncService = new RealtimeSyncService(this)
+	public syncExecutorService = new SyncExecutorService(this)
+	public realtimeSyncService = new RealtimeSyncService(
+		this,
+		this.syncExecutorService,
+	)
+	public autoSyncService = new AutoSyncService(this, this.syncExecutorService)
 
 	async onload() {
 		await this.loadSettings()
@@ -59,11 +66,14 @@ export default class NutstorePlugin extends Plugin {
 			})
 		})
 		setPluginInstance(this)
+
+		await this.autoSyncService.start()
 	}
 
 	async onunload() {
 		setPluginInstance(null)
 		emitCancelSync()
+		this.autoSyncService.unload()
 		this.ribbonManager.unload()
 		this.progressService.unload()
 		this.eventsService.unload()
@@ -103,6 +113,7 @@ export default class NutstorePlugin extends Plugin {
 			},
 			realtimeSync: false,
 			startupSyncDelaySeconds: 0,
+			autoSyncIntervalSeconds: 300,
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
