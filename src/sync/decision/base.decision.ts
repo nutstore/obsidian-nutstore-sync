@@ -1,11 +1,19 @@
+import { SyncRecord } from '~/storage/sync-record'
 import { MaybePromise } from '~/utils/types'
 import { NutstoreSync } from '..'
 import { BaseTask } from '../tasks/task.interface'
 
 export default abstract class BaseSyncDecision {
-	constructor(protected sync: NutstoreSync) {}
+	constructor(
+		protected sync: NutstoreSync,
+		protected syncRecordStorage: SyncRecord,
+	) {}
 
 	abstract decide(): MaybePromise<BaseTask[]>
+
+	protected getSyncRecordStorage() {
+		return this.syncRecordStorage
+	}
 
 	get webdav() {
 		return this.sync.webdav

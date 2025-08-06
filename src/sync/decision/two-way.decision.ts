@@ -4,7 +4,6 @@ import { isEqual } from 'ohash'
 import i18n from '~/i18n'
 import { SyncMode } from '~/settings'
 import { blobStore } from '~/storage/blob'
-import { SyncRecord } from '~/storage/sync-record'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
@@ -21,6 +20,7 @@ import PullTask from '../tasks/pull.task'
 import PushTask from '../tasks/push.task'
 import RemoveLocalTask from '../tasks/remove-local.task'
 import RemoveRemoteTask from '../tasks/remove-remote.task'
+import CleanRecordTask from '../tasks/clean-record.task'
 import { BaseTask } from '../tasks/task.interface'
 import BaseSyncDecision from './base.decision'
 
@@ -34,9 +34,9 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 			maxFileSize = bytesParse(maxFileSizeStr) ?? Infinity
 		}
 
-		const syncRecord = new SyncRecord(this.vault, this.remoteBaseDir)
+		const syncRecordStorage = this.getSyncRecordStorage()
 		const [records, localStats, remoteStats] = await Promise.all([
-			syncRecord.getRecords(),
+			syncRecordStorage.getRecords(),
 			this.sync.localFS.walk(),
 			this.sync.remoteFs.walk(),
 		])
@@ -347,6 +347,32 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						continue
 					}
 				}
+			}
+		}
+
+		// * clean orphaned records (both local and remote deleted)
+		for (const [recordPath, record] of records) {
+			const local = localStatsMap.get(recordPath)
+			const remote = remoteStatsMap.get(recordPath)
+			
+			// If both local and remote don't exist, but record exists, clean the record
+			if (!local && !remote) {
+				logger.debug({
+					reason: 'cleaning orphaned sync record (both local and remote deleted)',
+					remotePath: remotePathToAbsolute(this.remoteBaseDir, recordPath),
+					localPath: recordPath,
+					conditions: {
+						localExists: !!local,
+						remoteExists: !!remote,
+						recordExists: !!record,
+					},
+				})
+				
+				tasks.push(new CleanRecordTask({
+					...taskOptions,
+					remotePath: recordPath,
+					localPath: recordPath,
+				}))
 			}
 		}
 

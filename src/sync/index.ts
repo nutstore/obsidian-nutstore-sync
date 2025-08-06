@@ -100,7 +100,7 @@ export class NutstoreSync {
 				}
 			}
 
-			const tasks = await new TwoWaySyncDecision(this).decide()
+			const tasks = await new TwoWaySyncDecision(this, syncRecord).decide()
 
 			if (tasks.length === 0) {
 				emitEndSync({ showNotice, failedCount: 0 })
