@@ -7,7 +7,6 @@ import './webdav-patch'
 
 import { toBase64 } from 'js-base64'
 import { normalizePath, Notice, Plugin } from 'obsidian'
-import { join } from 'path'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import { emitSsoReceive } from './events/sso-receive'
@@ -26,6 +25,7 @@ import {
 	setPluginInstance,
 	SyncMode,
 } from './settings'
+import { ConflictStrategy } from './sync/tasks/conflict-resolve.task'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { GlobMatchOptions } from './utils/glob-match'
 import { stdRemotePath } from './utils/std-remote-path'
@@ -84,21 +84,19 @@ export default class NutstorePlugin extends Plugin {
 			remoteDir: '',
 			remoteCacheDir: '',
 			useGitStyle: false,
-			conflictStrategy: 'diff-match-patch',
+			conflictStrategy: ConflictStrategy.DiffMatchPatch,
 			oauthResponseText: '',
 			loginMode: 'sso',
 			confirmBeforeSync: true,
 			syncMode: SyncMode.LOOSE,
 			filterRules: {
 				exclusionRules: [
-					'.git',
-					'.DS_Store',
-					'.trash',
-					`${this.app.vault.configDir}`,
+					'**/.git',
+					'**/.DS_Store',
+					'**/.trash',
+					this.app.vault.configDir,
 				].map(createGlobMathOptions),
-				inclusionRules: [
-					normalizePath(join(this.app.vault.configDir, 'bookmarks.json')),
-				].map(createGlobMathOptions),
+				inclusionRules: [],
 			},
 			skipLargeFiles: {
 				maxSize: '30 MB',

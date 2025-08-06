@@ -27,7 +27,7 @@ import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import NutstorePlugin from '..'
-import TwoWaySyncDecision from './decision/two-way.decision'
+import TwoWaySyncDecider from './decision/two-way.decider'
 import NoopTask from './tasks/noop.task'
 import { BaseTask, TaskError, TaskResult } from './tasks/task.interface'
 
@@ -105,7 +105,7 @@ export class NutstoreSync {
 				}
 			}
 
-			const tasks = await new TwoWaySyncDecision(this, syncRecord).decide()
+			const tasks = await new TwoWaySyncDecider(this, syncRecord).decide()
 
 			if (tasks.length === 0) {
 				emitEndSync({ showNotice, failedCount: 0 })

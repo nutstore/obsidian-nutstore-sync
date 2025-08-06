@@ -1,6 +1,7 @@
 import { Setting } from 'obsidian'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
+import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { SyncMode } from './index'
 import BaseSettings from './settings.base'
 
@@ -57,15 +58,15 @@ export default class CommonSettings extends BaseSettings {
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption(
-						'diff-match-patch',
+						ConflictStrategy.DiffMatchPatch,
 						i18n.t('settings.conflictStrategy.diffMatchPatch'),
 					)
 					.addOption(
-						'latest-timestamp',
+						ConflictStrategy.LatestTimeStamp,
 						i18n.t('settings.conflictStrategy.latestTimestamp'),
 					)
 					.setValue(this.plugin.settings.conflictStrategy)
-					.onChange(async (value: 'diff-match-patch' | 'latest-timestamp') => {
+					.onChange(async (value: ConflictStrategy) => {
 						this.plugin.settings.conflictStrategy = value
 						await this.plugin.saveSettings()
 					}),

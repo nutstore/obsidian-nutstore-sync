@@ -3,7 +3,7 @@ import { useSettings } from '~/settings'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import { NutstoreSync } from '~/sync'
-import TwoWaySyncDecision from '~/sync/decision/two-way.decision'
+import TwoWaySyncDecider from '~/sync/decision/two-way.decider'
 import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
 import waitUntil from '~/utils/wait-until'
 import NutstorePlugin from '..'
@@ -24,7 +24,7 @@ export default class RealtimeSyncService {
 			getSyncRecordNamespace(this.vault.getName(), this.plugin.remoteBaseDir),
 			syncRecordKV,
 		)
-		const decider = new TwoWaySyncDecision(sync, syncRecord)
+		const decider = new TwoWaySyncDecider(sync, syncRecord)
 		const decided = await decider.decide()
 		if (decided.length === 0) {
 			return

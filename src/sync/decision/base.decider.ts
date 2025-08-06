@@ -3,7 +3,7 @@ import { MaybePromise } from '~/utils/types'
 import { NutstoreSync } from '..'
 import { BaseTask } from '../tasks/task.interface'
 
-export default abstract class BaseSyncDecision {
+export default abstract class BaseSyncDecider {
 	constructor(
 		protected sync: NutstoreSync,
 		protected syncRecordStorage: SyncRecord,

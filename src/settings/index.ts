@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting } from 'obsidian'
 import { onSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'
 import type NutstorePlugin from '~/index'
+import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { GlobMatchOptions } from '~/utils/glob-match'
 import waitUntil from '~/utils/wait-until'
 import AccountSettings from './account'
@@ -21,7 +22,7 @@ export interface NutstoreSettings {
 	remoteDir: string
 	remoteCacheDir?: string
 	useGitStyle: boolean
-	conflictStrategy: 'diff-match-patch' | 'latest-timestamp'
+	conflictStrategy: ConflictStrategy
 	oauthResponseText: string
 	loginMode: 'manual' | 'sso'
 	confirmBeforeSync: boolean

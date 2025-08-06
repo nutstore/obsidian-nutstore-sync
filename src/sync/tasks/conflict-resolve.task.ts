@@ -18,8 +18,8 @@ import {
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export enum ConflictStrategy {
-	IntelligentMerge,
-	LatestTimeStamp,
+	DiffMatchPatch = 'diff-match-patch',
+	LatestTimeStamp = 'latest-timestamp',
 }
 
 export default class ConflictResolveTask extends BaseTask {
@@ -62,7 +62,7 @@ export default class ConflictResolveTask extends BaseTask {
 			}
 
 			switch (this.options.strategy) {
-				case ConflictStrategy.IntelligentMerge:
+				case ConflictStrategy.DiffMatchPatch:
 					return await this.execIntelligentMerge()
 				case ConflictStrategy.LatestTimeStamp:
 					return await this.execLatestTimeStamp(local, remote)

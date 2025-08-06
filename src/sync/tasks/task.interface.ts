@@ -26,6 +26,10 @@ export abstract class BaseTask {
 		return this.options.vault
 	}
 
+	get syncRecord() {
+		return this.options.syncRecord
+	}
+
 	get webdav() {
 		return this.options.webdav
 	}
