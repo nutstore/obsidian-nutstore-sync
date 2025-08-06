@@ -1,4 +1,4 @@
-import { normalize } from 'path'
+import { normalize } from 'path-browserify'
 
 export function getRootFolderName(path: string) {
 	path = normalize(path)

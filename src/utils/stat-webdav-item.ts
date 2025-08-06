@@ -1,4 +1,4 @@
-import { isAbsolute } from 'path'
+import { isAbsolute } from 'path-browserify'
 import { FileStat, WebDAVClient } from 'webdav'
 import { fileStatToStatModel } from './file-stat-to-stat-model'
 

@@ -1,4 +1,4 @@
-import { dirname } from 'path'
+import { dirname } from 'path-browserify'
 import { StatModel } from '~/model/stat.model'
 import isRoot from './is-root'
 

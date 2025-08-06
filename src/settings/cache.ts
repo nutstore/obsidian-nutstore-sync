@@ -1,5 +1,5 @@
 import { Notice, Setting } from 'obsidian'
-import { join } from 'path'
+import { join } from 'path-browserify'
 import CacheClearModal from '~/components/CacheClearModal'
 import CacheRestoreModal from '~/components/CacheRestoreModal'
 import CacheSaveModal from '~/components/CacheSaveModal'

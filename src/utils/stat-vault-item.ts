@@ -1,5 +1,5 @@
 import { normalizePath, TFile, TFolder, Vault } from 'obsidian'
-import { basename } from 'path'
+import { basename } from 'path-browserify'
 import { StatModel } from '~/model/stat.model'
 
 export async function statVaultItem(

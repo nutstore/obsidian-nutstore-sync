@@ -1,7 +1,7 @@
 import { decode as decodeHtmlEntity } from 'html-entities'
 import { isArray } from 'lodash-es'
 import { Vault } from 'obsidian'
-import { basename, isAbsolute } from 'path'
+import { basename, isAbsolute } from 'path-browserify'
 import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'

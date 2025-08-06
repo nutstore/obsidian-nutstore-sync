@@ -1,7 +1,7 @@
 import { Buffer } from 'buffer'
 import { Notice } from 'obsidian'
 import { deflate, inflate } from 'pako'
-import { join } from 'path'
+import { join } from 'path-browserify'
 import superjson from 'superjson'
 import { BufferLike } from 'webdav'
 import { getDirectoryContents } from '~/api/webdav'

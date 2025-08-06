@@ -1,5 +1,5 @@
 import { Plugin } from 'obsidian'
-import { join } from 'path'
+import { join } from 'path-browserify'
 import { isNil } from 'ramda'
 import useStorage, { StorageInterface } from './use-storage'
 

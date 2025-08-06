@@ -32,6 +32,9 @@ importers:
       '@types/pako':
         specifier: ^2.0.3
         version: 2.0.3
+      '@types/path-browserify':
+        specifier: ^1.0.3
+        version: 1.0.3
       '@types/ramda':
         specifier: ^0.30.2
         version: 0.30.2
@@ -1248,6 +1251,9 @@ packages:
 
   '@types/pako@2.0.3':
     resolution: {integrity: sha512-bq0hMV9opAcrmE0Byyo0fY3Ew4tgOevJmQ9grUhpXQhYfyLJ1Kqg3P33JT5fdbT2AjeAjR51zqqVjAL/HMkx7Q==}
+
+  '@types/path-browserify@1.0.3':
+    resolution: {integrity: sha512-ZmHivEbNCBtAfcrFeBCiTjdIc2dey0l7oCGNGpSuRTy8jP6UVND7oUowlvDujBy8r2Hoa8bfFUOCiPWfmtkfxw==}
 
   '@types/ramda@0.30.2':
     resolution: {integrity: sha512-PyzHvjCalm2BRYjAU6nIB3TprYwMNOUY/7P/N8bSzp9W/yM2YrtGtAnnVtaCNSeOZ8DzKyFDvaqQs7LnWwwmBA==}
@@ -4491,6 +4497,8 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/pako@2.0.3': {}
+
+  '@types/path-browserify@1.0.3': {}
 
   '@types/ramda@0.30.2':
     dependencies:

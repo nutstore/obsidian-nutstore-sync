@@ -1,4 +1,4 @@
-import { dirname } from 'path'
+import { dirname } from 'path-browserify'
 import { BufferLike } from 'webdav'
 import logger from '~/utils/logger'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
