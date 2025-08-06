@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-08-06
+## [0.8.4] - 2025-08-06
 
 * **改进:**  实现了可配置的自动同步间隔。
 * **修复:**  删除了孤立的记录。
