@@ -11,6 +11,7 @@ export interface BaseTaskOptions {
 	remoteBaseDir: string
 	remotePath: string
 	localPath: string
+	syncRecord: SyncRecord
 }
 
 export interface TaskResult {
@@ -41,10 +42,6 @@ export abstract class BaseTask {
 
 	get localPath() {
 		return normalizePath(this.options.localPath)
-	}
-
-	get syncRecord() {
-		return new SyncRecord(this.vault, this.options.remoteBaseDir)
 	}
 
 	abstract exec(): MaybePromise<TaskResult>

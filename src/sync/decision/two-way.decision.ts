@@ -1,14 +1,15 @@
 import { parse as bytesParse } from 'bytes-iec'
-import { moment } from 'obsidian'
 import { isEqual } from 'ohash'
 import i18n from '~/i18n'
 import { SyncMode } from '~/settings'
 import { blobStore } from '~/storage/blob'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
+import { isSameTime } from '~/utils/is-same-time'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import CleanRecordTask from '../tasks/clean-record.task'
 import ConflictResolveTask, {
 	ConflictStrategy,
 } from '../tasks/conflict-resolve.task'
@@ -20,7 +21,6 @@ import PullTask from '../tasks/pull.task'
 import PushTask from '../tasks/push.task'
 import RemoveLocalTask from '../tasks/remove-local.task'
 import RemoveRemoteTask from '../tasks/remove-remote.task'
-import CleanRecordTask from '../tasks/clean-record.task'
 import { BaseTask } from '../tasks/task.interface'
 import BaseSyncDecision from './base.decision'
 
@@ -67,6 +67,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 			webdav: this.webdav,
 			vault: this.vault,
 			remoteBaseDir: this.remoteBaseDir,
+			syncRecord: syncRecordStorage,
 		}
 
 		const tasks: BaseTask[] = []
@@ -91,11 +92,9 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 			}
 			if (record) {
 				if (remote) {
-					const remoteChanged = !moment(remote.mtime).isSame(
-						record.remote.mtime,
-					)
+					const remoteChanged = !isSameTime(remote.mtime, record.remote.mtime)
 					if (local) {
-						let localChanged = !moment(local.mtime).isSame(record.local.mtime)
+						let localChanged = !isSameTime(local.mtime, record.local.mtime)
 						if (localChanged && record.base?.key) {
 							const blob = await blobStore.get(record.base.key)
 							if (blob) {
@@ -222,7 +221,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						}
 					}
 				} else if (local) {
-					const localChanged = !moment(local.mtime).isSame(record.local.mtime)
+					const localChanged = !isSameTime(local.mtime, record.local.mtime)
 					if (localChanged) {
 						logger.debug({
 							reason: 'local file changed and remote file does not exist',
@@ -354,11 +353,12 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 		for (const [recordPath, record] of records) {
 			const local = localStatsMap.get(recordPath)
 			const remote = remoteStatsMap.get(recordPath)
-			
+
 			// If both local and remote don't exist, but record exists, clean the record
 			if (!local && !remote) {
 				logger.debug({
-					reason: 'cleaning orphaned sync record (both local and remote deleted)',
+					reason:
+						'cleaning orphaned sync record (both local and remote deleted)',
 					remotePath: remotePathToAbsolute(this.remoteBaseDir, recordPath),
 					localPath: recordPath,
 					conditions: {
@@ -367,12 +367,14 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						recordExists: !!record,
 					},
 				})
-				
-				tasks.push(new CleanRecordTask({
-					...taskOptions,
-					remotePath: recordPath,
-					localPath: recordPath,
-				}))
+
+				tasks.push(
+					new CleanRecordTask({
+						...taskOptions,
+						remotePath: recordPath,
+						localPath: recordPath,
+					}),
+				)
 			}
 		}
 
@@ -403,7 +405,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 			} else if (record) {
 				const remoteChanged =
 					remote.mtime && record.remote.mtime
-						? !moment(remote.mtime).isSame(record.remote.mtime)
+						? !isSameTime(remote.mtime, record.remote.mtime)
 						: false
 				if (remoteChanged) {
 					logger.debug({
@@ -448,7 +450,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 						!subRecord ||
 						(sub.mtime &&
 							subRecord.remote.mtime &&
-							!moment(sub.mtime).isSame(subRecord.remote.mtime))
+							!isSameTime(sub.mtime, subRecord.remote.mtime))
 					) {
 						removable = false
 						break
@@ -526,7 +528,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 				}
 			} else {
 				if (record) {
-					const localChanged = !moment(local.mtime).isSame(record.local.mtime)
+					const localChanged = !isSameTime(local.mtime, record.local.mtime)
 					if (localChanged) {
 						logger.debug({
 							reason: 'local folder changed',
@@ -558,7 +560,7 @@ export default class TwoWaySyncDecision extends BaseSyncDecision {
 							!subRecord ||
 							(sub.mtime &&
 								subRecord.local.mtime &&
-								!moment(sub.mtime).isSame(subRecord.local.mtime))
+								!isSameTime(sub.mtime, subRecord.local.mtime))
 						) {
 							removable = false
 							break

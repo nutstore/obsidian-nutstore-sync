@@ -1,8 +1,10 @@
 import { debounce } from 'lodash-es'
 import { useSettings } from '~/settings'
+import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import { NutstoreSync } from '~/sync'
 import TwoWaySyncDecision from '~/sync/decision/two-way.decision'
+import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
 import waitUntil from '~/utils/wait-until'
 import NutstorePlugin from '..'
 
@@ -18,7 +20,10 @@ export default class RealtimeSyncService {
 			remoteBaseDir: this.plugin.remoteBaseDir,
 			webdav: await this.plugin.webDAVService.createWebDAVClient(),
 		})
-		const syncRecord = new SyncRecord(this.vault, this.plugin.remoteBaseDir)
+		const syncRecord = new SyncRecord(
+			getSyncRecordNamespace(this.vault.getName(), this.plugin.remoteBaseDir),
+			syncRecordKV,
+		)
 		const decider = new TwoWaySyncDecision(sync, syncRecord)
 		const decided = await decider.decide()
 		if (decided.length === 0) {

@@ -1,47 +1,73 @@
-import { Vault } from 'obsidian'
 import { SyncRecordModel } from '~/model/sync-record.model'
-import { getDBKey } from '~/utils/get-db-key'
-import { syncRecordKV } from './kv'
+import { UseStorageType } from './use-storage'
 
 export class SyncRecord {
 	constructor(
-		public vault: Vault,
-		public remoteBaseDir: string,
+		private namespace: string,
+		private storage: UseStorageType<Map<string, SyncRecordModel>>,
 	) {}
 
-	private get key() {
-		return getDBKey(this.vault.getName(), this.remoteBaseDir)
-	}
-
-	async updateFileRecord(path: string, record: SyncRecordModel) {
-		const map = (await syncRecordKV.get(this.key)) ?? new Map()
-		map.set(path, record)
-		await syncRecordKV.set(this.key, map)
-	}
-
-	async deleteFileRecord(path: string) {
-		const map = await syncRecordKV.get(this.key)
-		if (map && map.has(path)) {
-			map.delete(path)
-			await syncRecordKV.set(this.key, map)
+	async updateFileRecord(path: string, record: SyncRecordModel): Promise<void> {
+		const map = await this.storage.get(this.namespace)
+		if (map) {
+			map.set(path, record)
+			await this.storage.set(this.namespace, map)
+		} else {
+			await this.storage.set(this.namespace, new Map([[path, record]]))
 		}
 	}
 
-	async getRecords() {
-		const map = await syncRecordKV.get(this.key)
-		return map ?? new Map<string, SyncRecordModel>()
+	async deleteFileRecord(path: string): Promise<void> {
+		const map = await this.storage.get(this.namespace)
+		if (map) {
+			if (map.has(path)) {
+				map.delete(path)
+				await this.storage.set(this.namespace, map)
+			}
+		}
+	}
+
+	async getRecords(): Promise<Map<string, SyncRecordModel>> {
+		const map = await this.storage.get(this.namespace)
+		return map ?? new Map()
 	}
 
 	async setRecords(records: Map<string, SyncRecordModel>) {
-		return await syncRecordKV.set(this.key, records)
+		await this.storage.set(this.namespace, records)
 	}
 
-	async getRecord(path: string) {
-		const map = await syncRecordKV.get(this.key)
-		return map?.get(path)
+	async getRecord(path: string): Promise<SyncRecordModel | undefined> {
+		const map = await this.storage.get(this.namespace)
+		if (map) {
+			return map.get(path)
+		}
 	}
 
 	async drop() {
-		await syncRecordKV.unset(this.key)
+		await this.storage.unset(this.namespace)
+	}
+
+	async exists(path: string): Promise<boolean> {
+		const map = await this.storage.get(this.namespace)
+		if (map) {
+			return map.has(path)
+		}
+		return false
+	}
+
+	async batchUpdate(updates: [string, SyncRecordModel][]): Promise<void> {
+		if (updates.length === 0) {
+			return
+		}
+		const map = await this.storage.get(this.namespace)
+
+		if (map) {
+			for (const [path, record] of updates) {
+				map.set(path, record)
+			}
+			await this.storage.set(this.namespace, map)
+		} else {
+			await this.storage.set(this.namespace, new Map(updates))
+		}
 	}
 }
