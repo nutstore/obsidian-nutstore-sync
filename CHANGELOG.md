@@ -2,6 +2,16 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-08-06
+
+* **改进:**  实现了可配置的自动同步间隔。
+* **修复:** 删除了孤立记录。
+* **内部改进:**  改进了同步决策架构并添加了全面的 glob 匹配测试；重构了 `SyncRecord` 类，提高了代码可维护性和可读性；提升了 `StatModel` 的类型安全性并修复了相关类型问题。
+* **Enhancements:** Implemented configurable auto-sync interval.
+* **Bug Fixes:** Removed orphaned record.
+* **Internal Improvements:** Improved sync decision architecture and added comprehensive glob matching tests; Refactored `SyncRecord` class for better maintainability and readability; Improved `StatModel` type safety and fixed related type issues.
+
+
 ## [0.8.3] - 2025-07-21
 
 * 优化二进制文件检测：通过扩展名检查优化了二进制文件的检测。
