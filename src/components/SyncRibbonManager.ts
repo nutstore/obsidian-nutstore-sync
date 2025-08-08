@@ -49,9 +49,4 @@ export class SyncRibbonManager {
 			this.stopRibbonEl.classList.add('hidden')
 		}
 	}
-
-	public unload() {
-		this.startRibbonEl.remove()
-		this.stopRibbonEl.remove()
-	}
 }
