@@ -74,7 +74,6 @@ export default class NutstorePlugin extends Plugin {
 		setPluginInstance(null)
 		emitCancelSync()
 		this.autoSyncService.unload()
-		this.ribbonManager.unload()
 		this.progressService.unload()
 		this.eventsService.unload()
 	}
