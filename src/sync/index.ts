@@ -112,31 +112,31 @@ export class NutstoreSync {
 				return
 			}
 
-			let confirmedTasks = tasks
+			const noopTasks = tasks.filter((t) => t instanceof NoopTask)
+			let confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
 
-			if (showNotice) {
-				confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
-				if (settings.confirmBeforeSync && confirmedTasks.length > 0) {
-					const confirmExec = await new TaskListConfirmModal(
-						this.app,
-						confirmedTasks,
-					).open()
-					if (confirmExec.confirm) {
-						confirmedTasks = confirmExec.tasks
-					} else {
-						emitSyncError(new Error(i18n.t('sync.cancelled')))
-						return
-					}
+			if (
+				showNotice &&
+				settings.confirmBeforeSync &&
+				confirmedTasks.length > 0
+			) {
+				const confirmExec = await new TaskListConfirmModal(
+					this.app,
+					confirmedTasks,
+				).open()
+				if (confirmExec.confirm) {
+					confirmedTasks = confirmExec.tasks
+				} else {
+					emitSyncError(new Error(i18n.t('sync.cancelled')))
+					return
 				}
 			}
 
 			const confirmedTasksUniq = Array.from(
-				new Set([
-					...confirmedTasks,
-					...tasks.filter((t) => t instanceof NoopTask),
-				]),
+				new Set([...confirmedTasks, ...noopTasks]),
 			)
-			if (confirmedTasksUniq.length > 500 && Platform.isDesktopApp) {
+
+			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
 
