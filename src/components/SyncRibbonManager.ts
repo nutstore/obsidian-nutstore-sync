@@ -27,7 +27,11 @@ export class SyncRibbonManager {
 						showNotice: true,
 					})
 				}
-				new SyncConfirmModal(this.plugin.app, startSync).open()
+				if (plugin.settings.confirmBeforeSync) {
+					new SyncConfirmModal(this.plugin.app, startSync).open()
+				} else {
+					startSync()
+				}
 			},
 		)
 		this.stopRibbonEl = this.plugin.addRibbonIcon(

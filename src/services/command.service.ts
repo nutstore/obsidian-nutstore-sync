@@ -27,8 +27,11 @@ export default class CommandService {
 						showNotice: true,
 					})
 				}
-				new SyncConfirmModal(plugin.app, startSync).open()
-				return true
+				if (plugin.settings.confirmBeforeSync) {
+					new SyncConfirmModal(plugin.app, startSync).open()
+				} else {
+					startSync()
+				}
 			},
 		})
 
