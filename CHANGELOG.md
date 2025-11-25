@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-11-25
+## [0.8.5] - 2025-11-25
 
 - 功能: 允许跳过初始同步确认。/ Feature: Allow skipping initial sync confirmation.
 - 修复: 移除无用的卸载服务进程。/ Fix: Remove useless unload service process.
