@@ -1,4 +1,4 @@
-import { isNil } from 'lodash-es'
+import { chunk, debounce, isNil } from 'lodash-es'
 import { Notice, Platform, Vault, moment } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
@@ -112,31 +112,31 @@ export class NutstoreSync {
 				return
 			}
 
-			let confirmedTasks = tasks
+			const noopTasks = tasks.filter((t) => t instanceof NoopTask)
+			let confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
 
-			if (showNotice) {
-				confirmedTasks = tasks.filter((t) => !(t instanceof NoopTask))
-				if (settings.confirmBeforeSync && confirmedTasks.length > 0) {
-					const confirmExec = await new TaskListConfirmModal(
-						this.app,
-						confirmedTasks,
-					).open()
-					if (confirmExec.confirm) {
-						confirmedTasks = confirmExec.tasks
-					} else {
-						emitSyncError(new Error(i18n.t('sync.cancelled')))
-						return
-					}
+			if (
+				showNotice &&
+				settings.confirmBeforeSync &&
+				confirmedTasks.length > 0
+			) {
+				const confirmExec = await new TaskListConfirmModal(
+					this.app,
+					confirmedTasks,
+				).open()
+				if (confirmExec.confirm) {
+					confirmedTasks = confirmExec.tasks
+				} else {
+					emitSyncError(new Error(i18n.t('sync.cancelled')))
+					return
 				}
 			}
 
 			const confirmedTasksUniq = Array.from(
-				new Set([
-					...confirmedTasks,
-					...tasks.filter((t) => t instanceof NoopTask),
-				]),
+				new Set([...confirmedTasks, ...noopTasks]),
 			)
-			if (confirmedTasksUniq.length > 500 && Platform.isDesktopApp) {
+
+			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
 
@@ -248,11 +248,23 @@ export class NutstoreSync {
 		const startAt = Date.now()
 		const BATCH_SIZE = 10
 		let completedCount = 0
-		for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
-			const batch = tasks.slice(i, i + BATCH_SIZE).map(async (task, j) => {
-				completedCount++
+		let successfulTasksCount = 0
+
+		const debouncedSetRecords = debounce(
+			(records) => syncRecord.setRecords(records),
+			3000,
+			{
+				trailing: true,
+				leading: false,
+			},
+		)
+
+		const taskChunks = chunk(tasks, BATCH_SIZE)
+
+		for (const taskChunk of taskChunks) {
+			const batch = taskChunk.map(async (task) => {
 				try {
-					const idx = i + j
+					const idx = tasks.indexOf(task)
 					if (!results[idx]?.success) {
 						return
 					}
@@ -290,6 +302,7 @@ export class NutstoreSync {
 						local,
 						base: isNil(baseKey) ? undefined : { key: baseKey },
 					})
+					successfulTasksCount++
 				} catch (e) {
 					logger.error(
 						'updateMtimeInRecord',
@@ -299,12 +312,17 @@ export class NutstoreSync {
 						},
 						task.toJSON(),
 					)
+				} finally {
+					completedCount++
 				}
 			})
 			await Promise.all(batch)
 			emitSyncUpdateMtimeProgress(tasks.length, completedCount)
-			await syncRecord.setRecords(records)
+			debouncedSetRecords(records)
 		}
+
+		await debouncedSetRecords.flush()
+
 		logger.debug(`Records saving completed`, {
 			recordsSize: records.size,
 			elapsedMs: Date.now() - startAt,
