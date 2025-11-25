@@ -31,5 +31,11 @@
 	"[markdown]": {
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	},
-	"cSpell.words": ["Nutstore", "webdav"]
+	"cSpell.words": ["Nutstore", "webdav"],
+	"i18n-ally.localesPaths": [
+		"src/i18n",
+		"src/i18n/locales",
+		"packages/webdav-explorer/src/i18n",
+		"packages/webdav-explorer/src/i18n/locales"
+	]
 }
