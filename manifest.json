@@ -3,7 +3,7 @@
 	"name": "Nutstore Sync",
 	"version": "0.8.4",
 	"minAppVersion": "0.15.0",
-	"description": "Sync your vault with Nutstore/坚果云 using WebDAV protocol",
+	"description": "Sync your vault with Nutstore/坚果云 using WebDAV protocol.",
 	"author": "nutstore",
 	"authorUrl": "https://github.com/nutstore",
 	"isDesktopOnly": false
