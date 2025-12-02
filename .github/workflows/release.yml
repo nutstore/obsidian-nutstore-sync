@@ -30,6 +30,7 @@ jobs:
           NS_NSDAV_ENDPOINT: ${{ vars.NS_NSDAV_ENDPOINT }}
           NS_DAV_ENDPOINT: ${{ vars.NS_DAV_ENDPOINT }}
           NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
+          NODE_ENV: production
         run: |
           pnpm install
           pnpm run build
