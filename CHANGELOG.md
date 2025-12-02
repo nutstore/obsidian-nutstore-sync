@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-12-02
+## [0.8.5] - 2025-12-02
 
 - 修复：使用 GitHub NPM 源 ([`fix: use github npm source`](https://github.com/your-repo/your-project/commit/your-commit-hash))
 - 修复：移除无用的卸载服务进程 ([`fix: remove useless unload service process`](https://github.com/your-repo/your-project/commit/your-commit-hash))
