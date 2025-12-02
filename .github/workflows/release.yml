@@ -19,6 +19,8 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18.x'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@nutstore'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -31,6 +33,7 @@ jobs:
           NS_DAV_ENDPOINT: ${{ vars.NS_DAV_ENDPOINT }}
           NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm install
           pnpm run build
