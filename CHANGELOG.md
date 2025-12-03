@@ -4,18 +4,6 @@
 
 ## [0.8.5] - 2025-12-02
 
-- 修复：使用 GitHub NPM 源 ([`fix: use github npm source`](https://github.com/your-repo/your-project/commit/your-commit-hash))
-- 修复：移除无用的卸载服务进程 ([`fix: remove useless unload service process`](https://github.com/your-repo/your-project/commit/your-commit-hash))
-- 优化：对记录更新进行防抖处理，提升性能 ([`refactor: debounce record updates for performance`](https://github.com/your-repo/your-project/commit/your-commit-hash))
-- 新增：允许跳过初始同步确认 ([`feat: Allow skipping initial sync confirmation`](https://github.com/your-repo/your-project/commit/your-commit-hash))
-- Fix: Use GitHub NPM source ([`fix: use github npm source`](https://github.com/your-repo/your-project/commit/your-commit-hash))
-- Fix: Remove useless unload service process ([`fix: remove useless unload service process`](https://github.com/your-repo/your-project/commit/your-commit-hash))
-- Refactor: Debounce record updates for performance ([`refactor: debounce record updates for performance`](https://github.com/your-repo/your-project/commit/your-commit-hash))
-- Feat: Allow skipping initial sync confirmation ([`feat: Allow skipping initial sync confirmation`](https://
-
-
-## [0.8.5] - 2025-11-25
-
 - 功能: 允许跳过初始同步确认。/ Feature: Allow skipping initial sync confirmation.
 - 修复: 移除无用的卸载服务进程。/ Fix: Remove useless unload service process.
 - 优化: 优化记录更新的防抖性能。/ Refactor: Debounce record updates for performance.
