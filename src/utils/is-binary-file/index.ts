@@ -1,12 +1,30 @@
-import { Buffer } from 'buffer'
-
 /**
  * fork: https://github.com/gjtorikian/isBinaryFile/blob/main/src/index.ts
  *
  * remove `node:fs` dep
  */
 
+import { Buffer } from 'buffer'
+import type { EncodingHint } from './encoding.js'
+import { detectUtf16NoBom, isTextWithEncodingHint } from './encoding.js'
+export { type EncodingHint } from './encoding.js'
+
 const MAX_BYTES: number = 512
+const UTF8_BOUNDARY_RESERVE: number = 3
+
+/**
+ * Options for binary file detection.
+ */
+export interface IsBinaryOptions {
+	/**
+	 * Hint about expected encoding to avoid false positives.
+	 */
+	encoding?: EncodingHint
+	/**
+	 * Size of the buffer (only used when file is a Buffer).
+	 */
+	size?: number
+}
 
 // A very basic non-exception raising reader. Read bytes and
 // at the end use hasError() to check whether this worked.
@@ -36,8 +54,17 @@ class Reader {
 	}
 
 	public next(len: number): number[] {
+		// Prevent massive array allocation by checking bounds first
+		if (len < 0 || len > this.size - this.offset) {
+			this.error = true
+			return []
+		}
 		const n = new Array()
 		for (let i = 0; i < len; i++) {
+			// Stop reading if an error occurred
+			if (this.error) {
+				return n
+			}
 			n[i] = this.nextByte()
 		}
 		return n
@@ -53,6 +80,11 @@ function readProtoVarInt(reader: Reader): number {
 		const b = reader.nextByte()
 		varInt = varInt | ((b & 0x7f) << (7 * idx))
 		if ((b & 0x80) === 0) {
+			break
+		}
+		if (idx >= 10) {
+			// Varint can be between 1 and 10 bytes. This is too large.
+			reader.error = true
 			break
 		}
 		idx++
@@ -106,24 +138,26 @@ function isBinaryProto(fileBuffer: Buffer, totalBytes: number): boolean {
 
 export async function isBinaryFile(
 	file: ArrayBuffer | Buffer,
-	size?: number,
+	options?: IsBinaryOptions,
 ): Promise<boolean> {
-	if (file instanceof ArrayBuffer) {
-		const buf = Buffer.from(file)
-		return isBinaryCheck(buf, size ?? file.byteLength)
-	}
-
-	return isBinaryCheck(file, size ?? file.length)
+	const buffer = file instanceof ArrayBuffer ? Buffer.from(file) : file
+	const size = options?.size !== undefined ? options.size : buffer.length
+	return isBinaryCheck(buffer, size, options)
 }
 
-function isBinaryCheck(fileBuffer: Buffer, bytesRead: number): boolean {
+function isBinaryCheck(
+	fileBuffer: Buffer,
+	bytesRead: number,
+	options?: IsBinaryOptions,
+): boolean {
 	// empty file. no clue what it is.
 	if (bytesRead === 0) {
 		return false
 	}
 
 	let suspiciousBytes = 0
-	const totalBytes = Math.min(bytesRead, MAX_BYTES)
+	const totalBytes = Math.min(bytesRead, MAX_BYTES + UTF8_BOUNDARY_RESERVE)
+	const scanBytes = Math.min(totalBytes, MAX_BYTES)
 
 	// UTF-8 BOM
 	if (
@@ -183,7 +217,19 @@ function isBinaryCheck(fileBuffer: Buffer, bytesRead: number): boolean {
 		return false
 	}
 
-	for (let i = 0; i < totalBytes; i++) {
+	// Handle encoding hints - if provided, use specialized validation
+	if (options?.encoding) {
+		return !isTextWithEncodingHint(fileBuffer, bytesRead, options.encoding)
+	}
+
+	// Auto-detect UTF-16 without BOM by analyzing null byte patterns
+	const utf16Detected = detectUtf16NoBom(fileBuffer, bytesRead)
+	if (utf16Detected) {
+		// Detected UTF-16 pattern, validate as text
+		return !isTextWithEncodingHint(fileBuffer, bytesRead, utf16Detected)
+	}
+
+	for (let i = 0; i < scanBytes; i++) {
 		if (fileBuffer[i] === 0) {
 			// NULL byte--it's binary!
 			return true
@@ -237,17 +283,17 @@ function isBinaryCheck(fileBuffer: Buffer, bytesRead: number): boolean {
 
 			suspiciousBytes++
 			// Read at least 32 fileBuffer before making a decision
-			if (i >= 32 && (suspiciousBytes * 100) / totalBytes > 10) {
+			if (i >= 32 && (suspiciousBytes * 100) / scanBytes > 10) {
 				return true
 			}
 		}
 	}
 
-	if ((suspiciousBytes * 100) / totalBytes > 10) {
+	if ((suspiciousBytes * 100) / scanBytes > 10) {
 		return true
 	}
 
-	if (suspiciousBytes > 1 && isBinaryProto(fileBuffer, totalBytes)) {
+	if (suspiciousBytes > 1 && isBinaryProto(fileBuffer, scanBytes)) {
 		return true
 	}
 
