@@ -54,6 +54,7 @@ export default {
 			desc: 'Choose how to resolve file conflicts. \nNote: It is recommended to backup important files before using auto-merge feature to prevent data loss.',
 			diffMatchPatch: 'Smart merge (recommended)',
 			latestTimestamp: 'Use latest version',
+			skip: 'Skip conflicts',
 		},
 		confirmBeforeSync: {
 			name: 'Confirm before sync',

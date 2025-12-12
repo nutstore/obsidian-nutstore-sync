@@ -65,6 +65,10 @@ export default class CommonSettings extends BaseSettings {
 						ConflictStrategy.LatestTimeStamp,
 						i18n.t('settings.conflictStrategy.latestTimestamp'),
 					)
+					.addOption(
+						ConflictStrategy.Skip,
+						i18n.t('settings.conflictStrategy.skip'),
+					)
 					.setValue(this.plugin.settings.conflictStrategy)
 					.onChange(async (value: ConflictStrategy) => {
 						this.plugin.settings.conflictStrategy = value
@@ -188,5 +192,6 @@ export default class CommonSettings extends BaseSettings {
 				text.inputEl.min = '1'
 				text.inputEl.step = '1'
 			})
+
 	}
 }

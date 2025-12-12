@@ -44,6 +44,7 @@ export default {
 			desc: '选择解决文件冲突的方式。\n注意：建议在使用自动合并功能前，先手动备份重要文件，以防数据丢失。',
 			diffMatchPatch: '智能合并(推荐)',
 			latestTimestamp: '使用最新版本',
+			skip: '跳过冲突',
 		},
 		loginMode: {
 			name: '登录方式',

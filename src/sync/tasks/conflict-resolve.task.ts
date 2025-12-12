@@ -20,6 +20,7 @@ import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 export enum ConflictStrategy {
 	DiffMatchPatch = 'diff-match-patch',
 	LatestTimeStamp = 'latest-timestamp',
+	Skip = 'skip',
 }
 
 export default class ConflictResolveTask extends BaseTask {
@@ -66,6 +67,10 @@ export default class ConflictResolveTask extends BaseTask {
 					return await this.execIntelligentMerge()
 				case ConflictStrategy.LatestTimeStamp:
 					return await this.execLatestTimeStamp(local, remote)
+				case ConflictStrategy.Skip:
+					// Skip conflict resolution - keep files as they are
+					// Don't update record to preserve conflict state for next sync
+					return { success: true, skipRecord: true }
 			}
 		} catch (e) {
 			logger.error(this, e)

@@ -20,7 +20,9 @@ export default class AutoSyncService {
 
 		if (intervalSeconds > 0) {
 			this.autoSyncTimer = window.setInterval(async () => {
-				await this.syncExecutor.executeSync({ showNotice: false })
+				await this.syncExecutor.executeSync({
+					showNotice: false,
+				})
 			}, intervalSeconds * 1000)
 		}
 	}

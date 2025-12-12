@@ -239,6 +239,16 @@ export class NutstoreSync {
 		if (tasks.length === 0) {
 			return
 		}
+
+		// Filter out tasks that don't need record updates
+		const tasksNeedingUpdate = tasks.filter((task, idx) => {
+			return results[idx]?.success && !results[idx]?.skipRecord
+		})
+
+		if (tasksNeedingUpdate.length === 0) {
+			return
+		}
+
 		const latestRemoteEntities = await this.remoteFs.walk()
 		const syncRecord = new SyncRecord(
 			getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
@@ -259,15 +269,11 @@ export class NutstoreSync {
 			},
 		)
 
-		const taskChunks = chunk(tasks, BATCH_SIZE)
+		const taskChunks = chunk(tasksNeedingUpdate, BATCH_SIZE)
 
 		for (const taskChunk of taskChunks) {
 			const batch = taskChunk.map(async (task) => {
 				try {
-					const idx = tasks.indexOf(task)
-					if (!results[idx]?.success) {
-						return
-					}
 					const remote = latestRemoteEntities.find(
 						(entity) => entity.path === task.localPath,
 					)
@@ -317,7 +323,7 @@ export class NutstoreSync {
 				}
 			})
 			await Promise.all(batch)
-			emitSyncUpdateMtimeProgress(tasks.length, completedCount)
+			emitSyncUpdateMtimeProgress(tasksNeedingUpdate.length, completedCount)
 			debouncedSetRecords(records)
 		}
 
