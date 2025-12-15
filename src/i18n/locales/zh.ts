@@ -228,6 +228,7 @@ export default {
 		startButton: '开始同步',
 		stopButton: '停止同步',
 		hideButton: '隐藏',
+		closeButton: '关闭',
 		showProgressButton: '显示同步进度',
 		notSyncing: '尚未开始同步',
 		percentComplete: '{{percent}}%',

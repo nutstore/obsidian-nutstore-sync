@@ -26,6 +26,7 @@ export default class SyncProgressModal extends Modal {
 	private cancelSubscription: Subscription
 	private updateMtimeSubscription: Subscription
 	private stopButtonComponent: ButtonComponent
+	private hideButtonComponent: ButtonComponent
 
 	private cacheProgressBar: HTMLDivElement
 	private cacheProgressText: HTMLDivElement
@@ -81,9 +82,11 @@ export default class SyncProgressModal extends Modal {
 		if (progress.completed.length > 0) {
 			if (this.plugin.progressService.syncEnd) {
 				this.stopButtonComponent.buttonEl.addClass('hidden')
+				this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
 				this.currentFile.setText(i18n.t('sync.complete'))
 			} else if (this.syncCancelled) {
 				this.stopButtonComponent.buttonEl.addClass('hidden')
+				this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
 				this.currentFile.setText(i18n.t('sync.cancelled'))
 			} else {
 				const lastFile = progress.completed.at(-1)
@@ -249,6 +252,7 @@ export default class SyncProgressModal extends Modal {
 				button
 					.setButtonText(i18n.t('sync.hideButton'))
 					.onClick(() => this.close())
+				this.hideButtonComponent = button
 			})
 			.addButton((button) => {
 				button

@@ -231,6 +231,7 @@ export default {
 		startButton: 'Start sync',
 		stopButton: 'Stop sync',
 		hideButton: 'Hide',
+		closeButton: 'Close',
 		showProgressButton: 'Show sync progress',
 		notSyncing: 'No sync currently in progress',
 		percentComplete: '{{percent}}%',
