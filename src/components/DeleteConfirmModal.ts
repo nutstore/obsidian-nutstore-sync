@@ -1,0 +1,96 @@
+import { App, Modal, Setting } from 'obsidian'
+import i18n from '~/i18n'
+import RemoveLocalTask from '../sync/tasks/remove-local.task'
+
+export default class DeleteConfirmModal extends Modal {
+	private result: boolean = false
+	private selectedTasks: boolean[] = []
+
+	constructor(
+		app: App,
+		private tasks: RemoveLocalTask[],
+	) {
+		super(app)
+		this.selectedTasks = new Array(tasks.length).fill(true)
+	}
+
+	onOpen() {
+		this.setTitle(i18n.t('deleteConfirm.title'))
+
+		const { contentEl } = this
+		contentEl.empty()
+
+		const instruction = contentEl.createEl('p', {
+			cls: 'delete-confirm-instruction',
+		})
+		instruction.style.whiteSpace = 'pre-wrap'
+		instruction.setText(i18n.t('deleteConfirm.instruction'))
+
+		const tableContainer = contentEl.createDiv({
+			cls: 'max-h-50vh overflow-y-auto',
+		})
+		const table = tableContainer.createEl('table', { cls: 'task-list-table' })
+
+		const thead = table.createEl('thead')
+		const headerRow = thead.createEl('tr')
+		headerRow.createEl('th', { text: i18n.t('deleteConfirm.fileToDelete') })
+		headerRow.createEl('th', { text: i18n.t('deleteConfirm.path') })
+
+		const tbody = table.createEl('tbody')
+		this.tasks.forEach((task, index) => {
+			const row = tbody.createEl('tr')
+			const checkboxCell = row.createEl('td')
+			const checkbox = checkboxCell.createEl('input')
+			checkbox.type = 'checkbox'
+			checkbox.checked = this.selectedTasks[index]
+			checkbox.addEventListener('change', (e) => {
+				this.selectedTasks[index] = checkbox.checked
+				e.stopPropagation()
+			})
+			row.addEventListener('click', (e) => {
+				if (e.target === checkbox) {
+					return
+				}
+				checkbox.checked = !checkbox.checked
+				this.selectedTasks[index] = checkbox.checked
+				e.stopPropagation()
+			})
+			row.createEl('td', { text: task.localPath })
+		})
+
+		const settingDiv = contentEl.createDiv()
+		new Setting(settingDiv)
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('deleteConfirm.confirmDelete'))
+					.setWarning()
+					.onClick(() => {
+						this.result = true
+						this.close()
+					})
+			})
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('deleteConfirm.keepFiles'))
+					.onClick(() => {
+						this.result = false
+						this.close()
+					})
+			})
+	}
+
+	async open(): Promise<{ confirm: boolean; tasks: RemoveLocalTask[] }> {
+		super.open()
+		return new Promise((resolve) => {
+			this.onClose = () => {
+				const selectedTasks = this.tasks.filter(
+					(_, index) => this.selectedTasks[index],
+				)
+				resolve({
+					confirm: this.result,
+					tasks: selectedTasks,
+				})
+			}
+		})
+	}
+}

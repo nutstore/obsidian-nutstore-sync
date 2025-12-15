@@ -1,4 +1,5 @@
 import { useSettings } from '~/settings'
+import { SyncStartMode } from '~/sync'
 import type NutstorePlugin from '..'
 import type SyncExecutorService from './sync-executor.service'
 
@@ -21,7 +22,7 @@ export default class AutoSyncService {
 		if (intervalSeconds > 0) {
 			this.autoSyncTimer = window.setInterval(async () => {
 				await this.syncExecutor.executeSync({
-					showNotice: false,
+					mode: SyncStartMode.AUTO_SYNC,
 				})
 			}, intervalSeconds * 1000)
 		}

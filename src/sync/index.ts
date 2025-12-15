@@ -2,6 +2,7 @@ import { chunk, debounce, isNil } from 'lodash-es'
 import { Notice, Platform, Vault, moment } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
+import DeleteConfirmModal from '~/components/DeleteConfirmModal'
 import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
@@ -29,7 +30,13 @@ import { stdRemotePath } from '~/utils/std-remote-path'
 import NutstorePlugin from '..'
 import TwoWaySyncDecider from './decision/two-way.decider'
 import NoopTask from './tasks/noop.task'
+import RemoveLocalTask from './tasks/remove-local.task'
 import { BaseTask, TaskError, TaskResult } from './tasks/task.interface'
+
+export enum SyncStartMode {
+	MANUAL_SYNC = 'manual_sync',
+	AUTO_SYNC = 'auto_sync',
+}
 
 export class NutstoreSync {
 	remoteFs: IFileSystem
@@ -63,8 +70,9 @@ export class NutstoreSync {
 		)
 	}
 
-	async start({ showNotice }: { showNotice: boolean }) {
+	async start({ mode }: { mode: SyncStartMode }) {
 		try {
+			const showNotice = mode === SyncStartMode.MANUAL_SYNC
 			emitStartSync({ showNotice })
 
 			const settings = this.settings
@@ -129,6 +137,35 @@ export class NutstoreSync {
 				} else {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
 					return
+				}
+			}
+
+			// Check for RemoveLocalTask during auto-sync and ask for confirmation
+			if (mode === SyncStartMode.AUTO_SYNC) {
+				const removeLocalTasks = confirmedTasks.filter(
+					(t) => t instanceof RemoveLocalTask,
+				)
+				if (removeLocalTasks.length > 0) {
+					new Notice(i18n.t('deleteConfirm.warningNotice'), 0)
+					const deleteConfirm = await new DeleteConfirmModal(
+						this.app,
+						removeLocalTasks,
+					).open()
+
+					if (deleteConfirm.confirm) {
+						// Remove tasks that were not confirmed
+						const confirmedDeleteTasks = new Set(deleteConfirm.tasks)
+						confirmedTasks = confirmedTasks.filter(
+							(t) =>
+								!(t instanceof RemoveLocalTask) ||
+								confirmedDeleteTasks.has(t as RemoveLocalTask),
+						)
+					} else {
+						// User chose to keep all files - remove all RemoveLocalTask
+						confirmedTasks = confirmedTasks.filter(
+							(t) => !(t instanceof RemoveLocalTask),
+						)
+					}
 				}
 			}
 

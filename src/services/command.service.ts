@@ -1,7 +1,7 @@
 import SyncConfirmModal from '~/components/SyncConfirmModal'
 import { emitCancelSync } from '~/events'
 import i18n from '~/i18n'
-import { NutstoreSync } from '~/sync'
+import { NutstoreSync, SyncStartMode } from '~/sync'
 import NutstorePlugin from '..'
 
 export default class CommandService {
@@ -24,7 +24,7 @@ export default class CommandService {
 						remoteBaseDir: plugin.remoteBaseDir,
 					})
 					await sync.start({
-						showNotice: true,
+						mode: SyncStartMode.MANUAL_SYNC,
 					})
 				}
 				if (plugin.settings.confirmBeforeSync) {

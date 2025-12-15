@@ -281,6 +281,17 @@ export default {
 		continue: 'Continue',
 		cancel: 'Cancel',
 	},
+	deleteConfirm: {
+		title: 'Confirm Local File Deletion',
+		instruction:
+			'⚠️ The following local files will be deleted during auto-sync (because they were deleted remotely).\n\nPlease review the list carefully and confirm whether to proceed with deletion:',
+		warningNotice: 'Local files will be deleted, please confirm',
+		fileToDelete: 'Files to delete',
+		path: 'Path',
+		confirmDelete: 'Confirm Delete',
+		cancel: 'Cancel',
+		keepFiles: 'Keep all files',
+	},
 	textAreaModal: {
 		copy: 'Copy',
 		close: 'Close',

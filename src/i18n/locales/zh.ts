@@ -278,6 +278,17 @@ export default {
 		continue: '继续',
 		cancel: '取消',
 	},
+	deleteConfirm: {
+		title: '确认删除本地文件',
+		instruction:
+			'⚠️ 在自动同步过程中检测到以下本地文件将被删除（因远程已删除）。\n\n请仔细检查列表，确认是否继续删除这些文件：',
+		warningNotice: '检测到本地文件将被删除，请确认',
+		fileToDelete: '待删除文件',
+		path: '路径',
+		confirmDelete: '确认删除',
+		cancel: '取消',
+		keepFiles: '保留所有文件',
+	},
 	textAreaModal: {
 		copy: '复制',
 		close: '关闭',
