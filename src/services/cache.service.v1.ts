@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer'
 import { Notice } from 'obsidian'
 import { deflate, inflate } from 'pako'
 import { join } from 'path-browserify'
@@ -11,6 +10,7 @@ import { deltaCacheKV } from '~/storage/kv'
 import { fileStatToStatModel } from '~/utils/file-stat-to-stat-model'
 import { getDBKey } from '~/utils/get-db-key'
 import logger from '~/utils/logger'
+import { uint8ArrayToArrayBuffer } from '~/utils/uint8array-to-arraybuffer'
 import type NutstorePlugin from '..'
 
 /**
@@ -25,7 +25,7 @@ export default class CacheServiceV1 {
 	get key() {
 		const kvKey = getDBKey(
 			this.plugin.app.vault.getName(),
-			this.plugin.settings.remoteDir,
+			this.plugin.remoteBaseDir,
 		)
 		return kvKey
 	}
@@ -36,18 +36,34 @@ export default class CacheServiceV1 {
 		try {
 			const webdav = await this.plugin.webDAVService.createWebDAVClient()
 			const deltaCache = await deltaCacheKV.get(this.key)
+
+			// Validate cache data exists
+			if (!deltaCache) {
+				throw new Error('No cache data to save')
+			}
+
 			const exportedStorage: ExportedStorage = {
-				deltaCache: superjson.stringify(deltaCache),
+				deltaCache,
 				exportedAt: new Date().toISOString(),
 			}
-			const exportedStorageStr = JSON.stringify(exportedStorage)
-			const deflatedStorage = deflate(exportedStorageStr, { level: 9 })
+
+			// Encoding pipeline: superjson.stringify -> deflate level 9
+			const serializedStr = superjson.stringify(exportedStorage)
+			if (!serializedStr || serializedStr.length === 0) {
+				throw new Error('Cache data serialization failed')
+			}
+
+			const deflatedStorage = deflate(serializedStr, { level: 9 })
 			await webdav.createDirectory(this.remoteCacheDir, { recursive: true })
 
 			const filePath = join(this.remoteCacheDir, filename)
-			await webdav.putFileContents(filePath, Buffer.from(deflatedStorage), {
-				overwrite: true,
-			})
+			await webdav.putFileContents(
+				filePath,
+				uint8ArrayToArrayBuffer(deflatedStorage),
+				{
+					overwrite: true,
+				},
+			)
 
 			new Notice(i18n.t('settings.cache.saveModal.success'))
 			return Promise.resolve()
@@ -79,13 +95,33 @@ export default class CacheServiceV1 {
 			const fileContent = (await webdav.getFileContents(filePath, {
 				format: 'binary',
 			})) as BufferLike
+
+			// Check if file content is empty
+			if (!fileContent || fileContent.byteLength === 0) {
+				throw new Error('Cache file is empty')
+			}
+
+			// Decoding pipeline: inflate -> superjson.parse
 			const inflatedFileContent = inflate(new Uint8Array(fileContent))
+			if (!inflatedFileContent || inflatedFileContent.length === 0) {
+				throw new Error('Inflate failed or resulted in empty content')
+			}
+
 			const decoder = new TextDecoder()
-			const exportedStorage: ExportedStorage = JSON.parse(
-				decoder.decode(inflatedFileContent),
-			)
+			const decodedContent = decoder.decode(inflatedFileContent)
+			if (!decodedContent || decodedContent.trim() === '') {
+				throw new Error('Cache file content is invalid or empty')
+			}
+
+			const exportedStorage: ExportedStorage = superjson.parse(decodedContent)
+
+			// Validate the structure of exported storage
+			if (!exportedStorage || !exportedStorage.deltaCache) {
+				throw new Error('Invalid cache file format')
+			}
+
 			const { deltaCache } = exportedStorage
-			await deltaCacheKV.set(this.key, superjson.parse(deltaCache))
+			await deltaCacheKV.set(this.key, deltaCache)
 
 			new Notice(i18n.t('settings.cache.restoreModal.success'))
 			return Promise.resolve()
