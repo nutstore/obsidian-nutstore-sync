@@ -166,7 +166,7 @@ export default class CommonSettings extends BaseSettings {
 					)
 					.onChange(async (value) => {
 						const numValue = parseFloat(value)
-						if (!isNaN(numValue) && numValue > 0) {
+						if (!isNaN(numValue) && numValue >= 0) {
 							this.plugin.settings.autoSyncIntervalSeconds = numValue * 60
 							await this.plugin.saveSettings()
 							await this.plugin.autoSyncService.updateInterval()
@@ -175,9 +175,9 @@ export default class CommonSettings extends BaseSettings {
 				text.inputEl.addEventListener('blur', async () => {
 					const value = text.getValue()
 					const numValue = parseFloat(value)
-					if (Number.isNaN(numValue) || numValue <= 0) {
-						text.setValue('1')
-						this.plugin.settings.autoSyncIntervalSeconds = 60
+					if (Number.isNaN(numValue) || numValue < 0) {
+						text.setValue('0')
+						this.plugin.settings.autoSyncIntervalSeconds = 0
 						await this.plugin.saveSettings()
 						await this.plugin.autoSyncService.updateInterval()
 					} else {
@@ -189,7 +189,7 @@ export default class CommonSettings extends BaseSettings {
 					}
 				})
 				text.inputEl.type = 'number'
-				text.inputEl.min = '1'
+				text.inputEl.min = '0'
 				text.inputEl.step = '1'
 			})
 

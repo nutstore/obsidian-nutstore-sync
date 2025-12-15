@@ -66,7 +66,7 @@ export default {
 		},
 		syncMode: {
 			name: 'Sync mode',
-			desc: 'Choose between strict or loose sync mode. Loose mode is recommended for users with many files to achieve faster sync speed. In loose mode, files with the same name and equal size will be ignored during the first sync.',
+			desc: 'Choose between strict or loose sync mode. Loose mode is recommended for users with many files to achieve faster sync speed. In loose mode, files with the same name and equal size that have no sync record will be ignored.',
 			strict: 'Strict',
 			loose: 'Loose',
 		},
@@ -77,8 +77,8 @@ export default {
 		},
 		autoSyncInterval: {
 			name: 'Auto-sync interval',
-			desc: 'Set the interval for automatic background synchronization (in minutes)',
-			placeholder: 'Enter minutes (e.g., 5)',
+			desc: 'Set the interval for automatic background synchronization (in minutes). Set to 0 to disable automatic sync.',
+			placeholder: 'Enter minutes (e.g., 5, 0 to disable)',
 		},
 		sections: {
 			account: 'Account',
