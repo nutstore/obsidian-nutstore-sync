@@ -27,7 +27,7 @@ export default class PullTask extends BaseTask {
 	}
 }
 
-function bufferLikeToArrayBuffer(buffer: BufferLike) {
+function bufferLikeToArrayBuffer(buffer: BufferLike): ArrayBuffer {
 	if (buffer instanceof ArrayBuffer) {
 		return buffer
 	} else {
@@ -35,11 +35,11 @@ function bufferLikeToArrayBuffer(buffer: BufferLike) {
 	}
 }
 
-function toArrayBuffer(buffer: Buffer) {
-	const arrayBuffer = new ArrayBuffer(buffer.length)
-	const view = new Uint8Array(arrayBuffer)
-	for (let i = 0; i < buffer.length; ++i) {
-		view[i] = buffer[i]
+function toArrayBuffer(buf: Buffer): ArrayBuffer {
+	if (buf.buffer instanceof SharedArrayBuffer) {
+		const copy = new ArrayBuffer(buf.byteLength)
+		new Uint8Array(copy).set(buf)
+		return copy
 	}
-	return arrayBuffer
+	return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
 }
