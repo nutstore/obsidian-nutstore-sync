@@ -1,3 +1,4 @@
+import { clamp } from 'lodash-es'
 import { useSettings } from '~/settings'
 import { SyncStartMode } from '~/sync'
 import type NutstorePlugin from '..'
@@ -19,12 +20,15 @@ export default class AutoSyncService {
 	private startTimer(intervalSeconds: number) {
 		this.stopTimer()
 
-		if (intervalSeconds > 0) {
+		const intervalMs = intervalSeconds * 1000
+		const clampedIntervalMs = clamp(intervalMs, 0, 2 ** 31 - 1)
+
+		if (clampedIntervalMs > 0) {
 			this.autoSyncTimer = window.setInterval(async () => {
 				await this.syncExecutor.executeSync({
 					mode: SyncStartMode.AUTO_SYNC,
 				})
-			}, intervalSeconds * 1000)
+			}, clampedIntervalMs)
 		}
 	}
 

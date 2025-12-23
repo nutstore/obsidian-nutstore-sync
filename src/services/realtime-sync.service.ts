@@ -1,4 +1,5 @@
 import { debounce } from 'lodash-es'
+
 import { useSettings } from '~/settings'
 import waitUntil from '~/utils/wait-until'
 import NutstorePlugin from '..'
@@ -58,14 +59,6 @@ export default class RealtimeSyncService {
 				await this.submitSyncRequest.submit()
 			}),
 		)
-
-		useSettings().then(({ startupSyncDelaySeconds }) => {
-			if (startupSyncDelaySeconds > 0) {
-				window.setTimeout(() => {
-					this.submitSyncRequest.submitDirectly()
-				}, startupSyncDelaySeconds * 1000)
-			}
-		})
 	}
 
 	get vault() {
