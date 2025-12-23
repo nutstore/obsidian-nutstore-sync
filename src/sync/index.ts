@@ -177,12 +177,14 @@ export class NutstoreSync {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
 
-			if (showNotice && confirmedTasksUniq.length > 0) {
+			const hasNonNoopTask = confirmedTasksUniq.some(
+				(task) => !(task instanceof NoopTask),
+			)
+			if (showNotice && confirmedTasksUniq.length > 0 && hasNonNoopTask) {
 				this.plugin.progressService.showProgressModal()
 			}
 
-			await this.saveLogs()
-
+	
 			const tasksResult = await this.execTasks(confirmedTasksUniq)
 			const failedCount = tasksResult.filter((r) => !r.success).length
 
@@ -220,8 +222,7 @@ export class NutstoreSync {
 				taskPath: task.localPath,
 			})
 
-			await this.saveLogs()
-			const taskResult = await this.executeWithRetry(task)
+				const taskResult = await this.executeWithRetry(task)
 
 			logger.debug(`Task completed [${i + 1}/${total}] ${task.localPath}`, {
 				taskName: getTaskName(task),
@@ -241,7 +242,6 @@ export class NutstoreSync {
 			failedCount: total - successCount,
 		})
 
-		await this.saveLogs()
 
 		return res
 	}
@@ -370,7 +370,6 @@ export class NutstoreSync {
 			recordsSize: records.size,
 			elapsedMs: Date.now() - startAt,
 		})
-		await this.saveLogs()
 	}
 
 	private async handle503Error(waitMs: number) {
@@ -384,9 +383,6 @@ export class NutstoreSync {
 		await breakableSleep(onCancelSync(), startAt - now)
 	}
 
-	async saveLogs() {
-		await this.plugin.loggerService.saveLogs()
-	}
 
 	get app() {
 		return this.plugin.app
