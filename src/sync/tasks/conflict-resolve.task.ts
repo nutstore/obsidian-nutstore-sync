@@ -1,13 +1,14 @@
 import { isEqual, noop } from 'lodash-es'
-import { isNotNil } from 'ramda'
+import { extname } from 'path-browserify'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
 import { blobStore } from '~/storage/blob'
-import { isBinaryFile } from '~/utils/is-binary-file'
 import logger from '~/utils/logger'
 import { mergeDigIn } from '~/utils/merge-dig-in'
+import { isTextMime } from '~/utils/mime/is-text-mime'
+import { lookupMimeByExtname } from '~/utils/mime/lookup'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import {
@@ -166,13 +167,14 @@ export default class ConflictResolveTask extends BaseTask {
 				baseBlob = await blobStore.get(baseKey)
 			}
 
-			const hasBinaryFile = await Promise.all(
-				[localBuffer, remoteBuffer, await baseBlob?.arrayBuffer()]
-					.filter(isNotNil)
-					.map((buf) => isBinaryFile(buf)),
-			).then((res) => res.includes(true))
+			const localIsText = isTextMime(
+				lookupMimeByExtname(extname(file.path)) ?? '',
+			)
+			const remoteIsText = isTextMime(
+				lookupMimeByExtname(extname(this.remotePath)) ?? '',
+			)
 
-			if (hasBinaryFile) {
+			if (!(localIsText && remoteIsText)) {
 				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
 			}
 

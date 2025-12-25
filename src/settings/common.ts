@@ -1,3 +1,4 @@
+import { clamp } from 'lodash-es'
 import { Setting } from 'obsidian'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
@@ -116,27 +117,31 @@ export default class CommonSettings extends BaseSettings {
 			.setName(i18n.t('settings.startupSyncDelay.name'))
 			.setDesc(i18n.t('settings.startupSyncDelay.desc'))
 			.addText((text) => {
+				const MAX_SECONDS = 86400 // 1 day
 				text
 					.setPlaceholder(i18n.t('settings.startupSyncDelay.placeholder'))
 					.setValue(this.plugin.settings.startupSyncDelaySeconds.toString())
 					.onChange(async (value) => {
 						const numValue = parseFloat(value)
 						if (!isNaN(numValue)) {
-							this.plugin.settings.startupSyncDelaySeconds = numValue
+							const clampedValue = clamp(numValue, 0, MAX_SECONDS)
+							this.plugin.settings.startupSyncDelaySeconds = clampedValue
 							await this.plugin.saveSettings()
+							if (clampedValue !== numValue) {
+								text.setValue(clampedValue.toString())
+							}
 						}
 					})
-				text.inputEl.addEventListener('blur', () => {
-					const value = text.getValue()
-					const numValue = parseFloat(value)
-					if (Number.isNaN(numValue) || numValue < 0) {
-						text.setValue('0')
-					} else {
-						text.setValue(numValue.toString())
-					}
+				text.inputEl.addEventListener('blur', async () => {
+					const numValue = parseFloat(text.getValue())
+					const finalValue = isNaN(numValue) ? 0 : clamp(numValue, 0, MAX_SECONDS)
+					text.setValue(finalValue.toString())
+					this.plugin.settings.startupSyncDelaySeconds = finalValue
+					await this.plugin.saveSettings()
 				})
 				text.inputEl.type = 'number'
 				text.inputEl.min = '0'
+				text.inputEl.max = MAX_SECONDS.toString()
 			})
 
 		new Setting(this.containerEl)
@@ -157,6 +162,7 @@ export default class CommonSettings extends BaseSettings {
 			.setName(i18n.t('settings.autoSyncInterval.name'))
 			.setDesc(i18n.t('settings.autoSyncInterval.desc'))
 			.addText((text) => {
+				const MAX_MINUTES = 1440 // 1 day
 				text
 					.setPlaceholder(i18n.t('settings.autoSyncInterval.placeholder'))
 					.setValue(
@@ -166,32 +172,30 @@ export default class CommonSettings extends BaseSettings {
 					)
 					.onChange(async (value) => {
 						const numValue = parseFloat(value)
-						if (!isNaN(numValue) && numValue >= 0) {
-							this.plugin.settings.autoSyncIntervalSeconds = numValue * 60
+						if (!isNaN(numValue)) {
+							const clampedValue = clamp(numValue, 0, MAX_MINUTES)
+							this.plugin.settings.autoSyncIntervalSeconds = clampedValue * 60
 							await this.plugin.saveSettings()
-							await this.plugin.autoSyncService.updateInterval()
+							await this.plugin.scheduledSyncService.updateInterval()
+							if (clampedValue !== numValue) {
+								text.setValue(clampedValue.toString())
+							}
 						}
 					})
 				text.inputEl.addEventListener('blur', async () => {
-					const value = text.getValue()
-					const numValue = parseFloat(value)
-					if (Number.isNaN(numValue) || numValue < 0) {
-						text.setValue('0')
-						this.plugin.settings.autoSyncIntervalSeconds = 0
-						await this.plugin.saveSettings()
-						await this.plugin.autoSyncService.updateInterval()
-					} else {
-						text.setValue(Math.round(numValue).toString())
-						this.plugin.settings.autoSyncIntervalSeconds =
-							Math.round(numValue) * 60
-						await this.plugin.saveSettings()
-						await this.plugin.autoSyncService.updateInterval()
-					}
+					const numValue = parseFloat(text.getValue())
+					const finalValue = isNaN(numValue)
+						? 0
+						: Math.round(clamp(numValue, 0, MAX_MINUTES))
+					text.setValue(finalValue.toString())
+					this.plugin.settings.autoSyncIntervalSeconds = finalValue * 60
+					await this.plugin.saveSettings()
+					await this.plugin.scheduledSyncService.updateInterval()
 				})
 				text.inputEl.type = 'number'
 				text.inputEl.min = '0'
+				text.inputEl.max = MAX_MINUTES.toString()
 				text.inputEl.step = '1'
 			})
-
 	}
 }

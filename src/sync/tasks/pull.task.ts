@@ -2,9 +2,21 @@ import { dirname } from 'path-browserify'
 import { BufferLike } from 'webdav'
 import logger from '~/utils/logger'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
-import { BaseTask, toTaskError } from './task.interface'
+import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export default class PullTask extends BaseTask {
+	constructor(
+		readonly options: BaseTaskOptions & {
+			remoteSize: number
+		},
+	) {
+		super(options)
+	}
+
+	get remoteSize() {
+		return this.options.remoteSize
+	}
+
 	async exec() {
 		const fileExists = await this.vault.getFileByPath(this.localPath)
 		try {
@@ -13,6 +25,9 @@ export default class PullTask extends BaseTask {
 				details: false,
 			})) as BufferLike
 			const arrayBuffer = bufferLikeToArrayBuffer(file)
+			if (arrayBuffer.byteLength !== this.remoteSize) {
+				throw new Error('Remote Size Not Match!')
+			}
 			if (fileExists) {
 				await this.vault.modifyBinary(fileExists, arrayBuffer)
 			} else {

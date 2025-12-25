@@ -4,8 +4,9 @@ import { SyncStartMode } from '~/sync'
 import type NutstorePlugin from '..'
 import type SyncExecutorService from './sync-executor.service'
 
-export default class AutoSyncService {
+export default class ScheduledSyncService {
 	private autoSyncTimer: number | null = null
+	private startupSyncTimer: number | null = null
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -14,7 +15,20 @@ export default class AutoSyncService {
 
 	async start() {
 		const settings = await useSettings()
-		this.startTimer(settings.autoSyncIntervalSeconds)
+
+		if (settings.startupSyncDelaySeconds > 0) {
+			this.startupSyncTimer = window.setTimeout(async () => {
+				try {
+					await this.syncExecutor.executeSync({
+						mode: SyncStartMode.AUTO_SYNC,
+					})
+				} finally {
+					this.startTimer(settings.autoSyncIntervalSeconds)
+				}
+			}, settings.startupSyncDelaySeconds * 1000)
+		} else {
+			this.startTimer(settings.autoSyncIntervalSeconds)
+		}
 	}
 
 	private startTimer(intervalSeconds: number) {
@@ -46,5 +60,9 @@ export default class AutoSyncService {
 
 	unload() {
 		this.stopTimer()
+		if (this.startupSyncTimer !== null) {
+			window.clearTimeout(this.startupSyncTimer)
+			this.startupSyncTimer = null
+		}
 	}
 }

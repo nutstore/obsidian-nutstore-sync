@@ -60,7 +60,9 @@ export default class TaskListConfirmModal extends Modal {
 			row.createEl('td', { text: task.remotePath })
 		})
 
-		new Setting(contentEl)
+		const settingDiv = contentEl.createDiv()
+		settingDiv.style.marginTop = '1rem'
+		new Setting(settingDiv)
 			.addButton((button) => {
 				button
 					.setButtonText(i18n.t('taskList.continue'))

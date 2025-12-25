@@ -3,12 +3,12 @@ import { SyncMode } from '~/settings'
 import { blobStore } from '~/storage/blob'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSameTime } from '~/utils/is-same-time'
-import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
 import { BaseTask } from '../tasks/task.interface'
+import { hasFolderContentChanged } from './has-folder-content-changed'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export async function twoWayDecider(
@@ -101,6 +101,15 @@ export async function twoWayDecider(
 								},
 							})
 							if (remote.size > maxFileSize || local.size > maxFileSize) {
+								tasks.push(
+									taskFactory.createSkippedTask({
+										...options,
+										reason: 'file-too-large',
+										maxSize: maxFileSize,
+										remoteSize: remote.size,
+										localSize: local.size,
+									}),
+								)
 								continue
 							}
 
@@ -136,9 +145,23 @@ export async function twoWayDecider(
 								},
 							})
 							if (remote.size > maxFileSize) {
+								tasks.push(
+									taskFactory.createSkippedTask({
+										...options,
+										reason: 'file-too-large',
+										maxSize: maxFileSize,
+										remoteSize: remote.size,
+										localSize: local.size,
+									}),
+								)
 								continue
 							}
-							tasks.push(taskFactory.createPullTask(options))
+							tasks.push(
+								taskFactory.createPullTask({
+									...options,
+									remoteSize: remote.size,
+								}),
+							)
 							continue
 						}
 					} else {
@@ -155,6 +178,15 @@ export async function twoWayDecider(
 								},
 							})
 							if (local.size > maxFileSize) {
+								tasks.push(
+									taskFactory.createSkippedTask({
+										...options,
+										reason: 'file-too-large',
+										maxSize: maxFileSize,
+										remoteSize: remote.size,
+										localSize: local.size,
+									}),
+								)
 								continue
 							}
 							if (hasInvalidChar(local.path)) {
@@ -179,9 +211,22 @@ export async function twoWayDecider(
 							},
 						})
 						if (remote.size > maxFileSize) {
+							tasks.push(
+								taskFactory.createSkippedTask({
+									...options,
+									reason: 'file-too-large',
+									maxSize: maxFileSize,
+									remoteSize: remote.size,
+								}),
+							)
 							continue
 						}
-						tasks.push(taskFactory.createPullTask(options))
+						tasks.push(
+							taskFactory.createPullTask({
+								...options,
+								remoteSize: remote.size,
+							}),
+						)
 						continue
 					} else {
 						logger.debug({
@@ -213,6 +258,14 @@ export async function twoWayDecider(
 						},
 					})
 					if (local.size > maxFileSize) {
+						tasks.push(
+							taskFactory.createSkippedTask({
+								...options,
+								reason: 'file-too-large',
+								localSize: local.size,
+								maxSize: maxFileSize,
+							}),
+						)
 						continue
 					}
 					if (hasInvalidChar(local.path)) {
@@ -264,6 +317,15 @@ export async function twoWayDecider(
 					})
 
 					if (remote.size > maxFileSize || local.size > maxFileSize) {
+						tasks.push(
+							taskFactory.createSkippedTask({
+								...options,
+								reason: 'file-too-large',
+								remoteSize: remote.size,
+								localSize: local.size,
+								maxSize: maxFileSize,
+							}),
+						)
 						continue
 					}
 
@@ -295,9 +357,19 @@ export async function twoWayDecider(
 					})
 
 					if (remote.size > maxFileSize) {
+						tasks.push(
+							taskFactory.createSkippedTask({
+								...options,
+								reason: 'file-too-large',
+								remoteSize: remote.size,
+								maxSize: maxFileSize,
+							}),
+						)
 						continue
 					}
-					tasks.push(taskFactory.createPullTask(options))
+					tasks.push(
+						taskFactory.createPullTask({ ...options, remoteSize: remote.size }),
+					)
 					continue
 				}
 			} else {
@@ -314,6 +386,14 @@ export async function twoWayDecider(
 					})
 
 					if (local.size > maxFileSize) {
+						tasks.push(
+							taskFactory.createSkippedTask({
+								...options,
+								reason: 'file-too-large',
+								localSize: local.size,
+								maxSize: maxFileSize,
+							}),
+						)
 						continue
 					}
 					if (hasInvalidChar(local.path)) {
@@ -380,13 +460,17 @@ export async function twoWayDecider(
 				continue
 			}
 		} else if (record) {
-			const remoteChanged =
-				remote.mtime && record.remote.mtime
-					? !isSameTime(remote.mtime, record.remote.mtime)
-					: false
+			// Use sub-items check instead of mtime check
+			const remoteChanged = hasFolderContentChanged(
+				remote.path,
+				remoteStats,
+				syncRecords,
+				'remote',
+			)
+
 			if (remoteChanged) {
 				logger.debug({
-					reason: 'remote folder changed',
+					reason: 'remote folder content changed',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 					localPath: localPath,
 					conditions: {
@@ -413,45 +497,29 @@ export async function twoWayDecider(
 						}),
 					)
 				}
-
 				continue
 			}
-			// If there are no modified files in the remote folder or no paths that aren't in syncRecord, then the entire folder can be deleted!
-			let removable = true
-			for (const sub of remoteStats) {
-				if (!isSub(remote.path, sub.path)) {
-					continue
-				}
-				const subRecord = syncRecords.get(sub.path)
-				if (
-					!subRecord ||
-					(sub.mtime &&
-						subRecord.remote.mtime &&
-						!isSameTime(sub.mtime, subRecord.remote.mtime))
-				) {
-					removable = false
-					break
-				}
-			}
-			if (removable) {
-				logger.debug({
-					reason: 'remote folder is removable',
-					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
-					localPath: localPath,
-					conditions: {
-						removable,
-						localExists: !!local,
-						recordExists: !!record,
-					},
-				})
-				removeRemoteFolderTasks.push(
-					taskFactory.createRemoveRemoteTask({
-						localPath: remote.path,
-						remotePath: remote.path,
-						remoteBaseDir,
-					}),
-				)
-			}
+
+			// No need to traverse sub-items again, directly mark as removable
+			// because hasFolderContentChanged already checked
+			logger.debug({
+				reason: 'remote folder is removable (no content changes)',
+				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+				localPath: localPath,
+				conditions: {
+					removable: true,
+					localExists: !!local,
+					recordExists: !!record,
+				},
+			})
+			removeRemoteFolderTasks.push(
+				taskFactory.createRemoveRemoteTask({
+					localPath: remote.path,
+					remotePath: remote.path,
+					remoteBaseDir,
+				}),
+			)
+			continue
 		} else {
 			logger.debug({
 				reason: 'remote folder does not exist locally',
@@ -505,10 +573,17 @@ export async function twoWayDecider(
 			}
 		} else {
 			if (record) {
-				const localChanged = !isSameTime(local.mtime, record.local.mtime)
+				// Use sub-items check instead of mtime check
+				const localChanged = hasFolderContentChanged(
+					local.path,
+					localStats,
+					syncRecords,
+					'local',
+				)
+
 				if (localChanged) {
 					logger.debug({
-						reason: 'local folder changed',
+						reason: 'local folder content changed',
 						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 						localPath: local.path,
 						conditions: {
@@ -526,42 +601,25 @@ export async function twoWayDecider(
 					)
 					continue
 				}
-				// The folder existed remotely before but now it's gone. If there are no modifications in this local folder, then the local folder should be deleted too!
-				let removable = true
-				for (const sub of localStats) {
-					if (!isSub(local.path, sub.path)) {
-						continue
-					}
-					const subRecord = syncRecords.get(sub.path)
-					if (
-						!subRecord ||
-						(sub.mtime &&
-							subRecord.local.mtime &&
-							!isSameTime(sub.mtime, subRecord.local.mtime))
-					) {
-						removable = false
-						break
-					}
-				}
-				if (removable) {
-					logger.debug({
-						reason: 'local folder is removable',
-						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+
+				// No need to traverse sub-items again
+				logger.debug({
+					reason: 'local folder is removable (no content changes)',
+					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+					localPath: local.path,
+					conditions: {
+						removable: true,
+						remoteExists: !!remote,
+						recordExists: !!record,
+					},
+				})
+				removeLocalFolderTasks.push(
+					taskFactory.createRemoveLocalTask({
 						localPath: local.path,
-						conditions: {
-							removable,
-							remoteExists: !!remote,
-							recordExists: !!record,
-						},
-					})
-					removeLocalFolderTasks.push(
-						taskFactory.createRemoveLocalTask({
-							localPath: local.path,
-							remotePath: local.path,
-							remoteBaseDir,
-						}),
-					)
-				}
+						remotePath: local.path,
+						remoteBaseDir,
+					}),
+				)
 			} else {
 				logger.debug({
 					reason: 'local folder does not exist remotely',
@@ -590,7 +648,7 @@ export async function twoWayDecider(
 		}
 	}
 
-	// 排序文件夹任务，确保按正确顺序执行
+	// Sort folder tasks to ensure correct execution order
 	removeRemoteFolderTasks.sort(
 		(a, b) => b.remotePath.length - a.remotePath.length,
 	)

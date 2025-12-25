@@ -6,7 +6,8 @@ export async function statVaultItem(
 	vault: Vault,
 	path: string,
 ): Promise<StatModel | undefined> {
-	const file = vault.getAbstractFileByPath(normalizePath(path))
+	path = normalizePath(path)
+	const file = vault.getAbstractFileByPath(path)
 	if (!file) {
 		return undefined
 	}

@@ -32,8 +32,8 @@ export default {
 			failure: '登录失败，请重试',
 		},
 		useGitStyle: {
-			name: '使用Git样式的冲突标记',
-			desc: '启用后将使用 <<<<<<< 和 >>>>>>> 等标记来显示冲突，而不是HTML标记',
+			name: '使用 Git 样式的冲突标记',
+			desc: '启用后将使用 <<<<<<< 和 >>>>>>> 等标记来显示冲突，而不是 HTML 标记',
 		},
 		backupWarning: {
 			name: '备份提醒',
@@ -42,7 +42,7 @@ export default {
 		conflictStrategy: {
 			name: '冲突解决策略',
 			desc: '选择解决文件冲突的方式。\n注意：建议在使用自动合并功能前，先手动备份重要文件，以防数据丢失。',
-			diffMatchPatch: '智能合并(推荐)',
+			diffMatchPatch: '智能合并（推荐）',
 			latestTimestamp: '使用最新版本',
 			skip: '跳过冲突',
 		},
@@ -82,7 +82,7 @@ export default {
 		},
 		syncMode: {
 			name: '同步模式',
-			desc: '建议在文件较多的情况下选择宽松模式，可以获得更快的同步速度。宽松模式会忽略同名且大小相等但没有同步记录的文件。',
+			desc: '建议在文件较多的情况下选择宽松模式，同步速度更快。宽松模式会忽略同名且大小相等但没有同步记录的文件。',
 			strict: '严格',
 			loose: '宽松',
 		},
@@ -114,7 +114,7 @@ export default {
 			},
 			include: {
 				name: '包含规则',
-				desc: '符合规则的文件/文件夹会被同步, 如果和排除规则有冲突, 会优先选择包含规则.',
+				desc: '符合规则的文件/文件夹会被同步，如果和排除规则有冲突，会优先选择包含规则。',
 			},
 		},
 		skipLargeFiles: {
@@ -213,7 +213,7 @@ export default {
 	sync: {
 		failed: '同步失败!',
 		error: {
-			folderButFile: '预期文件夹但发现文件: {{path}}',
+			folderButFile: '期望是文件夹，却发现是文件: {{path}}',
 			notFound: '未找到: {{path}}',
 			localPathNotFound: '本地路径未找到: {{path}}',
 			cannotMergeBinary: '无法合并二进制文件',
@@ -246,20 +246,26 @@ export default {
 		failedStatus: '同步失败',
 		cancelled: '同步已取消',
 		suggestUseClientForManyTasks:
-			'Tips: 当同步任务较多时，建议使用坚果云客户端同步，可获得更好的性能和稳定性，插件更适合在移动端使用！',
+			'提示：当同步任务较多时，建议使用坚果云客户端同步，可获得更好的性能和稳定性，插件更适合在移动端使用！',
 		modalTitle: '同步进行中',
 		cancelButton: '取消同步',
 		progressText: '正在同步文件',
 		fileOp: {
 			createLocalDir: '创建本地目录',
 			createRemoteDir: '创建远程目录',
+			createRemoteDirs: '创建多级目录',
 			download: '下载',
 			filenameError: '路径含无效字符',
 			merge: '合并',
 			removeLocal: '删除本地',
 			removeRemote: '删除远程',
+			removeRemoteRecursively: '递归删除远程',
+			rename: '重命名',
 			sync: '同步',
 			upload: '上传',
+			noop: '跳过',
+			cleanRecord: '清理记录',
+			skip: '跳过',
 		},
 		confirmModal: {
 			title: '同步确认',
@@ -285,13 +291,12 @@ export default {
 	deleteConfirm: {
 		title: '确认删除本地文件',
 		instruction:
-			'⚠️ 在自动同步过程中检测到以下本地文件将被删除（因远程已删除）。\n\n请仔细检查列表，确认是否继续删除这些文件：',
+			'⚠️ 在自动同步过程中检测到以下本地文件将被删除（因远程已删除）。\n\n勾选要删除的文件，未勾选的文件将重新上传到远程：',
 		warningNotice: '检测到本地文件将被删除，请确认',
-		fileToDelete: '待删除文件',
-		path: '路径',
-		confirmDelete: '确认删除',
-		cancel: '取消',
-		keepFiles: '保留所有文件',
+		select: '选择',
+		filePath: '文件路径',
+		deleteAndReupload: '删除选中的，重新上传未选中的',
+		skipForNow: '暂时忽略',
 	},
 	textAreaModal: {
 		copy: '复制',

@@ -51,7 +51,7 @@ export default {
 		},
 		conflictStrategy: {
 			name: 'Conflict resolution strategy',
-			desc: 'Choose how to resolve file conflicts. \nNote: It is recommended to backup important files before using auto-merge feature to prevent data loss.',
+			desc: 'Choose how to resolve file conflicts. \nNote: We recommend backing up important files before using auto-merge to prevent data loss.',
 			diffMatchPatch: 'Smart merge (recommended)',
 			latestTimestamp: 'Use latest version',
 			skip: 'Skip conflicts',
@@ -66,7 +66,7 @@ export default {
 		},
 		syncMode: {
 			name: 'Sync mode',
-			desc: 'Choose between strict or loose sync mode. Loose mode is recommended for users with many files to achieve faster sync speed. In loose mode, files with the same name and equal size that have no sync record will be ignored.',
+			desc: 'Choose between strict or loose sync mode. Loose mode is recommended for users with many files for faster syncing. In loose mode, files with the same name and equal size that have no sync record will be ignored.',
 			strict: 'Strict',
 			loose: 'Loose',
 		},
@@ -119,7 +119,7 @@ export default {
 		},
 		skipLargeFiles: {
 			name: 'Skip large files',
-			desc: 'Files exceeding this size will be skipped during synchronization. If sync crashes occur, try lowering this value. Leave empty for no limit.',
+			desc: 'Files exceeding this size will be skipped during synchronization. If sync issues occur, try lowering this value. Leave empty for no limit.',
 			placeholder: 'e.g., 10 MiB or 500 KiB',
 		},
 		log: {
@@ -140,7 +140,7 @@ export default {
 			dump: 'Export',
 			dumpName: 'Cache management',
 			dumpDesc:
-				'The plugin stores information about your remote folders locally on your device. When you switch to a new device, this information is lost and needs to be rebuilt before syncing. For users with many files, rebuilding can be slow due to Nutstore access limits. Export saves this information to Nutstore, while Import retrieves it, allowing immediate syncing on new devices without waiting for a slow rebuild.',
+				'The plugin stores remote folder information locally. When switching devices, this data is lost and must be rebuilt before syncing. With many files, rebuilding can be slow due to rate limits. Export saves this data to Nutstore; Import retrieves it, allowing immediate syncing on new devices.',
 			restoreName: 'Import cache',
 			restoreDesc:
 				'Import previously exported cache data from Nutstore to your device. This lets you sync immediately on a new device without the long waiting time normally needed to scan all your files.',
@@ -249,25 +249,31 @@ export default {
 		failedStatus: 'Sync failed',
 		cancelled: 'Sync cancelled',
 		suggestUseClientForManyTasks:
-			'Tips: When there are many sync tasks, it is recommended to use Nutstore client for better performance and stability. The plugin is more suitable for mobile use!',
+			'Tip: When there are many sync tasks, we recommend using the Nutstore client for better performance and stability. The plugin is more suitable for mobile use!',
 		modalTitle: 'Syncing',
 		cancelButton: 'Cancel sync',
 		progressText: 'Syncing files',
 		fileOp: {
 			createLocalDir: 'Create local directory',
 			createRemoteDir: 'Create remote directory',
+			createRemoteDirs: 'Create multi-level directories',
 			download: 'Download',
 			filenameError: 'Invalid path characters',
 			merge: 'Merge',
 			removeLocal: 'Remove local',
 			removeRemote: 'Remove remote',
+			removeRemoteRecursively: 'Remove remote recursively',
+			rename: 'Rename',
 			sync: 'Sync',
 			upload: 'Upload',
+			noop: 'Skip',
+			cleanRecord: 'Clean record',
+			skip: 'Skip',
 		},
 		confirmModal: {
 			title: 'Sync confirmation',
 			message:
-				'⚠️ Please note:\n\n1. Sync operation may modify or delete local files\n2. It is recommended to backup important files before syncing\n3. In case of file conflicts, manual resolution may be required\n4. Initial sync will process all files and may take longer, please be patient\n\nAre you sure you want to start syncing?',
+				'⚠️ Please note:\n\n1. Sync operation may modify or delete local files\n2. We recommend backing up important files before syncing\n3. In case of file conflicts, manual resolution may be required\n4. Initial sync will process all files and may take longer, please be patient\n\nAre you sure you want to start syncing?',
 			confirm: 'Confirm sync',
 			cancel: 'Cancel',
 			remoteDir: 'Remote directory: {{dir}}',
@@ -286,15 +292,14 @@ export default {
 		cancel: 'Cancel',
 	},
 	deleteConfirm: {
-		title: 'Confirm Local File Deletion',
+		title: 'Confirm local file deletion',
 		instruction:
-			'⚠️ The following local files will be deleted during auto-sync (because they were deleted remotely).\n\nPlease review the list carefully and confirm whether to proceed with deletion:',
+			'⚠️ The following local files will be deleted during auto-sync (because they were deleted remotely).\n\nCheck files to delete; unchecked files will be re-uploaded:',
 		warningNotice: 'Local files will be deleted, please confirm',
-		fileToDelete: 'Files to delete',
-		path: 'Path',
-		confirmDelete: 'Confirm Delete',
-		cancel: 'Cancel',
-		keepFiles: 'Keep all files',
+		select: 'Select',
+		filePath: 'File path',
+		deleteAndReupload: 'Delete selected, re-upload unchecked',
+		skipForNow: 'Skip for now',
 	},
 	textAreaModal: {
 		copy: 'Copy',

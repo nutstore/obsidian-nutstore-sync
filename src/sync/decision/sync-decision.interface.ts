@@ -30,8 +30,34 @@ export interface ConflictTaskOptions extends TaskOptions {
 	useGitStyle: boolean
 }
 
+export interface PullTaskOptions extends TaskOptions {
+	remoteSize: number
+}
+
+export type SkippedTaskOptions = TaskOptions &
+	(
+		| {
+				reason: 'file-too-large'
+				maxSize: number
+				remoteSize: number
+				localSize?: number
+		  }
+		| {
+				reason: 'file-too-large'
+				maxSize: number
+				remoteSize?: number
+				localSize: number
+		  }
+		| {
+				reason: 'file-too-large'
+				maxSize: number
+				remoteSize: number
+				localSize: number
+		  }
+	)
+
 export interface TaskFactory {
-	createPullTask(options: TaskOptions): BaseTask
+	createPullTask(options: PullTaskOptions): BaseTask
 	createPushTask(options: TaskOptions): BaseTask
 	createConflictResolveTask(options: ConflictTaskOptions): BaseTask
 	createNoopTask(options: TaskOptions): BaseTask
@@ -41,6 +67,7 @@ export interface TaskFactory {
 	createMkdirRemoteTask(options: TaskOptions): BaseTask
 	createCleanRecordTask(options: TaskOptions): BaseTask
 	createFilenameErrorTask(options: TaskOptions): BaseTask
+	createSkippedTask(options: SkippedTaskOptions): BaseTask
 }
 
 export interface SyncDecisionInput {

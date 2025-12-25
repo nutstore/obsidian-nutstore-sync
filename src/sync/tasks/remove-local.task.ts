@@ -1,4 +1,3 @@
-import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
@@ -16,7 +15,9 @@ export default class RemoveLocalTask extends BaseTask {
 		try {
 			const stat = await statVaultItem(this.vault, this.localPath)
 			if (!stat) {
-				throw new Error(i18n.t('sync.error.notFound', { path: this.localPath }))
+				return {
+					success: true,
+				}
 			}
 			const file = this.vault.getAbstractFileByPath(this.localPath)
 			if (!file) {

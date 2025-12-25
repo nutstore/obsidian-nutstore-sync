@@ -1,11 +1,7 @@
 import logger from '~/utils/logger'
-import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
+import { BaseTask, toTaskError } from './task.interface'
 
 export default class CleanRecordTask extends BaseTask {
-	constructor(public readonly options: BaseTaskOptions) {
-		super(options)
-	}
-
 	async exec() {
 		try {
 			const syncRecord = this.syncRecord

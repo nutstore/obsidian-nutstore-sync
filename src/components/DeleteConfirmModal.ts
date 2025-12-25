@@ -3,7 +3,7 @@ import i18n from '~/i18n'
 import RemoveLocalTask from '../sync/tasks/remove-local.task'
 
 export default class DeleteConfirmModal extends Modal {
-	private result: boolean = false
+	private confirmed: boolean = false
 	private selectedTasks: boolean[] = []
 
 	constructor(
@@ -33,13 +33,17 @@ export default class DeleteConfirmModal extends Modal {
 
 		const thead = table.createEl('thead')
 		const headerRow = thead.createEl('tr')
-		headerRow.createEl('th', { text: i18n.t('deleteConfirm.fileToDelete') })
-		headerRow.createEl('th', { text: i18n.t('deleteConfirm.path') })
+		const selectHeader = headerRow.createEl('th', {
+			text: i18n.t('deleteConfirm.select'),
+		})
+		selectHeader.style.textAlign = 'center'
+		headerRow.createEl('th', { text: i18n.t('deleteConfirm.filePath') })
 
 		const tbody = table.createEl('tbody')
 		this.tasks.forEach((task, index) => {
 			const row = tbody.createEl('tr')
 			const checkboxCell = row.createEl('td')
+			checkboxCell.style.textAlign = 'center'
 			const checkbox = checkboxCell.createEl('input')
 			checkbox.type = 'checkbox'
 			checkbox.checked = this.selectedTasks[index]
@@ -59,36 +63,49 @@ export default class DeleteConfirmModal extends Modal {
 		})
 
 		const settingDiv = contentEl.createDiv()
+		settingDiv.style.marginTop = '1rem'
 		new Setting(settingDiv)
 			.addButton((button) => {
 				button
-					.setButtonText(i18n.t('deleteConfirm.confirmDelete'))
-					.setWarning()
+					.setButtonText(i18n.t('deleteConfirm.deleteAndReupload'))
+					.setCta()
 					.onClick(() => {
-						this.result = true
+						this.confirmed = true
 						this.close()
 					})
 			})
 			.addButton((button) => {
-				button
-					.setButtonText(i18n.t('deleteConfirm.keepFiles'))
-					.onClick(() => {
-						this.result = false
-						this.close()
-					})
+				button.setButtonText(i18n.t('deleteConfirm.skipForNow')).onClick(() => {
+					this.confirmed = false
+					this.close()
+				})
 			})
 	}
 
-	async open(): Promise<{ confirm: boolean; tasks: RemoveLocalTask[] }> {
+	async open(): Promise<{
+		tasksToDelete: RemoveLocalTask[]
+		tasksToReupload: RemoveLocalTask[]
+	}> {
 		super.open()
 		return new Promise((resolve) => {
 			this.onClose = () => {
-				const selectedTasks = this.tasks.filter(
+				if (!this.confirmed) {
+					// User cancelled, no changes
+					resolve({
+						tasksToDelete: [],
+						tasksToReupload: [],
+					})
+					return
+				}
+				const tasksToDelete = this.tasks.filter(
 					(_, index) => this.selectedTasks[index],
 				)
+				const tasksToReupload = this.tasks.filter(
+					(_, index) => !this.selectedTasks[index],
+				)
 				resolve({
-					confirm: this.result,
-					tasks: selectedTasks,
+					tasksToDelete,
+					tasksToReupload,
 				})
 			}
 		})
