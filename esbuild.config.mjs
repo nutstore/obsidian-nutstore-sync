@@ -6,18 +6,18 @@ import fs from 'fs'
 import postcssMergeRules from 'postcss-merge-rules'
 import process from 'process'
 
+dotenv.config()
+
+const prod = process.argv[2] === 'production'
+
 const renamePlugin = {
 	name: 'rename-plugin',
 	setup(build) {
 		build.onEnd(async () => {
-			fs.renameSync('./main.css', './styles.css')
+			fs.renameSync(prod ? './dist/main.css' : './main.css', './styles.css')
 		})
 	},
 }
-
-dotenv.config()
-
-const prod = process.argv[2] === 'production'
 
 const context = await esbuild.context({
 	entryPoints: ['src/index.ts'],
@@ -49,7 +49,7 @@ const context = await esbuild.context({
 	logLevel: 'info',
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
-	outfile: 'main.js',
+	outfile: prod ? 'dist/main.js' : 'main.js',
 	minify: prod,
 	platform: 'browser',
 	plugins: [
