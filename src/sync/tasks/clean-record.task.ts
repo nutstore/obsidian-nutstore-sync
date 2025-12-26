@@ -7,7 +7,7 @@ export default class CleanRecordTask extends BaseTask {
 			const syncRecord = this.syncRecord
 			await syncRecord.deleteFileRecord(this.localPath)
 
-			return { success: true }
+			return { success: true, skipRecord: true }
 		} catch (e) {
 			logger.error(this, e)
 			return {
