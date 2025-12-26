@@ -1,3 +1,7 @@
+/**
+ * https://github.com/broofa/mime/blob/ac08f60615756fbc40cda6b9d3b6619df61c1b97/types/standard.ts
+ */
+
 const types = {
 	'application/andrew-inset': ['ez'],
 	'application/appinstaller': ['appinstaller'],
