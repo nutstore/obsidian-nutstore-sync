@@ -14,6 +14,7 @@ import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
 import GlobMatch, {
 	extendRules,
+	GlobMatchOptions,
 	isVoidGlobMatchOptions,
 	needIncludeFromGlobRules,
 } from '~/utils/glob-match'
@@ -130,7 +131,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				size: delta.size,
 			})
 		}
-		const stats = Array.from(filesMap.values())
+		let stats = Array.from(filesMap.values())
 		if (stats.length === 0) {
 			return []
 		}
@@ -147,10 +148,8 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				subPath.add(path)
 			}
 		}
-		const contents = [...subPath]
-			.map((path) => filesMap.get(path))
-			.filter(isNotNil)
-		for (const item of contents) {
+		stats = [...subPath].map((path) => filesMap.get(path)).filter(isNotNil)
+		for (const item of stats) {
 			if (isAbsolute(item.path)) {
 				item.path = item.path.replace(this.options.remoteBaseDir, '')
 				if (item.path.startsWith('/')) {
@@ -159,19 +158,25 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			}
 		}
 		const settings = await useSettings()
-		const exclusions = extendRules(
-			(settings?.filterRules.exclusionRules ?? [])
+		const exclusions = this.buildRules(settings?.filterRules.exclusionRules)
+		const inclusions = this.buildRules(settings?.filterRules.inclusionRules)
+
+		const includedStats = stats.filter((stat) =>
+			needIncludeFromGlobRules(stat.path, inclusions, exclusions),
+		)
+		const completeStats = completeLossDir(stats, includedStats)
+		const completeStatPaths = new Set(completeStats.map((s) => s.path))
+		return stats.map((stat) => ({
+			stat,
+			ignored: !completeStatPaths.has(stat.path),
+		}))
+	}
+
+	private buildRules(rules: GlobMatchOptions[] = []): GlobMatch[] {
+		return extendRules(
+			rules
 				.filter((opt) => !isVoidGlobMatchOptions(opt))
 				.map(({ expr, options }) => new GlobMatch(expr, options)),
 		)
-		const inclusion = extendRules(
-			(settings?.filterRules.inclusionRules ?? [])
-				.filter((opt) => !isVoidGlobMatchOptions(opt))
-				.map(({ expr, options }) => new GlobMatch(expr, options)),
-		)
-		const filteredContents = contents.filter((item) =>
-			needIncludeFromGlobRules(item.path, inclusion, exclusions),
-		)
-		return completeLossDir(contents, filteredContents)
 	}
 }

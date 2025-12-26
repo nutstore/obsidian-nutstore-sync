@@ -1,5 +1,4 @@
 import { isEqual, noop } from 'lodash-es'
-import { extname } from 'path-browserify'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
@@ -7,8 +6,7 @@ import { SyncRecordModel } from '~/model/sync-record.model'
 import { blobStore } from '~/storage/blob'
 import logger from '~/utils/logger'
 import { mergeDigIn } from '~/utils/merge-dig-in'
-import { isTextMime } from '~/utils/mime/is-text-mime'
-import { lookupMimeByExtname } from '~/utils/mime/lookup'
+import { isMergeablePath } from '~/utils/mime/is-mergeable-path'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import {
@@ -167,14 +165,10 @@ export default class ConflictResolveTask extends BaseTask {
 				baseBlob = await blobStore.get(baseKey)
 			}
 
-			const localIsText = isTextMime(
-				lookupMimeByExtname(extname(file.path)) ?? '',
-			)
-			const remoteIsText = isTextMime(
-				lookupMimeByExtname(extname(this.remotePath)) ?? '',
-			)
+			const localIsMergeable = isMergeablePath(file.path)
+			const remoteIsMergeable = isMergeablePath(this.remotePath)
 
-			if (!(localIsText && remoteIsText)) {
+			if (!(localIsMergeable && remoteIsMergeable)) {
 				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
 			}
 

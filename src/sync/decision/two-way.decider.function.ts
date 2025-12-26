@@ -8,6 +8,7 @@ import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
 import { BaseTask } from '../tasks/task.interface'
+import { hasIgnoredInFolder } from '../utils/has-ignored-in-folder'
 import { hasFolderContentChanged } from './has-folder-content-changed'
 import { SyncDecisionInput } from './sync-decision.interface'
 
@@ -30,13 +31,25 @@ export async function twoWayDecider(
 		maxFileSize = bytesParse(maxFileSizeStr) ?? Infinity
 	}
 
-	const localStatsMap = new Map(localStats.map((item) => [item.path, item]))
-	const remoteStatsMap = new Map(remoteStats.map((item) => [item.path, item]))
+	// Filter out ignored files and extract StatModel from FsWalkResult
+	const localStatsFiltered = localStats
+		.filter((item) => !item.ignored)
+		.map((item) => item.stat)
+	const remoteStatsFiltered = remoteStats
+		.filter((item) => !item.ignored)
+		.map((item) => item.stat)
+
+	const localStatsMap = new Map(
+		localStatsFiltered.map((item) => [item.path, item]),
+	)
+	const remoteStatsMap = new Map(
+		remoteStatsFiltered.map((item) => [item.path, item]),
+	)
 	const mixedPath = new Set([...localStatsMap.keys(), ...remoteStatsMap.keys()])
 
 	logger.debug(
 		'local Stats',
-		localStats.map((d) => ({
+		localStatsFiltered.map((d) => ({
 			path: d.path,
 			size: d.isDir ? undefined : d.size,
 			isDir: d.isDir,
@@ -44,7 +57,7 @@ export async function twoWayDecider(
 	)
 	logger.debug(
 		'remote Stats',
-		remoteStats.map((d) => ({
+		remoteStatsFiltered.map((d) => ({
 			path: d.path,
 			size: d.isDir ? undefined : d.size,
 			isDir: d.isDir,
@@ -436,7 +449,7 @@ export async function twoWayDecider(
 	}
 
 	// * sync folder: remote -> local
-	for (const remote of remoteStats) {
+	for (const remote of remoteStatsFiltered) {
 		if (!remote.isDir) {
 			continue
 		}
@@ -463,7 +476,7 @@ export async function twoWayDecider(
 			// Use sub-items check instead of mtime check
 			const remoteChanged = hasFolderContentChanged(
 				remote.path,
-				remoteStats,
+				remoteStatsFiltered,
 				syncRecords,
 				'remote',
 			)
@@ -500,8 +513,20 @@ export async function twoWayDecider(
 				continue
 			}
 
-			// No need to traverse sub-items again, directly mark as removable
-			// because hasFolderContentChanged already checked
+			if (hasIgnoredInFolder(remote.path, remoteStats)) {
+				logger.debug({
+					reason: 'skip removing remote folder (contains ignored items)',
+					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+					localPath: localPath,
+					conditions: {
+						hasIgnoredItems: true,
+						localExists: !!local,
+						recordExists: !!record,
+					},
+				})
+				continue
+			}
+
 			logger.debug({
 				reason: 'remote folder is removable (no content changes)',
 				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
@@ -554,7 +579,7 @@ export async function twoWayDecider(
 	}
 
 	// * sync folder: local -> remote
-	for (const local of localStats) {
+	for (const local of localStatsFiltered) {
 		if (!local.isDir) {
 			continue
 		}
@@ -576,7 +601,7 @@ export async function twoWayDecider(
 				// Use sub-items check instead of mtime check
 				const localChanged = hasFolderContentChanged(
 					local.path,
-					localStats,
+					localStatsFiltered,
 					syncRecords,
 					'local',
 				)
@@ -602,7 +627,20 @@ export async function twoWayDecider(
 					continue
 				}
 
-				// No need to traverse sub-items again
+				if (hasIgnoredInFolder(local.path, localStats)) {
+					logger.debug({
+						reason: 'skip removing local folder (contains ignored items)',
+						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+						localPath: local.path,
+						conditions: {
+							hasIgnoredItems: true,
+							remoteExists: !!remote,
+							recordExists: !!record,
+						},
+					})
+					continue
+				}
+
 				logger.debug({
 					reason: 'local folder is removable (no content changes)',
 					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),

@@ -1,6 +1,5 @@
 import { chunk, debounce, isNil } from 'lodash-es'
 import { Vault } from 'obsidian'
-import { extname } from 'path-browserify'
 import { emitSyncUpdateMtimeProgress } from '~/events'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import { syncRecordKV } from '~/storage'
@@ -11,8 +10,7 @@ import type { BaseTask, TaskResult } from '~/sync/tasks/task.interface'
 import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
-import { isTextMime } from '~/utils/mime/is-text-mime'
-import { lookupMimeByExtname } from '~/utils/mime/lookup'
+import { isMergeablePath } from '~/utils/mime/is-mergeable-path'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import type NutstorePlugin from '../..'
@@ -49,7 +47,9 @@ export async function updateMtimeInRecord(
 	})
 
 	const latestRemoteEntities = await remoteFs.walk()
-	const remoteEntityMap = new Map(latestRemoteEntities.map((e) => [e.path, e]))
+	const remoteEntityMap = new Map(
+		latestRemoteEntities.map((e) => [e.stat.path, e]),
+	)
 	const syncRecord = new SyncRecord(
 		getSyncRecordNamespace(vault.getName(), remoteBaseDir),
 		syncRecordKV,
@@ -117,11 +117,8 @@ export async function updateMtimeInRecord(
 					}
 
 					const buffer = await vault.readBinary(file)
-					const isText = isTextMime(
-						lookupMimeByExtname(extname(file.path)) ?? '',
-					)
-					const isBinary = !isText
-					if (isBinary) {
+					const isMergeable = isMergeablePath(file.path)
+					if (!isMergeable) {
 						baseKey = undefined
 					} else {
 						const { key } = await blobStore.store(buffer)
@@ -131,7 +128,7 @@ export async function updateMtimeInRecord(
 				base = isNil(baseKey) ? undefined : { key: baseKey }
 
 				records.set(localPath, {
-					remote,
+					remote: remote.stat,
 					local,
 					base,
 				})

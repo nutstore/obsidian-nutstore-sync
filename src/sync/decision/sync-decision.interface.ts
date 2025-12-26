@@ -1,3 +1,4 @@
+import { FsWalkResult } from '~/fs/fs.interface'
 import { StatModel } from '~/model/stat.model'
 import { SyncMode } from '~/settings'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
@@ -72,8 +73,8 @@ export interface TaskFactory {
 
 export interface SyncDecisionInput {
 	settings: SyncDecisionSettings
-	localStats: StatModel[]
-	remoteStats: StatModel[]
+	localStats: FsWalkResult[]
+	remoteStats: FsWalkResult[]
 	syncRecords: Map<string, SyncRecordItem>
 	remoteBaseDir: string
 	compareFileContent: (
