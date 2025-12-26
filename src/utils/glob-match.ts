@@ -51,7 +51,9 @@ export default class GlobMatch {
 	}
 }
 
-export function getUserOptions(opt: GlobMatchOptions): GlobMatchUserOptions {
+export function getUserOptions(
+	opt: GlobMatchOptions | string,
+): GlobMatchUserOptions {
 	if (typeof opt === 'string') {
 		return cloneDeep(DEFAULT_USER_OPTIONS)
 	}
@@ -84,7 +86,7 @@ export function needIncludeFromGlobRules(
 export function extendRules(rules: GlobMatch[]) {
 	rules = [...rules]
 	for (const { expr, options } of rules) {
-		if (expr.endsWith('**')) {
+		if (expr.startsWith('!') || expr.includes('*') || expr.endsWith('**')) {
 			continue
 		}
 		const newRule = new GlobMatch(
