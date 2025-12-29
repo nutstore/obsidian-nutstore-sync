@@ -12,7 +12,7 @@ import { stdRemotePath } from '~/utils/std-remote-path'
 import BaseSettings from './settings.base'
 
 export interface ExportedStorage {
-	deltaCache: string
+	deltaCache: any
 	exportedAt: string
 }
 

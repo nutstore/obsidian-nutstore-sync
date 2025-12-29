@@ -1,11 +1,10 @@
 import { isEqual, noop } from 'lodash-es'
-import { isNotNil } from 'ramda'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
 import { blobStore } from '~/storage/blob'
-import { isBinaryFile } from '~/utils/is-binary-file'
+import { isMergeablePath } from '~/sync/utils/is-mergeable-path'
 import logger from '~/utils/logger'
 import { mergeDigIn } from '~/utils/merge-dig-in'
 import { statVaultItem } from '~/utils/stat-vault-item'
@@ -20,6 +19,7 @@ import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 export enum ConflictStrategy {
 	DiffMatchPatch = 'diff-match-patch',
 	LatestTimeStamp = 'latest-timestamp',
+	Skip = 'skip',
 }
 
 export default class ConflictResolveTask extends BaseTask {
@@ -66,6 +66,10 @@ export default class ConflictResolveTask extends BaseTask {
 					return await this.execIntelligentMerge()
 				case ConflictStrategy.LatestTimeStamp:
 					return await this.execLatestTimeStamp(local, remote)
+				case ConflictStrategy.Skip:
+					// Skip conflict resolution - keep files as they are
+					// Don't update record to preserve conflict state for next sync
+					return { success: true, skipRecord: true }
 			}
 		} catch (e) {
 			logger.error(this, e)
@@ -161,13 +165,10 @@ export default class ConflictResolveTask extends BaseTask {
 				baseBlob = await blobStore.get(baseKey)
 			}
 
-			const hasBinaryFile = await Promise.all(
-				[localBuffer, remoteBuffer, await baseBlob?.arrayBuffer()]
-					.filter(isNotNil)
-					.map((buf) => isBinaryFile(buf)),
-			).then((res) => res.includes(true))
+			const localIsMergeable = isMergeablePath(file.path)
+			const remoteIsMergeable = isMergeablePath(this.remotePath)
 
-			if (hasBinaryFile) {
+			if (!(localIsMergeable && remoteIsMergeable)) {
 				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
 			}
 

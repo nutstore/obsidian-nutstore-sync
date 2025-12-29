@@ -1,9 +1,10 @@
-import 'core-js/actual/array'
-import 'core-js/actual/string/pad-start'
-import 'core-js/actual/string/replace-all'
-import './assets/styles/global.css'
+import 'blob-polyfill'
+import 'core-js/stable'
+
 import './polyfill'
 import './webdav-patch'
+
+import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
 import { normalizePath, Notice, Plugin } from 'obsidian'
@@ -11,7 +12,7 @@ import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
-import AutoSyncService from './services/auto-sync.service'
+import ScheduledSyncService from './services/scheduled-sync.service'
 import CommandService from './services/command.service'
 import EventsService from './services/events.service'
 import I18nService from './services/i18n.service'
@@ -49,7 +50,7 @@ export default class NutstorePlugin extends Plugin {
 		this,
 		this.syncExecutorService,
 	)
-	public autoSyncService = new AutoSyncService(this, this.syncExecutorService)
+	public scheduledSyncService = new ScheduledSyncService(this, this.syncExecutorService)
 
 	async onload() {
 		await this.loadSettings()
@@ -67,15 +68,16 @@ export default class NutstorePlugin extends Plugin {
 		})
 		setPluginInstance(this)
 
-		await this.autoSyncService.start()
+		await this.scheduledSyncService.start()
 	}
 
 	async onunload() {
 		setPluginInstance(null)
 		emitCancelSync()
-		this.autoSyncService.unload()
+		this.scheduledSyncService.unload()
 		this.progressService.unload()
 		this.eventsService.unload()
+		this.realtimeSyncService.unload()
 	}
 
 	async loadSettings() {

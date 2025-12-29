@@ -17,6 +17,7 @@ export interface BaseTaskOptions {
 export interface TaskResult {
 	success: boolean
 	error?: TaskError
+	skipRecord?: boolean
 }
 
 export abstract class BaseTask {

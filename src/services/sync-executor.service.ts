@@ -1,27 +1,37 @@
-import { useSettings } from '~/settings'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
-import { NutstoreSync } from '~/sync'
+import { NutstoreSync, SyncStartMode } from '~/sync'
 import TwoWaySyncDecider from '~/sync/decision/two-way.decider'
 import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
 import waitUntil from '~/utils/wait-until'
 import type NutstorePlugin from '..'
 
 export interface SyncOptions {
-	showNotice?: boolean
+	mode: SyncStartMode
 }
 
 export default class SyncExecutorService {
 	constructor(private plugin: NutstorePlugin) {}
 
-	async executeSync(options: SyncOptions = {}) {
-		const settings = await useSettings()
-
+	async executeSync(options: SyncOptions) {
 		if (this.plugin.isSyncing) {
 			return false
 		}
 
 		await waitUntil(() => this.plugin.isSyncing === false, 500)
+
+		// 确保 configDir 始终在排除列表中，因为这个目录里的文件不支持同步
+		const configDir = this.plugin.app.vault.configDir
+		const hasConfigDirRule = this.plugin.settings.filterRules.exclusionRules.some(
+			(rule) => rule.expr === configDir
+		)
+		if (!hasConfigDirRule) {
+			this.plugin.settings.filterRules.exclusionRules.push({
+				expr: configDir,
+				options: { caseSensitive: false },
+			})
+			await this.plugin.saveSettings()
+		}
 
 		const sync = new NutstoreSync(this.plugin, {
 			vault: this.plugin.app.vault,
@@ -46,7 +56,7 @@ export default class SyncExecutorService {
 		}
 
 		await sync.start({
-			showNotice: options.showNotice ?? false,
+			mode: options.mode,
 		})
 
 		return true

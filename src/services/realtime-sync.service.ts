@@ -1,38 +1,24 @@
 import { debounce } from 'lodash-es'
 import { useSettings } from '~/settings'
+import { SyncStartMode } from '~/sync'
 import waitUntil from '~/utils/wait-until'
 import NutstorePlugin from '..'
 import type SyncExecutorService from './sync-executor.service'
 
 export default class RealtimeSyncService {
-	async realtimeSync() {
-		const settings = await useSettings()
-		if (!settings.realtimeSync) {
+	private waiting = false
+
+	private submitDirectly = async () => {
+		if (this.waiting) {
 			return
 		}
-		await this.syncExecutor.executeSync({ showNotice: false })
+		this.waiting = true
+		await waitUntil(() => this.plugin.isSyncing === false, 500)
+		this.waiting = false
+		await this.syncExecutor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 	}
 
-	submitSyncRequest = new (class {
-		waiting = false
-
-		constructor(public realtimeSyncService: RealtimeSyncService) {}
-
-		submitDirectly = async () => {
-			if (this.waiting) {
-				return
-			}
-			this.waiting = true
-			await waitUntil(
-				() => this.realtimeSyncService.plugin.isSyncing === false,
-				500,
-			)
-			this.waiting = false
-			await this.realtimeSyncService.realtimeSync()
-		}
-
-		submit = debounce(this.submitDirectly, 8000)
-	})(this)
+	private submitSyncRequest = debounce(this.submitDirectly, 8000)
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -40,35 +26,47 @@ export default class RealtimeSyncService {
 	) {
 		this.plugin.registerEvent(
 			this.vault.on('create', async () => {
-				await this.submitSyncRequest.submit()
+				const settings = await useSettings()
+				if (!settings.realtimeSync) {
+					return
+				}
+				await this.submitSyncRequest()
 			}),
 		)
 		this.plugin.registerEvent(
 			this.vault.on('delete', async () => {
-				await this.submitSyncRequest.submit()
+				const settings = await useSettings()
+				if (!settings.realtimeSync) {
+					return
+				}
+				await this.submitSyncRequest()
 			}),
 		)
 		this.plugin.registerEvent(
 			this.vault.on('modify', async () => {
-				await this.submitSyncRequest.submit()
+				const settings = await useSettings()
+				if (!settings.realtimeSync) {
+					return
+				}
+				await this.submitSyncRequest()
 			}),
 		)
 		this.plugin.registerEvent(
 			this.vault.on('rename', async () => {
-				await this.submitSyncRequest.submit()
+				const settings = await useSettings()
+				if (!settings.realtimeSync) {
+					return
+				}
+				await this.submitSyncRequest()
 			}),
 		)
-
-		useSettings().then(({ startupSyncDelaySeconds }) => {
-			if (startupSyncDelaySeconds > 0) {
-				window.setTimeout(() => {
-					this.submitSyncRequest.submitDirectly()
-				}, startupSyncDelaySeconds * 1000)
-			}
-		})
 	}
 
 	get vault() {
 		return this.plugin.app.vault
+	}
+
+	unload() {
+		this.submitSyncRequest.cancel()
 	}
 }

@@ -9,10 +9,13 @@ import PullTask from '../tasks/pull.task'
 import PushTask from '../tasks/push.task'
 import RemoveLocalTask from '../tasks/remove-local.task'
 import RemoveRemoteTask from '../tasks/remove-remote.task'
+import SkippedTask from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 import BaseSyncDecider from './base.decider'
 import {
 	ConflictTaskOptions,
+	PullTaskOptions,
+	SkippedTaskOptions,
 	TaskFactory,
 	TaskOptions,
 } from './sync-decision.interface'
@@ -37,7 +40,7 @@ export default class TwoWaySyncDecider extends BaseSyncDecider {
 
 		// 创建Task工厂
 		const taskFactory: TaskFactory = {
-			createPullTask: (options: TaskOptions) =>
+			createPullTask: (options: PullTaskOptions) =>
 				new PullTask({ ...commonTaskOptions, ...options }),
 			createPushTask: (options: TaskOptions) =>
 				new PushTask({ ...commonTaskOptions, ...options }),
@@ -57,6 +60,8 @@ export default class TwoWaySyncDecider extends BaseSyncDecider {
 				new CleanRecordTask({ ...commonTaskOptions, ...options }),
 			createFilenameErrorTask: (options: TaskOptions) =>
 				new FilenameErrorTask({ ...commonTaskOptions, ...options }),
+			createSkippedTask: (options: SkippedTaskOptions) =>
+				new SkippedTask({ ...commonTaskOptions, ...options }),
 		}
 
 		// 文件内容比较函数

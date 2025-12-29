@@ -3,6 +3,7 @@ import { useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/sync-record'
 import GlobMatch, {
 	extendRules,
+	GlobMatchOptions,
 	isVoidGlobMatchOptions,
 	needIncludeFromGlobRules,
 } from '~/utils/glob-match'
@@ -20,23 +21,29 @@ export class LocalVaultFileSystem implements AbstractFileSystem {
 
 	async walk() {
 		const settings = await useSettings()
-		const exclusions = extendRules(
-			(settings?.filterRules.exclusionRules ?? [])
-				.filter((opt) => !isVoidGlobMatchOptions(opt))
-				.map(({ expr, options }) => new GlobMatch(expr, options)),
-		)
-		const inclusion = extendRules(
-			(settings?.filterRules.inclusionRules ?? [])
-				.filter((opt) => !isVoidGlobMatchOptions(opt))
-				.map(({ expr, options }) => new GlobMatch(expr, options)),
-		)
+		const exclusions = this.buildRules(settings?.filterRules.exclusionRules)
+		const inclusions = this.buildRules(settings?.filterRules.inclusionRules)
+
 		const stats = await traverseLocalVault(
 			this.options.vault,
 			this.options.vault.getRoot().path,
 		)
-		const filteredStats = stats.filter((s) =>
-			needIncludeFromGlobRules(s.path, inclusion, exclusions),
+		const includedStats = stats.filter((stat) =>
+			needIncludeFromGlobRules(stat.path, inclusions, exclusions),
 		)
-		return completeLossDir(stats, filteredStats)
+		const completeStats = completeLossDir(stats, includedStats)
+		const completeStatPaths = new Set(completeStats.map((s) => s.path))
+		return stats.map((stat) => ({
+			stat,
+			ignored: !completeStatPaths.has(stat.path),
+		}))
+	}
+
+	private buildRules(rules: GlobMatchOptions[] = []): GlobMatch[] {
+		return extendRules(
+			rules
+				.filter((opt) => !isVoidGlobMatchOptions(opt))
+				.map(({ expr, options }) => new GlobMatch(expr, options)),
+		)
 	}
 }

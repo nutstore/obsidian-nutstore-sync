@@ -2,9 +2,21 @@ import { dirname } from 'path-browserify'
 import { BufferLike } from 'webdav'
 import logger from '~/utils/logger'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
-import { BaseTask, toTaskError } from './task.interface'
+import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export default class PullTask extends BaseTask {
+	constructor(
+		readonly options: BaseTaskOptions & {
+			remoteSize: number
+		},
+	) {
+		super(options)
+	}
+
+	get remoteSize() {
+		return this.options.remoteSize
+	}
+
 	async exec() {
 		const fileExists = await this.vault.getFileByPath(this.localPath)
 		try {
@@ -13,6 +25,9 @@ export default class PullTask extends BaseTask {
 				details: false,
 			})) as BufferLike
 			const arrayBuffer = bufferLikeToArrayBuffer(file)
+			if (arrayBuffer.byteLength !== this.remoteSize) {
+				throw new Error('Remote Size Not Match!')
+			}
 			if (fileExists) {
 				await this.vault.modifyBinary(fileExists, arrayBuffer)
 			} else {
@@ -27,7 +42,7 @@ export default class PullTask extends BaseTask {
 	}
 }
 
-function bufferLikeToArrayBuffer(buffer: BufferLike) {
+function bufferLikeToArrayBuffer(buffer: BufferLike): ArrayBuffer {
 	if (buffer instanceof ArrayBuffer) {
 		return buffer
 	} else {
@@ -35,11 +50,11 @@ function bufferLikeToArrayBuffer(buffer: BufferLike) {
 	}
 }
 
-function toArrayBuffer(buffer: Buffer) {
-	const arrayBuffer = new ArrayBuffer(buffer.length)
-	const view = new Uint8Array(arrayBuffer)
-	for (let i = 0; i < buffer.length; ++i) {
-		view[i] = buffer[i]
+function toArrayBuffer(buf: Buffer): ArrayBuffer {
+	if (buf.buffer instanceof SharedArrayBuffer) {
+		const copy = new ArrayBuffer(buf.byteLength)
+		new Uint8Array(copy).set(buf)
+		return copy
 	}
-	return arrayBuffer
+	return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
 }

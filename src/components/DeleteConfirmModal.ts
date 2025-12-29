@@ -1,28 +1,30 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
-import getTaskName from '~/utils/get-task-name'
-import { BaseTask } from '../sync/tasks/task.interface'
+import RemoveLocalTask from '../sync/tasks/remove-local.task'
 
-export default class TaskListConfirmModal extends Modal {
-	private result: boolean = false
+export default class DeleteConfirmModal extends Modal {
+	private confirmed: boolean = false
 	private selectedTasks: boolean[] = []
 
 	constructor(
 		app: App,
-		private tasks: BaseTask[],
+		private tasks: RemoveLocalTask[],
 	) {
 		super(app)
 		this.selectedTasks = new Array(tasks.length).fill(true)
 	}
 
 	onOpen() {
-		this.setTitle(i18n.t('taskList.title'))
+		this.setTitle(i18n.t('deleteConfirm.title'))
 
 		const { contentEl } = this
 		contentEl.empty()
 
-		const instruction = contentEl.createEl('p')
-		instruction.setText(i18n.t('taskList.instruction'))
+		const instruction = contentEl.createEl('p', {
+			cls: 'delete-confirm-instruction',
+		})
+		instruction.style.whiteSpace = 'pre-wrap'
+		instruction.setText(i18n.t('deleteConfirm.instruction'))
 
 		const tableContainer = contentEl.createDiv({
 			cls: 'max-h-50vh overflow-y-auto',
@@ -31,15 +33,17 @@ export default class TaskListConfirmModal extends Modal {
 
 		const thead = table.createEl('thead')
 		const headerRow = thead.createEl('tr')
-		headerRow.createEl('th', { text: i18n.t('taskList.execute') })
-		headerRow.createEl('th', { text: i18n.t('taskList.action') })
-		headerRow.createEl('th', { text: i18n.t('taskList.localPath') })
-		headerRow.createEl('th', { text: i18n.t('taskList.remotePath') })
+		const selectHeader = headerRow.createEl('th', {
+			text: i18n.t('deleteConfirm.select'),
+		})
+		selectHeader.style.textAlign = 'center'
+		headerRow.createEl('th', { text: i18n.t('deleteConfirm.filePath') })
 
 		const tbody = table.createEl('tbody')
 		this.tasks.forEach((task, index) => {
 			const row = tbody.createEl('tr')
 			const checkboxCell = row.createEl('td')
+			checkboxCell.style.textAlign = 'center'
 			const checkbox = checkboxCell.createEl('input')
 			checkbox.type = 'checkbox'
 			checkbox.checked = this.selectedTasks[index]
@@ -55,9 +59,7 @@ export default class TaskListConfirmModal extends Modal {
 				this.selectedTasks[index] = checkbox.checked
 				e.stopPropagation()
 			})
-			row.createEl('td', { text: getTaskName(task) })
 			row.createEl('td', { text: task.localPath })
-			row.createEl('td', { text: task.remotePath })
 		})
 
 		const settingDiv = contentEl.createDiv()
@@ -65,31 +67,45 @@ export default class TaskListConfirmModal extends Modal {
 		new Setting(settingDiv)
 			.addButton((button) => {
 				button
-					.setButtonText(i18n.t('taskList.continue'))
+					.setButtonText(i18n.t('deleteConfirm.deleteAndReupload'))
 					.setCta()
 					.onClick(() => {
-						this.result = true
+						this.confirmed = true
 						this.close()
 					})
 			})
 			.addButton((button) => {
-				button.setButtonText(i18n.t('taskList.cancel')).onClick(() => {
-					this.result = false
+				button.setButtonText(i18n.t('deleteConfirm.skipForNow')).onClick(() => {
+					this.confirmed = false
 					this.close()
 				})
 			})
 	}
 
-	async open(): Promise<{ confirm: boolean; tasks: BaseTask[] }> {
+	async open(): Promise<{
+		tasksToDelete: RemoveLocalTask[]
+		tasksToReupload: RemoveLocalTask[]
+	}> {
 		super.open()
 		return new Promise((resolve) => {
 			this.onClose = () => {
-				const selectedTasks = this.tasks.filter(
+				if (!this.confirmed) {
+					// User cancelled, no changes
+					resolve({
+						tasksToDelete: [],
+						tasksToReupload: [],
+					})
+					return
+				}
+				const tasksToDelete = this.tasks.filter(
 					(_, index) => this.selectedTasks[index],
 				)
+				const tasksToReupload = this.tasks.filter(
+					(_, index) => !this.selectedTasks[index],
+				)
 				resolve({
-					confirm: this.result,
-					tasks: selectedTasks,
+					tasksToDelete,
+					tasksToReupload,
 				})
 			}
 		})

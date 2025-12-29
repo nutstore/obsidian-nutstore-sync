@@ -1,7 +1,7 @@
 import { emitCancelSync } from '../events'
 import i18n from '../i18n'
 import type NutstorePlugin from '../index'
-import { NutstoreSync } from '../sync'
+import { NutstoreSync, SyncStartMode } from '../sync'
 import SyncConfirmModal from './SyncConfirmModal'
 
 export class SyncRibbonManager {
@@ -24,7 +24,7 @@ export class SyncRibbonManager {
 						remoteBaseDir: this.plugin.remoteBaseDir,
 					})
 					await sync.start({
-						showNotice: true,
+						mode: SyncStartMode.MANUAL_SYNC,
 					})
 				}
 				if (plugin.settings.confirmBeforeSync) {
