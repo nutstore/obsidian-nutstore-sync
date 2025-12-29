@@ -31,7 +31,7 @@
 	"[markdown]": {
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	},
-	"cSpell.words": ["Mkdirs", "Nutstore", "webdav"],
+	"cSpell.words": ["fflate", "Mkdirs", "Nutstore", "webdav"],
 	"i18n-ally.localesPaths": [
 		"src/i18n",
 		"src/i18n/locales",

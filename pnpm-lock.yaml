@@ -35,9 +35,6 @@ importers:
       '@types/node':
         specifier: ^16.11.6
         version: 16.18.126
-      '@types/pako':
-        specifier: ^2.0.3
-        version: 2.0.4
       '@types/path-browserify':
         specifier: ^1.0.3
         version: 1.0.3
@@ -98,6 +95,9 @@ importers:
       fast-xml-parser:
         specifier: ^4.5.1
         version: 4.5.3
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
       glob-to-regexp:
         specifier: ^0.4.1
         version: 0.4.1
@@ -134,9 +134,6 @@ importers:
       ohash:
         specifier: ^1.1.4
         version: 1.1.6
-      pako:
-        specifier: ^2.1.0
-        version: 2.1.0
       path-browserify:
         specifier: ^1.0.1
         version: 1.0.1
@@ -1486,9 +1483,6 @@ packages:
 
   '@types/node@22.19.1':
     resolution: {integrity: sha512-LCCV0HdSZZZb34qifBsyWlUmok6W7ouER+oQIGBScS8EsZsQbrtFTUrDX4hOl+CS6p7cnNC4td+qrSVGSCTUfQ==}
-
-  '@types/pako@2.0.4':
-    resolution: {integrity: sha512-VWDCbrLeVXJM9fihYodcLiIv0ku+AlOa/TQ1SvYOaBuyrSKgEcro95LJyIsJ4vSo6BXIxOKxiJAat04CmST9Fw==}
 
   '@types/path-browserify@1.0.3':
     resolution: {integrity: sha512-ZmHivEbNCBtAfcrFeBCiTjdIc2dey0l7oCGNGpSuRTy8jP6UVND7oUowlvDujBy8r2Hoa8bfFUOCiPWfmtkfxw==}
@@ -3181,9 +3175,6 @@ packages:
 
   package-manager-detector@0.2.11:
     resolution: {integrity: sha512-BEnLolu+yuz22S56CU1SUKq3XC3PkwD5wv4ikR4MfGvnRVcmzXR9DwSlW2fEamyTPyXHomBJRzgapeuBvRNzJQ==}
-
-  pako@2.1.0:
-    resolution: {integrity: sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -5227,8 +5218,6 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/pako@2.0.4': {}
-
   '@types/path-browserify@1.0.3': {}
 
   '@types/ramda@0.30.2':
@@ -7213,8 +7202,6 @@ snapshots:
   package-manager-detector@0.2.11:
     dependencies:
       quansync: 0.2.10
-
-  pako@2.1.0: {}
 
   parent-module@1.0.1:
     dependencies:

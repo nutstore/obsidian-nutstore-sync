@@ -1,5 +1,5 @@
+import { deflateSync, inflateSync } from 'fflate/browser'
 import { Notice } from 'obsidian'
-import { deflate, inflate } from 'pako'
 import { join } from 'path-browserify'
 import superjson from 'superjson'
 import { BufferLike } from 'webdav'
@@ -53,10 +53,14 @@ export default class CacheServiceV1 {
 				throw new Error('Cache data serialization failed')
 			}
 
-			const deflatedStorage = deflate(serializedStr, { level: 9 })
-			await webdav.createDirectory(this.remoteCacheDir, { recursive: true })
+			const encoder = new TextEncoder()
 
+			const deflatedStorage = deflateSync(encoder.encode(serializedStr), {
+				level: 9,
+			}) as Uint8Array<ArrayBuffer>
 			const filePath = join(this.remoteCacheDir, filename)
+
+			await webdav.createDirectory(this.remoteCacheDir, { recursive: true })
 			await webdav.putFileContents(
 				filePath,
 				uint8ArrayToArrayBuffer(deflatedStorage),
@@ -102,7 +106,7 @@ export default class CacheServiceV1 {
 			}
 
 			// Decoding pipeline: inflate -> superjson.parse
-			const inflatedFileContent = inflate(new Uint8Array(fileContent))
+			const inflatedFileContent = inflateSync(new Uint8Array(fileContent))
 			if (!inflatedFileContent || inflatedFileContent.length === 0) {
 				throw new Error('Inflate failed or resulted in empty content')
 			}
