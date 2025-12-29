@@ -1,3 +1,4 @@
+import { chunk } from 'lodash-es'
 import { Notice, Platform, Vault, moment, normalizePath } from 'obsidian'
 import { dirname } from 'path-browserify'
 import { Subscription } from 'rxjs'
@@ -379,16 +380,26 @@ export class NutstoreSync {
 						task instanceof SkippedTask
 					),
 			)
-			if (showNotice && optimizedTasks.length > 0 && hasSubstantialTask) {
+			if (showNotice && hasSubstantialTask) {
 				this.plugin.progressService.showProgressModal()
 			}
 
-			const tasksResult = await this.execTasks(optimizedTasks)
-			const failedCount = tasksResult.filter((r) => !r.success).length
+			const chunkSize = 256
+			const taskChunks = chunk(optimizedTasks, chunkSize)
+			const allTasksResult: TaskResult[] = []
 
-			logger.debug('tasks result', tasksResult, 'failed:', failedCount)
+			for (const taskChunk of taskChunks) {
+				const chunkResult = await this.execTasks(taskChunk)
+				allTasksResult.push(...chunkResult)
+				await this.updateMtimeInRecord(taskChunk, chunkResult)
 
-			await this.updateMtimeInRecord(optimizedTasks, tasksResult)
+				if (this.isCancelled) {
+					break
+				}
+			}
+
+			const failedCount = allTasksResult.filter((r) => !r.success).length
+			logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
 
 			emitEndSync({ failedCount, showNotice })
 		} catch (error) {
