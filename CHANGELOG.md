@@ -2,6 +2,14 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-12-29
+
+- 功能: 分块执行同步任务并新增批量远端操作（批量建目录、递归删除）、覆盖推送与跳过冲突，显著提升大批量同步效率。/ Feature: Execute sync jobs in chunks with new batch remote operations (bulk mkdir, recursive delete), overwrite push, and conflict skipping to speed up large syncs.
+- 功能: 扩展 glob 规则和路径判定（Mergeable、Markdown、二进制文件），自动排除 configDir，并支持禁用间隔自动同步，增强策略可控性。/ Feature: Extended glob rules and path detection (mergeable, markdown, binary), auto-exclusion of configDir, and ability to disable interval auto sync for finer control.
+- 功能: 新增删除确认弹窗、将同步日志保存到 Vault，并在同步结束时显示 Close 状态，整体提升可用性与反馈。/ Feature: Added delete confirmation modal, saving sync logs to the vault, and showing Close instead of Hidden after sync to improve UX and feedback.
+- 修复: 保护忽略文件不被远端删除、修复缓存服务、记录跳过、进度上报与任务分块等问题，保证同步稳定性。/ Fix: Safeguarded ignored files from remote deletion and fixed cache service, record skipping, progress reporting, and chunked task handling to keep sync stable.
+- 优化: 使用 `fflate` 压缩缓存、以 SWC 支持 ES5、改进 ArrayBuffer 转换与时长 clamping，提供更快更兼容的运行体验。/ Improvement: Switched to `fflate` caching, compile with SWC for ES5 support, and improved ArrayBuffer conversion plus duration clamping for faster, more compatible runtime.
+
 ## [0.8.5] - 2025-12-02
 
 - 功能: 允许跳过初始同步确认。/ Feature: Allow skipping initial sync confirmation.
@@ -412,4 +420,3 @@
 *   Added SSO (Single Sign-On) related UI (later hidden).
 *   Improved sync setup: Remote base directory now falls back to using the vault name.
 *   Fixed issues related to handling server base paths, empty file stats, etc., during synchronization.
-
