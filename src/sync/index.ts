@@ -388,8 +388,19 @@ export class NutstoreSync {
 			const taskChunks = chunk(optimizedTasks, chunkSize)
 			const allTasksResult: TaskResult[] = []
 
+			const totalDisplayableTasks = optimizedTasks.filter(
+				(t) => !(t instanceof NoopTask || t instanceof CleanRecordTask),
+			)
+
+			// Track all completed tasks across all chunks
+			const allCompletedTasks: BaseTask[] = []
+
 			for (const taskChunk of taskChunks) {
-				const chunkResult = await this.execTasks(taskChunk)
+				const chunkResult = await this.execTasks(
+					taskChunk,
+					totalDisplayableTasks,
+					allCompletedTasks,
+				)
 				allTasksResult.push(...chunkResult)
 				await this.updateMtimeInRecord(taskChunk, chunkResult)
 
@@ -410,18 +421,22 @@ export class NutstoreSync {
 		}
 	}
 
-	private async execTasks(tasks: BaseTask[]) {
+	private async execTasks(
+		tasks: BaseTask[],
+		totalDisplayableTasks: BaseTask[],
+		allCompletedTasks: BaseTask[],
+	) {
 		const res: TaskResult[] = []
 		// Filter out NoopTask and CleanRecordTask from total count for progress display
 		const tasksToDisplay = tasks.filter(
 			(t) => !(t instanceof NoopTask || t instanceof CleanRecordTask),
 		)
-		const total = tasksToDisplay.length
-		const completed: BaseTask[] = []
 
 		logger.debug(`Starting to execute sync tasks`, {
 			totalTasks: tasks.length,
-			displayedTasks: total,
+			displayedTasks: tasksToDisplay.length,
+			totalDisplayableTasks: totalDisplayableTasks.length,
+			alreadyCompleted: allCompletedTasks.length,
 		})
 
 		for (let i = 0; i < tasks.length; ++i) {
@@ -453,8 +468,8 @@ export class NutstoreSync {
 			res[i] = taskResult
 			// Only add substantial tasks to completed list for progress display
 			if (!(task instanceof NoopTask || task instanceof CleanRecordTask)) {
-				completed.push(task)
-				emitSyncProgress(total, completed)
+				allCompletedTasks.push(task)
+				emitSyncProgress(totalDisplayableTasks.length, allCompletedTasks)
 			}
 		}
 
