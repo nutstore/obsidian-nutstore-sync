@@ -384,7 +384,7 @@ export class NutstoreSync {
 				this.plugin.progressService.showProgressModal()
 			}
 
-			const chunkSize = 256
+			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)
 			const allTasksResult: TaskResult[] = []
 

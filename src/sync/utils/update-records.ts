@@ -147,7 +147,7 @@ export async function updateMtimeInRecord(
 			}
 		})
 		await Promise.all(batch)
-		emitSyncUpdateMtimeProgress(tasksNeedingUpdate.length, completedCount)
+		emitSyncUpdateMtimeProgress(expandedTasks.length, completedCount)
 		debouncedSetRecords(records)
 	}
 
