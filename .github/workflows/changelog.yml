@@ -72,14 +72,17 @@ jobs:
             # System prompt defines the AI's role and overall instructions (from OpenAI version)
             SYSTEM_PROMPT="You are a helpful assistant that generates changelog entries. Generate a concise and user-friendly changelog entry in Markdown bullet points based on the provided commit messages. Focus on user-facing changes, features, and bug fixes. Group similar items if possible. This will be running in a GitHub Action, please make sure to use CI compatible characters. You should write in both Chinese and English, with Chinese first. Do not include a header, just the bullet points."
             
+            # Convert escaped newlines into real lines without letting the shell evaluate backticks
+            COMMIT_MESSAGES=$(printf '%b' "$COMMIT_MESSAGES_RAW")
+
             # User prompt contains the specific data for this run (from OpenAI version)
-            USER_INPUT_PROMPT="Commit messages:\n\n${{ steps.commit_messages.outputs.commits }}"
+            USER_INPUT_PROMPT=$(printf "Commit messages:\n\n%s" "$COMMIT_MESSAGES")
 
             # Combine system and user prompts for Gemini
             COMBINED_PROMPT="${SYSTEM_PROMPT}\n\n${USER_INPUT_PROMPT}"
 
             # Calculate dynamic max tokens based on commit message lines
-            COMMIT_LINES=$(echo "${{ steps.commit_messages.outputs.commits }}" | grep -c '^-')
+            COMMIT_LINES=$(printf '%s\n' "$COMMIT_MESSAGES" | grep -c '^-')
             BASE_TOKENS=300  # Base tokens for template and formatting
             PER_LINE_TOKENS=20 # Additional tokens per commit line
             MAX_TOKENS=$(( BASE_TOKENS + (COMMIT_LINES * PER_LINE_TOKENS) ))
@@ -142,6 +145,7 @@ jobs:
           fi
         env:
            GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+           COMMIT_MESSAGES_RAW: ${{ steps.commit_messages.outputs.commits }}
 
 
       - name: Update CHANGELOG.md
