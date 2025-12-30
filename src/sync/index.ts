@@ -4,6 +4,7 @@ import { dirname } from 'path-browserify'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
 import DeleteConfirmModal from '~/components/DeleteConfirmModal'
+import FailedTasksModal, { FailedTaskInfo } from '~/components/FailedTasksModal'
 import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
@@ -412,6 +413,22 @@ export class NutstoreSync {
 			const failedCount = allTasksResult.filter((r) => !r.success).length
 			logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
 
+			if (mode === SyncStartMode.MANUAL_SYNC && failedCount > 0) {
+				const failedTasksInfo: FailedTaskInfo[] = []
+				for (let i = 0; i < allTasksResult.length; i++) {
+					const result = allTasksResult[i]
+					if (!result.success && result.error) {
+						const task = result.error.task
+						failedTasksInfo.push({
+							taskName: getTaskName(task),
+							localPath: task.options.localPath,
+							errorMessage: result.error.message,
+						})
+					}
+				}
+				new FailedTasksModal(this.app, failedTasksInfo).open()
+			}
+
 			emitEndSync({ failedCount, showNotice })
 		} catch (error) {
 			emitSyncError(error)
@@ -495,7 +512,7 @@ export class NutstoreSync {
 				}
 			}
 			const taskResult = await task.exec()
-			if (taskResult.error && is503Error(taskResult.error)) {
+			if (!taskResult.success && is503Error(taskResult.error)) {
 				await this.handle503Error(60000)
 				if (this.isCancelled) {
 					return {

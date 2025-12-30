@@ -301,6 +301,14 @@ export default {
 		deleteAndReupload: 'Delete selected, re-upload unchecked',
 		skipForNow: 'Skip for now',
 	},
+	failedTasks: {
+		title: 'Failed sync tasks',
+		instruction: 'The following tasks failed during sync:',
+		taskName: 'Task',
+		localPath: 'Local path',
+		errorMessage: 'Error',
+		close: 'Close',
+	},
 	textAreaModal: {
 		copy: 'Copy',
 		close: 'Close',

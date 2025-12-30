@@ -298,6 +298,14 @@ export default {
 		deleteAndReupload: '删除选中的，重新上传未选中的',
 		skipForNow: '暂时忽略',
 	},
+	failedTasks: {
+		title: '同步失败任务',
+		instruction: '以下任务在同步时失败：',
+		taskName: '任务',
+		localPath: '本地路径',
+		errorMessage: '失败原因',
+		close: '关闭',
+	},
 	textAreaModal: {
 		copy: '复制',
 		close: '关闭',

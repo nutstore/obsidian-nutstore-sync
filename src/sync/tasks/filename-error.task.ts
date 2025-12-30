@@ -1,4 +1,4 @@
-import { BaseTask } from './task.interface'
+import { BaseTask, toTaskError } from './task.interface'
 
 /**
  * 如果文件名里存在坚果云不支持的特殊字符, 将无法上传.
@@ -9,6 +9,12 @@ export default class FilenameErrorTask extends BaseTask {
 	exec() {
 		return {
 			success: false,
-		}
+			error: toTaskError(
+				new Error(
+					'Filename contains unsupported characters: ' + this.localPath,
+				),
+				this,
+			),
+		} as const
 	}
 }

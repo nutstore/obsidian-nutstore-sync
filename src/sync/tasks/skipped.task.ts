@@ -31,6 +31,6 @@ export default class SkippedTask extends BaseTask {
 		return {
 			success: true,
 			skipRecord: true,
-		}
+		} as const
 	}
 }
