@@ -1,24 +1,33 @@
 import { BaseTask, BaseTaskOptions } from './task.interface'
 
+export enum SkipReason {
+	FileTooLarge = 'file-too-large',
+	FolderContainsIgnoredItems = 'folder-contains-ignored-items',
+}
+
 export type SkippedTaskOptions = BaseTaskOptions &
 	(
 		| {
-				reason: 'file-too-large'
+				reason: SkipReason.FileTooLarge
 				maxSize: number
 				remoteSize: number
 				localSize?: number
 		  }
 		| {
-				reason: 'file-too-large'
+				reason: SkipReason.FileTooLarge
 				maxSize: number
 				remoteSize?: number
 				localSize: number
 		  }
 		| {
-				reason: 'file-too-large'
+				reason: SkipReason.FileTooLarge
 				maxSize: number
 				remoteSize: number
 				localSize: number
+		  }
+		| {
+				reason: SkipReason.FolderContainsIgnoredItems
+				ignoredPaths: string[]
 		  }
 	)
 

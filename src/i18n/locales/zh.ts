@@ -267,6 +267,10 @@ export default {
 			cleanRecord: '清理记录',
 			skip: '跳过',
 		},
+		skipReason: {
+			'file-too-large': '文件过大',
+			'folder-contains-ignored-items': '文件夹包含被忽略的文件',
+		},
 		confirmModal: {
 			title: '同步确认',
 			message:

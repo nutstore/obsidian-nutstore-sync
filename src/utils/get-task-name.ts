@@ -52,7 +52,8 @@ export default function getTaskName(task: BaseTask) {
 		return i18n.t('sync.fileOp.removeRemoteRecursively')
 	}
 	if (task instanceof SkippedTask) {
-		return i18n.t('sync.fileOp.skip')
+		const reasonText = i18n.t(`sync.skipReason.${task.options.reason}`)
+		return `${i18n.t('sync.fileOp.skip')} (${reasonText})`
 	}
 	return i18n.t('sync.fileOp.sync')
 }
