@@ -2,10 +2,11 @@ import postcss from '@deanc/esbuild-plugin-postcss'
 import UnoCSS from '@unocss/postcss'
 import dotenv from 'dotenv'
 import esbuild from 'esbuild'
-import fs from 'fs'
+import fs, { readFileSync } from 'fs'
 import postcssMergeRules from 'postcss-merge-rules'
 import process from 'process'
 
+const pkgJson = JSON.parse(readFileSync('./package.json', 'utf-8'))
 dotenv.config()
 
 const prod = process.argv[2] === 'production'
@@ -43,6 +44,7 @@ const context = await esbuild.context({
 		),
 		'process.env.NS_DAV_ENDPOINT': JSON.stringify(process.env.NS_DAV_ENDPOINT),
 		'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || ''),
+		'process.env.PLUGIN_VERSION': JSON.stringify(pkgJson.version),
 	},
 	format: 'cjs',
 	target: 'es2015',
