@@ -1,14 +1,13 @@
-import { decode as decodeHtmlEntity } from 'html-entities'
 import { isArray } from 'lodash-es'
 import { Vault } from 'obsidian'
-import { basename, isAbsolute } from 'path-browserify'
+import { isAbsolute } from 'path-browserify'
 import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'
 import { NS_DAV_ENDPOINT } from '~/consts'
-import { StatModel } from '~/model/stat.model'
 import { useSettings } from '~/settings'
 import { deltaCacheKV } from '~/storage'
+import { applyDeltasToStats } from '~/utils/apply-deltas-to-stats'
 import { getDBKey } from '~/utils/get-db-key'
 import { getRootFolderName } from '~/utils/get-root-folder-name'
 import GlobMatch, {
@@ -95,39 +94,30 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		} else {
 			deltaCache = await this.resetDeltaCache()
 		}
+
 		await deltaCacheKV.set(kvKey, deltaCache)
-		deltaCache.deltas.forEach((delta) => {
-			delta.delta.entry.forEach((entry) => {
-				entry.path = decodeHtmlEntity(entry.path)
-			})
-		})
-		deltaCache.files.forEach((file) => {
-			file.path = decodeHtmlEntity(file.path)
-		})
-		const deltasMap = new Map(
-			deltaCache.deltas.flatMap((d) => d.delta.entry.map((d) => [d.path, d])),
-		)
-		const filesMap = new Map<string, StatModel>(
-			deltaCache.files.map((d) => [d.path, d]),
-		)
-		for (const delta of deltasMap.values()) {
-			if (delta.isDeleted) {
-				filesMap.delete(delta.path)
-				continue
+
+		// Apply deltas to files
+		const allDeltas = deltaCache.deltas.flatMap((d) => d.delta.entry)
+		let stats =
+			allDeltas.length === 0
+				? deltaCache.files
+				: applyDeltasToStats(deltaCache.files, allDeltas)
+		{
+			const lastDelta = deltaCache.deltas.at(-1)
+			if (lastDelta) {
+				const latestCursor = lastDelta.cursor
+				deltaCache.files = stats
+				deltaCache.deltas = []
+				deltaCache.originCursor = latestCursor
+				await deltaCacheKV.set(kvKey, deltaCache)
 			}
-			filesMap.set(delta.path, {
-				path: delta.path,
-				basename: basename(delta.path),
-				isDir: delta.isDir,
-				isDeleted: delta.isDeleted,
-				mtime: new Date(delta.modified).valueOf(),
-				size: delta.size,
-			})
 		}
-		let stats = Array.from(filesMap.values())
+
 		if (stats.length === 0) {
 			return []
 		}
+
 		const base = stdRemotePath(this.options.remoteBaseDir)
 		const subPath = new Set<string>()
 		for (let { path } of stats) {
@@ -141,7 +131,9 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				subPath.add(path)
 			}
 		}
-		stats = [...subPath].map((path) => filesMap.get(path)).filter(isNotNil)
+
+		const statsMap = new Map(stats.map((s) => [s.path, s]))
+		stats = [...subPath].map((path) => statsMap.get(path)).filter(isNotNil)
 		for (const item of stats) {
 			if (isAbsolute(item.path)) {
 				item.path = item.path.replace(this.options.remoteBaseDir, '')
@@ -150,6 +142,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				}
 			}
 		}
+
 		const settings = await useSettings()
 		const exclusions = this.buildRules(settings?.filterRules.exclusionRules)
 		const inclusions = this.buildRules(settings?.filterRules.inclusionRules)
