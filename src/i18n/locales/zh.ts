@@ -1,4 +1,7 @@
 export default {
+	errors: {
+		filenameUnsupportedChars: '文件 {{path}} 包含不支持的字符：{{chars}}',
+	},
 	settings: {
 		title: 'WebDAV 设置',
 		account: {

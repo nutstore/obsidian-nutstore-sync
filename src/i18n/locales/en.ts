@@ -1,4 +1,7 @@
 export default {
+	errors: {
+		filenameUnsupportedChars: 'File {{path}} contains unsupported characters: {{chars}}',
+	},
 	settings: {
 		account: {
 			name: 'Account',

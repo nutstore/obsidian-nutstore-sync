@@ -497,23 +497,13 @@ export async function twoWayDecider(
 					},
 				})
 
-				if (hasInvalidChar(localPath)) {
-					tasks.push(
-						taskFactory.createFilenameErrorTask({
-							localPath,
-							remotePath: remote.path,
-							remoteBaseDir,
-						}),
-					)
-				} else {
-					mkdirLocalTasks.push(
-						taskFactory.createMkdirLocalTask({
-							localPath,
-							remotePath: remote.path,
-							remoteBaseDir,
-						}),
-					)
-				}
+				mkdirLocalTasks.push(
+					taskFactory.createMkdirLocalTask({
+						localPath,
+						remotePath: remote.path,
+						remoteBaseDir,
+					}),
+				)
 				continue
 			}
 
@@ -571,23 +561,13 @@ export async function twoWayDecider(
 				},
 			})
 
-			if (hasInvalidChar(localPath)) {
-				tasks.push(
-					taskFactory.createFilenameErrorTask({
-						localPath,
-						remotePath: remote.path,
-						remoteBaseDir,
-					}),
-				)
-			} else {
-				mkdirLocalTasks.push(
-					taskFactory.createMkdirLocalTask({
-						localPath,
-						remotePath: remote.path,
-						remoteBaseDir,
-					}),
-				)
-			}
+			mkdirLocalTasks.push(
+				taskFactory.createMkdirLocalTask({
+					localPath,
+					remotePath: remote.path,
+					remoteBaseDir,
+				}),
+			)
 
 			continue
 		}
@@ -632,13 +612,23 @@ export async function twoWayDecider(
 							recordExists: !!record,
 						},
 					})
-					mkdirRemoteTasks.push(
-						taskFactory.createMkdirRemoteTask({
-							localPath: local.path,
-							remotePath: local.path,
-							remoteBaseDir,
-						}),
-					)
+					if (hasInvalidChar(local.path)) {
+						tasks.push(
+							taskFactory.createFilenameErrorTask({
+								localPath: local.path,
+								remotePath: local.path,
+								remoteBaseDir,
+							}),
+						)
+					} else {
+						mkdirRemoteTasks.push(
+							taskFactory.createMkdirRemoteTask({
+								localPath: local.path,
+								remotePath: local.path,
+								remoteBaseDir,
+							}),
+						)
+					}
 					continue
 				}
 
@@ -694,13 +684,23 @@ export async function twoWayDecider(
 						recordExists: !!record,
 					},
 				})
-				mkdirRemoteTasks.push(
-					taskFactory.createMkdirRemoteTask({
-						localPath: local.path,
-						remotePath: local.path,
-						remoteBaseDir,
-					}),
-				)
+				if (hasInvalidChar(local.path)) {
+					tasks.push(
+						taskFactory.createFilenameErrorTask({
+							localPath: local.path,
+							remotePath: local.path,
+							remoteBaseDir,
+						}),
+					)
+				} else {
+					mkdirRemoteTasks.push(
+						taskFactory.createMkdirRemoteTask({
+							localPath: local.path,
+							remotePath: local.path,
+							remoteBaseDir,
+						}),
+					)
+				}
 				continue
 			}
 			continue
