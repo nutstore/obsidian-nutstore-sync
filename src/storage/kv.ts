@@ -32,3 +32,17 @@ export const blobKV = useStorage<Blob>(
 		storeName: 'base_blob_store',
 	}),
 )
+
+export interface TraverseWebDAVCache {
+	rootCursor: string
+	queue: string[]
+	nodes: Record<string, StatModel[]>
+	processedCount: number
+}
+
+export const traverseWebDAVKV = useStorage<TraverseWebDAVCache>(
+	localforage.createInstance({
+		name: DB_NAME,
+		storeName: 'traverse_webdav_cache',
+	}),
+)

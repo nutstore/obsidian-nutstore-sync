@@ -5,7 +5,6 @@ import { basename, isAbsolute } from 'path-browserify'
 import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
 import { getDelta } from '~/api/delta'
-import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
 import { NS_DAV_ENDPOINT } from '~/consts'
 import { StatModel } from '~/model/stat.model'
 import { useSettings } from '~/settings'
@@ -20,7 +19,7 @@ import GlobMatch, {
 } from '~/utils/glob-match'
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
-import { traverseWebDAV } from '~/utils/traverse-webdav'
+import { ResumableWebDAVTraversal } from '~/utils/traverse-webdav'
 import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
@@ -41,6 +40,22 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		})
 	}
 
+	private async resetDeltaCache() {
+		const traversal = new ResumableWebDAVTraversal({
+			token: this.options.token,
+			remoteBaseDir: this.options.remoteBaseDir,
+			kvKey: getDBKey(this.options.vault.getName(), this.options.remoteBaseDir),
+			saveInterval: 1,
+		})
+		const files = await traversal.traverse()
+		const originCursor = traversal.cursor
+		return {
+			files,
+			originCursor,
+			deltas: [],
+		}
+	}
+
 	async walk() {
 		const kvKey = getDBKey(
 			this.options.vault.getName(),
@@ -59,16 +74,8 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 					break
 				}
 				if (response.reset) {
-					deltaCache.deltas = []
-					deltaCache.files = await traverseWebDAV(
-						this.options.token,
-						this.options.remoteBaseDir,
-					)
-					cursor = await getLatestDeltaCursor({
-						token: this.options.token,
-						folderName: getRootFolderName(this.options.remoteBaseDir),
-					}).then((d) => d?.response?.cursor)
-					deltaCache.originCursor = cursor
+					deltaCache = await this.resetDeltaCache()
+					cursor = deltaCache.originCursor
 				} else if (response.delta.entry) {
 					if (!isArray(response.delta.entry)) {
 						response.delta.entry = [response.delta.entry]
@@ -86,21 +93,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				}
 			}
 		} else {
-			const files = await traverseWebDAV(
-				this.options.token,
-				this.options.remoteBaseDir,
-			)
-			const {
-				response: { cursor: originCursor },
-			} = await getLatestDeltaCursor({
-				token: this.options.token,
-				folderName: getRootFolderName(this.options.remoteBaseDir),
-			})
-			deltaCache = {
-				files,
-				originCursor,
-				deltas: [],
-			}
+			deltaCache = await this.resetDeltaCache()
 		}
 		await deltaCacheKV.set(kvKey, deltaCache)
 		deltaCache.deltas.forEach((delta) => {

@@ -56,6 +56,9 @@ importers:
       assert:
         specifier: ^2.1.0
         version: 2.1.0
+      async-mutex:
+        specifier: ^0.5.0
+        version: 0.5.0
       blob-polyfill:
         specifier: ^9.0.20240710
         version: 9.0.20240710
@@ -1813,6 +1816,9 @@ packages:
 
   ast-v8-to-istanbul@0.3.4:
     resolution: {integrity: sha512-cxrAnZNLBnQwBPByK4CeDaw5sWZtMilJE/Q3iDA0aamgaIVNDF9T6K2/8DfYDZEejZ2jNnDrG9m8MY72HFd0KA==}
+
+  async-mutex@0.5.0:
+    resolution: {integrity: sha512-1A94B18jkJ3DYq284ohPxoXbfTA5HsQ7/Mf4DEhcyLx3Bz27Rh59iScbB6EPiP+B+joue6YCxcMXSbFC1tZKwA==}
 
   at-least-node@1.0.0:
     resolution: {integrity: sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==}
@@ -5761,6 +5767,10 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.29
       estree-walker: 3.0.3
       js-tokens: 9.0.1
+
+  async-mutex@0.5.0:
+    dependencies:
+      tslib: 2.4.0
 
   at-least-node@1.0.0: {}
 
