@@ -1,8 +1,14 @@
 export default {
 	errors: {
-		filenameUnsupportedChars: 'File {{path}} contains unsupported characters: {{chars}}',
+		filenameUnsupportedChars:
+			'File {{path}} contains unsupported characters: {{chars}}',
 	},
 	settings: {
+		language: {
+			name: 'Language',
+			desc: 'Select interface language',
+			auto: 'Auto detect',
+		},
 		account: {
 			name: 'Account',
 			desc: 'Enter your WebDAV account',
