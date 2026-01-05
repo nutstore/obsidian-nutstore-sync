@@ -9,8 +9,8 @@ import NoopTask from '~/sync/tasks/noop.task'
 import PullTask from '~/sync/tasks/pull.task'
 import PushTask from '~/sync/tasks/push.task'
 import RemoveLocalTask from '~/sync/tasks/remove-local.task'
-import RemoveRemoteTask from '~/sync/tasks/remove-remote.task'
 import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
+import RemoveRemoteTask from '~/sync/tasks/remove-remote.task'
 import SkippedTask from '~/sync/tasks/skipped.task'
 import { BaseTask } from '~/sync/tasks/task.interface'
 
@@ -53,7 +53,7 @@ export default function getTaskName(task: BaseTask) {
 	}
 	if (task instanceof SkippedTask) {
 		const reasonText = i18n.t(`sync.skipReason.${task.options.reason}`)
-		return `${i18n.t('sync.fileOp.skip')} (${reasonText})`
+		return `${i18n.t('sync.fileOp.skip')}: ${reasonText}`
 	}
 	return i18n.t('sync.fileOp.sync')
 }

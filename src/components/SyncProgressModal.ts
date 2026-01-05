@@ -1,5 +1,10 @@
 import { ButtonComponent, Modal, setIcon, Setting } from 'obsidian'
 import { Subscription } from 'rxjs'
+import CleanRecordTask from '~/sync/tasks/clean-record.task'
+import FilenameErrorTask from '~/sync/tasks/filename-error.task'
+import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
+import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
+import SkippedTask from '~/sync/tasks/skipped.task'
 import getTaskName from '~/utils/get-task-name'
 import NutstorePlugin from '..'
 import {
@@ -106,39 +111,47 @@ export default class SyncProgressModal extends Modal {
 
 		recentFiles.forEach((file) => {
 			const item = this.filesList.createDiv({
-				cls: 'flex items-center p-1 rounded text-3 gap-2 hover:bg-[var(--background-secondary)]',
+				cls: 'flex items-center p-1 rounded text-2.5 gap-2 hover:bg-[var(--background-secondary)]',
 			})
 
 			const icon = item.createSpan({ cls: 'text-[var(--text-muted)]' })
 
-			if (file instanceof PullTask) {
+			if (file instanceof CleanRecordTask) {
+				setIcon(icon, 'archive-x')
+			} else if (file instanceof ConflictResolveTask) {
+				setIcon(icon, 'git-merge')
+			} else if (file instanceof FilenameErrorTask) {
+				setIcon(icon, 'refresh-cw-off')
+			} else if (
+				file instanceof MkdirLocalTask ||
+				file instanceof MkdirRemoteTask ||
+				file instanceof MkdirsRemoteTask
+			) {
+				setIcon(icon, 'folder-plus')
+			} else if (file instanceof PullTask) {
 				setIcon(icon, 'arrow-down-narrow-wide')
 			} else if (file instanceof PushTask) {
 				setIcon(icon, 'arrow-up-narrow-wide')
 			} else if (
-				file instanceof MkdirLocalTask ||
-				file instanceof MkdirRemoteTask
-			) {
-				setIcon(icon, 'folder-plus')
-			} else if (
 				file instanceof RemoveLocalTask ||
-				file instanceof RemoveRemoteTask
+				file instanceof RemoveRemoteTask ||
+				file instanceof RemoveRemoteRecursivelyTask
 			) {
 				setIcon(icon, 'trash')
-			} else if (file instanceof ConflictResolveTask) {
-				setIcon(icon, 'git-merge')
+			} else if (file instanceof SkippedTask) {
+				setIcon(icon, 'chevron-last')
 			} else {
 				setIcon(icon, 'arrow-left-right')
 			}
 
 			const typeLabel = item.createSpan({
-				cls: 'flex-none w-15 text-[var(--text-normal)] font-500',
+				cls: 'flex-none w-17 md:w-24 text-[var(--text-normal)] font-500',
 			})
 
 			typeLabel.setText(getTaskName(file))
 
 			const filePath = item.createSpan({
-				cls: 'flex-1 truncate overflow-hidden whitespace-nowrap',
+				cls: 'flex-1 break-all',
 			})
 			filePath.setText(
 				i18n.t('sync.filePath', {
@@ -153,7 +166,7 @@ export default class SyncProgressModal extends Modal {
 		contentEl.empty()
 
 		const container = contentEl.createDiv({
-			cls: 'flex flex-col gap-4 h-50vh max-h-50vh',
+			cls: 'flex flex-col gap-4 min-h-[40vh] max-h-[75vh]',
 		})
 
 		const header = container.createDiv({
