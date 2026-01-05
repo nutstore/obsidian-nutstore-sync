@@ -1,4 +1,4 @@
-import { clamp } from 'lodash-es'
+import { clamp, isNil } from 'lodash-es'
 import { Setting } from 'obsidian'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
@@ -134,7 +134,9 @@ export default class CommonSettings extends BaseSettings {
 					})
 				text.inputEl.addEventListener('blur', async () => {
 					const numValue = parseFloat(text.getValue())
-					const finalValue = isNaN(numValue) ? 0 : clamp(numValue, 0, MAX_SECONDS)
+					const finalValue = isNaN(numValue)
+						? 0
+						: clamp(numValue, 0, MAX_SECONDS)
 					text.setValue(finalValue.toString())
 					this.plugin.settings.startupSyncDelaySeconds = finalValue
 					await this.plugin.saveSettings()
@@ -197,5 +199,29 @@ export default class CommonSettings extends BaseSettings {
 				text.inputEl.max = MAX_MINUTES.toString()
 				text.inputEl.step = '1'
 			})
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.language.name'))
+			.setDesc(i18n.t('settings.language.desc'))
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption('', i18n.t('settings.language.auto'))
+					.addOption('zh', '简体中文')
+					.addOption('en', 'English')
+					.setValue(this.plugin.settings.language || '')
+					.onChange(async (value: string) => {
+						if (
+							value === 'zh' ||
+							value === 'en' ||
+							value === '' ||
+							isNil(value)
+						) {
+							this.plugin.settings.language = value || undefined
+							await this.plugin.saveSettings()
+							await this.plugin.i18nService.update()
+							await this.settings.display()
+						}
+					}),
+			)
 	}
 }

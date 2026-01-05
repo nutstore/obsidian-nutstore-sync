@@ -115,6 +115,7 @@ export default class NutstorePlugin extends Plugin {
 			realtimeSync: false,
 			startupSyncDelaySeconds: 0,
 			autoSyncIntervalSeconds: 300,
+			language: undefined,
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
