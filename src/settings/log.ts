@@ -47,7 +47,7 @@ export default class LogSettings extends BaseSettings {
 			const content = `# Nutstore Plugin Logs\n\nGenerated at: ${new Date().toLocaleString()}\n\n---\n\n${this.logs}`
 
 			// 确保目录存在
-			const folderExists = await this.app.vault.adapter.exists(dirPath)
+			const folderExists = await this.app.vault.getFolderByPath(dirPath)
 			if (!folderExists) {
 				await this.app.vault.createFolder(dirPath)
 			}
