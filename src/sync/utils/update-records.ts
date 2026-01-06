@@ -8,7 +8,7 @@ import { SyncRecord } from '~/storage/sync-record'
 import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
 import type { BaseTask, TaskResult } from '~/sync/tasks/task.interface'
 import { isMergeablePath } from '~/sync/utils/is-mergeable-path'
-import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
+import { getDBKey } from '~/utils/get-db-key'
 import { isSub } from '~/utils/is-sub'
 import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
@@ -51,7 +51,7 @@ export async function updateMtimeInRecord(
 		latestRemoteEntities.map((e) => [e.stat.path, e]),
 	)
 	const syncRecord = new SyncRecord(
-		getSyncRecordNamespace(vault.getName(), remoteBaseDir),
+		getDBKey(vault.getName(), remoteBaseDir),
 		syncRecordKV,
 	)
 	const records = await syncRecord.getRecords()
