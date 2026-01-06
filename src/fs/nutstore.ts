@@ -1,15 +1,10 @@
-import { isArray } from 'lodash-es'
 import { Vault } from 'obsidian'
 import { isAbsolute } from 'path-browserify'
 import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
-import { getDelta } from '~/api/delta'
 import { NS_DAV_ENDPOINT } from '~/consts'
 import { useSettings } from '~/settings'
-import { deltaCacheKV } from '~/storage'
-import { applyDeltasToStats } from '~/utils/apply-deltas-to-stats'
-import { getDBKey } from '~/utils/get-db-key'
-import { getRootFolderName } from '~/utils/get-root-folder-name'
+import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import GlobMatch, {
 	extendRules,
 	GlobMatchOptions,
@@ -39,80 +34,17 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		})
 	}
 
-	private async resetDeltaCache() {
+	async walk() {
 		const traversal = new ResumableWebDAVTraversal({
 			token: this.options.token,
 			remoteBaseDir: this.options.remoteBaseDir,
-			kvKey: getDBKey(this.options.vault.getName(), this.options.remoteBaseDir),
+			kvKey: await getTraversalWebDAVDBKey(
+				this.options.token,
+				this.options.remoteBaseDir,
+			),
 			saveInterval: 1,
 		})
-		const files = await traversal.traverse()
-		const originCursor = traversal.cursor
-		return {
-			files,
-			originCursor,
-			deltas: [],
-		}
-	}
-
-	async walk() {
-		const kvKey = getDBKey(
-			this.options.vault.getName(),
-			this.options.remoteBaseDir,
-		)
-		let deltaCache = await deltaCacheKV.get(kvKey)
-		if (deltaCache) {
-			let cursor = deltaCache.deltas.at(-1)?.cursor ?? deltaCache.originCursor
-			while (true) {
-				const { response } = await getDelta({
-					token: this.options.token,
-					cursor,
-					folderName: getRootFolderName(this.options.remoteBaseDir),
-				})
-				if (response.cursor === cursor) {
-					break
-				}
-				if (response.reset) {
-					deltaCache = await this.resetDeltaCache()
-					cursor = deltaCache.originCursor
-				} else if (response.delta.entry) {
-					if (!isArray(response.delta.entry)) {
-						response.delta.entry = [response.delta.entry]
-					}
-					if (response.delta.entry.length > 0) {
-						deltaCache.deltas.push(response)
-					}
-					if (response.hasMore) {
-						cursor = response.cursor
-					} else {
-						break
-					}
-				} else {
-					break
-				}
-			}
-		} else {
-			deltaCache = await this.resetDeltaCache()
-		}
-
-		await deltaCacheKV.set(kvKey, deltaCache)
-
-		// Apply deltas to files
-		const allDeltas = deltaCache.deltas.flatMap((d) => d.delta.entry)
-		let stats =
-			allDeltas.length === 0
-				? deltaCache.files
-				: applyDeltasToStats(deltaCache.files, allDeltas)
-		{
-			const lastDelta = deltaCache.deltas.at(-1)
-			if (lastDelta) {
-				const latestCursor = lastDelta.cursor
-				deltaCache.files = stats
-				deltaCache.deltas = []
-				deltaCache.originCursor = latestCursor
-				await deltaCacheKV.set(kvKey, deltaCache)
-			}
-		}
+		let stats = await traversal.traverse()
 
 		if (stats.length === 0) {
 			return []
@@ -152,10 +84,11 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		)
 		const completeStats = completeLossDir(stats, includedStats)
 		const completeStatPaths = new Set(completeStats.map((s) => s.path))
-		return stats.map((stat) => ({
+		const results = stats.map((stat) => ({
 			stat,
 			ignored: !completeStatPaths.has(stat.path),
 		}))
+		return results
 	}
 
 	private buildRules(rules: GlobMatchOptions[] = []): GlobMatch[] {
