@@ -4,13 +4,21 @@ import i18n from '~/i18n'
 import { getUserOptions, GlobMatchOptions } from '~/utils/glob-match'
 import NutstorePlugin from '..'
 
+enum FilterType {
+	Include = 'include',
+	Exclude = 'exclude',
+}
+
 export default class FilterEditorModal extends Modal {
+	static readonly FilterType = FilterType
+
 	filters: GlobMatchOptions[]
 
 	constructor(
 		private plugin: NutstorePlugin,
 		filters: GlobMatchOptions[] = [],
 		private onSave: (filters: GlobMatchOptions[]) => void,
+		private filterType: FilterType = FilterType.Exclude,
 	) {
 		super(plugin.app)
 		this.filters = cloneDeep(filters)
@@ -20,9 +28,18 @@ export default class FilterEditorModal extends Modal {
 		const { contentEl } = this
 		contentEl.empty()
 
-		contentEl.createEl('h2', { text: i18n.t('settings.filters.edit') })
+		const titleKey =
+			this.filterType === FilterType.Include
+				? 'settings.filters.include.name'
+				: 'settings.filters.exclude.name'
+		const descKey =
+			this.filterType === FilterType.Include
+				? 'settings.filters.include.desc'
+				: 'settings.filters.exclude.desc'
+
+		contentEl.createEl('h2', { text: i18n.t(titleKey) })
 		contentEl.createEl('p', {
-			text: i18n.t('settings.filters.description'),
+			text: i18n.t(descKey),
 			cls: 'setting-item-description',
 		})
 
