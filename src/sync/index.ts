@@ -20,7 +20,7 @@ import i18n from '~/i18n'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import breakableSleep from '~/utils/breakable-sleep'
-import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
+import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
@@ -66,7 +66,7 @@ export class NutstoreSync {
 		this.localFS = new LocalVaultFileSystem({
 			vault: this.options.vault,
 			syncRecord: new SyncRecord(
-				getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
+				getDBKey(this.vault.getName(), this.remoteBaseDir),
 				syncRecordKV,
 			),
 		})
@@ -86,7 +86,7 @@ export class NutstoreSync {
 			const webdav = this.webdav
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
 			const syncRecord = new SyncRecord(
-				getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
+				getDBKey(this.vault.getName(), this.remoteBaseDir),
 				syncRecordKV,
 			)
 

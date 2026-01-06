@@ -1,18 +1,16 @@
 import { Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
-import { blobKV, deltaCacheKV, syncRecordKV } from '~/storage/kv'
+import { blobKV, syncRecordKV } from '~/storage/kv'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
 export interface CacheClearOptions {
-	deltaCacheEnabled: boolean
 	syncRecordEnabled: boolean
 	blobEnabled: boolean
 }
 
 export default class CacheClearModal extends Modal {
 	private options: CacheClearOptions = {
-		deltaCacheEnabled: false,
 		syncRecordEnabled: false,
 		blobEnabled: false,
 	}
@@ -34,16 +32,6 @@ export default class CacheClearModal extends Modal {
 		const optionsContainer = contentEl.createDiv({
 			cls: 'py-2',
 		})
-
-		// Delta Cache Option
-		new Setting(optionsContainer)
-			.setName(i18n.t('settings.cache.clearModal.deltaCache.name'))
-			.setDesc(i18n.t('settings.cache.clearModal.deltaCache.desc'))
-			.addToggle((toggle) => {
-				toggle.setValue(this.options.deltaCacheEnabled).onChange((value) => {
-					this.options.deltaCacheEnabled = value
-				})
-			})
 
 		// Sync Record Cache Option
 		new Setting(optionsContainer)
@@ -121,15 +109,10 @@ export default class CacheClearModal extends Modal {
 	 * Static method to clear selected caches
 	 */
 	static async clearSelectedCaches(options: CacheClearOptions) {
-		const { deltaCacheEnabled, syncRecordEnabled, blobEnabled } = options
+		const { syncRecordEnabled, blobEnabled } = options
 		const cleared = []
 
 		try {
-			if (deltaCacheEnabled) {
-				await deltaCacheKV.clear()
-				cleared.push(i18n.t('settings.cache.clearModal.deltaCache.name'))
-			}
-
 			if (syncRecordEnabled) {
 				await syncRecordKV.clear()
 				cleared.push(i18n.t('settings.cache.clearModal.syncRecordCache.name'))
