@@ -137,6 +137,11 @@ export class NutstoreSync {
 				(t) => !(t instanceof CleanRecordTask),
 			)
 
+			if (this.isCancelled) {
+				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				return
+			}
+
 			if (
 				showNotice &&
 				settings.confirmBeforeSync &&
