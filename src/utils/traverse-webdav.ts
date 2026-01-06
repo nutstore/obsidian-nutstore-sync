@@ -73,14 +73,12 @@ export class ResumableWebDAVTraversal {
 		return await this.lock.runExclusive(async () => {
 			await this.loadState()
 
-			let results: StatModel[] = []
-
 			// Use incremental scan if already traversed once
 			const isIncrementalScan =
 				this.queue.length === 0 && Object.keys(this.nodes).length > 0
 
 			if (isIncrementalScan) {
-				results = await this.incrementalScan()
+				await this.incrementalScan()
 			} else {
 				// Initial scan or resume: BFS traversal
 				if (this.queue.length === 0) {
@@ -94,12 +92,12 @@ export class ResumableWebDAVTraversal {
 					this.queue = [this.remoteBaseDir]
 				}
 
-				results = await this.bfsTraverse()
+				await this.bfsTraverse()
 			}
 
 			await this.saveState()
 
-			return results
+			return this.getAllFromCache()
 		})
 	}
 
