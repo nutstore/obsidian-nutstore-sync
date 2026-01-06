@@ -24,6 +24,7 @@ export default class FilterSettings extends BaseSettings {
 							await this.plugin.saveSettings()
 							this.display()
 						},
+						FilterEditorModal.FilterType.Include,
 					).open()
 				})
 			})
@@ -42,6 +43,7 @@ export default class FilterSettings extends BaseSettings {
 							await this.plugin.saveSettings()
 							this.display()
 						},
+						FilterEditorModal.FilterType.Exclude,
 					).open()
 				})
 			})
