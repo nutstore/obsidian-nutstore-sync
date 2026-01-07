@@ -327,4 +327,11 @@ export default {
 		close: 'Close',
 		copied: 'Text copied to clipboard',
 	},
+	time: {
+		justNow: 'just now',
+		minutesAgo: '{{count}}min ago',
+		hoursAgo: '{{count}}h ago',
+		daysAgo: '{{count}}d ago',
+		longAgo: 'long ago',
+	},
 }

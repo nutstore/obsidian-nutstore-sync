@@ -28,13 +28,14 @@ export default class EventsService {
 
 			onEndSync().subscribe(async ({ failedCount, showNotice }) => {
 				plugin.toggleSyncUI(false)
-				plugin.statusService.updateSyncStatus({
-					text:
-						failedCount > 0
-							? i18n.t('sync.completeWithFailed', { failedCount })
-							: i18n.t('sync.complete'),
-					showNotice,
-				})
+				const now = Date.now()
+				plugin.statusService.setLastSyncTime(now, failedCount)
+				if (showNotice) {
+					const text = failedCount > 0
+						? i18n.t('sync.completeWithFailed', { failedCount })
+						: i18n.t('sync.complete')
+					new Notice(text)
+				}
 			}),
 
 			onSyncError().subscribe((error) => {
