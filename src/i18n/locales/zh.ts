@@ -323,4 +323,11 @@ export default {
 		close: '关闭',
 		copied: '文本已复制到剪贴板',
 	},
+	time: {
+		justNow: '刚刚',
+		minutesAgo: '{{count}}分钟前',
+		hoursAgo: '{{count}}小时前',
+		daysAgo: '{{count}}天前',
+		longAgo: '很久前',
+	},
 }

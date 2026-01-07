@@ -78,6 +78,7 @@ export default class NutstorePlugin extends Plugin {
 		this.progressService.unload()
 		this.eventsService.unload()
 		this.realtimeSyncService.unload()
+		this.statusService.unload()
 	}
 
 	async loadSettings() {
