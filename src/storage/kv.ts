@@ -23,7 +23,6 @@ export interface TraverseWebDAVCache {
 	rootCursor: string
 	queue: string[]
 	nodes: Record<string, StatModel[]>
-	processedCount: number
 }
 
 export const traverseWebDAVKV = useStorage<TraverseWebDAVCache>(
