@@ -1,5 +1,5 @@
 import { Mutex } from 'async-mutex'
-import { dirname } from 'path-browserify'
+import { dirname, normalize } from 'path-browserify'
 import { DeltaEntry, getDelta } from '~/api/delta'
 import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
 import { getDirectoryContents } from '~/api/webdav'
@@ -10,6 +10,7 @@ import { fileStatToStatModel } from './file-stat-to-stat-model'
 import { getRootFolderName } from './get-root-folder-name'
 import { is503Error } from './is-503-error'
 import sleep from './sleep'
+import { stdRemotePath } from './std-remote-path'
 import { MaybePromise } from './types'
 
 const getContents = apiLimiter.wrap(getDirectoryContents)
@@ -48,6 +49,25 @@ export class ResumableWebDAVTraversal {
 	private queue: string[] = []
 	private nodes: Record<string, StatModel[]> = {}
 	private processedCount: number = 0
+
+	/**
+	 * Normalize directory path for use as nodes key
+	 */
+	private normalizeDirPath(path: string): string {
+		return stdRemotePath(path)
+	}
+
+	/**
+	 * Normalize file/directory path for comparison
+	 * Uses normalize to handle //, ./, etc, then removes trailing slash for consistent comparison
+	 */
+	private normalizeForComparison(path: string): string {
+		let normalized = normalize(path)
+		if (normalized.endsWith('/') && normalized.length > 1) {
+			normalized = normalized.slice(0, -1)
+		}
+		return normalized
+	}
 
 	constructor(options: {
 		token: string
@@ -112,12 +132,12 @@ export class ResumableWebDAVTraversal {
 
 			while (this.queue.length > 0) {
 				const currentPath = this.queue[0]
+				const normalizedPath = this.normalizeDirPath(currentPath)
 				const resultItems: StatModel[] = []
 
 				try {
-					const cachedItems = this.nodes[currentPath]
+					const cachedItems = this.nodes[normalizedPath]
 
-					// Use cached items if available for resume
 					if (cachedItems) {
 						resultItems.push(...cachedItems)
 					} else {
@@ -139,7 +159,7 @@ export class ResumableWebDAVTraversal {
 						}
 					}
 
-					this.nodes[currentPath] = resultItems
+					this.nodes[normalizedPath] = resultItems
 
 					this.queue.shift()
 					this.processedCount++
@@ -149,13 +169,11 @@ export class ResumableWebDAVTraversal {
 					}
 				} catch (err) {
 					console.error(`Error processing ${currentPath}`, err)
-					// Save state before throwing for resume capability
 					await this.saveState()
 					throw err
 				}
 			}
 
-			// Check for changes during traversal
 			const { response: endResponse } = await executeWithRetry(() =>
 				getLatestDeltaCursor({
 					token: this.token,
@@ -164,7 +182,6 @@ export class ResumableWebDAVTraversal {
 			)
 			const traverseEndCursor = endResponse.cursor
 
-			// Cursor changed, apply delta updates
 			if (traverseStartCursor && traverseStartCursor !== traverseEndCursor) {
 				console.log('Changes detected during traversal, applying delta')
 				const newCursor =
@@ -176,7 +193,7 @@ export class ResumableWebDAVTraversal {
 					console.log(
 						'Reset detected during delta apply, performing full re-scan',
 					)
-					continue // Restart traversal instead of recursion
+					continue
 				}
 
 				return this.getAllFromCache()
@@ -209,7 +226,7 @@ export class ResumableWebDAVTraversal {
 			)
 			this.nodes = {}
 			this.queue = [this.remoteBaseDir]
-			// Get fresh cursor after reset
+			this.processedCount = 0
 			const { response: cursorResponse } = await executeWithRetry(() =>
 				getLatestDeltaCursor({
 					token: this.token,
@@ -237,15 +254,14 @@ export class ResumableWebDAVTraversal {
 
 		this.rootCursor = response.cursor
 
-		// Full scan required if reset
 		if (response.reset) {
 			console.log('Delta reset, performing full scan')
 			this.queue = [this.remoteBaseDir]
 			this.nodes = {}
+			this.processedCount = 0
 			return await this.bfsTraverse()
 		}
 
-		// Return from cache if no changes
 		if (response.delta.entry.length === 0) {
 			console.log('No changes detected, returning from cache')
 			return this.getAllFromCache()
@@ -272,7 +288,9 @@ export class ResumableWebDAVTraversal {
 
 		for (const entry of sortedEntries) {
 			// Filter out changes that don't belong to remoteBaseDir scope
-			const isSelf = entry.path === this.remoteBaseDir
+			const normalizedBaseDir = this.normalizeDirPath(this.remoteBaseDir)
+			const normalizedEntryPath = this.normalizeDirPath(entry.path)
+			const isSelf = normalizedEntryPath === normalizedBaseDir
 			const isChild = entry.path.startsWith(baseDirPrefix)
 
 			if (!isSelf && !isChild) {
@@ -282,19 +300,24 @@ export class ResumableWebDAVTraversal {
 				if (entry.isDeleted) {
 					const parentPath = dirname(entry.path)
 					if (parentPath) {
-						const parentItems = this.nodes[parentPath]
+						const normalizedParentPath = this.normalizeDirPath(parentPath)
+						const parentItems = this.nodes[normalizedParentPath]
 						if (parentItems) {
-							this.nodes[parentPath] = parentItems.filter(
-								(item) => item.path !== entry.path,
+							const normalizedEntryPathForCmp = this.normalizeForComparison(
+								entry.path,
+							)
+							this.nodes[normalizedParentPath] = parentItems.filter(
+								(item) =>
+									this.normalizeForComparison(item.path) !==
+									normalizedEntryPathForCmp,
 							)
 						}
 					}
 
-					// Delete directory and all subdirectories
 					for (const nodePath in this.nodes) {
 						if (
-							nodePath === entry.path ||
-							nodePath.startsWith(entry.path + '/')
+							nodePath === normalizedEntryPath ||
+							nodePath.startsWith(normalizedEntryPath)
 						) {
 							delete this.nodes[nodePath]
 						}
@@ -302,10 +325,11 @@ export class ResumableWebDAVTraversal {
 				} else {
 					const parentPath = dirname(entry.path)
 
-					// Only update parent's children list if parent exists
-					// (Avoid self-reference when entry.path is at root level)
+					// Only update parent's children list if parent already exists
+					// (Avoid creating incomplete parent records)
 					if (parentPath) {
-						const parentItems = this.nodes[parentPath]
+						const normalizedParentPath = this.normalizeDirPath(parentPath)
+						const parentItems = this.nodes[normalizedParentPath]
 
 						if (parentItems) {
 							const dirStat: StatModel = {
@@ -318,31 +342,49 @@ export class ResumableWebDAVTraversal {
 									: undefined,
 							}
 
-							// Replace entry
-							this.nodes[parentPath] = [
-								...parentItems.filter((item) => item.path !== entry.path),
+							const normalizedEntryPathForCmp = this.normalizeForComparison(
+								entry.path,
+							)
+							this.nodes[normalizedParentPath] = [
+								...parentItems.filter(
+									(item) =>
+										this.normalizeForComparison(item.path) !==
+										normalizedEntryPathForCmp,
+								),
 								dirStat,
 							]
 						}
 					}
 
-					if (!this.nodes[entry.path]) {
-						this.nodes[entry.path] = []
+					if (!this.nodes[normalizedEntryPath]) {
+						this.nodes[normalizedEntryPath] = []
 					}
 				}
 			} else {
+				// is file
 				const parentPath = dirname(entry.path)
 
 				// Only update parent's children list if parent exists
 				if (parentPath) {
-					const parentItems = this.nodes[parentPath]
-
-					if (parentItems) {
-						if (entry.isDeleted) {
-							this.nodes[parentPath] = parentItems.filter(
-								(item) => item.path !== entry.path,
+					const normalizedParentPath = this.normalizeDirPath(parentPath)
+					if (entry.isDeleted) {
+						const parentItems = this.nodes[normalizedParentPath]
+						if (parentItems) {
+							const normalizedEntryPathForCmp = this.normalizeForComparison(
+								entry.path,
 							)
-						} else {
+							this.nodes[normalizedParentPath] = parentItems.filter(
+								(item) =>
+									this.normalizeForComparison(item.path) !==
+									normalizedEntryPathForCmp,
+							)
+						}
+					} else {
+						// Only update if parent directory already exists in cache
+						// (Avoid creating incomplete parent records that would hide other files)
+						const parentItems = this.nodes[normalizedParentPath]
+
+						if (parentItems) {
 							const stat: StatModel = {
 								path: entry.path,
 								basename: entry.path.split('/').pop() || '',
@@ -352,9 +394,15 @@ export class ResumableWebDAVTraversal {
 								size: entry.size,
 							}
 
-							// Replace entry
-							this.nodes[parentPath] = [
-								...parentItems.filter((item) => item.path !== entry.path),
+							const normalizedEntryPathForCmp = this.normalizeForComparison(
+								entry.path,
+							)
+							this.nodes[normalizedParentPath] = [
+								...parentItems.filter(
+									(item) =>
+										this.normalizeForComparison(item.path) !==
+										normalizedEntryPathForCmp,
+								),
 								stat,
 							]
 						}
@@ -384,7 +432,6 @@ export class ResumableWebDAVTraversal {
 			this.rootCursor = cache.rootCursor || ''
 			this.queue = cache.queue || []
 			this.nodes = cache.nodes || {}
-			this.processedCount = cache.processedCount || 0
 		}
 	}
 
@@ -396,7 +443,6 @@ export class ResumableWebDAVTraversal {
 			rootCursor: this.rootCursor,
 			queue: this.queue,
 			nodes: this.nodes,
-			processedCount: this.processedCount,
 		})
 	}
 
