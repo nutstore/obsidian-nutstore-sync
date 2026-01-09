@@ -1,5 +1,14 @@
 export default {
+	errors: {
+		filenameUnsupportedChars:
+			'File {{path}} contains unsupported characters: {{chars}}',
+	},
 	settings: {
+		language: {
+			name: 'Language',
+			desc: 'Select interface language',
+			auto: 'Auto detect',
+		},
 		account: {
 			name: 'Account',
 			desc: 'Enter your WebDAV account',
@@ -74,11 +83,15 @@ export default {
 			name: 'Auto-sync on startup',
 			desc: 'Set the number of seconds after startup to automatically perform a sync. Set to 0 to disable auto-sync on startup.',
 			placeholder: 'Enter seconds (e.g., 5, 0 to disable)',
+		invalidValue: 'Invalid value, reset to 0',
+		exceedsMax: 'Value exceeds maximum limit of {{max}} seconds (1 day), automatically adjusted',
 		},
 		autoSyncInterval: {
 			name: 'Auto-sync interval',
 			desc: 'Set the interval for automatic background synchronization (in minutes). Set to 0 to disable automatic sync.',
 			placeholder: 'Enter minutes (e.g., 5, 0 to disable)',
+		invalidValue: 'Invalid value, reset to 0',
+		exceedsMax: 'Value exceeds maximum limit of {{max}} minutes (1 day), automatically adjusted',
 		},
 		sections: {
 			account: 'Account',
@@ -119,8 +132,10 @@ export default {
 		},
 		skipLargeFiles: {
 			name: 'Skip large files',
-			desc: 'Files exceeding this size will be skipped during synchronization. If sync issues occur, try lowering this value. Leave empty for no limit.',
+			desc: 'Files exceeding this size will be skipped during synchronization. If sync issues occur, try lowering this value. Maximum 500MB.',
 			placeholder: 'e.g., 10 MiB or 500 KiB',
+			invalidFormat: 'Invalid file size format. Please use formats like "10MB" or "500KB"',
+			exceedsMaxSize: 'File size exceeds maximum limit of 500MB',
 		},
 		log: {
 			title: 'Debug logs',
@@ -226,7 +241,8 @@ export default {
 		},
 		requestsTooFrequent:
 			'Requests too frequent, plugin will resume sync at {{time}}',
-		start: '⌛️ Sync started',
+		preparing: '📋 Preparing sync',
+		start: '⌛️ Starting sync',
 		complete: '✅ Sync completed',
 		completeWithFailed: '❌ Sync completed with {{failedCount}} failed tasks',
 		failedWithError: 'Sync failed with error: {{error}}',
@@ -270,6 +286,10 @@ export default {
 			cleanRecord: 'Clean record',
 			skip: 'Skip',
 		},
+		skipReason: {
+			'file-too-large': 'File too large',
+			'folder-contains-ignored-items': 'Folder contains ignored items',
+		},
 		confirmModal: {
 			title: 'Sync confirmation',
 			message:
@@ -301,9 +321,24 @@ export default {
 		deleteAndReupload: 'Delete selected, re-upload unchecked',
 		skipForNow: 'Skip for now',
 	},
+	failedTasks: {
+		title: 'Failed sync tasks',
+		instruction: 'The following tasks failed during sync:',
+		taskName: 'Task',
+		localPath: 'Local path',
+		errorMessage: 'Error',
+		close: 'Close',
+	},
 	textAreaModal: {
 		copy: 'Copy',
 		close: 'Close',
 		copied: 'Text copied to clipboard',
+	},
+	time: {
+		justNow: 'just now',
+		minutesAgo: '{{count}}min ago',
+		hoursAgo: '{{count}}h ago',
+		daysAgo: '{{count}}d ago',
+		longAgo: 'long ago',
 	},
 }

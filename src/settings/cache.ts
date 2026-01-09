@@ -5,15 +5,15 @@ import CacheRestoreModal from '~/components/CacheRestoreModal'
 import CacheSaveModal from '~/components/CacheSaveModal'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import i18n from '~/i18n'
-import { blobKV, deltaCacheKV, syncRecordKV } from '~/storage/kv'
+import { TraverseWebDAVCache } from '~/storage'
 import { getDBKey } from '~/utils/get-db-key'
 import logger from '~/utils/logger'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import BaseSettings from './settings.base'
 
 export interface ExportedStorage {
-	deltaCache: any
 	exportedAt: string
+	traverseWebDAVCache?: TraverseWebDAVCache
 }
 
 export default class CacheSettings extends BaseSettings {
@@ -118,27 +118,5 @@ export default class CacheSettings extends BaseSettings {
 		return await webdav.createDirectory(this.remoteCacheDir, {
 			recursive: true,
 		})
-	}
-
-	/**
-	 * Clear the local cache
-	 * @param options Options specifying which caches to clear
-	 */
-	async clearCache({
-		deltaCacheEnabled = true,
-		syncRecordEnabled = true,
-		blobEnabled = true,
-	} = {}) {
-		if (deltaCacheEnabled) {
-			await deltaCacheKV.clear()
-		}
-
-		if (syncRecordEnabled) {
-			await syncRecordKV.clear()
-		}
-
-		if (blobEnabled) {
-			await blobKV.clear()
-		}
 	}
 }

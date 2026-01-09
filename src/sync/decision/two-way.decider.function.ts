@@ -7,8 +7,12 @@ import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
+import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
-import { hasIgnoredInFolder } from '../utils/has-ignored-in-folder'
+import {
+	getIgnoredPathsInFolder,
+	hasIgnoredInFolder,
+} from '../utils/has-ignored-in-folder'
 import { hasFolderContentChanged } from './has-folder-content-changed'
 import { SyncDecisionInput } from './sync-decision.interface'
 
@@ -28,7 +32,7 @@ export async function twoWayDecider(
 	let maxFileSize = Infinity
 	const maxFileSizeStr = settings.skipLargeFiles.maxSize.trim()
 	if (maxFileSizeStr !== '') {
-		maxFileSize = bytesParse(maxFileSizeStr) ?? Infinity
+		maxFileSize = bytesParse(maxFileSizeStr, { mode: 'jedec' }) ?? Infinity
 	}
 
 	// Filter out ignored files and extract StatModel from FsWalkResult
@@ -117,7 +121,7 @@ export async function twoWayDecider(
 								tasks.push(
 									taskFactory.createSkippedTask({
 										...options,
-										reason: 'file-too-large',
+										reason: SkipReason.FileTooLarge,
 										maxSize: maxFileSize,
 										remoteSize: remote.size,
 										localSize: local.size,
@@ -161,7 +165,7 @@ export async function twoWayDecider(
 								tasks.push(
 									taskFactory.createSkippedTask({
 										...options,
-										reason: 'file-too-large',
+										reason: SkipReason.FileTooLarge,
 										maxSize: maxFileSize,
 										remoteSize: remote.size,
 										localSize: local.size,
@@ -194,7 +198,7 @@ export async function twoWayDecider(
 								tasks.push(
 									taskFactory.createSkippedTask({
 										...options,
-										reason: 'file-too-large',
+										reason: SkipReason.FileTooLarge,
 										maxSize: maxFileSize,
 										remoteSize: remote.size,
 										localSize: local.size,
@@ -227,7 +231,7 @@ export async function twoWayDecider(
 							tasks.push(
 								taskFactory.createSkippedTask({
 									...options,
-									reason: 'file-too-large',
+									reason: SkipReason.FileTooLarge,
 									maxSize: maxFileSize,
 									remoteSize: remote.size,
 								}),
@@ -274,7 +278,7 @@ export async function twoWayDecider(
 						tasks.push(
 							taskFactory.createSkippedTask({
 								...options,
-								reason: 'file-too-large',
+								reason: SkipReason.FileTooLarge,
 								localSize: local.size,
 								maxSize: maxFileSize,
 							}),
@@ -333,7 +337,7 @@ export async function twoWayDecider(
 						tasks.push(
 							taskFactory.createSkippedTask({
 								...options,
-								reason: 'file-too-large',
+								reason: SkipReason.FileTooLarge,
 								remoteSize: remote.size,
 								localSize: local.size,
 								maxSize: maxFileSize,
@@ -373,7 +377,7 @@ export async function twoWayDecider(
 						tasks.push(
 							taskFactory.createSkippedTask({
 								...options,
-								reason: 'file-too-large',
+								reason: SkipReason.FileTooLarge,
 								remoteSize: remote.size,
 								maxSize: maxFileSize,
 							}),
@@ -402,7 +406,7 @@ export async function twoWayDecider(
 						tasks.push(
 							taskFactory.createSkippedTask({
 								...options,
-								reason: 'file-too-large',
+								reason: SkipReason.FileTooLarge,
 								localSize: local.size,
 								maxSize: maxFileSize,
 							}),
@@ -493,27 +497,18 @@ export async function twoWayDecider(
 					},
 				})
 
-				if (hasInvalidChar(localPath)) {
-					tasks.push(
-						taskFactory.createFilenameErrorTask({
-							localPath,
-							remotePath: remote.path,
-							remoteBaseDir,
-						}),
-					)
-				} else {
-					mkdirLocalTasks.push(
-						taskFactory.createMkdirLocalTask({
-							localPath,
-							remotePath: remote.path,
-							remoteBaseDir,
-						}),
-					)
-				}
+				mkdirLocalTasks.push(
+					taskFactory.createMkdirLocalTask({
+						localPath,
+						remotePath: remote.path,
+						remoteBaseDir,
+					}),
+				)
 				continue
 			}
 
 			if (hasIgnoredInFolder(remote.path, remoteStats)) {
+				const ignoredPaths = getIgnoredPathsInFolder(remote.path, remoteStats)
 				logger.debug({
 					reason: 'skip removing remote folder (contains ignored items)',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
@@ -523,7 +518,17 @@ export async function twoWayDecider(
 						localExists: !!local,
 						recordExists: !!record,
 					},
+					ignoredPaths,
 				})
+				tasks.push(
+					taskFactory.createSkippedTask({
+						localPath,
+						remotePath: remote.path,
+						remoteBaseDir,
+						reason: SkipReason.FolderContainsIgnoredItems,
+						ignoredPaths,
+					}),
+				)
 				continue
 			}
 
@@ -556,23 +561,13 @@ export async function twoWayDecider(
 				},
 			})
 
-			if (hasInvalidChar(localPath)) {
-				tasks.push(
-					taskFactory.createFilenameErrorTask({
-						localPath,
-						remotePath: remote.path,
-						remoteBaseDir,
-					}),
-				)
-			} else {
-				mkdirLocalTasks.push(
-					taskFactory.createMkdirLocalTask({
-						localPath,
-						remotePath: remote.path,
-						remoteBaseDir,
-					}),
-				)
-			}
+			mkdirLocalTasks.push(
+				taskFactory.createMkdirLocalTask({
+					localPath,
+					remotePath: remote.path,
+					remoteBaseDir,
+				}),
+			)
 
 			continue
 		}
@@ -617,17 +612,28 @@ export async function twoWayDecider(
 							recordExists: !!record,
 						},
 					})
-					mkdirRemoteTasks.push(
-						taskFactory.createMkdirRemoteTask({
-							localPath: local.path,
-							remotePath: local.path,
-							remoteBaseDir,
-						}),
-					)
+					if (hasInvalidChar(local.path)) {
+						tasks.push(
+							taskFactory.createFilenameErrorTask({
+								localPath: local.path,
+								remotePath: local.path,
+								remoteBaseDir,
+							}),
+						)
+					} else {
+						mkdirRemoteTasks.push(
+							taskFactory.createMkdirRemoteTask({
+								localPath: local.path,
+								remotePath: local.path,
+								remoteBaseDir,
+							}),
+						)
+					}
 					continue
 				}
 
 				if (hasIgnoredInFolder(local.path, localStats)) {
+					const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
 					logger.debug({
 						reason: 'skip removing local folder (contains ignored items)',
 						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
@@ -637,7 +643,17 @@ export async function twoWayDecider(
 							remoteExists: !!remote,
 							recordExists: !!record,
 						},
+						ignoredPaths,
 					})
+					tasks.push(
+						taskFactory.createSkippedTask({
+							localPath: local.path,
+							remotePath: local.path,
+							remoteBaseDir,
+							reason: SkipReason.FolderContainsIgnoredItems,
+							ignoredPaths,
+						}),
+					)
 					continue
 				}
 
@@ -668,13 +684,23 @@ export async function twoWayDecider(
 						recordExists: !!record,
 					},
 				})
-				mkdirRemoteTasks.push(
-					taskFactory.createMkdirRemoteTask({
-						localPath: local.path,
-						remotePath: local.path,
-						remoteBaseDir,
-					}),
-				)
+				if (hasInvalidChar(local.path)) {
+					tasks.push(
+						taskFactory.createFilenameErrorTask({
+							localPath: local.path,
+							remotePath: local.path,
+							remoteBaseDir,
+						}),
+					)
+				} else {
+					mkdirRemoteTasks.push(
+						taskFactory.createMkdirRemoteTask({
+							localPath: local.path,
+							remotePath: local.path,
+							remoteBaseDir,
+						}),
+					)
+				}
 				continue
 			}
 			continue

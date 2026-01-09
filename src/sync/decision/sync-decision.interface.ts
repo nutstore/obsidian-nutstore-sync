@@ -2,6 +2,7 @@ import { FsWalkResult } from '~/fs/fs.interface'
 import { StatModel } from '~/model/stat.model'
 import { SyncMode } from '~/settings'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
+import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 
 export interface SyncDecisionSettings {
@@ -38,22 +39,26 @@ export interface PullTaskOptions extends TaskOptions {
 export type SkippedTaskOptions = TaskOptions &
 	(
 		| {
-				reason: 'file-too-large'
+				reason: SkipReason.FileTooLarge
 				maxSize: number
 				remoteSize: number
 				localSize?: number
 		  }
 		| {
-				reason: 'file-too-large'
+				reason: SkipReason.FileTooLarge
 				maxSize: number
 				remoteSize?: number
 				localSize: number
 		  }
 		| {
-				reason: 'file-too-large'
+				reason: SkipReason.FileTooLarge
 				maxSize: number
 				remoteSize: number
 				localSize: number
+		  }
+		| {
+				reason: SkipReason.FolderContainsIgnoredItems
+				ignoredPaths: string[]
 		  }
 	)
 

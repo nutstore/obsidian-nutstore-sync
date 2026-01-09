@@ -4,6 +4,6 @@ export default class NoopTask extends BaseTask {
 	exec() {
 		return {
 			success: true,
-		}
+		} as const
 	}
 }
