@@ -47,7 +47,7 @@ const context = await esbuild.context({
 		'process.env.PLUGIN_VERSION': JSON.stringify(pkgJson.version),
 	},
 	format: 'cjs',
-	target: 'es2015',
+	target: 'es2018',
 	logLevel: 'info',
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
