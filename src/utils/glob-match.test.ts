@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import GlobMatch, { needIncludeFromGlobRules } from './glob-match'
+import GlobMatch, { needIncludeFromGlobRules, extendRules } from './glob-match'
 
 describe('needIncludeFromGlobRules', () => {
 	// --- 基础行为测试 ---
@@ -923,5 +923,316 @@ describe('needIncludeFromGlobRules', () => {
 				needIncludeFromGlobRules('src/main.js', inclusion, exclusion),
 			).toBe(true)
 		})
+	})
+})
+
+describe('extendRules', () => {
+	// --- 基础功能测试 ---
+	it('应该扩展普通文件夹规则', () => {
+		const rules = [
+			new GlobMatch('.git', { caseSensitive: false }),
+			new GlobMatch('node_modules', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		// 应该包含原有规则 + 扩展规则（每个规则扩展为 3 个）
+		expect(extended.length).toBe(8)
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('.git')
+		expect(exprs).toContain('.git/**')
+		expect(exprs).toContain('**/.git')
+		expect(exprs).toContain('**/.git/**')
+		expect(exprs).toContain('node_modules')
+		expect(exprs).toContain('node_modules/**')
+		expect(exprs).toContain('**/node_modules')
+		expect(exprs).toContain('**/node_modules/**')
+	})
+
+	it('应该扩展以斜杠结尾的文件夹规则', () => {
+		const rules = [
+			new GlobMatch('.obsidian/', { caseSensitive: false }),
+			new GlobMatch('temp/', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		expect(extended.length).toBe(8)
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('.obsidian/')
+		expect(exprs).toContain('.obsidian/**')
+		expect(exprs).toContain('**/.obsidian')
+		expect(exprs).toContain('**/.obsidian/**')
+		expect(exprs).toContain('temp/')
+		expect(exprs).toContain('temp/**')
+		expect(exprs).toContain('**/temp')
+		expect(exprs).toContain('**/temp/**')
+	})
+
+	// --- 跳过规则测试 ---
+	it('应该跳过以 ! 开头的规则', () => {
+		const rules = [
+			new GlobMatch('!important', { caseSensitive: false }),
+			new GlobMatch('!.gitkeep', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		// 应该只包含原有规则，不扩展
+		expect(extended.length).toBe(2)
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('!important')
+		expect(exprs).toContain('!.gitkeep')
+	})
+
+	it('应该跳过包含通配符的规则', () => {
+		const rules = [
+			new GlobMatch('*.log', { caseSensitive: false }),
+			new GlobMatch('test*.txt', { caseSensitive: false }),
+			new GlobMatch('**/.git', { caseSensitive: false }),
+			new GlobMatch('node_modules/*', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		// 应该只包含原有规则，不扩展
+		expect(extended.length).toBe(4)
+		expect(extended.every((rule, i) => rule.expr === rules[i].expr)).toBe(true)
+	})
+
+	it('应该跳过以 ** 结尾的规则', () => {
+		const rules = [
+			new GlobMatch('.git/**', { caseSensitive: false }),
+			new GlobMatch('node_modules/**', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		// 应该只包含原有规则，不扩展
+		expect(extended.length).toBe(2)
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('.git/**')
+		expect(exprs).toContain('node_modules/**')
+	})
+
+	it('应该跳过以 **/ 开头的规则', () => {
+		const rules = [
+			new GlobMatch('**/.git', { caseSensitive: false }),
+			new GlobMatch('**/node_modules', { caseSensitive: false }),
+			new GlobMatch('**/.DS_Store', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		// 已经是全局匹配，不需要扩展
+		expect(extended.length).toBe(3)
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('**/.git')
+		expect(exprs).toContain('**/node_modules')
+		expect(exprs).toContain('**/.DS_Store')
+	})
+
+	it('应该正确处理以 / 开头的规则（只匹配根目录）', () => {
+		const rules = [
+			new GlobMatch('/.git', { caseSensitive: false }),
+			new GlobMatch('/temp', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		// 以 / 开头表示根目录，只添加 /** 后缀，不添加 **/ 前缀
+		expect(extended.length).toBe(4)
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('/.git')
+		expect(exprs).toContain('/.git/**')
+		expect(exprs).toContain('/temp')
+		expect(exprs).toContain('/temp/**')
+	})
+
+	// --- 混合规则测试 ---
+	it('应该正确处理混合规则', () => {
+		const rules = [
+			new GlobMatch('.git', { caseSensitive: false }), // 应扩展 -> +3
+			new GlobMatch('*.log', { caseSensitive: false }), // 跳过（包含*）
+			new GlobMatch('node_modules/', { caseSensitive: false }), // 应扩展 -> +3
+			new GlobMatch('!important', { caseSensitive: false }), // 跳过（以!开头）
+			new GlobMatch('temp/**', { caseSensitive: false }), // 跳过（以**结尾）
+		]
+
+		const extended = extendRules(rules)
+
+		// 原有5个 + 扩展6个（2个规则各扩展3个）= 11个
+		expect(extended.length).toBe(11)
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('.git')
+		expect(exprs).toContain('.git/**')
+		expect(exprs).toContain('**/.git')
+		expect(exprs).toContain('**/.git/**')
+		expect(exprs).toContain('*.log')
+		expect(exprs).toContain('node_modules/')
+		expect(exprs).toContain('node_modules/**')
+		expect(exprs).toContain('**/node_modules')
+		expect(exprs).toContain('**/node_modules/**')
+		expect(exprs).toContain('!important')
+		expect(exprs).toContain('temp/**')
+	})
+
+	it('应该正确处理包含所有边界情况的混合规则', () => {
+		const rules = [
+			new GlobMatch('.git', { caseSensitive: false }), // 普通规则 -> +3
+			new GlobMatch('**/.DS_Store', { caseSensitive: false }), // 以 **/ 开头，跳过
+			new GlobMatch('/.obsidian', { caseSensitive: false }), // 以 / 开头 -> +1
+			new GlobMatch('*.log', { caseSensitive: false }), // 包含 *，跳过
+			new GlobMatch('temp/**', { caseSensitive: false }), // 以 ** 结尾，跳过
+			new GlobMatch('!important', { caseSensitive: false }), // 以 ! 开头，跳过
+		]
+
+		const extended = extendRules(rules)
+
+		// 原有6个 + .git扩展3个 + /.obsidian扩展1个 = 10个
+		expect(extended.length).toBe(10)
+
+		// 验证关键规则存在（不关心顺序）
+		const exprs = extended.map((r) => r.expr)
+		expect(exprs).toContain('.git')
+		expect(exprs).toContain('.git/**')
+		expect(exprs).toContain('**/.git')
+		expect(exprs).toContain('**/.git/**')
+		expect(exprs).toContain('**/.DS_Store')
+		expect(exprs).toContain('/.obsidian')
+		expect(exprs).toContain('/.obsidian/**')
+		expect(exprs).toContain('*.log')
+		expect(exprs).toContain('temp/**')
+		expect(exprs).toContain('!important')
+	})
+
+	// --- 不可变性测试 ---
+	it('不应该修改原数组', () => {
+		const rules = [
+			new GlobMatch('.git', { caseSensitive: false }),
+			new GlobMatch('node_modules', { caseSensitive: false }),
+		]
+		const originalLength = rules.length
+
+		const extended = extendRules(rules)
+
+		// 原数组不应被修改
+		expect(rules.length).toBe(originalLength)
+		expect(extended).not.toBe(rules)
+	})
+
+	// --- 选项保持测试 ---
+	it('应该保持原规则的选项配置', () => {
+		const rules = [
+			new GlobMatch('.git', { caseSensitive: true }),
+			new GlobMatch('node_modules', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		// 扩展规则应该保持原规则的选项
+		const gitRules = extended.filter(
+			(r) =>
+				r.expr === '.git' ||
+				r.expr === '.git/**' ||
+				r.expr === '**/.git' ||
+				r.expr === '**/.git/**',
+		)
+		const nodeRules = extended.filter(
+			(r) =>
+				r.expr === 'node_modules' ||
+				r.expr === 'node_modules/**' ||
+				r.expr === '**/node_modules' ||
+				r.expr === '**/node_modules/**',
+		)
+
+		gitRules.forEach((rule) => {
+			expect(rule.options.caseSensitive).toBe(true)
+		})
+		nodeRules.forEach((rule) => {
+			expect(rule.options.caseSensitive).toBe(false)
+		})
+	})
+
+	// --- 实际使用场景测试 ---
+	it('扩展后的规则应该能正确匹配文件夹内的文件', () => {
+		const rules = [new GlobMatch('.git', { caseSensitive: false })]
+		const extended = extendRules(rules)
+
+		// 验证生成了 4 个规则
+		expect(extended.length).toBe(4)
+
+		// 测试各种路径的匹配情况
+		const testCases = [
+			{ path: '.git', expected: true }, // 根目录的 .git
+			{ path: '.git/config', expected: true }, // 根目录 .git 内的文件
+			{ path: '.git/hooks/pre-commit', expected: true }, // 根目录 .git 深层文件
+			{ path: 'project/.git', expected: true }, // 子目录中的 .git
+			{ path: 'src/project/.git', expected: true }, // 深层子目录中的 .git
+			{ path: 'project/.git/config', expected: true }, // 子目录 .git 内的文件
+			{ path: 'src/project/.git/hooks/pre-commit', expected: true }, // 深层 .git 内的文件
+		]
+
+		testCases.forEach(({ path, expected }) => {
+			const matched = extended.some((rule) => rule.test(path))
+			expect(matched).toBe(expected)
+		})
+	})
+
+	it('与 needIncludeFromGlobRules 集成测试', () => {
+		const exclusionRules = [
+			new GlobMatch('.git', { caseSensitive: false }),
+			new GlobMatch('.obsidian', { caseSensitive: false }),
+		]
+		const extended = extendRules(exclusionRules)
+
+		// 应该排除文件夹本身
+		expect(needIncludeFromGlobRules('.git', [], extended)).toBe(false)
+		expect(needIncludeFromGlobRules('.obsidian', [], extended)).toBe(false)
+
+		// 应该排除文件夹内的文件
+		expect(needIncludeFromGlobRules('.git/config', [], extended)).toBe(false)
+		expect(
+			needIncludeFromGlobRules('.obsidian/workspace.json', [], extended),
+		).toBe(false)
+
+		// 不应该排除其他文件
+		expect(needIncludeFromGlobRules('readme.md', [], extended)).toBe(true)
+	})
+
+	// --- 边界情况测试 ---
+	it('应该处理空数组', () => {
+		const rules: GlobMatch[] = []
+		const extended = extendRules(rules)
+
+		expect(extended.length).toBe(0)
+	})
+
+	it('应该处理特殊路径字符', () => {
+		const rules = [
+			new GlobMatch('@types', { caseSensitive: false }),
+			new GlobMatch('__pycache__', { caseSensitive: false }),
+			new GlobMatch('.DS_Store', { caseSensitive: false }),
+		]
+
+		const extended = extendRules(rules)
+
+		expect(extended.length).toBe(12)
+		const exprs = extended.map((r) => r.expr)
+		// @types 的扩展
+		expect(exprs).toContain('@types')
+		expect(exprs).toContain('@types/**')
+		expect(exprs).toContain('**/@types')
+		expect(exprs).toContain('**/@types/**')
+		// __pycache__ 的扩展
+		expect(exprs).toContain('__pycache__')
+		expect(exprs).toContain('__pycache__/**')
+		expect(exprs).toContain('**/__pycache__')
+		expect(exprs).toContain('**/__pycache__/**')
+		// .DS_Store 的扩展
+		expect(exprs).toContain('.DS_Store')
+		expect(exprs).toContain('.DS_Store/**')
+		expect(exprs).toContain('**/.DS_Store')
+		expect(exprs).toContain('**/.DS_Store/**')
 	})
 })
