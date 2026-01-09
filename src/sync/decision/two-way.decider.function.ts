@@ -32,7 +32,7 @@ export async function twoWayDecider(
 	let maxFileSize = Infinity
 	const maxFileSizeStr = settings.skipLargeFiles.maxSize.trim()
 	if (maxFileSizeStr !== '') {
-		maxFileSize = bytesParse(maxFileSizeStr) ?? Infinity
+		maxFileSize = bytesParse(maxFileSizeStr, { mode: 'jedec' }) ?? Infinity
 	}
 
 	// Filter out ignored files and extract StatModel from FsWalkResult
