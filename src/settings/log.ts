@@ -1,6 +1,7 @@
 import { Notice, Setting } from 'obsidian'
 import { isNotNil } from 'ramda'
 import i18n from '~/i18n'
+import logger from '~/utils/logger'
 import logsStringify from '~/utils/logs-stringify'
 import BaseSettings from './settings.base'
 
@@ -58,7 +59,7 @@ export default class LogSettings extends BaseSettings {
 			await this.app.workspace.getLeaf().openFile(file)
 		} catch (error) {
 			new Notice(i18n.t('settings.log.saveError'))
-			console.error('Failed to save logs to note:', error)
+			logger.error('Failed to save logs to note:', error)
 		}
 	}
 }
