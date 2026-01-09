@@ -1,5 +1,6 @@
 import GlobToRegExp from 'glob-to-regexp'
 import { cloneDeep } from 'lodash-es'
+import path from 'path-browserify'
 
 export interface GlobMatchUserOptions {
 	caseSensitive: boolean
@@ -26,28 +27,105 @@ function generateFlags(options: GlobMatchUserOptions) {
 	return flags
 }
 
+function normalizePath(rawPath: string) {
+	const normalized = path.normalize(rawPath)
+	const trimmed = normalized.replace(/^\.+\//, '').replace(/^\/+/, '')
+	const isDirPath = trimmed.endsWith('/')
+	const withoutTrailing = isDirPath ? trimmed.slice(0, -1) : trimmed
+	const segments = withoutTrailing
+		? withoutTrailing.split('/').filter(Boolean)
+		: []
+	return {
+		normalized: segments.join('/'),
+		segments,
+		isDirPath,
+	}
+}
+
+function buildRegExp(expr: string, options: GlobMatchUserOptions) {
+	return GlobToRegExp(expr, {
+		flags: generateFlags(options),
+		extended: true,
+		globstar: true,
+	})
+}
+
 export default class GlobMatch {
 	re: RegExp
+	private readonly isRooted: boolean
+	private readonly isDirOnly: boolean
+	private readonly hasSlash: boolean
+	private readonly patternBody: string
+	private readonly pathRegex?: RegExp
+	private readonly segmentRegex?: RegExp
 
 	constructor(
 		public expr: string,
 		public options: GlobMatchUserOptions,
 	) {
-		this.re = GlobToRegExp(this.expr, {
-			flags: generateFlags(options),
-			extended: true,
-			globstar: true,
-		})
+		const trimmed = expr.trim()
+		this.isRooted = trimmed.startsWith('/')
+		this.isDirOnly = trimmed.endsWith('/')
+		this.patternBody = trimmed.slice(
+			this.isRooted ? 1 : 0,
+			this.isDirOnly ? -1 : undefined,
+		)
+		this.hasSlash = this.patternBody.includes('/')
+		if (this.patternBody !== '') {
+			if (this.isRooted || this.hasSlash) {
+				this.pathRegex = buildRegExp(this.patternBody, options)
+				this.re = this.pathRegex
+			} else {
+				this.segmentRegex = buildRegExp(this.patternBody, options)
+				this.re = this.segmentRegex
+			}
+		} else {
+			this.re = /^$/
+		}
+	}
+
+	private matchDirectoryBySegments(segments: string[], isDirPath: boolean) {
+		for (let i = 0; i < segments.length; i += 1) {
+			const isSegmentDir = i < segments.length - 1 || isDirPath
+			if (!isSegmentDir) {
+				continue
+			}
+			if (this.segmentRegex?.test(segments[i])) {
+				return true
+			}
+		}
+		return false
+	}
+
+	private matchDirectoryByPrefix(segments: string[], isDirPath: boolean) {
+		for (let i = 1; i <= segments.length; i += 1) {
+			const isSegmentDir = i < segments.length || isDirPath
+			if (!isSegmentDir) {
+				continue
+			}
+			const prefix = segments.slice(0, i).join('/')
+			if (this.pathRegex?.test(prefix)) {
+				return true
+			}
+		}
+		return false
 	}
 
 	test(path: string) {
-		if (path === this.expr) {
-			return true
+		if (this.patternBody === '') {
+			return false
 		}
-		if (this.re.test(path)) {
-			return true
+		const { normalized, segments, isDirPath } = normalizePath(path)
+		if (this.isDirOnly) {
+			if (this.isRooted || this.hasSlash) {
+				return this.matchDirectoryByPrefix(segments, isDirPath)
+			}
+			return this.matchDirectoryBySegments(segments, isDirPath)
 		}
-		return false
+		if (this.isRooted || this.hasSlash) {
+			return this.pathRegex?.test(normalized) ?? false
+		}
+		return segments.some((segment) => this.segmentRegex?.test(segment))
 	}
 }
 
@@ -75,25 +153,15 @@ export function needIncludeFromGlobRules(
 			return false
 		}
 	}
-	return true
-}
-
-/**
- * 如果忽略/包含了某文件夹，例如：.git，那也应该忽略/包含里面的所有文件。
- *
- * 即: .git = .git + .git/*
- */
-export function extendRules(rules: GlobMatch[]) {
-	rules = [...rules]
-	for (const { expr, options } of rules) {
-		if (expr.startsWith('!') || expr.includes('*') || expr.endsWith('**')) {
-			continue
+	const { segments } = normalizePath(path)
+	const parentCount = Math.max(segments.length - 1, 0)
+	for (let i = 1; i <= parentCount; i += 1) {
+		const parentPath = `${segments.slice(0, i).join('/')}/`
+		for (const rule of exclusion) {
+			if (rule.test(parentPath)) {
+				return false
+			}
 		}
-		const newRule = new GlobMatch(
-			`${expr.endsWith('/') ? expr : expr + '/'}**`,
-			options,
-		)
-		rules.push(newRule)
 	}
-	return rules
+	return true
 }

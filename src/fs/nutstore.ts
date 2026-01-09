@@ -6,7 +6,6 @@ import { NS_DAV_ENDPOINT } from '~/consts'
 import { useSettings } from '~/settings'
 import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import GlobMatch, {
-	extendRules,
 	GlobMatchOptions,
 	isVoidGlobMatchOptions,
 	needIncludeFromGlobRules,
@@ -92,10 +91,8 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 	}
 
 	private buildRules(rules: GlobMatchOptions[] = []): GlobMatch[] {
-		return extendRules(
-			rules
-				.filter((opt) => !isVoidGlobMatchOptions(opt))
-				.map(({ expr, options }) => new GlobMatch(expr, options)),
-		)
+		return rules
+			.filter((opt) => !isVoidGlobMatchOptions(opt))
+			.map(({ expr, options }) => new GlobMatch(expr, options))
 	}
 }
