@@ -206,68 +206,138 @@ export class ResumableWebDAVTraversal {
 	}
 
 	/**
+	 * Fetch all delta changes by paginating through hasMore
+	 * Yields batches of delta entries as they are fetched
+	 */
+	private async *fetchAllDelta(startCursor: string): AsyncGenerator<{
+		entries: DeltaEntry[]
+		cursor: string
+		reset: boolean
+		hasMore: boolean
+	}> {
+		let currentCursor = startCursor
+
+		while (true) {
+			const { response } = await executeWithRetry(() =>
+				getDelta({
+					token: this.token,
+					folderName: getRootFolderName(this.remoteBaseDir),
+					cursor: currentCursor,
+				}),
+			)
+
+			if (response.reset) {
+				yield {
+					entries: [],
+					cursor: response.cursor,
+					reset: true,
+					hasMore: false,
+				}
+				return
+			}
+
+			currentCursor = response.cursor
+
+			yield {
+				entries: response.delta.entry,
+				cursor: currentCursor,
+				reset: false,
+				hasMore: response.hasMore,
+			}
+
+			if (!response.hasMore) {
+				break
+			}
+		}
+	}
+
+	/**
 	 * Apply changes during traversal without re-scanning
 	 * Returns the new cursor. If reset occurred, clears cache and sets queue for re-scan.
 	 */
 	private async applyDeltaDuringTraversal(
 		startCursor: string,
 	): Promise<string> {
-		const { response } = await executeWithRetry(() =>
-			getDelta({
-				token: this.token,
-				folderName: getRootFolderName(this.remoteBaseDir),
-				cursor: startCursor,
-			}),
-		)
+		let finalCursor = startCursor
+		let processedEntries = 0
 
-		if (response.reset) {
-			console.warn(
-				'Delta reset during traversal, clearing cache and will trigger full re-scan',
-			)
-			this.nodes = {}
-			this.queue = [this.remoteBaseDir]
-			this.processedCount = 0
-			const { response: cursorResponse } = await executeWithRetry(() =>
-				getLatestDeltaCursor({
-					token: this.token,
-					folderName: getRootFolderName(this.remoteBaseDir),
-				}),
-			)
-			return cursorResponse.cursor
+		for await (const { entries, cursor, reset } of this.fetchAllDelta(
+			startCursor,
+		)) {
+			if (reset) {
+				console.warn(
+					'Delta reset during traversal, clearing cache and will trigger full re-scan',
+				)
+				this.nodes = {}
+				this.queue = [this.remoteBaseDir]
+				this.processedCount = 0
+				const { response: cursorResponse } = await executeWithRetry(() =>
+					getLatestDeltaCursor({
+						token: this.token,
+						folderName: getRootFolderName(this.remoteBaseDir),
+					}),
+				)
+				return cursorResponse.cursor
+			}
+
+			if (entries.length > 0) {
+				this.applyDeltaToNodes(entries)
+				processedEntries += entries.length
+
+				// Save state periodically based on number of processed entries
+				if (processedEntries >= this.saveInterval) {
+					await this.saveState()
+					processedEntries = 0
+				}
+			}
+
+			finalCursor = cursor
 		}
 
-		this.applyDeltaToNodes(response.delta.entry)
-		return response.cursor
+		await this.saveState()
+
+		return finalCursor
 	}
 
 	/**
-	 * Incremental scan using getDelta
+	 * Incremental scan using fetchAllDelta
 	 */
 	private async incrementalScan(): Promise<StatModel[]> {
-		const { response } = await executeWithRetry(() =>
-			getDelta({
-				token: this.token,
-				folderName: getRootFolderName(this.remoteBaseDir),
-				cursor: this.rootCursor,
-			}),
-		)
+		let hasAnyEntries = false
+		let processedEntries = 0
 
-		this.rootCursor = response.cursor
+		for await (const deltas of this.fetchAllDelta(this.rootCursor)) {
+			const { entries, cursor, reset } = deltas
+			console.log(processedEntries, deltas)
 
-		if (response.reset) {
-			console.log('Delta reset, performing full scan')
-			this.queue = [this.remoteBaseDir]
-			this.nodes = {}
-			this.processedCount = 0
-			return await this.bfsTraverse()
+			this.rootCursor = cursor
+
+			if (reset) {
+				console.log('Delta reset, performing full scan')
+				this.queue = [this.remoteBaseDir]
+				this.nodes = {}
+				this.processedCount = 0
+				return await this.bfsTraverse()
+			}
+
+			if (entries.length > 0) {
+				hasAnyEntries = true
+				this.applyDeltaToNodes(entries)
+				processedEntries += entries.length
+
+				// Save state periodically based on number of processed entries
+				if (processedEntries >= this.saveInterval) {
+					await this.saveState()
+					processedEntries = 0
+				}
+			}
 		}
 
-		if (response.delta.entry.length === 0) {
+		await this.saveState()
+
+		if (!hasAnyEntries) {
 			console.log('No changes detected, returning from cache')
-			return this.getAllFromCache()
 		}
-
-		this.applyDeltaToNodes(response.delta.entry)
 
 		return this.getAllFromCache()
 	}
