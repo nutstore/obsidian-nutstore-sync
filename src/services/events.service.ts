@@ -1,6 +1,12 @@
 import { Notice } from 'obsidian'
 import { Subscription } from 'rxjs'
-import { onEndSync, onStartSync, onSyncError, onSyncProgress } from '~/events'
+import {
+	onEndSync,
+	onPreparingSync,
+	onStartSync,
+	onSyncError,
+	onSyncProgress,
+} from '~/events'
 import i18n from '~/i18n'
 import { is503Error } from '~/utils/is-503-error'
 import NutstorePlugin from '..'
@@ -10,8 +16,15 @@ export default class EventsService {
 
 	constructor(private plugin: NutstorePlugin) {
 		this.subscriptions = [
-			onStartSync().subscribe(({ showNotice }) => {
+			onPreparingSync().subscribe(({ showNotice }) => {
 				plugin.toggleSyncUI(true)
+				plugin.statusService.updateSyncStatus({
+					text: i18n.t('sync.preparing'),
+					showNotice,
+				})
+			}),
+
+			onStartSync().subscribe(({ showNotice }) => {
 				plugin.statusService.updateSyncStatus({
 					text: i18n.t('sync.start'),
 					showNotice,

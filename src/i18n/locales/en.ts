@@ -83,11 +83,17 @@ export default {
 			name: 'Auto-sync on startup',
 			desc: 'Set the number of seconds after startup to automatically perform a sync. Set to 0 to disable auto-sync on startup.',
 			placeholder: 'Enter seconds (e.g., 5, 0 to disable)',
+			invalidValue: 'Invalid value, reset to 0',
+			exceedsMax:
+				'Value exceeds maximum limit of {{max}} seconds (1 day), automatically adjusted',
 		},
 		autoSyncInterval: {
 			name: 'Auto-sync interval',
 			desc: 'Set the interval for automatic background synchronization (in minutes). Set to 0 to disable automatic sync.',
 			placeholder: 'Enter minutes (e.g., 5, 0 to disable)',
+			invalidValue: 'Invalid value, reset to 0',
+			exceedsMax:
+				'Value exceeds maximum limit of {{max}} minutes (1 day), automatically adjusted',
 		},
 		sections: {
 			account: 'Account',
@@ -128,8 +134,11 @@ export default {
 		},
 		skipLargeFiles: {
 			name: 'Skip large files',
-			desc: 'Files exceeding this size will be skipped during synchronization. If sync issues occur, try lowering this value. Leave empty for no limit.',
+			desc: 'Files exceeding this size will be skipped during synchronization. If sync issues occur, try lowering this value.',
 			placeholder: 'e.g., 10 MiB or 500 KiB',
+			invalidFormat:
+				'Invalid file size format. Please use formats like "10MB" or "500KB"',
+			exceedsMaxSize: 'File size exceeds maximum limit of 500MB',
 		},
 		log: {
 			title: 'Debug logs',
@@ -235,7 +244,8 @@ export default {
 		},
 		requestsTooFrequent:
 			'Requests too frequent, plugin will resume sync at {{time}}',
-		start: '⌛️ Sync started',
+		preparing: '📋 Preparing sync',
+		start: '⌛️ Starting sync',
 		complete: '✅ Sync completed',
 		completeWithFailed: '❌ Sync completed with {{failedCount}} failed tasks',
 		failedWithError: 'Sync failed with error: {{error}}',

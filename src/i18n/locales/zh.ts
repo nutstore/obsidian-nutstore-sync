@@ -98,11 +98,15 @@ export default {
 			name: '启动后自动同步',
 			desc: '设置启动后第几秒自动执行一次同步。设置为 0 则禁用启动时自动同步。',
 			placeholder: '输入秒数 (例如 5, 0 则禁用)',
+			invalidValue: '无效的数值，已重置为 0',
+			exceedsMax: '数值超过最大限制 {{max}} 秒（1天），已自动调整',
 		},
 		autoSyncInterval: {
 			name: '定时自动同步',
 			desc: '设置每隔多长时间在后台自动执行一次同步（分钟）。设置为 0 则禁用定时自动同步。',
 			placeholder: '输入分钟数 (例如 5, 0 则禁用)',
+			invalidValue: '无效的数值，已重置为 0',
+			exceedsMax: '数值超过最大限制 {{max}} 分钟（1天），已自动调整',
 		},
 		filters: {
 			name: '过滤器',
@@ -127,8 +131,10 @@ export default {
 		},
 		skipLargeFiles: {
 			name: '跳过大文件',
-			desc: '同步时将跳过超过此大小的文件。如遇同步崩溃，可尝试降低此值。留空表示不限制。',
+			desc: '同步时将跳过超过此大小的文件。如遇同步崩溃，可尝试降低此值。',
 			placeholder: '例如：10 MiB 或 500 KiB',
+			invalidFormat: '无效的文件大小格式，请使用如 "10MB" 或 "500KB" 的格式',
+			exceedsMaxSize: '文件大小超过最大限制 500MB',
 		},
 		log: {
 			title: '调试日志',
@@ -231,7 +237,8 @@ export default {
 			requestsTooFrequent: '请求过于频繁，请等待几分钟后再试',
 		},
 		requestsTooFrequent: '请求过于频繁，插件将在 {{time}} 后自动继续同步任务',
-		start: '⌛️ 同步开始',
+		preparing: '📋 准备同步',
+		start: '⌛️ 开始同步',
 		complete: '✅ 同步完成',
 		completeWithFailed: '❌ 同步完成，但有 {{failedCount}} 个任务失败',
 		failedWithError: '同步失败，错误信息: {{error}}',
