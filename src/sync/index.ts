@@ -8,6 +8,7 @@ import FailedTasksModal, { FailedTaskInfo } from '~/components/FailedTasksModal'
 import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
+	emitPreparingSync,
 	emitStartSync,
 	emitSyncError,
 	emitSyncProgress,
@@ -80,7 +81,7 @@ export class NutstoreSync {
 	async start({ mode }: { mode: SyncStartMode }) {
 		try {
 			const showNotice = mode === SyncStartMode.MANUAL_SYNC
-			emitStartSync({ showNotice })
+			emitPreparingSync({ showNotice })
 
 			const settings = this.settings
 			const webdav = this.webdav
@@ -389,6 +390,9 @@ export class NutstoreSync {
 			if (showNotice && hasSubstantialTask) {
 				this.plugin.progressService.showProgressModal()
 			}
+
+			// Emit start sync event after all confirmations are done
+			emitStartSync({ showNotice })
 
 			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)
