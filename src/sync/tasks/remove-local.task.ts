@@ -17,14 +17,14 @@ export default class RemoveLocalTask extends BaseTask {
 			if (!stat) {
 				return {
 					success: true,
-				}
+				} as const
 			}
 			const file = this.vault.getAbstractFileByPath(this.localPath)
 			if (!file) {
 				throw new Error('cannot find file in local fs: ' + this.localPath)
 			}
 			await this.vault.trash(file, false)
-			return { success: true }
+			return { success: true } as const
 		} catch (e) {
 			logger.error(e)
 			return { success: false, error: toTaskError(e, this) }

@@ -14,11 +14,18 @@ export interface BaseTaskOptions {
 	syncRecord: SyncRecord
 }
 
-export interface TaskResult {
-	success: boolean
-	error?: TaskError
+interface TaskSuccessResult {
+	success: true
 	skipRecord?: boolean
 }
+
+interface TaskFailureResult {
+	success: false
+	error: TaskError
+	skipRecord?: boolean
+}
+
+export type TaskResult = TaskSuccessResult | TaskFailureResult
 
 export abstract class BaseTask {
 	constructor(readonly options: BaseTaskOptions) {}

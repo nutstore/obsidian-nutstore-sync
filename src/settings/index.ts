@@ -37,6 +37,7 @@ export interface NutstoreSettings {
 	realtimeSync: boolean
 	startupSyncDelaySeconds: number
 	autoSyncIntervalSeconds: number
+	language?: 'zh' | 'en'
 }
 
 let pluginInstance: NutstorePlugin | null = null
@@ -61,6 +62,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	filterSettings: FilterSettings
 	logSettings: LogSettings
 	cacheSettings: CacheSettings
+	warningContainerEl: HTMLElement
 
 	subSso = onSsoReceive().subscribe(() => {
 		this.display()
@@ -69,9 +71,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: NutstorePlugin) {
 		super(app, plugin)
 		this.plugin = plugin
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.backupWarning.name'))
-			.setDesc(i18n.t('settings.backupWarning.desc'))
+		this.warningContainerEl = this.containerEl.createDiv()
 		this.accountSettings = new AccountSettings(
 			this.app,
 			this.plugin,
@@ -105,6 +105,10 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	}
 
 	async display() {
+		this.warningContainerEl.empty()
+		new Setting(this.warningContainerEl)
+			.setName(i18n.t('settings.backupWarning.name'))
+			.setDesc(i18n.t('settings.backupWarning.desc'))
 		await this.accountSettings.display()
 		await this.commonSettings.display()
 		await this.filterSettings.display()

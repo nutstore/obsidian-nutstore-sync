@@ -1,19 +1,24 @@
-import { getLanguage } from 'obsidian'
 import i18n from '~/i18n'
+import { useSettings } from '~/settings'
+import logger from '~/utils/logger'
 import NutstorePlugin from '..'
 
 export default class I18nService {
 	constructor(private plugin: NutstorePlugin) {
 		this.update()
-		this.plugin.registerInterval(window.setInterval(this.update, 60000))
 	}
 
-	update = () => {
-		let code = navigator.language.split('-')[0]
+	update = async () => {
 		try {
-			code = getLanguage?.().split('-')[0]
-		} finally {
-			i18n.changeLanguage(code.toLowerCase())
+			const settings = await useSettings()
+			if (settings.language) {
+				i18n.changeLanguage(settings.language.toLowerCase())
+			} else {
+				const code = navigator.language.split('-')[0]
+				i18n.changeLanguage(code.toLowerCase())
+			}
+		} catch (e) {
+			logger.error(e)
 		}
 	}
 }

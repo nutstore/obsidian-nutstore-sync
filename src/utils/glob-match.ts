@@ -81,19 +81,27 @@ export function needIncludeFromGlobRules(
 /**
  * 如果忽略/包含了某文件夹，例如：.git，那也应该忽略/包含里面的所有文件。
  *
- * 即: .git = .git + .git/*
+ * 即: .git 会被扩展为 .git + .git/** + **\/.git + **\/.git/**
  */
 export function extendRules(rules: GlobMatch[]) {
 	rules = [...rules]
 	for (const { expr, options } of rules) {
-		if (expr.startsWith('!') || expr.includes('*') || expr.endsWith('**')) {
+		if (expr.startsWith('!') || expr.includes('*')) {
 			continue
 		}
-		const newRule = new GlobMatch(
-			`${expr.endsWith('/') ? expr : expr + '/'}**`,
-			options,
-		)
-		rules.push(newRule)
+
+		const baseExpr = expr.endsWith('/') ? expr.slice(0, -1) : expr
+
+		// 如果以 / 开头，表示只匹配根目录，只添加 /** 后缀
+		if (baseExpr.startsWith('/')) {
+			rules.push(new GlobMatch(`${baseExpr}/**`, options))
+		} else {
+			rules.push(
+				new GlobMatch(`${baseExpr}/**`, options),
+				new GlobMatch(`**/${baseExpr}`, options),
+				new GlobMatch(`**/${baseExpr}/**`, options),
+			)
+		}
 	}
 	return rules
 }
