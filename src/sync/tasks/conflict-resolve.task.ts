@@ -169,7 +169,7 @@ export default class ConflictResolveTask extends BaseTask {
 			const remoteIsMergeable = isMergeablePath(this.remotePath)
 
 			if (!(localIsMergeable && remoteIsMergeable)) {
-				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
+				throw new Error(i18n.t('sync.error.mergeNotSupported'))
 			}
 
 			const localText = await new Blob([new Uint8Array(localBuffer)]).text()

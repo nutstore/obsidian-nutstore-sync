@@ -230,7 +230,7 @@ export default {
 			folderButFile: '期望是文件夹，却发现是文件: {{path}}',
 			notFound: '未找到: {{path}}',
 			localPathNotFound: '本地路径未找到: {{path}}',
-			cannotMergeBinary: '无法合并二进制文件',
+			mergeNotSupported: '该文件类型暂不支持合并',
 			failedToAutoMerge: '自动合并失败',
 			failedToUploadMerged: '上传合并内容失败',
 			conflictsMarkedInFile: '发现冲突，已在文件中标记',

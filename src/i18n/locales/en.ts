@@ -235,7 +235,7 @@ export default {
 			folderButFile: 'Expected folder but found file: {{path}}',
 			notFound: 'Not found: {{path}}',
 			localPathNotFound: 'Local path not found: {{path}}',
-			cannotMergeBinary: 'Cannot merge binary file',
+			mergeNotSupported: 'This file type is currently not supported for merging',
 			failedToAutoMerge: 'Failed to auto merge',
 			failedToUploadMerged: 'Failed to upload merged content',
 			conflictsMarkedInFile: 'Conflicts found and marked in file',
