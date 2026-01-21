@@ -254,8 +254,6 @@ export default class SyncProgressModal extends Modal {
 		this.currentFile = currentFile
 		this.filesList = filesList
 
-		this.update()
-
 		const footerButtons = container.createDiv({
 			cls: 'border-t border-[var(--background-modifier-border)]',
 		})
@@ -276,6 +274,8 @@ export default class SyncProgressModal extends Modal {
 					})
 				this.stopButtonComponent = button
 			})
+
+		this.update()
 	}
 
 	onClose(): void {
