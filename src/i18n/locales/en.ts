@@ -69,6 +69,10 @@ export default {
 			name: 'Confirm before sync',
 			desc: 'Show pending tasks and execute after confirmation',
 		},
+		confirmBeforeDeleteInAutoSync: {
+			name: 'Confirm before deleting files during auto-sync',
+			desc: 'Show a confirmation dialog when local files are about to be deleted during auto-sync, allowing you to choose to delete or re-upload them',
+		},
 		realtimeSync: {
 			name: 'Real-time sync',
 			desc: 'Automatically sync changes as soon as files are modified',

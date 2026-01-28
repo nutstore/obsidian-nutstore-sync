@@ -100,6 +100,7 @@ export default class NutstorePlugin extends Plugin {
 			oauthResponseText: '',
 			loginMode: 'sso',
 			confirmBeforeSync: true,
+			confirmBeforeDeleteInAutoSync: true,
 			syncMode: SyncMode.LOOSE,
 			filterRules: {
 				exclusionRules: [

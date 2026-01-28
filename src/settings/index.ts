@@ -26,6 +26,7 @@ export interface NutstoreSettings {
 	oauthResponseText: string
 	loginMode: 'manual' | 'sso'
 	confirmBeforeSync: boolean
+	confirmBeforeDeleteInAutoSync: boolean
 	syncMode: SyncMode
 	filterRules: {
 		exclusionRules: GlobMatchOptions[]

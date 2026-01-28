@@ -111,6 +111,18 @@ export default class CommonSettings extends BaseSettings {
 			)
 
 		new Setting(this.containerEl)
+			.setName(i18n.t('settings.confirmBeforeDeleteInAutoSync.name'))
+			.setDesc(i18n.t('settings.confirmBeforeDeleteInAutoSync.desc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.confirmBeforeDeleteInAutoSync)
+					.onChange(async (value) => {
+						this.plugin.settings.confirmBeforeDeleteInAutoSync = value
+						await this.plugin.saveSettings()
+					}),
+			)
+
+		new Setting(this.containerEl)
 			.setName(i18n.t('settings.realtimeSync.name'))
 			.setDesc(i18n.t('settings.realtimeSync.desc'))
 			.addToggle((toggle) =>

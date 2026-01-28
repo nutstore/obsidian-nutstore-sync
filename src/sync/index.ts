@@ -161,7 +161,7 @@ export class NutstoreSync {
 			}
 
 			// Check for RemoveLocalTask during auto-sync and ask for confirmation
-			if (mode === SyncStartMode.AUTO_SYNC) {
+			if (mode === SyncStartMode.AUTO_SYNC && settings.confirmBeforeDeleteInAutoSync) {
 				const removeLocalTasks = confirmedTasks.filter(
 					(t) => t instanceof RemoveLocalTask,
 				) as RemoveLocalTask[]

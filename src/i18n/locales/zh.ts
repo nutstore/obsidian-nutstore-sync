@@ -84,6 +84,10 @@ export default {
 			name: '同步前确认',
 			desc: '同步前显示待执行的任务列表，确认后再执行',
 		},
+		confirmBeforeDeleteInAutoSync: {
+			name: '自动同步时删除文件前确认',
+			desc: '自动同步过程中检测到本地文件将被删除时，弹出确认对话框让你选择删除或重新上传',
+		},
 		realtimeSync: {
 			name: '实时同步',
 			desc: '文件修改后自动进行同步',
