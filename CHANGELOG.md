@@ -2,6 +2,12 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-02-05
+
+获取不完整的问题)
+        *   Fix UI issues (SyncProgressModal button, FilterEditorModal description). (修复同步进度弹窗和
+
+
 ## [1.0.0] - 2025-12-29
 
 - 功能: 分块执行同步任务并新增批量远端操作（批量建目录、递归删除）、覆盖推送与跳过冲突，显著提升大批量同步效率。/ Feature: Execute sync jobs in chunks with new batch remote operations (bulk mkdir, recursive delete), overwrite push, and conflict skipping to speed up large syncs.
