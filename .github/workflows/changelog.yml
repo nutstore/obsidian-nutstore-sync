@@ -89,7 +89,7 @@ jobs:
             MAX_TOKENS=$(( MAX_TOKENS > 2000 ? 2000 : MAX_TOKENS )) # Cap at 2000 tokens
             
             # Construct the JSON payload for Gemini API as a single line
-            # Using gemini-2.0-flash model
+            # Using gemini-3-flash-preview model
             JSON_PAYLOAD=$(jq -n --arg prompt_text "$COMBINED_PROMPT" --argjson maxOutputTokens "$MAX_TOKENS" \
             '{
               "contents":[{"parts":[{"text": $prompt_text}]}],
@@ -97,9 +97,9 @@ jobs:
               "safetySettings":[{"category":"HARM_CATEGORY_DANGEROUS_CONTENT","threshold":"BLOCK_NONE"}]
             }')
 
-            echo "Sending prompt to Gemini API (gemini-2.0-flash)..."
-            # Use gemini-2.0-flash model
-            API_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+            echo "Sending prompt to Gemini API (gemini-3-flash-preview)..."
+            # Use gemini-3-flash-preview model
+            API_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
 
             API_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
               -H "x-goog-api-key: ${{ secrets.GEMINI_API_KEY }}" \
