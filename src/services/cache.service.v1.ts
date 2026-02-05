@@ -6,9 +6,9 @@ import { BufferLike } from 'webdav'
 import { getDirectoryContents } from '~/api/webdav'
 import i18n from '~/i18n'
 import { ExportedStorage } from '~/settings/cache'
-import { deltaCacheKV } from '~/storage/kv'
+import { traverseWebDAVKV } from '~/storage'
 import { fileStatToStatModel } from '~/utils/file-stat-to-stat-model'
-import { getDBKey } from '~/utils/get-db-key'
+import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import logger from '~/utils/logger'
 import { uint8ArrayToArrayBuffer } from '~/utils/uint8array-to-arraybuffer'
 import type NutstorePlugin from '..'
@@ -22,28 +22,21 @@ export default class CacheServiceV1 {
 		private remoteCacheDir: string,
 	) {}
 
-	get key() {
-		const kvKey = getDBKey(
-			this.plugin.app.vault.getName(),
-			this.plugin.remoteBaseDir,
-		)
-		return kvKey
-	}
 	/**
 	 * Save the current cache to a file in the remote cache directory
 	 */
 	async saveCache(filename: string) {
 		try {
 			const webdav = await this.plugin.webDAVService.createWebDAVClient()
-			const deltaCache = await deltaCacheKV.get(this.key)
-
-			// Validate cache data exists
-			if (!deltaCache) {
-				throw new Error('No cache data to save')
-			}
+			const traverseWebDAVCache = await traverseWebDAVKV.get(
+				await getTraversalWebDAVDBKey(
+					await this.plugin.getToken(),
+					this.plugin.remoteBaseDir,
+				),
+			)
 
 			const exportedStorage: ExportedStorage = {
-				deltaCache,
+				traverseWebDAVCache: traverseWebDAVCache || undefined,
 				exportedAt: new Date().toISOString(),
 			}
 
@@ -120,13 +113,19 @@ export default class CacheServiceV1 {
 			const exportedStorage: ExportedStorage = superjson.parse(decodedContent)
 
 			// Validate the structure of exported storage
-			if (!exportedStorage || !exportedStorage.deltaCache) {
+			if (!exportedStorage) {
 				throw new Error('Invalid cache file format')
 			}
-
-			const { deltaCache } = exportedStorage
-			await deltaCacheKV.set(this.key, deltaCache)
-
+			const { traverseWebDAVCache } = exportedStorage
+			if (traverseWebDAVCache) {
+				await traverseWebDAVKV.set(
+					await getTraversalWebDAVDBKey(
+						await this.plugin.getToken(),
+						this.plugin.remoteBaseDir,
+					),
+					traverseWebDAVCache,
+				)
+			}
 			new Notice(i18n.t('settings.cache.restoreModal.success'))
 			return Promise.resolve()
 		} catch (error) {

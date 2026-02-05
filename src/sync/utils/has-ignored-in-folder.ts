@@ -21,3 +21,26 @@ export function hasIgnoredInFolder(
 
 	return false
 }
+
+/**
+ * Get all ignored file/folder paths within a directory
+ * @param dirPath directory path to check
+ * @param stats FsWalkResult array from walk operation
+ * @returns array of ignored paths within the directory
+ */
+export function getIgnoredPathsInFolder(
+	dirPath: string,
+	stats: FsWalkResult[],
+): string[] {
+	const ignoredPaths: string[] = []
+
+	for (const item of stats) {
+		if (isSub(dirPath, item.stat.path) || item.stat.path === dirPath) {
+			if (item.ignored) {
+				ignoredPaths.push(item.stat.path)
+			}
+		}
+	}
+
+	return ignoredPaths
+}

@@ -34,7 +34,7 @@ export default class PullTask extends BaseTask {
 				await mkdirsVault(this.vault, dirname(this.localPath))
 				await this.vault.createBinary(this.localPath, arrayBuffer)
 			}
-			return { success: true }
+			return { success: true } as const
 		} catch (e) {
 			logger.error(this, e)
 			return { success: false, error: toTaskError(e, this) }

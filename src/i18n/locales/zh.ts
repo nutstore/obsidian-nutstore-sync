@@ -1,6 +1,14 @@
 export default {
+	errors: {
+		filenameUnsupportedChars: '文件 {{path}} 包含不支持的字符：{{chars}}',
+	},
 	settings: {
 		title: 'WebDAV 设置',
+		language: {
+			name: '语言',
+			desc: '选择界面语言',
+			auto: '自动检测',
+		},
 		account: {
 			name: '账号',
 			desc: '输入你的 WebDAV 账号',
@@ -76,6 +84,10 @@ export default {
 			name: '同步前确认',
 			desc: '同步前显示待执行的任务列表，确认后再执行',
 		},
+		confirmBeforeDeleteInAutoSync: {
+			name: '自动同步时删除文件前确认',
+			desc: '自动同步过程中检测到本地文件将被删除时，弹出确认对话框让你选择删除或重新上传',
+		},
 		realtimeSync: {
 			name: '实时同步',
 			desc: '文件修改后自动进行同步',
@@ -90,11 +102,15 @@ export default {
 			name: '启动后自动同步',
 			desc: '设置启动后第几秒自动执行一次同步。设置为 0 则禁用启动时自动同步。',
 			placeholder: '输入秒数 (例如 5, 0 则禁用)',
+			invalidValue: '无效的数值，已重置为 0',
+			exceedsMax: '数值超过最大限制 {{max}} 秒（1天），已自动调整',
 		},
 		autoSyncInterval: {
 			name: '定时自动同步',
 			desc: '设置每隔多长时间在后台自动执行一次同步（分钟）。设置为 0 则禁用定时自动同步。',
 			placeholder: '输入分钟数 (例如 5, 0 则禁用)',
+			invalidValue: '无效的数值，已重置为 0',
+			exceedsMax: '数值超过最大限制 {{max}} 分钟（1天），已自动调整',
 		},
 		filters: {
 			name: '过滤器',
@@ -119,8 +135,10 @@ export default {
 		},
 		skipLargeFiles: {
 			name: '跳过大文件',
-			desc: '同步时将跳过超过此大小的文件。如遇同步崩溃，可尝试降低此值。留空表示不限制。',
+			desc: '同步时将跳过超过此大小的文件。如遇同步崩溃，可尝试降低此值。',
 			placeholder: '例如：10 MiB 或 500 KiB',
+			invalidFormat: '无效的文件大小格式，请使用如 "10MB" 或 "500KB" 的格式',
+			exceedsMaxSize: '文件大小超过最大限制 500MB',
 		},
 		log: {
 			title: '调试日志',
@@ -216,14 +234,15 @@ export default {
 			folderButFile: '期望是文件夹，却发现是文件: {{path}}',
 			notFound: '未找到: {{path}}',
 			localPathNotFound: '本地路径未找到: {{path}}',
-			cannotMergeBinary: '无法合并二进制文件',
+			mergeNotSupported: '该文件类型暂不支持合并',
 			failedToAutoMerge: '自动合并失败',
 			failedToUploadMerged: '上传合并内容失败',
 			conflictsMarkedInFile: '发现冲突，已在文件中标记',
 			requestsTooFrequent: '请求过于频繁，请等待几分钟后再试',
 		},
 		requestsTooFrequent: '请求过于频繁，插件将在 {{time}} 后自动继续同步任务',
-		start: '⌛️ 同步开始',
+		preparing: '📋 准备同步',
+		start: '⌛️ 开始同步',
 		complete: '✅ 同步完成',
 		completeWithFailed: '❌ 同步完成，但有 {{failedCount}} 个任务失败',
 		failedWithError: '同步失败，错误信息: {{error}}',
@@ -267,6 +286,10 @@ export default {
 			cleanRecord: '清理记录',
 			skip: '跳过',
 		},
+		skipReason: {
+			'file-too-large': '文件过大',
+			'folder-contains-ignored-items': '文件夹包含被忽略的文件',
+		},
 		confirmModal: {
 			title: '同步确认',
 			message:
@@ -298,9 +321,24 @@ export default {
 		deleteAndReupload: '删除选中的，重新上传未选中的',
 		skipForNow: '暂时忽略',
 	},
+	failedTasks: {
+		title: '同步失败任务',
+		instruction: '以下任务在同步时失败：',
+		taskName: '任务',
+		localPath: '本地路径',
+		errorMessage: '失败原因',
+		close: '关闭',
+	},
 	textAreaModal: {
 		copy: '复制',
 		close: '关闭',
 		copied: '文本已复制到剪贴板',
+	},
+	time: {
+		justNow: '刚刚',
+		minutesAgo: '{{count}}分钟前',
+		hoursAgo: '{{count}}小时前',
+		daysAgo: '{{count}}天前',
+		longAgo: '很久前',
 	},
 }

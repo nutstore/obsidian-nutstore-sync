@@ -2,7 +2,6 @@ import { Vault } from 'obsidian'
 import { useSettings } from '~/settings'
 import { SyncRecord } from '~/storage/sync-record'
 import GlobMatch, {
-	extendRules,
 	GlobMatchOptions,
 	isVoidGlobMatchOptions,
 	needIncludeFromGlobRules,
@@ -40,10 +39,8 @@ export class LocalVaultFileSystem implements AbstractFileSystem {
 	}
 
 	private buildRules(rules: GlobMatchOptions[] = []): GlobMatch[] {
-		return extendRules(
-			rules
-				.filter((opt) => !isVoidGlobMatchOptions(opt))
-				.map(({ expr, options }) => new GlobMatch(expr, options)),
-		)
+		return rules
+			.filter((opt) => !isVoidGlobMatchOptions(opt))
+			.map(({ expr, options }) => new GlobMatch(expr, options))
 	}
 }

@@ -1,26 +1,18 @@
-import { decode as decodeHtmlEntity } from 'html-entities'
-import { isArray } from 'lodash-es'
 import { Vault } from 'obsidian'
-import { basename, isAbsolute } from 'path-browserify'
+import { isAbsolute } from 'path-browserify'
 import { isNotNil } from 'ramda'
 import { createClient, WebDAVClient } from 'webdav'
-import { getDelta } from '~/api/delta'
-import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
 import { NS_DAV_ENDPOINT } from '~/consts'
-import { StatModel } from '~/model/stat.model'
 import { useSettings } from '~/settings'
-import { deltaCacheKV } from '~/storage'
-import { getDBKey } from '~/utils/get-db-key'
-import { getRootFolderName } from '~/utils/get-root-folder-name'
+import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import GlobMatch, {
-	extendRules,
 	GlobMatchOptions,
 	isVoidGlobMatchOptions,
 	needIncludeFromGlobRules,
 } from '~/utils/glob-match'
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
-import { traverseWebDAV } from '~/utils/traverse-webdav'
+import { ResumableWebDAVTraversal } from '~/utils/traverse-webdav'
 import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
@@ -42,99 +34,21 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 	}
 
 	async walk() {
-		const kvKey = getDBKey(
-			this.options.vault.getName(),
-			this.options.remoteBaseDir,
-		)
-		let deltaCache = await deltaCacheKV.get(kvKey)
-		if (deltaCache) {
-			let cursor = deltaCache.deltas.at(-1)?.cursor ?? deltaCache.originCursor
-			while (true) {
-				const { response } = await getDelta({
-					token: this.options.token,
-					cursor,
-					folderName: getRootFolderName(this.options.remoteBaseDir),
-				})
-				if (response.cursor === cursor) {
-					break
-				}
-				if (response.reset) {
-					deltaCache.deltas = []
-					deltaCache.files = await traverseWebDAV(
-						this.options.token,
-						this.options.remoteBaseDir,
-					)
-					cursor = await getLatestDeltaCursor({
-						token: this.options.token,
-						folderName: getRootFolderName(this.options.remoteBaseDir),
-					}).then((d) => d?.response?.cursor)
-					deltaCache.originCursor = cursor
-				} else if (response.delta.entry) {
-					if (!isArray(response.delta.entry)) {
-						response.delta.entry = [response.delta.entry]
-					}
-					if (response.delta.entry.length > 0) {
-						deltaCache.deltas.push(response)
-					}
-					if (response.hasMore) {
-						cursor = response.cursor
-					} else {
-						break
-					}
-				} else {
-					break
-				}
-			}
-		} else {
-			const files = await traverseWebDAV(
+		const traversal = new ResumableWebDAVTraversal({
+			token: this.options.token,
+			remoteBaseDir: this.options.remoteBaseDir,
+			kvKey: await getTraversalWebDAVDBKey(
 				this.options.token,
 				this.options.remoteBaseDir,
-			)
-			const {
-				response: { cursor: originCursor },
-			} = await getLatestDeltaCursor({
-				token: this.options.token,
-				folderName: getRootFolderName(this.options.remoteBaseDir),
-			})
-			deltaCache = {
-				files,
-				originCursor,
-				deltas: [],
-			}
-		}
-		await deltaCacheKV.set(kvKey, deltaCache)
-		deltaCache.deltas.forEach((delta) => {
-			delta.delta.entry.forEach((entry) => {
-				entry.path = decodeHtmlEntity(entry.path)
-			})
+			),
+			saveInterval: 1,
 		})
-		deltaCache.files.forEach((file) => {
-			file.path = decodeHtmlEntity(file.path)
-		})
-		const deltasMap = new Map(
-			deltaCache.deltas.flatMap((d) => d.delta.entry.map((d) => [d.path, d])),
-		)
-		const filesMap = new Map<string, StatModel>(
-			deltaCache.files.map((d) => [d.path, d]),
-		)
-		for (const delta of deltasMap.values()) {
-			if (delta.isDeleted) {
-				filesMap.delete(delta.path)
-				continue
-			}
-			filesMap.set(delta.path, {
-				path: delta.path,
-				basename: basename(delta.path),
-				isDir: delta.isDir,
-				isDeleted: delta.isDeleted,
-				mtime: new Date(delta.modified).valueOf(),
-				size: delta.size,
-			})
-		}
-		let stats = Array.from(filesMap.values())
+		let stats = await traversal.traverse()
+
 		if (stats.length === 0) {
 			return []
 		}
+
 		const base = stdRemotePath(this.options.remoteBaseDir)
 		const subPath = new Set<string>()
 		for (let { path } of stats) {
@@ -148,7 +62,9 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				subPath.add(path)
 			}
 		}
-		stats = [...subPath].map((path) => filesMap.get(path)).filter(isNotNil)
+
+		const statsMap = new Map(stats.map((s) => [s.path, s]))
+		stats = [...subPath].map((path) => statsMap.get(path)).filter(isNotNil)
 		for (const item of stats) {
 			if (isAbsolute(item.path)) {
 				item.path = item.path.replace(this.options.remoteBaseDir, '')
@@ -157,6 +73,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				}
 			}
 		}
+
 		const settings = await useSettings()
 		const exclusions = this.buildRules(settings?.filterRules.exclusionRules)
 		const inclusions = this.buildRules(settings?.filterRules.inclusionRules)
@@ -166,17 +83,16 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		)
 		const completeStats = completeLossDir(stats, includedStats)
 		const completeStatPaths = new Set(completeStats.map((s) => s.path))
-		return stats.map((stat) => ({
+		const results = stats.map((stat) => ({
 			stat,
 			ignored: !completeStatPaths.has(stat.path),
 		}))
+		return results
 	}
 
 	private buildRules(rules: GlobMatchOptions[] = []): GlobMatch[] {
-		return extendRules(
-			rules
-				.filter((opt) => !isVoidGlobMatchOptions(opt))
-				.map(({ expr, options }) => new GlobMatch(expr, options)),
-		)
+		return rules
+			.filter((opt) => !isVoidGlobMatchOptions(opt))
+			.map(({ expr, options }) => new GlobMatch(expr, options))
 	}
 }

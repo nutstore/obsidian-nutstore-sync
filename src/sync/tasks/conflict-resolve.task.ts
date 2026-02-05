@@ -58,7 +58,7 @@ export default class ConflictResolveTask extends BaseTask {
 			}
 
 			if (local.size === 0 && remote.size === 0) {
-				return { success: true }
+				return { success: true } as const
 			}
 
 			switch (this.options.strategy) {
@@ -69,7 +69,7 @@ export default class ConflictResolveTask extends BaseTask {
 				case ConflictStrategy.Skip:
 					// Skip conflict resolution - keep files as they are
 					// Don't update record to preserve conflict state for next sync
-					return { success: true, skipRecord: true }
+					return { success: true, skipRecord: true } as const
 			}
 		} catch (e) {
 			logger.error(this, e)
@@ -88,7 +88,7 @@ export default class ConflictResolveTask extends BaseTask {
 			const remoteMtime = remote.mtime!
 
 			if (remoteMtime === localMtime) {
-				return { success: true }
+				return { success: true } as const
 			}
 
 			const file = this.vault.getFileByPath(this.localPath)
@@ -135,7 +135,7 @@ export default class ConflictResolveTask extends BaseTask {
 					break
 			}
 
-			return { success: true }
+			return { success: true } as const
 		} catch (e) {
 			logger.error(this, e)
 			return { success: false, error: toTaskError(e, this) }
@@ -155,7 +155,7 @@ export default class ConflictResolveTask extends BaseTask {
 			})) as BufferLike
 
 			if (isEqual(localBuffer, remoteBuffer)) {
-				return { success: true }
+				return { success: true } as const
 			}
 
 			const { record } = this.options
@@ -169,7 +169,7 @@ export default class ConflictResolveTask extends BaseTask {
 			const remoteIsMergeable = isMergeablePath(this.remotePath)
 
 			if (!(localIsMergeable && remoteIsMergeable)) {
-				throw new Error(i18n.t('sync.error.cannotMergeBinary'))
+				throw new Error(i18n.t('sync.error.mergeNotSupported'))
 			}
 
 			const localText = await new Blob([new Uint8Array(localBuffer)]).text()
@@ -200,7 +200,7 @@ export default class ConflictResolveTask extends BaseTask {
 
 				if (putResult) {
 					await this.vault.modify(file, mergedDmpText)
-					return { success: true }
+					return { success: true } as const
 				} else {
 					throw new Error(i18n.t('sync.error.failedToUploadMerged'))
 				}
@@ -209,7 +209,7 @@ export default class ConflictResolveTask extends BaseTask {
 			if (mergeResult.isIdentical) {
 				// This case should be caught by the isEqual(localBuffer, remoteBuffer) check earlier,
 				// but resolveByIntelligentMerge also returns it.
-				return { success: true }
+				return { success: true } as const
 			}
 
 			const mergedText = mergeResult.mergedText!
@@ -219,7 +219,7 @@ export default class ConflictResolveTask extends BaseTask {
 				if (mergedText !== localText) {
 					await this.vault.modify(file, mergedText)
 				}
-				return { success: true }
+				return { success: true } as const
 			}
 
 			// If mergedText is different from remoteText, then both remote and local need to be updated.
@@ -237,7 +237,7 @@ export default class ConflictResolveTask extends BaseTask {
 				await this.vault.modify(file, mergedText)
 			}
 
-			return { success: true }
+			return { success: true } as const
 		} catch (e) {
 			logger.error(this, e)
 			return { success: false, error: toTaskError(e, this) }

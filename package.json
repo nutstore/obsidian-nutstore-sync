@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-nutstore-sync",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"main": "main.js",
 	"scripts": {
 		"dev": "run-p dev:*",
@@ -29,6 +29,7 @@
 		"@unocss/postcss": "66.1.0-beta.3",
 		"@vitest/coverage-v8": "^3.1.2",
 		"assert": "^2.1.0",
+		"async-mutex": "^0.5.0",
 		"blob-polyfill": "^9.0.20240710",
 		"bottleneck": "^2.19.5",
 		"buffer": "^6.0.3",

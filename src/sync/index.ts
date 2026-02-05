@@ -4,9 +4,11 @@ import { dirname } from 'path-browserify'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
 import DeleteConfirmModal from '~/components/DeleteConfirmModal'
+import FailedTasksModal, { FailedTaskInfo } from '~/components/FailedTasksModal'
 import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
+	emitPreparingSync,
 	emitStartSync,
 	emitSyncError,
 	emitSyncProgress,
@@ -19,7 +21,7 @@ import i18n from '~/i18n'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import breakableSleep from '~/utils/breakable-sleep'
-import { getSyncRecordNamespace } from '~/utils/get-sync-record-namespace'
+import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
@@ -65,7 +67,7 @@ export class NutstoreSync {
 		this.localFS = new LocalVaultFileSystem({
 			vault: this.options.vault,
 			syncRecord: new SyncRecord(
-				getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
+				getDBKey(this.vault.getName(), this.remoteBaseDir),
 				syncRecordKV,
 			),
 		})
@@ -79,13 +81,13 @@ export class NutstoreSync {
 	async start({ mode }: { mode: SyncStartMode }) {
 		try {
 			const showNotice = mode === SyncStartMode.MANUAL_SYNC
-			emitStartSync({ showNotice })
+			emitPreparingSync({ showNotice })
 
 			const settings = this.settings
 			const webdav = this.webdav
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
 			const syncRecord = new SyncRecord(
-				getSyncRecordNamespace(this.vault.getName(), this.remoteBaseDir),
+				getDBKey(this.vault.getName(), this.remoteBaseDir),
 				syncRecordKV,
 			)
 
@@ -136,6 +138,11 @@ export class NutstoreSync {
 				(t) => !(t instanceof CleanRecordTask),
 			)
 
+			if (this.isCancelled) {
+				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				return
+			}
+
 			if (
 				showNotice &&
 				settings.confirmBeforeSync &&
@@ -154,7 +161,7 @@ export class NutstoreSync {
 			}
 
 			// Check for RemoveLocalTask during auto-sync and ask for confirmation
-			if (mode === SyncStartMode.AUTO_SYNC) {
+			if (mode === SyncStartMode.AUTO_SYNC && settings.confirmBeforeDeleteInAutoSync) {
 				const removeLocalTasks = confirmedTasks.filter(
 					(t) => t instanceof RemoveLocalTask,
 				) as RemoveLocalTask[]
@@ -384,6 +391,9 @@ export class NutstoreSync {
 				this.plugin.progressService.showProgressModal()
 			}
 
+			// Emit start sync event after all confirmations are done
+			emitStartSync({ showNotice })
+
 			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)
 			const allTasksResult: TaskResult[] = []
@@ -411,6 +421,22 @@ export class NutstoreSync {
 
 			const failedCount = allTasksResult.filter((r) => !r.success).length
 			logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
+
+			if (mode === SyncStartMode.MANUAL_SYNC && failedCount > 0) {
+				const failedTasksInfo: FailedTaskInfo[] = []
+				for (let i = 0; i < allTasksResult.length; i++) {
+					const result = allTasksResult[i]
+					if (!result.success && result.error) {
+						const task = result.error.task
+						failedTasksInfo.push({
+							taskName: getTaskName(task),
+							localPath: task.options.localPath,
+							errorMessage: result.error.message,
+						})
+					}
+				}
+				new FailedTasksModal(this.app, failedTasksInfo).open()
+			}
 
 			emitEndSync({ failedCount, showNotice })
 		} catch (error) {
@@ -495,7 +521,7 @@ export class NutstoreSync {
 				}
 			}
 			const taskResult = await task.exec()
-			if (taskResult.error && is503Error(taskResult.error)) {
+			if (!taskResult.success && is503Error(taskResult.error)) {
 				await this.handle503Error(60000)
 				if (this.isCancelled) {
 					return {
