@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-02-05
+## [1.1.0] - 2026-02-05
 
 获取不完整的问题)
         *   Fix UI issues (SyncProgressModal button, FilterEditorModal description). (修复同步进度弹窗和
