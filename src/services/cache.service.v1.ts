@@ -118,7 +118,7 @@ export default class CacheServiceV1 {
 			}
 			const { traverseWebDAVCache } = exportedStorage
 			if (traverseWebDAVCache) {
-				traverseWebDAVKV.set(
+				await traverseWebDAVKV.set(
 					await getTraversalWebDAVDBKey(
 						await this.plugin.getToken(),
 						this.plugin.remoteBaseDir,
