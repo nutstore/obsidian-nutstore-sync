@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
+import { decode as decodeHtmlEntities } from 'html-entities'
 import { isNil } from 'lodash-es'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
@@ -53,6 +54,7 @@ export const getDelta = apiLimiter.wrap(
 				hex: true,
 				leadingZeros: true,
 			},
+			processEntities: false,
 		})
 		const result: { response: DeltaResponse } = parseXml.parse(response.text)
 
@@ -68,6 +70,9 @@ export const getDelta = apiLimiter.wrap(
 			result.response.delta = {
 				entry: [],
 			}
+		}
+		for (const entry of result.response.delta.entry) {
+			entry.path = decodeHtmlEntities(entry.path)
 		}
 		return result
 	},

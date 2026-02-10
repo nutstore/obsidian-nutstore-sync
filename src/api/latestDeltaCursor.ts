@@ -33,6 +33,7 @@ export const getLatestDeltaCursor = apiLimiter.wrap(
 				hex: true,
 				leadingZeros: true,
 			},
+			processEntities: false,
 		})
 		const result: {
 			response: {
