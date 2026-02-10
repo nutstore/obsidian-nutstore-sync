@@ -92,6 +92,7 @@ export async function getDirectoryContents(
 					hex: true,
 					leadingZeros: true,
 				},
+				processEntities: false,
 			})
 			const result: WebDAVResponse = parseXml.parse(response.text)
 			const items = Array.isArray(result.multistatus.response)
@@ -114,7 +115,7 @@ export async function getDirectoryContents(
 			nextUrl.pathname = decodeURI(nextUrl.pathname)
 			currentUrl = nextUrl.toString()
 		} catch (e) {
-			if (is503Error(e)) {
+			if (is503Error(e as Error)) {
 				logger.error('503 error, retrying...')
 				await sleep(60_000)
 				continue
