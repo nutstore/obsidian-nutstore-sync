@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-02-11
+## [1.1.2] - 2026-02-11
 
 - **新增对 traverseWebDAV 缓存清理的支持**
 - **Added support for clearing the traverseWebDAV cache**
