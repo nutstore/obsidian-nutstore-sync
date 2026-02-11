@@ -191,6 +191,10 @@ export default {
 					name: 'File snapshot cache',
 					desc: 'Stores file snapshots needed for comparing changes during sync.',
 				},
+				traverseWebDAVCache: {
+					name: 'File scan cache',
+					desc: 'Stores remote folder structure to enable faster sync by fetching only changes. If you encounter file list anomalies or data inconsistencies after a plugin update, try clearing this cache. After clearing, the next sync will need to re-scan all remote files, which may take a while.',
+				},
 				clearedType: 'Cleared: {{types}}',
 				nothingSelected: 'Please select at least one cache type to clear.',
 			},
