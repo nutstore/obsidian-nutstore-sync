@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-02-10
+## [1.1.1] - 2026-02-10
 
 - 修复：增强了 HTML 实体解码支持，提升了对特殊字符的处理能力。
 -
