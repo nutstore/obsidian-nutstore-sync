@@ -18,6 +18,11 @@ export default class SyncExecutorService {
 			return false
 		}
 
+		// 检查账号配置，未配置时静默返回（自动同步场景）
+		if (!this.plugin.isAccountConfigured()) {
+			return false
+		}
+
 		await waitUntil(() => this.plugin.isSyncing === false, 500)
 
 		// 确保 configDir 始终在排除列表中，因为这个目录里的文件不支持同步

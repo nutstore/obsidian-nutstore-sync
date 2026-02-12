@@ -249,6 +249,7 @@ export default {
 			conflictsMarkedInFile: 'Conflicts found and marked in file',
 			requestsTooFrequent:
 				'Requests too frequent, please wait a few minutes and try again',
+			accountNotConfigured: 'Nutstore account not configured. Please configure your account in settings first.',
 		},
 		requestsTooFrequent:
 			'Requests too frequent, plugin will resume sync at {{time}}',
