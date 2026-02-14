@@ -1,7 +1,7 @@
 {
 	"id": "nutstore-sync",
 	"name": "Nutstore Sync",
-	"version": "1.1.2",
+	"version": "1.1.3",
 	"minAppVersion": "0.15.0",
 	"description": "Sync your vault with Nutstore/坚果云 using WebDAV protocol.",
 	"author": "nutstore",
