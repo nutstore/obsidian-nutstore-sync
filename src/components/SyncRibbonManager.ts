@@ -1,3 +1,4 @@
+import { Notice } from 'obsidian'
 import { emitCancelSync } from '../events'
 import i18n from '../i18n'
 import type NutstorePlugin from '../index'
@@ -16,6 +17,16 @@ export class SyncRibbonManager {
 				if (this.plugin.isSyncing) {
 					return
 				}
+
+				// 检查账号配置
+				if (!this.plugin.isAccountConfigured()) {
+					new Notice(i18n.t('sync.error.accountNotConfigured'))
+					// 打开设置页面，引导用户配置账号
+					this.plugin.app.setting.open()
+					this.plugin.app.setting.openTabById(this.plugin.manifest.id)
+					return
+				}
+
 				const startSync = async () => {
 					const sync = new NutstoreSync(this.plugin, {
 						webdav: await this.plugin.webDAVService.createWebDAVClient(),

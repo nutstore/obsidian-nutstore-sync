@@ -43,6 +43,11 @@ export default class CacheSettings extends BaseSettings {
 			})
 			.addButton((button) => {
 				button.setIcon('folder').onClick(() => {
+					// 检查账号配置
+					if (!this.plugin.isAccountConfigured()) {
+						new Notice(i18n.t('sync.error.accountNotConfigured'))
+						return
+					}
 					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
 						this.plugin.settings.remoteCacheDir = path
 						await this.plugin.saveSettings()

@@ -1,3 +1,4 @@
+import { Notice } from 'obsidian'
 import SyncConfirmModal from '~/components/SyncConfirmModal'
 import { emitCancelSync } from '~/events'
 import i18n from '~/i18n'
@@ -16,6 +17,16 @@ export default class CommandService {
 				if (checking) {
 					return true
 				}
+
+				// 检查账号配置
+				if (!plugin.isAccountConfigured()) {
+					new Notice(i18n.t('sync.error.accountNotConfigured'))
+					// 打开设置页面，引导用户配置账号
+					plugin.app.setting.open()
+					plugin.app.setting.openTabById(plugin.manifest.id)
+					return
+				}
+
 				const startSync = async () => {
 					const sync = new NutstoreSync(plugin, {
 						webdav: await plugin.webDAVService.createWebDAVClient(),

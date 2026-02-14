@@ -147,6 +147,25 @@ export default class NutstorePlugin extends Plugin {
 		return toBase64(token)
 	}
 
+	/**
+	 * 检查账号配置是否完整
+	 * @returns true 表示配置完整，false 表示未配置或配置不完整
+	 */
+	isAccountConfigured(): boolean {
+		if (this.settings.loginMode === 'sso') {
+			// SSO 模式：检查是否有 OAuth 响应数据
+			return !!this.settings.oauthResponseText && this.settings.oauthResponseText.trim() !== ''
+		} else {
+			// 手动模式：检查账号和凭证是否都已填写
+			return (
+				!!this.settings.account &&
+				this.settings.account.trim() !== '' &&
+				!!this.settings.credential &&
+				this.settings.credential.trim() !== ''
+			)
+		}
+	}
+
 	get remoteBaseDir() {
 		let remoteDir = normalizePath(this.settings.remoteDir.trim())
 		if (remoteDir === '' || remoteDir === '/') {
