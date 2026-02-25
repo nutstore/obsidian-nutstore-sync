@@ -5,8 +5,9 @@
 ## [1.1.3] - 2026-02-14
 
 - 优化了设置访问的稳定性和错误处理。
-
-- 优化账户同步流程：在同步前增加配置校验
+- 优化账户同步流程：在同步前增加配置校验，引导用户前往设置页面。
+- Improved stability and error handling for settings access.
+- Enhanced account sync workflow: Added configuration validation before sync and guided users to settings page.
 
 
 ## [1.1.2] - 2026-02-11
@@ -18,13 +19,58 @@
 ## [1.1.1] - 2026-02-10
 
 - 修复：增强了 HTML 实体解码支持，提升了对特殊字符的处理能力。
--
+- Fix: Enhanced HTML entity decoding support, improving special character handling.
 
 
 ## [1.1.0] - 2026-02-05
 
-获取不完整的问题)
-        *   Fix UI issues (SyncProgressModal button, FilterEditorModal description). (修复同步进度弹窗和
+### 新增功能 / Features
+- 新增可恢复的 WebDAV 遍历功能，支持大规模目录树的高效扫描。
+- 新增失败任务弹窗，集中展示同步错误信息。
+- 新增同步准备事件，提供更细致的同步状态反馈。
+- 新增删除确认设置，允许在自动同步时控制是否显示删除确认。
+- 新增显示相对时间功能，改善时间显示的可读性。
+- 新增更多任务图标，丰富任务类型的视觉反馈。
+- 新增文件跳过原因显示（文件大小、被忽略项等），提升同步透明度。
+- Added resumable WebDAV traversal for efficient large directory tree scanning.
+- Added failed tasks modal to centralize sync error information display.
+- Added sync preparing event for more detailed sync status feedback.
+- Added delete confirmation setting to control confirmation display during auto-sync.
+- Added relative time display for improved time readability.
+- Added more task icons to enrich visual feedback for task types.
+- Added skip reason display (file size, ignored items, etc.) to improve sync transparency.
+
+### 修复 / Fixes
+- 修复同步进度弹窗按钮未定义的问题。
+- 修复 FilterEditorModal 描述显示问题。
+- 修复文件大小限制判断逻辑。
+- 修复 traverseWebDAVKV 异步等待问题。
+- 修复 delta 增量获取不完整的问题，确保持续检索直到无更多可用数据。
+- 修复节点键值的标准化问题。
+- 修复取消检测在确认前的问题。
+- 修复可恢复遍历的返回值。
+- 修复远程目录创建前的文件名有效性检查。
+- Fixed undefined button reference in SyncProgressModal.
+- Fixed FilterEditorModal description display issue.
+- Fixed file size limit logic.
+- Fixed traverseWebDAVKV async await issue.
+- Fixed incomplete delta retrieval, ensuring continuous retrieval until no more data is available.
+- Fixed node key normalization issue.
+- Fixed cancel detection before confirmation.
+- Fixed resumable traverse return value.
+- Fixed filename validity check before remote directory creation.
+
+### 重构与优化 / Refactoring & Improvements
+- 重构并增强 glob 匹配逻辑，改进路径标准化。
+- 重构 delta 应用逻辑，新增 applyDeltasToStats 工具函数。
+- 移除 delta 缓存键值存储，简化架构。
+- 改用 Vault API 进行文件操作，提升稳定性。
+- 将语言设置从 Obsidian API 获取改为插件设置中配置。
+- Refactored and enhanced glob matching logic with improved path normalization.
+- Refactored delta application logic and added applyDeltasToStats utility.
+- Removed delta cache key-value storage to simplify architecture.
+- Switched to Vault API for file operations to improve stability.
+- Changed language setting from Obsidian API to plugin settings configuration.
 
 
 ## [1.0.0] - 2025-12-29
