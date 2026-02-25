@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-02-14
+## [1.1.3] - 2026-02-14
 
 - 优化了设置访问的稳定性和错误处理。
 
