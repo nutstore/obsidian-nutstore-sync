@@ -24,12 +24,10 @@ export class SyncRibbonManager {
 					new Notice(i18n.t('sync.error.accountNotConfigured'))
 					// 打开设置页面，引导用户配置账号
 					try {
-						const setting = (plugin.app as any).setting
-						if (setting && typeof setting.open === 'function') {
+						const setting = this.plugin.app.setting
+						if (setting) {
 							setting.open()
-						}
-						if (setting && typeof setting.openTabById === 'function') {
-							setting.openTabById(plugin.manifest.id)
+							setting.openTabById(this.plugin.manifest.id)
 						}
 					} catch (error) {
 						logger.error('Failed to open settings:', error)
