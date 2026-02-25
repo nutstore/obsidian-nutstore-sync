@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@nutstore"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm install
+
+      - name: Build plugin
+        env:
+          NS_NSDAV_ENDPOINT: ${{ vars.NS_NSDAV_ENDPOINT }}
+          NS_DAV_ENDPOINT: ${{ vars.NS_DAV_ENDPOINT }}
+          NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
+          NODE_ENV: production
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm run build
+
+      - name: Check build artifacts
+        run: |
+          if [ ! -f main.js ] || [ ! -f manifest.json ] || [ ! -f styles.css ]; then
+            echo "Error: Required build artifacts not found"
+            exit 1
+          fi
+          echo "Build successful! All required files generated."

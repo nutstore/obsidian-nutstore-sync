@@ -1,4 +1,5 @@
 import { Notice } from 'obsidian'
+import logger from '~/utils/logger'
 import { emitCancelSync } from '../events'
 import i18n from '../i18n'
 import type NutstorePlugin from '../index'
@@ -22,8 +23,17 @@ export class SyncRibbonManager {
 				if (!this.plugin.isAccountConfigured()) {
 					new Notice(i18n.t('sync.error.accountNotConfigured'))
 					// 打开设置页面，引导用户配置账号
-					this.plugin.app.setting.open()
-					this.plugin.app.setting.openTabById(this.plugin.manifest.id)
+					try {
+						const setting = (plugin.app as any).setting
+						if (setting && typeof setting.open === 'function') {
+							setting.open()
+						}
+						if (setting && typeof setting.openTabById === 'function') {
+							setting.openTabById(plugin.manifest.id)
+						}
+					} catch (error) {
+						logger.error('Failed to open settings:', error)
+					}
 					return
 				}
 
