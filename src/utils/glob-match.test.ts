@@ -181,6 +181,37 @@ describe('needIncludeFromGlobRules', () => {
 			).toBe(false)
 		})
 
+		it('包含普通路径默认不递归，子路径仍可被排除', () => {
+			const inclusion = makeRules(['aaa/bb'])
+			const exclusion = makeRules(['aaa/bb/cc'])
+
+			expect(needIncludeFromGlobRules('aaa/bb', inclusion, exclusion)).toBe(true)
+			expect(needIncludeFromGlobRules('aaa/bb/file.md', inclusion, exclusion)).toBe(
+				true,
+			)
+			expect(needIncludeFromGlobRules('aaa/bb/cc', inclusion, exclusion)).toBe(
+				false,
+			)
+			expect(
+				needIncludeFromGlobRules('aaa/bb/cc/child.md', inclusion, exclusion),
+			).toBe(false)
+		})
+
+		it('包含路径使用 /** 时递归包含，并继续优先于排除规则', () => {
+			const inclusion = makeRules(['aaa/bb/**'])
+			const exclusion = makeRules(['aaa/bb/cc/**'])
+
+			expect(needIncludeFromGlobRules('aaa/bb/file.md', inclusion, exclusion)).toBe(
+				true,
+			)
+			expect(
+				needIncludeFromGlobRules('aaa/bb/deep/note.md', inclusion, exclusion),
+			).toBe(true)
+			expect(needIncludeFromGlobRules('aaa/bb/cc/file.md', inclusion, exclusion)).toBe(
+				true,
+			)
+		})
+
 		it('模式中间包含 /：相对路径匹配', () => {
 			const exclusion = makeRules(['doc/*.txt'])
 
