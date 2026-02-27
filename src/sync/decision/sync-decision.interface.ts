@@ -82,6 +82,7 @@ export interface SyncDecisionInput {
 	remoteStats: FsWalkResult[]
 	syncRecords: Map<string, SyncRecordItem>
 	remoteBaseDir: string
+	getBaseContent: (key: string) => Promise<ArrayBuffer | null>
 	compareFileContent: (
 		filePath: string,
 		baseContent: ArrayBuffer,

@@ -1,6 +1,5 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { SyncMode } from '~/settings'
-import { blobStore } from '~/storage/blob'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSameTime } from '~/utils/is-same-time'
 import logger from '~/utils/logger'
@@ -25,6 +24,7 @@ export async function twoWayDecider(
 		remoteStats,
 		syncRecords,
 		remoteBaseDir,
+		getBaseContent,
 		compareFileContent,
 		taskFactory,
 	} = input
@@ -94,9 +94,8 @@ export async function twoWayDecider(
 				if (local) {
 					let localChanged = !isSameTime(local.mtime, record.local.mtime)
 					if (localChanged && record.base?.key) {
-						const blob = await blobStore.get(record.base.key)
-						if (blob) {
-							const baseContent = await blob.arrayBuffer()
+						const baseContent = await getBaseContent(record.base.key)
+						if (baseContent) {
 							localChanged = !(await compareFileContent(
 								local.path,
 								baseContent,
