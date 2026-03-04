@@ -1,4 +1,5 @@
 import { isEqual } from 'ohash'
+import { blobStore } from '~/storage/blob'
 import CleanRecordTask from '../tasks/clean-record.task'
 import ConflictResolveTask from '../tasks/conflict-resolve.task'
 import FilenameErrorTask from '../tasks/filename-error.task'
@@ -74,6 +75,13 @@ export default class TwoWaySyncDecider extends BaseSyncDecider {
 			const currentContent = await this.vault.readBinary(file)
 			return isEqual(baseContent, currentContent)
 		}
+		const getBaseContent = async (key: string): Promise<ArrayBuffer | null> => {
+			const blob = await blobStore.get(key)
+			if (!blob) {
+				return null
+			}
+			return await blob.arrayBuffer()
+		}
 
 		// 调用纯函数进行决策
 		return await twoWayDecider({
@@ -87,6 +95,7 @@ export default class TwoWaySyncDecider extends BaseSyncDecider {
 			remoteStats,
 			syncRecords: records,
 			remoteBaseDir: this.remoteBaseDir,
+			getBaseContent,
 			compareFileContent,
 			taskFactory,
 		})
