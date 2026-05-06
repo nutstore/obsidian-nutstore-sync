@@ -517,7 +517,7 @@ function App(props: AppProps) {
 					{/* Messages */}
 					<div
 						ref={messagesEl}
-						class="min-h-0 flex-1 overflow-y-auto px-3 scrollbar-default"
+						class="min-h-0 flex-1 overflow-y-auto px-3 pb-3 scrollbar-default"
 					>
 						<Show
 							when={

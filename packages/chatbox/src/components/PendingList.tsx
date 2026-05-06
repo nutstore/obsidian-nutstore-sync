@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js'
-import type { ChatboxProps } from '../types'
 import { t } from '../i18n'
+import type { ChatboxProps } from '../types'
 
 export function PendingList(props: {
 	pendingMessages: ChatboxProps['pendingMessages']
@@ -14,7 +14,7 @@ export function PendingList(props: {
 				<div class="mt-2 flex flex-col gap-2">
 					<For each={props.pendingMessages}>
 						{(message) => (
-							<div class="rounded-2 bg-[var(--background-secondary)] p-3 text-sm text-[var(--text-normal)] whitespace-pre-wrap break-words">
+							<div class="rounded-2 bg-[var(--background-secondary)] p-3 text-sm text-[var(--text-normal)] whitespace-pre-wrap break-words select-text">
 								{message.text}
 							</div>
 						)}
