@@ -1,5 +1,6 @@
-import type { ModelMessage } from 'ai'
+import type { GenerateTextResult, ModelMessage } from 'ai'
 import { tool as aiTool, generateText, stepCountIs } from 'ai'
+import { getInterleavedMessageField } from './interleaved-message-field'
 import { getProviderResolver } from './providers/registry'
 import {
 	AIMessage,
@@ -121,8 +122,11 @@ function toAISDKTools(tools: AIToolDefinition[]) {
 	)
 }
 
-function toAssistantMessage(result: any) {
-	const toolCalls = result.toolCalls.map((toolCall: any) => ({
+function toAssistantMessage(
+	result: GenerateTextResult<any, any>,
+	interleavedField?: string,
+): AIMessage {
+	const toolCalls = result.toolCalls.map((toolCall) => ({
 		id: toolCall.toolCallId,
 		type: 'function' as const,
 		function: {
@@ -131,18 +135,27 @@ function toAssistantMessage(result: any) {
 		},
 	}))
 
-	if (toolCalls.length > 0) {
-		return {
-			role: 'assistant' as const,
-			content: toTextParts(result.text),
-			tool_calls: toolCalls,
+	const message: AIMessage =
+		toolCalls.length > 0
+			? {
+					role: 'assistant',
+					content: toTextParts(result.text),
+					tool_calls: toolCalls,
+				}
+			: {
+					role: 'assistant',
+					content: toTextParts(result.text) || [],
+				}
+
+	if (interleavedField && message.role === 'assistant') {
+		const body = result.response.body as any
+		const raw = body?.choices?.[0]?.message?.[interleavedField]
+		if (raw !== undefined) {
+			message.interleaved = { [interleavedField]: raw }
 		}
 	}
 
-	return {
-		role: 'assistant' as const,
-		content: toTextParts(result.text) || [],
-	}
+	return message
 }
 
 export function assertProviderUsable(provider: AIProviderConfig) {
@@ -155,9 +168,14 @@ export async function generateAssistantTurn(
 	const resolver = getProviderResolver(request.provider)
 	const modelName =
 		request.provider.models[request.model]?.name?.trim() || request.model
+	const interleavedField = getInterleavedMessageField(
+		request.provider,
+		request.model,
+	)
 	const { model, providerName } = resolver.createLanguageModel(
 		request.provider as never,
 		request.model,
+		{ messages: request.messages, interleavedField },
 	)
 	const result = await generateText({
 		model,
@@ -166,10 +184,13 @@ export async function generateAssistantTurn(
 		stopWhen: stepCountIs(1),
 		temperature: request.temperature,
 		maxOutputTokens: request.maxTokens,
+		experimental_include: {
+			responseBody: !!interleavedField,
+		},
 	})
 
 	return {
-		message: toAssistantMessage(result),
+		message: toAssistantMessage(result, interleavedField),
 		meta: {
 			providerId: request.provider.id,
 			providerName: request.provider.name || providerName,

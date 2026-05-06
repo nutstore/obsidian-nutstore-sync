@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { simulateStreamingMiddleware, wrapLanguageModel } from 'ai'
+import { createInterleavedMessageFieldFetch } from '~/ai/interleaved-message-field'
 import { obsidianFetch } from '~/ai/transport/obsidian-fetch'
 import type { AIProviderConfig } from '~/ai/types'
 import i18n from '~/i18n'
@@ -13,13 +14,17 @@ function assertProviderUsable(provider: AIProviderConfig) {
 
 export const openAIProviderResolver: AIProviderResolver = {
 	assertUsable: assertProviderUsable,
-	createLanguageModel(provider, modelId) {
+	createLanguageModel(provider, modelId, context) {
 		assertProviderUsable(provider)
 		const factory = createOpenAI({
 			name: provider.name || 'openai',
 			baseURL: provider.api,
 			apiKey: provider.apiKey,
-			fetch: obsidianFetch,
+			fetch: createInterleavedMessageFieldFetch(
+				obsidianFetch,
+				context?.messages,
+				context?.interleavedField,
+			),
 		})
 
 		return {

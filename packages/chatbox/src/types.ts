@@ -80,12 +80,14 @@ export interface ChatAssistantMessageWithContent {
 	role: 'assistant'
 	content: ChatMessageContentPart[]
 	tool_calls?: ChatToolCall[]
+	interleaved?: Record<string, unknown>
 }
 
 export interface ChatAssistantMessageWithToolCalls {
 	role: 'assistant'
 	content?: null
 	tool_calls: ChatToolCall[]
+	interleaved?: Record<string, unknown>
 }
 
 export interface ChatToolMessage {
