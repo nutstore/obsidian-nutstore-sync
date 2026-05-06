@@ -1,5 +1,6 @@
 import { isEqual } from 'ohash'
 import { blobStore } from '~/storage/blob'
+import { existsLocalPath, readLocalBinary } from '~/utils/local-vault-io'
 import CleanRecordTask from '../tasks/clean-record.task'
 import ConflictResolveTask from '../tasks/conflict-resolve.task'
 import FilenameErrorTask from '../tasks/filename-error.task'
@@ -70,9 +71,9 @@ export default class TwoWaySyncDecider extends BaseSyncDecider {
 			filePath: string,
 			baseContent: ArrayBuffer,
 		): Promise<boolean> => {
-			const exists = await this.vault.adapter.exists(filePath)
+			const exists = await existsLocalPath(this.vault, filePath)
 			if (!exists) return false
-			const currentContent = await this.vault.adapter.readBinary(filePath)
+			const currentContent = await readLocalBinary(this.vault, filePath)
 			return isEqual(baseContent, currentContent)
 		}
 		const getBaseContent = async (key: string): Promise<ArrayBuffer | null> => {

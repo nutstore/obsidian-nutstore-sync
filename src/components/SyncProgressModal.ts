@@ -84,16 +84,16 @@ export default class SyncProgressModal extends Modal {
 			}),
 		)
 
-		if (progress.completed.length > 0) {
-			if (this.plugin.progressService.syncEnd) {
-				this.stopButtonComponent.buttonEl.addClass('hidden')
-				this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
-				this.currentFile.setText(i18n.t('sync.complete'))
-			} else if (this.syncCancelled) {
-				this.stopButtonComponent.buttonEl.addClass('hidden')
-				this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
-				this.currentFile.setText(i18n.t('sync.cancelled'))
-			} else {
+		if (this.plugin.progressService.syncEnd) {
+			this.stopButtonComponent.buttonEl.addClass('hidden')
+			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
+			this.currentFile.setText(i18n.t('sync.complete'))
+		} else if (this.syncCancelled) {
+			this.stopButtonComponent.buttonEl.addClass('hidden')
+			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
+			this.currentFile.setText(i18n.t('sync.cancelled'))
+		} else {
+			if (progress.completed.length > 0) {
 				const lastFile = progress.completed.at(-1)
 				if (lastFile) {
 					this.currentFile.setText(

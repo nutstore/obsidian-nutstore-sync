@@ -1,8 +1,4 @@
-import { syncRecordKV } from '~/storage'
-import { SyncRecord } from '~/storage/sync-record'
 import { NutstoreSync, SyncStartMode } from '~/sync'
-import TwoWaySyncDecider from '~/sync/decision/two-way.decider'
-import { getDBKey } from '~/utils/get-db-key'
 import waitUntil from '~/utils/wait-until'
 import type NutstorePlugin from '..'
 
@@ -32,22 +28,8 @@ export default class SyncExecutorService {
 			webdav: await this.plugin.webDAVService.createWebDAVClient(),
 		})
 
-		const syncRecord = new SyncRecord(
-			getDBKey(this.plugin.app.vault.getName(), this.plugin.remoteBaseDir),
-			syncRecordKV,
-		)
-
-		const decider = new TwoWaySyncDecider(sync, syncRecord)
-		const decided = await decider.decide()
-
-		if (decided.length === 0) {
-			return false
-		}
-
-		await sync.start({
+		return await sync.start({
 			mode: options.mode,
 		})
-
-		return true
 	}
 }

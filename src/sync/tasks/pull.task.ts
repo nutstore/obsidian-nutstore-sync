@@ -1,6 +1,7 @@
 import { dirname } from 'path-browserify'
 import { BufferLike } from 'webdav'
 import logger from '~/utils/logger'
+import { writeLocalBinary } from '~/utils/local-vault-io'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
@@ -28,7 +29,7 @@ export default class PullTask extends BaseTask {
 				throw new Error('Remote Size Not Match!')
 			}
 			await mkdirsVault(this.vault, dirname(this.localPath))
-			await this.vault.adapter.writeBinary(this.localPath, arrayBuffer)
+			await writeLocalBinary(this.vault, this.localPath, arrayBuffer)
 			return { success: true } as const
 		} catch (e) {
 			logger.error(this, e)

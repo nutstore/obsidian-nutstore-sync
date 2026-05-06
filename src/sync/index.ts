@@ -21,6 +21,7 @@ import i18n from '~/i18n'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import breakableSleep from '~/utils/breakable-sleep'
+import { computeEffectiveFilterRules } from '~/utils/config-dir-rules'
 import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
@@ -40,7 +41,6 @@ import { BaseTask, TaskError, TaskResult } from './tasks/task.interface'
 import { mergeMkdirTasks } from './utils/merge-mkdir-tasks'
 import { mergeRemoveRemoteTasks } from './utils/merge-remove-remote-tasks'
 import { updateMtimeInRecord as updateMtimeInRecordUtil } from './utils/update-records'
-import { computeEffectiveFilterRules } from '~/utils/config-dir-rules'
 
 export enum SyncStartMode {
 	MANUAL_SYNC = 'manual_sync',
@@ -81,10 +81,20 @@ export class NutstoreSync {
 		)
 	}
 
-	async start({ mode }: { mode: SyncStartMode }) {
+	async start({ mode }: { mode: SyncStartMode }): Promise<boolean> {
 		try {
 			const showNotice = mode === SyncStartMode.MANUAL_SYNC
-			emitPreparingSync({ showNotice })
+			let preparingEmitted = false
+			const emitPreparingOnce = () => {
+				if (preparingEmitted) {
+					return
+				}
+				emitPreparingSync({ showNotice })
+				preparingEmitted = true
+			}
+			if (showNotice) {
+				emitPreparingOnce()
+			}
 
 			const settings = this.settings
 			const webdav = this.webdav
@@ -103,7 +113,7 @@ export class NutstoreSync {
 			while (!remoteBaseDirExits) {
 				if (this.isCancelled) {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
-					return
+					return false
 				}
 				try {
 					await webdav.createDirectory(this.options.remoteBaseDir, {
@@ -111,11 +121,11 @@ export class NutstoreSync {
 					})
 					break
 				} catch (e) {
-					if (is503Error(e)) {
+					if (is503Error(e as Error)) {
 						await this.handle503Error(60000)
 						if (this.isCancelled) {
 							emitSyncError(new Error(i18n.t('sync.cancelled')))
-							return
+							return false
 						}
 						remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 					} else {
@@ -127,9 +137,13 @@ export class NutstoreSync {
 			const tasks = await new TwoWaySyncDecider(this, syncRecord).decide()
 
 			if (tasks.length === 0) {
-				emitEndSync({ showNotice, failedCount: 0 })
-				return
+				if (preparingEmitted) {
+					emitEndSync({ showNotice, failedCount: 0 })
+				}
+				return false
 			}
+
+			emitPreparingOnce()
 
 			const noopTasks = tasks.filter((t) => t instanceof NoopTask)
 			const skippedTasks = tasks.filter((t) => t instanceof SkippedTask)
@@ -143,7 +157,7 @@ export class NutstoreSync {
 
 			if (this.isCancelled) {
 				emitSyncError(new Error(i18n.t('sync.cancelled')))
-				return
+				return false
 			}
 
 			if (
@@ -159,7 +173,7 @@ export class NutstoreSync {
 					confirmedTasks = confirmExec.tasks
 				} else {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
-					return
+					return false
 				}
 			}
 
@@ -393,20 +407,23 @@ export class NutstoreSync {
 						task instanceof SkippedTask
 					),
 			)
-			if (showNotice && hasSubstantialTask) {
-				this.plugin.progressService.showProgressModal()
-			}
-
-			// Emit start sync event after all confirmations are done
-			emitStartSync({ showNotice })
-
-			const chunkSize = 200
-			const taskChunks = chunk(optimizedTasks, chunkSize)
-			const allTasksResult: TaskResult[] = []
 
 			const totalDisplayableTasks = optimizedTasks.filter(
 				(t) => !(t instanceof NoopTask || t instanceof CleanRecordTask),
 			)
+
+			// Emit start sync event after all confirmations are done
+			emitStartSync({ showNotice })
+			if (totalDisplayableTasks.length > 0) {
+				emitSyncProgress(totalDisplayableTasks.length, [])
+			}
+			if (showNotice && hasSubstantialTask) {
+				this.plugin.progressService.showProgressModal()
+			}
+
+			const chunkSize = 200
+			const taskChunks = chunk(optimizedTasks, chunkSize)
+			const allTasksResult: TaskResult[] = []
 
 			// Track all completed tasks across all chunks
 			const allCompletedTasks: BaseTask[] = []
@@ -445,9 +462,11 @@ export class NutstoreSync {
 			}
 
 			emitEndSync({ failedCount, showNotice })
+			return true
 		} catch (error) {
-			emitSyncError(error)
+			emitSyncError(error as Error)
 			logger.error('Sync error:', error)
+			return false
 		} finally {
 			this.subscriptions.forEach((sub) => sub.unsubscribe())
 		}

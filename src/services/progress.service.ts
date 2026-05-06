@@ -3,6 +3,7 @@ import { Notice } from 'obsidian'
 import SyncProgressModal from '../components/SyncProgressModal'
 import {
 	onEndSync,
+	onPreparingSync,
 	onStartSync,
 	onSyncProgress,
 	UpdateSyncProgress,
@@ -21,6 +22,10 @@ export class ProgressService {
 	syncEnd = false
 
 	private subscriptions = [
+		onPreparingSync().subscribe(() => {
+			this.syncEnd = false
+			this.resetProgress()
+		}),
 		onStartSync().subscribe(() => {
 			this.syncEnd = false
 			this.resetProgress()
@@ -55,8 +60,14 @@ export class ProgressService {
 			new Notice(i18n.t('sync.notSyncing'))
 			return
 		}
+		if (this.progressModal) {
+			this.updateModal()
+			return
+		}
 		this.closeProgressModal()
-		this.progressModal = new SyncProgressModal(this.plugin)
+		this.progressModal = new SyncProgressModal(this.plugin, () => {
+			this.progressModal = null
+		})
 		this.progressModal.open()
 	}
 

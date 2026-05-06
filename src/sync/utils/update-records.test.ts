@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Vault } from 'obsidian'
+import { TFile, type Vault } from 'obsidian'
 
 vi.mock('~/utils/get-task-name', () => ({
 	default: () => 'task',
@@ -73,7 +73,7 @@ vi.mock('~/storage', () => {
 })
 
 describe('updateMtimeInRecord', () => {
-	it('uses adapter stat and readBinary to persist local metadata immediately after writes', async () => {
+	it('uses Vault metadata and readBinary for normal paths when persisting records', async () => {
 		records.clear()
 		setRecords.mockClear()
 		getRecords.mockClear()
@@ -82,20 +82,28 @@ describe('updateMtimeInRecord', () => {
 
 		const vault = {
 			getName: vi.fn(() => 'vault-name'),
-			adapter: {
-				stat: vi.fn(async (path: string) => {
-					if (path === 'folder/file.md') {
-						return {
-							type: 'file',
-							mtime: 10,
-							size: 10,
-						}
-					}
+			getAbstractFileByPath: vi.fn((path: string) => {
+				if (path !== 'folder/file.md') {
 					return null
-				}),
+				}
+				return Object.assign(new TFile(), {
+					path,
+					stat: {
+						mtime: 10,
+						size: 10,
+					},
+				})
+			}),
+			readBinary: vi.fn(async () => Uint8Array.from([1, 2, 3]).buffer),
+			configDir: '.obsidian',
+			adapter: {
+				stat: vi.fn(),
 				readBinary: vi.fn(async () => Uint8Array.from([1, 2, 3]).buffer),
 			},
 		} as unknown as Vault & {
+			getAbstractFileByPath: ReturnType<typeof vi.fn>
+			readBinary: ReturnType<typeof vi.fn>
+			configDir: string
 			adapter: {
 				stat: ReturnType<typeof vi.fn>
 				readBinary: ReturnType<typeof vi.fn>
@@ -119,8 +127,9 @@ describe('updateMtimeInRecord', () => {
 			10,
 		)
 
-		expect(vault.adapter.stat).toHaveBeenCalledWith('folder/file.md')
-		expect(vault.adapter.readBinary).toHaveBeenCalledWith('folder/file.md')
+		expect(vault.adapter.stat).not.toHaveBeenCalled()
+		expect(vault.readBinary).toHaveBeenCalledWith(expect.any(TFile))
+		expect(vault.adapter.readBinary).not.toHaveBeenCalled()
 		expect(blobStoreStore).toHaveBeenCalledTimes(1)
 		expect(records.get('folder/file.md')).toEqual({
 			local: {
