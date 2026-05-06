@@ -3,7 +3,7 @@ import logger from '~/utils/logger'
 import { emitCancelSync } from '../events'
 import i18n from '../i18n'
 import type NutstorePlugin from '../index'
-import { NutstoreSync, SyncStartMode } from '../sync'
+import { SyncStartMode } from '../sync'
 import { CHATBOX_VIEW_TYPE } from '../views/chatbox.view'
 import SyncConfirmModal from './SyncConfirmModal'
 
@@ -37,13 +37,7 @@ export class SyncRibbonManager {
 				}
 
 				const startSync = async () => {
-					const sync = new NutstoreSync(this.plugin, {
-						webdav: await this.plugin.webDAVService.createWebDAVClient(),
-						vault: this.plugin.app.vault,
-						token: await this.plugin.getToken(),
-						remoteBaseDir: this.plugin.remoteBaseDir,
-					})
-					await sync.start({
+					await this.plugin.syncExecutorService.executeSync({
 						mode: SyncStartMode.MANUAL_SYNC,
 					})
 				}
