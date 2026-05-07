@@ -25,6 +25,8 @@ jobs:
 
       - name: Update version in CHANGELOG.md
         run: |
+          set -euo pipefail
+
           echo "GITHUB_REF: $GITHUB_REF"
           # Get release version (without 'v' prefix if present)
           VERSION=${GITHUB_REF#refs/tags/}
@@ -32,11 +34,19 @@ jobs:
           VERSION=${VERSION#v}
           echo "After removing v prefix: $VERSION"
 
+          RELEASE_PUBLISHED_AT=$(jq -r '.release.published_at // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$RELEASE_PUBLISHED_AT" ]; then
+            RELEASE_DATE=${RELEASE_PUBLISHED_AT%%T*}
+          else
+            RELEASE_DATE=$(date -u +%F)
+          fi
+          echo "Resolved release date: $RELEASE_DATE"
+
           echo "Current content before replacement:"
           cat CHANGELOG.md
 
-          # Only replace "Unreleased" in the heading, not in other places
-          sed -i "s/## \[Unreleased\]/## [$VERSION]/" CHANGELOG.md
+          # Only replace the Unreleased heading line
+          sed -i "s/^## \[Unreleased\]$/## [$VERSION] - $RELEASE_DATE/" CHANGELOG.md
 
           echo "Content after replacement:"
           cat CHANGELOG.md
