@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Vault } from 'obsidian'
+import { TFile, TFolder, type Vault } from 'obsidian'
 import { mkdirsVault } from './mkdirs-vault'
 import { statVaultItem } from './stat-vault-item'
 import { traverseLocalVault } from './traverse-local-vault'
@@ -11,7 +11,28 @@ type AdapterMock = {
 	mkdir: ReturnType<typeof vi.fn>
 }
 
-function createVault(adapterOverrides: Partial<AdapterMock> = {}) {
+type VaultMock = Vault & {
+	adapter: AdapterMock
+	configDir: string
+	getAbstractFileByPath: ReturnType<typeof vi.fn>
+	createFolder: ReturnType<typeof vi.fn>
+}
+
+function makeFile(path: string, mtime: number, size: number) {
+	return Object.assign(new TFile(), {
+		path,
+		stat: { mtime, size },
+	})
+}
+
+function makeFolder(path: string) {
+	return Object.assign(new TFolder(), { path })
+}
+
+function createVault(
+	adapterOverrides: Partial<AdapterMock> = {},
+	abstractFiles = new Map<string, TFile | TFolder>(),
+) {
 	const adapter: AdapterMock = {
 		stat: vi.fn(),
 		exists: vi.fn(),
@@ -23,18 +44,21 @@ function createVault(adapterOverrides: Partial<AdapterMock> = {}) {
 	return {
 		adapter,
 		configDir: '.obsidian',
-	} as unknown as Vault & { adapter: AdapterMock; configDir: string }
+		getAbstractFileByPath: vi.fn((path: string) => abstractFiles.get(path) ?? null),
+		createFolder: vi.fn(async (path: string) => {
+			abstractFiles.set(path, makeFolder(path))
+		}),
+	} as unknown as VaultMock
 }
 
 describe('statVaultItem', () => {
-	it('reads file metadata from adapter.stat', async () => {
-		const vault = createVault({
-			stat: vi.fn().mockResolvedValue({
-				type: 'file',
-				mtime: 123,
-				size: 456,
-			}),
-		})
+	it('reads normal file metadata from the Vault API', async () => {
+		const vault = createVault(
+			{
+				stat: vi.fn(),
+			},
+			new Map([['folder/note.md', makeFile('folder/note.md', 123, 456)]]),
+		)
 
 		await expect(statVaultItem(vault, 'folder/note.md')).resolves.toEqual({
 			path: 'folder/note.md',
@@ -44,30 +68,31 @@ describe('statVaultItem', () => {
 			mtime: 123,
 			size: 456,
 		})
+		expect(vault.adapter.stat).not.toHaveBeenCalled()
 	})
 
-	it('returns directory metadata from adapter.stat', async () => {
+	it('reads hidden file metadata from adapter.stat', async () => {
 		const vault = createVault({
 			stat: vi.fn().mockResolvedValue({
-				type: 'folder',
-				mtime: 99,
-				size: 0,
+				type: 'file',
+				mtime: 123,
+				size: 456,
 			}),
 		})
 
-		await expect(statVaultItem(vault, 'folder')).resolves.toEqual({
-			path: 'folder',
-			basename: 'folder',
-			isDir: true,
+		await expect(statVaultItem(vault, '.hidden/note.md')).resolves.toEqual({
+			path: '.hidden/note.md',
+			basename: 'note.md',
+			isDir: false,
 			isDeleted: false,
-			mtime: 99,
+			mtime: 123,
+			size: 456,
 		})
+		expect(vault.adapter.stat).toHaveBeenCalledWith('.hidden/note.md')
 	})
 
 	it('returns undefined when the path is missing', async () => {
-		const vault = createVault({
-			stat: vi.fn().mockResolvedValue(null),
-		})
+		const vault = createVault()
 
 		await expect(statVaultItem(vault, 'missing.md')).resolves.toBeUndefined()
 	})
@@ -75,30 +100,24 @@ describe('statVaultItem', () => {
 
 describe('mkdirsVault', () => {
 	it('creates missing parent directories from top to bottom', async () => {
-		const existing = new Set<string>()
 		const mkdir = vi.fn(async (path: string) => {
-			existing.add(path)
+			return path
 		})
-		const vault = createVault({
-			exists: vi.fn(async (path: string) => existing.has(path)),
-			mkdir,
-		})
+		const vault = createVault({ mkdir }, new Map())
 
 		await mkdirsVault(vault, 'a/b/c')
 
-		expect(mkdir.mock.calls.map(([path]) => path)).toEqual([
+		expect(vault.createFolder.mock.calls.map(([path]) => path)).toEqual([
 			'a',
 			'a/b',
 			'a/b/c',
 		])
+		expect(mkdir).not.toHaveBeenCalled()
 	})
 
 	it('skips work for root-like paths and existing directories', async () => {
 		const mkdir = vi.fn()
-		const vault = createVault({
-			exists: vi.fn(async (path: string) => path === 'exists'),
-			mkdir,
-		})
+		const vault = createVault({ mkdir }, new Map([['exists', makeFolder('exists')]]))
 
 		await mkdirsVault(vault, '.')
 		await mkdirsVault(vault, '/')
@@ -110,11 +129,14 @@ describe('mkdirsVault', () => {
 
 describe('traverseLocalVault', () => {
 	it('walks adapter.list recursively and ignores config node_modules', async () => {
+		const abstractFiles = new Map<string, TFile | TFolder>([
+			['docs', makeFolder('docs')],
+			['readme.md', makeFile('readme.md', 2, 3)],
+			['docs/file.md', makeFile('docs/file.md', 2, 3)],
+		])
 		const vault = createVault({
 			stat: vi.fn(async (path: string) => {
 				const folders = new Set([
-					'',
-					'docs',
 					'.obsidian',
 					'.obsidian/plugins',
 					'.obsidian/plugins/test',
@@ -170,7 +192,7 @@ describe('traverseLocalVault', () => {
 				}
 				return { files: [], folders: [] }
 			}),
-		})
+		}, abstractFiles)
 
 		const results = await traverseLocalVault(vault, '')
 
@@ -182,15 +204,19 @@ describe('traverseLocalVault', () => {
 			'.obsidian/plugins',
 			'.obsidian/plugins/test',
 		])
+		expect(vault.adapter.stat).not.toHaveBeenCalledWith('readme.md')
+		expect(vault.adapter.stat).not.toHaveBeenCalledWith('docs')
+		expect(vault.adapter.stat).toHaveBeenCalledWith('.obsidian')
 	})
 
 	it('returns an empty array when the start path is not a folder', async () => {
 		const vault = createVault({
-			stat: vi.fn().mockResolvedValue(null),
-			list: vi.fn(),
+			list: vi.fn(async () => {
+				throw new Error('missing')
+			}),
 		})
 
 		await expect(traverseLocalVault(vault, 'missing')).resolves.toEqual([])
-		expect(vault.adapter.list).not.toHaveBeenCalled()
+		expect(vault.adapter.list).toHaveBeenCalledWith('missing')
 	})
 })

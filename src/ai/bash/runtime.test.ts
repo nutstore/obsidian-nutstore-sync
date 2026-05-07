@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { App, Vault } from 'obsidian'
+import { TFile, TFolder, type App, type Vault } from 'obsidian'
 import type { PermissionRequest } from '~/ai/permission-guard'
 import { createVaultBash, execVaultBash, VAULT_MOUNT_POINT } from './runtime'
 import {
@@ -177,18 +177,18 @@ function createMockVault(
 
 	const buildFolder = (path: string, parent: MockFolder | null): MockFolder => {
 		const normalized = store.normalize(path)
-		const folder: MockFolder = {
+		const folder: MockFolder = Object.assign(new TFolder(), {
 			path: normalized,
 			name: normalized ? store.basename(normalized) : '',
 			parent,
 			children: [],
-		}
+		})
 		folder.children = store.listChildren(normalized).map((childPath) => {
 			const childStat = store.stat(childPath)
 			if (childStat?.type === 'folder') {
 				return buildFolder(childPath, folder)
 			}
-			return {
+			return Object.assign(new TFile(), {
 				path: childPath,
 				name: store.basename(childPath),
 				parent: folder,
@@ -196,7 +196,7 @@ function createMockVault(
 					size: childStat?.size ?? 0,
 					mtime: childStat?.mtime ?? 0,
 				},
-			} satisfies MockFile
+			}) satisfies MockFile
 		})
 		return folder
 	}
@@ -222,7 +222,7 @@ function createMockVault(
 			if (stat.type === 'folder') {
 				return buildFolder(normalized, parent)
 			}
-			return {
+			return Object.assign(new TFile(), {
 				path: normalized,
 				name: store.basename(normalized),
 				parent,
@@ -230,7 +230,7 @@ function createMockVault(
 					size: stat.size,
 					mtime: stat.mtime,
 				},
-			} satisfies MockFile
+			}) satisfies MockFile
 		},
 		async readBinary(file: MockFile) {
 			return store.readBinary(file.path)

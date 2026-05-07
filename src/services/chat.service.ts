@@ -1263,21 +1263,19 @@ export default class ChatService {
 				}
 
 				if (runtime.stopRequested) {
-					fragment.messages.push(
-						this.createMessageRecord(response.message, {
-							meta: { ...response.meta, modelId: model.id },
-						}),
-					)
+					const record = this.createMessageRecord(response.message, {
+						meta: { ...response.meta, modelId: model.id },
+					})
+					fragment.messages.push(record)
 					this.finishStoppedSessionRun(session, fragment)
 					await this.persistSession(session)
 					return
 				}
 
-				fragment.messages.push(
-					this.createMessageRecord(response.message, {
-						meta: { ...response.meta, modelId: model.id },
-					}),
-				)
+				const assistantRecord = this.createMessageRecord(response.message, {
+					meta: { ...response.meta, modelId: model.id },
+				})
+				fragment.messages.push(assistantRecord)
 				fragment.updatedAt = Date.now()
 				session.updatedAt = Date.now()
 				await this.persistSession(session)

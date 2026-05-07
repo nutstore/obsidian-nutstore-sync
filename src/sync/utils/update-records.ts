@@ -10,6 +10,7 @@ import type { BaseTask, TaskResult } from '~/sync/tasks/task.interface'
 import { isMergeablePath } from '~/sync/utils/is-mergeable-path'
 import { getDBKey } from '~/utils/get-db-key'
 import { isSub } from '~/utils/is-sub'
+import { readLocalBinary } from '~/utils/local-vault-io'
 import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
@@ -111,7 +112,7 @@ export async function updateMtimeInRecord(
 				let base: { key: string } | undefined
 				let baseKey: string | undefined
 				if (!local.isDir) {
-					const buffer = await vault.adapter.readBinary(localPath)
+					const buffer = await readLocalBinary(vault, localPath)
 					const isMergeable = isMergeablePath(localPath)
 					if (!isMergeable) {
 						baseKey = undefined

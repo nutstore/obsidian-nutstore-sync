@@ -1,5 +1,6 @@
 import { Vault } from 'obsidian'
 import { dirname, normalize } from 'path-browserify'
+import { existsLocalPath, isAdapterPath } from './local-vault-io'
 
 export async function mkdirsVault(vault: Vault, path: string) {
 	const stack: string[] = []
@@ -7,14 +8,14 @@ export async function mkdirsVault(vault: Vault, path: string) {
 	if (currentPath === '/' || currentPath === '.') {
 		return
 	}
-	if (await vault.adapter.exists(currentPath)) {
+	if (await existsLocalPath(vault, currentPath)) {
 		return
 	}
 	while (
 		currentPath !== '' &&
 		currentPath !== '/' &&
 		currentPath !== '.' &&
-		!(await vault.adapter.exists(currentPath))
+		!(await existsLocalPath(vault, currentPath))
 	) {
 		stack.push(currentPath)
 		currentPath = dirname(currentPath)
@@ -24,9 +25,13 @@ export async function mkdirsVault(vault: Vault, path: string) {
 		if (!pop) {
 			continue
 		}
-		if (await vault.adapter.exists(pop)) {
+		if (await existsLocalPath(vault, pop)) {
 			continue
 		}
-		await vault.adapter.mkdir(pop)
+		if (isAdapterPath(vault, pop)) {
+			await vault.adapter.mkdir(pop)
+		} else {
+			await vault.createFolder(pop)
+		}
 	}
 }

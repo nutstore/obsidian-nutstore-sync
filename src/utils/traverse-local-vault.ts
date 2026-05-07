@@ -24,11 +24,13 @@ export async function traverseLocalVault(vault: Vault, from: string) {
 			continue
 		}
 		const folderPath = normalizePath(current)
-		const folderStat = await vault.adapter.stat(folderPath)
-		if (!folderStat || folderStat.type !== 'folder') {
+		let listed: Awaited<ReturnType<typeof vault.adapter.list>>
+		try {
+			listed = await vault.adapter.list(folderPath)
+		} catch {
 			continue
 		}
-		const { files, folders } = await vault.adapter.list(folderPath)
+		const { files, folders } = listed
 		const normalizedFiles = files.map((path) => normalizePath(path))
 		const normalizedFolders = folders
 			.map((path) => normalizePath(path))

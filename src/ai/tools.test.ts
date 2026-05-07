@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { App } from 'obsidian'
+import { TFile, TFolder, type App } from 'obsidian'
 import { createAITools } from './tools'
 import { VAULT_MOUNT_POINT } from './bash/runtime'
 import { filterVaultEntries, type SearchPathEntry } from './search-path-filter'
@@ -45,17 +45,17 @@ function createToolApp() {
 	}
 	const buildFolder = (path: string, parent: any): any => {
 		const normalized = normalize(path)
-		const folder: any = {
+		const folder: any = Object.assign(new TFolder(), {
 			path: normalized,
 			name: normalized ? basename(normalized) : '',
 			parent,
 			children: [],
-		}
+		})
 		folder.children = listChildren(normalized).map((childPath) => {
 			if (folders.has(childPath)) {
 				return buildFolder(childPath, folder)
 			}
-			return {
+			return Object.assign(new TFile(), {
 				path: childPath,
 				name: basename(childPath),
 				parent: folder,
@@ -63,7 +63,7 @@ function createToolApp() {
 					size: files.get(childPath)?.length ?? 0,
 					mtime: 0,
 				},
-			}
+			})
 		})
 		return folder
 	}
@@ -76,7 +76,7 @@ function createToolApp() {
 			return buildFolder(normalized, buildFolder(dirname(normalized), null))
 		}
 		if (files.has(normalized)) {
-			return {
+			return Object.assign(new TFile(), {
 				path: normalized,
 				name: basename(normalized),
 				parent: buildFolder(dirname(normalized), null),
@@ -84,7 +84,7 @@ function createToolApp() {
 					size: files.get(normalized)?.length ?? 0,
 					mtime: 0,
 				},
-			}
+			})
 		}
 		return null
 	}

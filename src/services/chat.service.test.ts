@@ -371,6 +371,158 @@ describe('ChatService fragment workflows', () => {
 		expect(service.getViewProps().pendingMessages).toHaveLength(0)
 	})
 
+	it('persists interleaved assistant fields on the message and forwards them on every subsequent turn', async () => {
+		const plugin = createPlugin() as any
+		plugin.settings.ai.providers['provider-1'].models['model-1'].interleaved = {
+			field: 'vendor_context',
+		}
+
+		generateAssistantTurn
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: '' }],
+					tool_calls: [
+						{
+							id: 'tool-1',
+							type: 'function',
+							function: {
+								name: 'missing_tool',
+								arguments: '{}',
+							},
+						},
+					],
+					interleaved: { vendor_context: 'snapshot-1' },
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Final after tool' }],
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Fresh turn' }],
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+
+		const service = new ChatService(plugin as never)
+		await service.ensureSession()
+		await service.sendMessage('Use a tool')
+		await service.sendMessage('New user turn')
+
+		const messagesOnNextTurn = generateAssistantTurn.mock.calls[2][0].messages
+		const replayedAssistant = messagesOnNextTurn.find(
+			(message: any) =>
+				message.role === 'assistant' && message.interleaved !== undefined,
+		)
+		expect(replayedAssistant.interleaved).toEqual({
+			vendor_context: 'snapshot-1',
+		})
+
+		const session = getActiveSession(service)
+		const storedAssistantWithToolCalls = session.fragments[0].messages.find(
+			(item: any) =>
+				item.message.role === 'assistant' && item.message.tool_calls,
+		)
+		expect(storedAssistantWithToolCalls.message.interleaved).toEqual({
+			vendor_context: 'snapshot-1',
+		})
+		expect(storedAssistantWithToolCalls.message.vendor_context).toBeUndefined()
+	})
+
+	it('rehydrates persisted interleaved fields and replays them in fresh sessions', async () => {
+		const plugin = createPlugin() as any
+		plugin.settings.ai.providers['provider-1'].models['model-1'].interleaved = {
+			field: 'vendor_context',
+		}
+
+		generateAssistantTurn
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: '' }],
+					tool_calls: [
+						{
+							id: 'tool-1',
+							type: 'function',
+							function: {
+								name: 'missing_tool',
+								arguments: '{}',
+							},
+						},
+					],
+					interleaved: { vendor_context: 'persisted-snapshot' },
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Final after tool' }],
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Reload reply' }],
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+
+		const firstService = new ChatService(plugin as never)
+		await firstService.ensureSession()
+		await firstService.sendMessage('Use a tool')
+
+		const reloadedPlugin = createPlugin() as any
+		reloadedPlugin.settings.ai.providers['provider-1'].models[
+			'model-1'
+		].interleaved = { field: 'vendor_context' }
+		const reloadedService = new ChatService(reloadedPlugin as never)
+		await reloadedService.ensureSession()
+		await reloadedService.sendMessage('After reload')
+
+		const messagesAfterReload =
+			generateAssistantTurn.mock.calls[2][0].messages
+		const replayedAssistant = messagesAfterReload.find(
+			(message: any) =>
+				message.role === 'assistant' && message.interleaved !== undefined,
+		)
+		expect(replayedAssistant.interleaved).toEqual({
+			vendor_context: 'persisted-snapshot',
+		})
+	})
+
 	it('stops thinking runs and removes unmatched tool calls from the assistant message', async () => {
 		const response = deferredResult<{
 			message: {
@@ -434,6 +586,78 @@ describe('ChatService fragment workflows', () => {
 		expect(fragment.messages[1].message.content?.[0]).toEqual({
 			type: 'text',
 			text: 'Partial answer',
+		})
+	})
+
+	it('passes interleaved assistant fields through subagent tool-call loops', async () => {
+		const plugin = createPlugin() as any
+		plugin.settings.ai.providers['provider-1'].models['model-1'].interleaved = {
+			field: 'vendor_context',
+		}
+
+		generateAssistantTurn
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: '' }],
+					tool_calls: [
+						{
+							id: 'tool-1',
+							type: 'function',
+							function: {
+								name: 'missing_tool',
+								arguments: '{}',
+							},
+						},
+					],
+					interleaved: { vendor_context: 'subagent context snapshot' },
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+			.mockResolvedValueOnce({
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Subagent done' }],
+				},
+				meta: {
+					providerId: 'provider-1',
+					providerName: 'Provider',
+					modelName: 'model-a',
+				},
+			})
+
+		const service = new ChatService(plugin as never)
+		await service.ensureSession()
+		const session = getActiveSession(service)
+		const provider = plugin.settings.ai.providers['provider-1']
+		const task = {
+			id: 'task-1',
+			sessionId: session.id,
+			depth: 1,
+			maxDepth: 2,
+			status: 'running',
+			prompt: 'Do work',
+		}
+
+		const result = await (service as any).runBackgroundTaskLoop(
+			task,
+			session,
+			provider,
+			{ id: 'model-1' },
+		)
+
+		expect(result.status).toBe('completed')
+		const subagentMessages = generateAssistantTurn.mock.calls[1][0].messages
+		const replayedAssistant = subagentMessages.find(
+			(message: any) =>
+				message.role === 'assistant' && message.interleaved !== undefined,
+		)
+		expect(replayedAssistant.interleaved).toEqual({
+			vendor_context: 'subagent context snapshot',
 		})
 	})
 
