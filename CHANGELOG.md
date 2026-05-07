@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [1.2.2]
+## [1.2.2] - 2026-05-07
 
 - 重构同步机制：将手动与边栏触发统一由 `SyncExecutorService` 管理，并增加并发保护防止重复触发 (Refactor sync mechanism: funnel manual/ribbon triggers through `SyncExecutorService` and add single-flight guard)
 - 修复了无法选择和复制消息文本的问题 (#128) (Fix: allow selecting and copying message text (#128))
@@ -10,7 +10,7 @@
 - 重构路径访问逻辑：常规路径使用 Vault API，隐藏路径使用 Adapter API (Refactor: use Vault API for regular paths and Adapter API for hidden paths)
 
 
-## [1.2.1]
+## [1.2.1] - 2026-04-29
 
 - 修复未选择会话时的默认模型应用问题 | Fixed default model application for empty unselected sessions.
 - 修复对话模型显示名称记录问题，并确保任务运行使用模型 ID | Fixed chat model display name recording and ensured model IDs are used for task runs.
