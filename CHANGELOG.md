@@ -2,6 +2,14 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 重构同步机制：将手动与边栏触发统一由 `SyncExecutorService` 管理，并增加并发保护防止重复触发 (Refactor sync mechanism: funnel manual/ribbon triggers through `SyncExecutorService` and add single-flight guard)
+- 修复了无法选择和复制消息文本的问题 (#128) (Fix: allow selecting and copying message text (#128))
+- 在聊天服务及相关类型中增加对交错消息字段的支持 (Feat: add interleaved message field support in chat service and related types)
+- 重构路径访问逻辑：常规路径使用 Vault API，隐藏路径使用 Adapter API (Refactor: use Vault API for regular paths and Adapter API for hidden paths)
+
+
 ## [1.2.1]
 
 - 修复未选择会话时的默认模型应用问题 | Fixed default model application for empty unselected sessions.
