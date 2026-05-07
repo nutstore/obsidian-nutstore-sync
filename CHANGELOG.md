@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.2.2]
 
 - 重构同步机制：将手动与边栏触发统一由 `SyncExecutorService` 管理，并增加并发保护防止重复触发 (Refactor sync mechanism: funnel manual/ribbon triggers through `SyncExecutorService` and add single-flight guard)
 - 修复了无法选择和复制消息文本的问题 (#128) (Fix: allow selecting and copying message text (#128))
