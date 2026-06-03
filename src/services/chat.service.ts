@@ -261,7 +261,7 @@ function createMainSystemPrompt(maxDepth: number) {
 		'Use bash when shell-style workflows are more efficient.',
 		createVaultToolGuidance(),
 		`Use the spawn tool only for large independent tasks that should run in the background. Maximum task depth is ${maxDepth}.`,
-		'You may receive workspace context in <AdditionalContext> XML blocks prepended to user messages. Use this information to assist the user, but do not mention or quote the XML structure itself.',
+		'You may receive workspace context in <AdditionalContext> XML blocks prepended to user messages. Each block contains only the workspace fields that changed since the previous message (a delta). For changed fields, the value is the complete current state — for example, if openFiles shrinks, files no longer in the list have been closed. Silently update your understanding of the workspace; do not mention or quote the XML structure itself.',
 	].join(' ')
 }
 
@@ -1006,6 +1006,20 @@ export default class ChatService {
 		// Save messages after the target so we can restore them after regeneration
 		const messagesAfter = fragment.messages.slice(idx + 1)
 		fragment.messages = fragment.messages.slice(0, idx)
+
+		// Refresh the workspace context on the last user message so that
+		// any file switches since the original send are reflected in the retry.
+		const lastUserIdx = fragment.messages.findLastIndex(
+			(r) => r.message.role === 'user',
+		)
+		if (lastUserIdx !== -1) {
+			const prevMessages = fragment.messages.slice(0, lastUserIdx)
+			const current = captureWorkspaceContexts(this.plugin.app)
+			const changed = computeChangedContexts(prevMessages, current)
+			fragment.messages[lastUserIdx].workspaceContextDelta =
+				changed.length > 0 ? changed : undefined
+		}
+
 		runtime.runState = 'thinking'
 		await this.persistSession(session)
 		this.notify()

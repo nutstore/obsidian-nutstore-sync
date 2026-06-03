@@ -1,16 +1,38 @@
-import type { App } from 'obsidian'
+import type { App, WorkspaceLeaf } from 'obsidian'
 import { hash as hashObject } from 'ohash'
 
 import type { ChatMessageRecord, WorkspaceContextDelta } from './domain'
+
+type View = WorkspaceLeaf['view'] & {
+	file?: {
+		path: string
+	}
+	containerEl?: HTMLElement
+}
+
+function getConnectedFilePath(leaf: WorkspaceLeaf): string | null {
+	const view = leaf.view as unknown as View
+	if (
+		!view?.file?.path ||
+		!(
+			view.getViewType() in
+			['markdown', 'canvas', 'pdf', 'image', 'video', 'audio', 'bases']
+		) ||
+		!view.containerEl?.isConnected
+	) {
+		return null
+	}
+	return view.file.path
+}
 
 export function captureWorkspaceContexts(app: App): WorkspaceContextDelta[] {
 	const activeFile = app.workspace.getActiveFile()?.path ?? null
 
 	const openFilePaths = new Set<string>()
 	app.workspace.iterateAllLeaves((leaf) => {
-		const file = (leaf.view as { file?: { path: string } | null }).file
-		if (file?.path) {
-			openFilePaths.add(file.path)
+		const filePath = getConnectedFilePath(leaf)
+		if (filePath) {
+			openFilePaths.add(filePath)
 		}
 	})
 	const openFiles = Array.from(openFilePaths).sort()
