@@ -25,7 +25,7 @@ export default class AISettings extends BaseSettings {
 			.setName(i18n.t('settings.ai.providers.name'))
 			.setDesc(
 				i18n.t('settings.ai.providers.summary', {
-					count: listProviders(this.plugin.settings.ai.providers).length,
+					count: this.listUserManagedProviders().length,
 				}),
 			)
 			.addButton((button) =>
@@ -119,6 +119,13 @@ export default class AISettings extends BaseSettings {
 						await this.persist()
 					}),
 			)
+	}
+
+	private listUserManagedProviders() {
+		return listProviders(this.plugin.settings.ai.providers).filter(
+			(provider) =>
+				!this.plugin.nutstoreLlmGatewayService.isManagedProvider(provider),
+		)
 	}
 
 	private async persist(showNotice: boolean = true) {

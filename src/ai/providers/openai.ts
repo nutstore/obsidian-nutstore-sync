@@ -1,13 +1,18 @@
 import { createOpenAI } from '@ai-sdk/openai'
-import { simulateStreamingMiddleware, wrapLanguageModel } from 'ai'
-import { createInterleavedMessageFieldFetch } from '~/ai/interleaved-message-field'
-import { obsidianFetch } from '~/ai/transport/obsidian-fetch'
+import { wrapLanguageModel } from 'ai'
+import { createProviderFetch } from '~/ai/transport/provider-fetch'
 import type { AIProviderConfig } from '~/ai/types'
+import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
 import i18n from '~/i18n'
 import type { AIProviderResolver } from './types'
 
 function assertProviderUsable(provider: AIProviderConfig) {
 	if (!provider.apiKey.trim()) {
+		if (provider.id === NUTSTORE_LLM_GATEWAY_PROVIDER_ID) {
+			throw new Error(
+				i18n.t('settings.ai.nutstoreLlmGateway.errors.authorizationRequired'),
+			)
+		}
 		throw new Error(i18n.t('chatbox.errors.apiKeyRequired'))
 	}
 }
@@ -20,17 +25,16 @@ export const openAIProviderResolver: AIProviderResolver = {
 			name: provider.name || 'openai',
 			baseURL: provider.api,
 			apiKey: provider.apiKey,
-			fetch: createInterleavedMessageFieldFetch(
-				obsidianFetch,
-				context?.messages,
-				context?.interleavedField,
-			),
+			fetch: createProviderFetch(provider, {
+				messages: context?.messages,
+				interleavedField: context?.interleavedField,
+			}),
 		})
 
 		return {
 			model: wrapLanguageModel({
 				model: factory.chat(modelId),
-				middleware: [simulateStreamingMiddleware()],
+				middleware: [],
 			}),
 			providerName: provider.name || 'OpenAI',
 		}

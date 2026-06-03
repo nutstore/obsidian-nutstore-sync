@@ -77,6 +77,7 @@ export function createProviderConfig(
 		name: provider.name?.trim() || '',
 		doc: provider.doc?.trim() || '',
 		apiKey: provider.apiKey || '',
+		allowBrowserCors: provider.allowBrowserCors ?? false,
 		models: sanitizeModels(provider.models),
 	}
 }
@@ -166,16 +167,47 @@ export function getFirstModel(provider: AIProviderConfig | undefined) {
 
 let _presetProviders: AIProviderDefinitions | null = null
 
-export function getPresetProviders(): AIProviderDefinitions {
-	if (!_presetProviders) {
-		const parsed = aiProviderDefinitionsSchema.safeParse(modelsApiJson)
-		if (!parsed.success) {
-			throw new Error(
-				`Invalid preset AI providers: ${formatSchemaIssues(parsed.error)}`,
-			)
-		}
-		_presetProviders = parsed.data
+function parsePresetProviders(
+	source: unknown,
+): { success: true; data: AIProviderDefinitions } | { success: false } {
+	const parsed = aiProviderDefinitionsSchema.safeParse(source)
+	if (!parsed.success) {
+		return { success: false }
 	}
+	return { success: true, data: parsed.data }
+}
+
+export function sanitizePresetProviders(
+	source: unknown,
+): AIProviderDefinitions | undefined {
+	const parsed = parsePresetProviders(source)
+	return parsed.success ? parsed.data : undefined
+}
+
+export function setPresetProvidersSource(source: unknown): boolean {
+	const parsed = parsePresetProviders(source)
+	if (!parsed.success) {
+		return false
+	}
+	_presetProviders = parsed.data
+	return true
+}
+
+export function resetPresetProvidersSource() {
+	_presetProviders = null
+}
+
+export function getPresetProviders(): AIProviderDefinitions {
+	if (_presetProviders) {
+		return _presetProviders
+	}
+	const parsed = aiProviderDefinitionsSchema.safeParse(modelsApiJson)
+	if (!parsed.success) {
+		throw new Error(
+			`Invalid preset AI providers: ${formatSchemaIssues(parsed.error)}`,
+		)
+	}
+	_presetProviders = parsed.data
 	return _presetProviders
 }
 
@@ -185,9 +217,39 @@ export function listPresetProviders(): AIProviderDefinition[] {
 	)
 }
 
-export function findPresetModelById(modelId: string): AIModelConfig | undefined {
+function normalizeProviderApi(api?: string): string | undefined {
+	const trimmed = api?.trim()
+	if (!trimmed) return undefined
+	return trimmed.replace(/\/+$/, '')
+}
+
+export function findPresetProviderByApi(
+	api?: string,
+): AIProviderDefinition | undefined {
+	const normalizedApi = normalizeProviderApi(api)
+	if (!normalizedApi) return undefined
+
+	for (const provider of Object.values(getPresetProviders())) {
+		if (normalizeProviderApi(provider.api) === normalizedApi) {
+			return provider
+		}
+	}
+
+	return undefined
+}
+
+export function findPresetModelById(
+	modelId: string,
+	providerApi?: string,
+): AIModelConfig | undefined {
 	const targetId = modelId.trim()
 	if (!targetId) return undefined
+
+	const matchedProvider = findPresetProviderByApi(providerApi)
+	if (matchedProvider) {
+		const matched = matchedProvider.models[targetId]
+		if (matched) return createModelConfig(matched, targetId)
+	}
 
 	for (const provider of Object.values(getPresetProviders())) {
 		const matched = provider.models[targetId]
@@ -197,6 +259,17 @@ export function findPresetModelById(modelId: string): AIModelConfig | undefined 
 	return undefined
 }
 
+export function listMissingPresetModelsForProvider(
+	provider: AIProviderConfig,
+): AIModelConfig[] {
+	const matchedPreset = findPresetProviderByApi(provider.api)
+	if (!matchedPreset) return []
+
+	return Object.entries(matchedPreset.models)
+		.filter(([modelId]) => !provider.models[modelId])
+		.map(([modelId, model]) => createModelConfig(model, modelId))
+}
+
 export function createProviderFromPreset(
 	preset: AIProviderDefinition,
 	apiKey: string,
@@ -204,6 +277,7 @@ export function createProviderFromPreset(
 	return {
 		...preset,
 		apiKey,
+		allowBrowserCors: false,
 		models: Object.fromEntries(
 			Object.entries(preset.models).map(([modelId, model]) => [
 				modelId,

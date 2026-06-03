@@ -101,12 +101,11 @@ export type AIProviderDefinitions = z.infer<typeof aiProviderDefinitionsSchema>
 
 export const aiProviderConfigSchema = aiProviderDefinitionSchema.extend({
 	apiKey: z.string(),
+	allowBrowserCors: z.boolean().optional(),
 })
-export const aiProviderInputSchema = aiProviderConfigSchema
-	.partial()
-	.extend({
-		models: aiModelInputsSchema.optional(),
-	})
+export const aiProviderInputSchema = aiProviderConfigSchema.partial().extend({
+	models: aiModelInputsSchema.optional(),
+})
 export const aiProviderConfigsSchema = z.record(
 	z.string(),
 	aiProviderConfigSchema,

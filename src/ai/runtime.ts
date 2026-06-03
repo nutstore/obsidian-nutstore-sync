@@ -1,5 +1,5 @@
-import type { GenerateTextResult, ModelMessage } from 'ai'
-import { tool as aiTool, generateText, stepCountIs } from 'ai'
+import type { ModelMessage } from 'ai'
+import { streamText, tool as aiTool, stepCountIs } from 'ai'
 import { getInterleavedMessageField } from './interleaved-message-field'
 import { getProviderResolver } from './providers/registry'
 import {
@@ -24,11 +24,32 @@ export interface GenerateAssistantTurnResult {
 	meta: AIMessageMeta
 }
 
+export interface GenerateAssistantTurnCallbacks {
+	onTextDelta?: (delta: string) => void | Promise<void>
+}
+
 function toTextParts(text?: string | null): AIMessageContentPart[] | null {
 	if (!text) {
 		return null
 	}
 	return [{ type: 'text', text }]
+}
+
+function mergeAdjacentUserMessages(messages: AIMessage[]): AIMessage[] {
+	const merged: AIMessage[] = []
+	for (const message of messages) {
+		const previous = merged[merged.length - 1]
+		if (message.role === 'user' && previous?.role === 'user') {
+			previous.content = [...previous.content, ...message.content]
+			continue
+		}
+		merged.push(
+			message.role === 'user'
+				? { ...message, content: [...message.content] }
+				: message,
+		)
+	}
+	return merged
 }
 
 function toModelMessages(messages: AIMessage[]): ModelMessage[] {
@@ -123,8 +144,18 @@ function toAISDKTools(tools: AIToolDefinition[]) {
 }
 
 function toAssistantMessage(
-	result: GenerateTextResult<any, any>,
-	interleavedField?: string,
+	result: {
+		text: string
+		toolCalls: Array<{
+			toolCallId: string
+			toolName: string
+			input?: unknown
+		}>
+	},
+	interleaved?: {
+		field: string
+		value: unknown
+	},
 ): AIMessage {
 	const toolCalls = result.toolCalls.map((toolCall) => ({
 		id: toolCall.toolCallId,
@@ -147,15 +178,48 @@ function toAssistantMessage(
 					content: toTextParts(result.text) || [],
 				}
 
-	if (interleavedField && message.role === 'assistant') {
-		const body = result.response.body as any
-		const raw = body?.choices?.[0]?.message?.[interleavedField]
-		if (raw !== undefined) {
-			message.interleaved = { [interleavedField]: raw }
-		}
+	if (
+		interleaved &&
+		message.role === 'assistant' &&
+		interleaved.value !== undefined
+	) {
+		message.interleaved = { [interleaved.field]: interleaved.value }
 	}
 
 	return message
+}
+
+function getTextFromInterleavedRawValue(rawValue: unknown, field: string) {
+	if (!rawValue || typeof rawValue !== 'object') {
+		return undefined
+	}
+	const choices = (rawValue as { choices?: unknown }).choices
+	if (!Array.isArray(choices) || choices.length === 0) {
+		return undefined
+	}
+	const choice = choices[0]
+	if (!choice || typeof choice !== 'object') {
+		return undefined
+	}
+	const delta = (choice as { delta?: unknown }).delta
+	if (delta && typeof delta === 'object' && field in delta) {
+		return (delta as Record<string, unknown>)[field]
+	}
+	const message = (choice as { message?: unknown }).message
+	if (message && typeof message === 'object' && field in message) {
+		return (message as Record<string, unknown>)[field]
+	}
+	return undefined
+}
+
+function mergeInterleavedValue(current: unknown, next: unknown): unknown {
+	if (typeof next === 'undefined') {
+		return current
+	}
+	if (typeof current === 'string' && typeof next === 'string') {
+		return `${current}${next}`
+	}
+	return next
 }
 
 export function assertProviderUsable(provider: AIProviderConfig) {
@@ -164,6 +228,7 @@ export function assertProviderUsable(provider: AIProviderConfig) {
 
 export async function generateAssistantTurn(
 	request: GenerateAssistantTurnRequest,
+	callbacks?: GenerateAssistantTurnCallbacks,
 ): Promise<GenerateAssistantTurnResult> {
 	const resolver = getProviderResolver(request.provider)
 	const modelName =
@@ -172,33 +237,70 @@ export async function generateAssistantTurn(
 		request.provider,
 		request.model,
 	)
+	const messages = mergeAdjacentUserMessages(request.messages)
 	const { model, providerName } = resolver.createLanguageModel(
 		request.provider as never,
 		request.model,
-		{ messages: request.messages, interleavedField },
+		{ messages, interleavedField },
 	)
-	const result = await generateText({
+	let interleavedValue: unknown
+	let streamError: unknown
+	const result = streamText({
 		model,
-		messages: toModelMessages(request.messages),
+		messages: toModelMessages(messages),
 		tools: toAISDKTools(request.tools),
 		stopWhen: stepCountIs(1),
 		temperature: request.temperature,
 		maxOutputTokens: request.maxTokens,
-		experimental_include: {
-			responseBody: !!interleavedField,
+		onError: ({ error }) => {
+			streamError = error
+		},
+		onChunk: async ({ chunk }) => {
+			if (chunk.type === 'text-delta' && chunk.text) {
+				await callbacks?.onTextDelta?.(chunk.text)
+				return
+			}
+			if (chunk.type === 'raw' && interleavedField) {
+				const nextValue = getTextFromInterleavedRawValue(
+					chunk.rawValue,
+					interleavedField,
+				)
+				interleavedValue = mergeInterleavedValue(interleavedValue, nextValue)
+			}
 		},
 	})
+	await result.consumeStream()
+	if (streamError) {
+		throw streamError
+	}
+
+	const text = await result.text
+	const toolCalls = await result.toolCalls
+	const usage = await result.totalUsage
+
+	const message = toAssistantMessage(
+		{
+			text,
+			toolCalls,
+		},
+		interleavedField
+			? {
+					field: interleavedField,
+					value: interleavedValue,
+				}
+			: undefined,
+	)
 
 	return {
-		message: toAssistantMessage(result, interleavedField),
+		message,
 		meta: {
 			providerId: request.provider.id,
 			providerName: request.provider.name || providerName,
 			modelName,
 			usage: {
-				inputTokens: result.usage.inputTokens,
-				outputTokens: result.usage.outputTokens,
-				totalTokens: result.usage.totalTokens,
+				inputTokens: usage.inputTokens,
+				outputTokens: usage.outputTokens,
+				totalTokens: usage.totalTokens,
 			},
 		},
 	}

@@ -6,6 +6,7 @@ import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
+import ProviderCorsConfirmModal from './ProviderCorsConfirmModal'
 
 export default class ProviderEditorModal extends Modal {
 	private draft: AIProviderConfig
@@ -21,19 +22,26 @@ export default class ProviderEditorModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass('provider-editor-modal')
+		this.contentEl.addClass('provider-editor-modal__content')
 		this.render()
 	}
 
 	private render() {
 		const { contentEl } = this
 		contentEl.empty()
-		contentEl.createEl('h2', {
+		const bodyEl = contentEl.createDiv({ cls: 'provider-editor-modal__body' })
+		const footerEl = contentEl.createDiv({
+			cls: 'provider-editor-modal__footer',
+		})
+
+		bodyEl.createEl('h2', {
 			text: this.isNew
 				? i18n.t('settings.ai.modals.provider.createTitle')
 				: i18n.t('settings.ai.modals.provider.editTitle'),
 		})
 
-		new Setting(contentEl)
+		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.name'))
 			.setDesc(i18n.t('settings.ai.provider.desc'))
 			.then((s) => s.settingEl.addClass('setting-required'))
@@ -43,7 +51,7 @@ export default class ProviderEditorModal extends Modal {
 				}),
 			)
 
-		new Setting(contentEl)
+		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.baseUrl.name'))
 			.setDesc(i18n.t('settings.ai.provider.baseUrl.desc'))
 			.then((s) => s.settingEl.addClass('setting-required'))
@@ -56,7 +64,7 @@ export default class ProviderEditorModal extends Modal {
 					}),
 			)
 
-		new Setting(contentEl)
+		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.apiKey.name'))
 			.setDesc(i18n.t('settings.ai.provider.apiKey.desc'))
 			.then((s) => s.settingEl.addClass('setting-required'))
@@ -67,7 +75,31 @@ export default class ProviderEditorModal extends Modal {
 				text.inputEl.type = 'password'
 			})
 
-		const modelContainer = contentEl.createDiv()
+		new Setting(bodyEl)
+			.setName(i18n.t('settings.ai.provider.allowBrowserCors.name'))
+			.setDesc(i18n.t('settings.ai.provider.allowBrowserCors.desc'))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(!!this.draft.allowBrowserCors)
+					.onChange(async (value) => {
+						if (!value) {
+							this.draft.allowBrowserCors = false
+							return
+						}
+						const confirmed = await new ProviderCorsConfirmModal(
+							this.app,
+						).open()
+						if (!confirmed) {
+							this.render()
+							return
+						}
+						this.draft.allowBrowserCors = true
+					}),
+			)
+
+		const modelContainer = bodyEl.createDiv({
+			cls: 'provider-editor-modal__models',
+		})
 		new Setting(modelContainer)
 			.setName(i18n.t('settings.ai.models.name'))
 			.setDesc(i18n.t('settings.ai.models.desc'))
@@ -89,7 +121,10 @@ export default class ProviderEditorModal extends Modal {
 							return true
 						},
 						true,
-						{ findPresetOnSave: true },
+						{
+							findPresetOnSave: true,
+							presetProviderApi: this.draft.api,
+						},
 					).open()
 				}),
 			)
@@ -105,6 +140,17 @@ export default class ProviderEditorModal extends Modal {
 		for (const model of models) {
 			new Setting(modelContainer)
 				.setName(model.name || i18n.t('settings.ai.unnamedModel'))
+				.then((s) => {
+					const inputModalities = model.modalities?.input ?? ['text']
+					s.descEl.createDiv({ cls: 'modality-badge-row' }, (row) => {
+						for (const modality of inputModalities) {
+							row.createSpan({
+								cls: `modality-badge modality-badge-${modality}`,
+								text: modality,
+							})
+						}
+					})
+				})
 				.addButton((button) =>
 					button
 						.setButtonText(i18n.t('settings.ai.modals.model.edit'))
@@ -137,25 +183,23 @@ export default class ProviderEditorModal extends Modal {
 						button.buttonEl.removeClass('mod-warning')
 					}
 
-					button
-						.setIcon('trash')
-						.onClick(() => {
-							if (!confirmDelete) {
-								confirmDelete = true
-								button.buttonEl.empty()
-								button.buttonEl.createSpan({
-									text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
-								})
-								button.buttonEl.addClass('mod-warning')
-								return
-							}
-							this.deleteModel(model)
-						})
+					button.setIcon('trash').onClick(() => {
+						if (!confirmDelete) {
+							confirmDelete = true
+							button.buttonEl.empty()
+							button.buttonEl.createSpan({
+								text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
+							})
+							button.buttonEl.addClass('mod-warning')
+							return
+						}
+						this.deleteModel(model)
+					})
 					button.buttonEl.addEventListener('blur', resetButton)
 				})
 		}
 
-		new Setting(contentEl)
+		new Setting(footerEl)
 			.addButton((button) =>
 				button
 					.setButtonText(i18n.t('settings.filters.save'))
@@ -172,7 +216,11 @@ export default class ProviderEditorModal extends Modal {
 							this.close()
 						} catch (error) {
 							logger.error(error)
-							new Notice(i18n.t('settings.ai.errors.saveFailed'))
+							new Notice(
+								error instanceof Error
+									? error.message
+									: i18n.t('settings.ai.errors.saveFailed'),
+							)
 						}
 					}),
 			)
@@ -191,6 +239,8 @@ export default class ProviderEditorModal extends Modal {
 	}
 
 	onClose() {
+		this.modalEl.removeClass('provider-editor-modal')
+		this.contentEl.removeClass('provider-editor-modal__content')
 		this.contentEl.empty()
 	}
 }

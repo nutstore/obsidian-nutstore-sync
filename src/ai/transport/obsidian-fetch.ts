@@ -1,10 +1,6 @@
 import { getReasonPhrase } from 'http-status-codes'
+import type { FetchFunction } from '~/ai/interleaved-message-field'
 import requestUrl from '~/utils/request-url'
-
-type FetchFunction = (
-	input: RequestInfo | URL,
-	init?: RequestInit,
-) => Promise<Response>
 
 function toHeadersRecord(headers?: HeadersInit) {
 	if (!headers) {
