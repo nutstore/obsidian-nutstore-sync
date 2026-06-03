@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import GlobMatch, { needIncludeFromGlobRules } from './glob-match'
 import {
 	computeEffectiveFilterRules,
 	getConfigDirSystemFilterRules,
 	getConfigDirSystemTraversalRules,
 } from './config-dir-rules'
+import GlobMatch, { needIncludeFromGlobRules } from './glob-match'
 
 function createPluginMock(
 	mode: 'none' | 'bookmarks' | 'all',
@@ -45,6 +45,10 @@ describe('computeEffectiveFilterRules', () => {
 			{ expr: '.obsidian/plugins/**/.git', options: { caseSensitive: true } },
 			{
 				expr: '.obsidian/plugins/**/.pnpm-store',
+				options: { caseSensitive: true },
+			},
+			{
+				expr: '.obsidian/plugins/nutstore-sync/cache/ObsidianNutstoreSync.SyncCache.v1',
 				options: { caseSensitive: true },
 			},
 			{ expr: '.obsidian/workspace', options: { caseSensitive: true } },
@@ -215,9 +219,38 @@ describe('computeEffectiveFilterRules', () => {
 					expr: '.obsidian/plugins/**/node_modules/**',
 					options: { caseSensitive: true },
 				},
+				{
+					expr: '.obsidian/plugins/nutstore-sync/cache/ObsidianNutstoreSync.SyncCache.v1',
+					options: { caseSensitive: true },
+				},
+				{
+					expr: '.obsidian/plugins/nutstore-sync/cache/ObsidianNutstoreSync.SyncCache.v1/**',
+					options: { caseSensitive: true },
+				},
 			]),
 		)
 	})
+
+	it.each(['none', 'bookmarks', 'all'] as const)(
+		'excludes the automatic remote sync cache file in %s mode',
+		(mode) => {
+			const rules = computeEffectiveFilterRules(createPluginMock(mode))
+			const exclusions = rules.exclusionRules.map(
+				(rule) => new GlobMatch(rule.expr, rule.options),
+			)
+			const inclusions = rules.inclusionRules.map(
+				(rule) => new GlobMatch(rule.expr, rule.options),
+			)
+
+			expect(
+				needIncludeFromGlobRules(
+					'.obsidian/plugins/nutstore-sync/cache/ObsidianNutstoreSync.SyncCache.v1',
+					inclusions,
+					exclusions,
+				),
+			).toBe(false)
+		},
+	)
 
 	it('uses mode-derived rules as normal glob rules', () => {
 		const inclusion = [new GlobMatch('**/*.json', { caseSensitive: false })]

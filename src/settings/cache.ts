@@ -1,79 +1,26 @@
-import { Notice, Setting } from 'obsidian'
-import { join } from 'path-browserify'
+import { ButtonComponent, Notice, Setting } from 'obsidian'
+import type { Subscription } from 'rxjs'
 import CacheClearModal from '~/components/CacheClearModal'
-import CacheRestoreModal from '~/components/CacheRestoreModal'
-import CacheSaveModal from '~/components/CacheSaveModal'
-import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
+import { IN_DEV } from '~/consts'
+import { onGcProgress } from '~/events/gc-progress'
 import i18n from '~/i18n'
-import { TraverseWebDAVCache } from '~/storage'
-import { getDBKey } from '~/utils/get-db-key'
+import { blobStore } from '~/storage/blob'
 import logger from '~/utils/logger'
-import { stdRemotePath } from '~/utils/std-remote-path'
 import BaseSettings from './settings.base'
 
-export interface ExportedStorage {
-	exportedAt: string
-	traverseWebDAVCache?: TraverseWebDAVCache
-}
-
 export default class CacheSettings extends BaseSettings {
+	private gcUnlockWatcherActive = false
+	private gcWatcherGeneration = 0
+	private gcButton: ButtonComponent | undefined
+	private gcProgressSub: Subscription | undefined
+	private readonly blobGarbageCount = 5000
+	private readonly blobGarbageSizeBytes = 64 * 1024
+
 	async display() {
 		this.containerEl.empty()
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.cache.title'))
 			.setHeading()
-
-		// set remote cache directory
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.cache.remoteCacheDir.name'))
-			.setDesc(i18n.t('settings.cache.remoteCacheDir.desc'))
-			.addText((text) => {
-				text
-					.setPlaceholder(i18n.t('settings.cache.remoteCacheDir.placeholder'))
-					.setValue(this.remoteCacheDir)
-					.onChange(async (value) => {
-						this.plugin.settings.remoteCacheDir = value
-						await this.plugin.saveSettings()
-					})
-				text.inputEl.addEventListener('blur', async () => {
-					this.plugin.settings.remoteCacheDir = this.remoteCacheDir
-					await this.plugin.saveSettings()
-					this.display()
-				})
-			})
-			.addButton((button) => {
-				button.setIcon('folder').onClick(() => {
-					// 检查账号配置
-					if (!this.plugin.isAccountConfigured()) {
-						new Notice(i18n.t('sync.error.accountNotConfigured'))
-						return
-					}
-					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
-						this.plugin.settings.remoteCacheDir = path
-						await this.plugin.saveSettings()
-						this.display()
-					}).open()
-				})
-			})
-
-		// Save and restore cache
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.cache.dumpName'))
-			.setDesc(i18n.t('settings.cache.dumpDesc'))
-			.addButton((button) => {
-				button.setButtonText(i18n.t('settings.cache.dump')).onClick(() => {
-					new CacheSaveModal(this.plugin, this.remoteCacheDir, () =>
-						this.display(),
-					).open()
-				})
-			})
-			.addButton((button) => {
-				button.setButtonText(i18n.t('settings.cache.restore')).onClick(() => {
-					new CacheRestoreModal(this.plugin, this.remoteCacheDir, () =>
-						this.display(),
-					).open()
-				})
-			})
 
 		// clear
 		new Setting(this.containerEl)
@@ -96,32 +43,144 @@ export default class CacheSettings extends BaseSettings {
 								}
 							} catch (error) {
 								logger.error('Error clearing cache:', error)
-								new Notice(`Error clearing cache: ${error.message}`)
+								const message =
+									error instanceof Error ? error.message : String(error)
+								new Notice(`Error clearing cache: ${message}`)
 							}
 						}).open()
 					})
 			})
-	}
 
-	get remoteCacheDir() {
-		return stdRemotePath(
-			this.plugin.settings.remoteCacheDir?.trim() ||
-				this.plugin.manifest.name.trim(),
-		)
-	}
+		// garbage collection
+		const gcRunning = this.plugin.gcService.isRunningNow()
+		this.watchGcUnlock(gcRunning)
 
-	get remoteCachePath() {
-		const filename = getDBKey(
-			this.app.vault.getName(),
-			this.plugin.settings.remoteDir,
-		)
-		return join(this.remoteCacheDir, filename + '.json')
-	}
-
-	async createRemoteCacheDir() {
-		const webdav = await this.plugin.webDAVService.createWebDAVClient()
-		return await webdav.createDirectory(this.remoteCacheDir, {
-			recursive: true,
+		this.gcProgressSub?.unsubscribe()
+		this.gcProgressSub = onGcProgress().subscribe(({ current, total }) => {
+			const pct = total === 0 ? 100 : Math.round((current / total) * 100)
+			this.gcButton?.setButtonText(`${pct}%`)
 		})
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.cache.gcName'))
+			.setDesc(i18n.t('settings.cache.gcDesc'))
+			.addButton((button) => {
+				this.gcButton = button
+				button.setButtonText(
+					gcRunning
+						? i18n.t('settings.cache.gcRunning')
+						: i18n.t('settings.cache.gc'),
+				)
+				if (gcRunning) {
+					button.setDisabled(true)
+				}
+				button.onClick(() => {
+					button.buttonEl.disabled = true
+					button.setButtonText(i18n.t('settings.cache.gcRunning'))
+					void (async () => {
+						try {
+							const result = await this.plugin.gcService.runBlobGc()
+							if (result.ok) {
+								new Notice(
+									i18n.t('settings.cache.gcCompleted', {
+										count: result.deletedCount,
+									}),
+								)
+							}
+						} catch (error) {
+							logger.error('Error running blob GC:', error)
+							new Notice(`Error: ${(error as Error).message}`)
+						} finally {
+							await this.display()
+						}
+					})()
+				})
+			})
+
+		if (IN_DEV) {
+			new Setting(this.containerEl)
+				.setName(i18n.t('settings.cache.generateBlobGarbageName'))
+				.setDesc(
+					i18n.t('settings.cache.generateBlobGarbageDesc', {
+						count: this.blobGarbageCount,
+						sizeKiB: this.blobGarbageSizeBytes / 1024,
+					}),
+				)
+				.addButton((button) => {
+					button
+						.setButtonText(i18n.t('settings.cache.generateBlobGarbage'))
+						.onClick(async () => {
+							button.setDisabled(true)
+							try {
+								new Notice(i18n.t('settings.cache.generateBlobGarbageRunning'))
+								const created = await this.generateBlobGarbage()
+								new Notice(
+									i18n.t('settings.cache.generateBlobGarbageDone', {
+										count: created,
+									}),
+								)
+							} catch (error) {
+								logger.error('Error generating blob garbage:', error)
+								new Notice(`Error: ${(error as Error).message}`)
+							} finally {
+								button.setDisabled(false)
+							}
+						})
+				})
+		}
+	}
+
+	hide() {
+		this.gcWatcherGeneration++
+		this.gcUnlockWatcherActive = false
+		this.gcProgressSub?.unsubscribe()
+		this.gcProgressSub = undefined
+		this.gcButton = undefined
+	}
+
+	private watchGcUnlock(gcRunning: boolean) {
+		if (!gcRunning) {
+			this.gcUnlockWatcherActive = false
+			return
+		}
+
+		if (this.gcUnlockWatcherActive) {
+			return
+		}
+
+		this.gcUnlockWatcherActive = true
+		const generation = this.gcWatcherGeneration
+		void this.plugin.gcService.waitUntilIdle().then(() => {
+			if (generation !== this.gcWatcherGeneration) {
+				return
+			}
+			this.gcUnlockWatcherActive = false
+			if (!document.contains(this.containerEl)) {
+				return
+			}
+			void this.display()
+		})
+	}
+
+	private async generateBlobGarbage() {
+		function createRandomBytes(size: number) {
+			const bytes = new Uint8Array(size)
+			if (globalThis.crypto?.getRandomValues) {
+				globalThis.crypto.getRandomValues(bytes)
+				return bytes
+			}
+			for (let i = 0; i < bytes.length; i++) {
+				bytes[i] = Math.floor(Math.random() * 256)
+			}
+			return bytes
+		}
+
+		let created = 0
+		for (let i = 0; i < this.blobGarbageCount; i++) {
+			const payload = createRandomBytes(this.blobGarbageSizeBytes)
+			await blobStore.store(payload.buffer)
+			created++
+		}
+		return created
 	}
 }

@@ -9,6 +9,8 @@ export default function (logs: any) {
 	} catch {
 		try {
 			return deepStringify(logs)
-		} catch {}
+		} catch {
+			//
+		}
 	}
 }

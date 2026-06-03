@@ -5,6 +5,7 @@ import FilenameErrorTask from '~/sync/tasks/filename-error.task'
 import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
 import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
 import SkippedTask from '~/sync/tasks/skipped.task'
+import { BaseTask } from '~/sync/tasks/task.interface'
 import getTaskName from '~/utils/get-task-name'
 import NutstorePlugin from '..'
 import {
@@ -22,21 +23,21 @@ import RemoveLocalTask from '../sync/tasks/remove-local.task'
 import RemoveRemoteTask from '../sync/tasks/remove-remote.task'
 
 export default class SyncProgressModal extends Modal {
-	private progressBar: HTMLDivElement
-	private progressText: HTMLDivElement
-	private progressStats: HTMLDivElement
-	private currentFile: HTMLDivElement
-	private filesList: HTMLDivElement
+	private progressBar!: HTMLDivElement
+	private progressText!: HTMLDivElement
+	private progressStats!: HTMLDivElement
+	private currentFile!: HTMLDivElement
+	private filesList!: HTMLDivElement
 	private syncCancelled = false
 	private cancelSubscription: Subscription
 	private updateMtimeSubscription: Subscription
-	private stopButtonComponent: ButtonComponent
-	private hideButtonComponent: ButtonComponent
+	private stopButtonComponent!: ButtonComponent
+	private hideButtonComponent!: ButtonComponent
 
-	private cacheProgressBar: HTMLDivElement
-	private cacheProgressText: HTMLDivElement
-	private cacheProgressStats: HTMLDivElement
-	private cacheCurrentOperation: HTMLDivElement
+	private cacheProgressBar!: HTMLDivElement
+	private cacheProgressText!: HTMLDivElement
+	private cacheProgressStats!: HTMLDivElement
+	private cacheCurrentOperation!: HTMLDivElement
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -93,72 +94,89 @@ export default class SyncProgressModal extends Modal {
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
 			this.currentFile.setText(i18n.t('sync.cancelled'))
 		} else {
-			if (progress.completed.length > 0) {
-				const lastFile = progress.completed.at(-1)
-				if (lastFile) {
-					this.currentFile.setText(
-						i18n.t('sync.currentFile', {
-							path: lastFile.localPath,
-						}),
-					)
-				}
+			if (progress.current) {
+				this.currentFile.setText(
+					i18n.t('sync.currentFile', {
+						path: progress.current.localPath,
+					}),
+				)
+			} else {
+				this.currentFile.setText('')
 			}
 		}
 
 		this.filesList.empty()
 
+		const isCurrentInFlight =
+			progress.current !== null &&
+			!progress.completed.some((c) => c.task === progress.current)
+		if (isCurrentInFlight) {
+			this.renderTaskRow(progress.current!, 'in-progress')
+		}
+
 		const recentFiles = progress.completed.slice().reverse()
 
-		recentFiles.forEach((file) => {
-			const item = this.filesList.createDiv({
-				cls: 'flex items-center p-1 rounded text-2.5 gap-2 hover:bg-[var(--background-secondary)]',
-			})
-
-			const icon = item.createSpan({ cls: 'text-[var(--text-muted)]' })
-
-			if (file instanceof CleanRecordTask) {
-				setIcon(icon, 'archive-x')
-			} else if (file instanceof ConflictResolveTask) {
-				setIcon(icon, 'git-merge')
-			} else if (file instanceof FilenameErrorTask) {
-				setIcon(icon, 'refresh-cw-off')
-			} else if (
-				file instanceof MkdirLocalTask ||
-				file instanceof MkdirRemoteTask ||
-				file instanceof MkdirsRemoteTask
-			) {
-				setIcon(icon, 'folder-plus')
-			} else if (file instanceof PullTask) {
-				setIcon(icon, 'arrow-down-narrow-wide')
-			} else if (file instanceof PushTask) {
-				setIcon(icon, 'arrow-up-narrow-wide')
-			} else if (
-				file instanceof RemoveLocalTask ||
-				file instanceof RemoveRemoteTask ||
-				file instanceof RemoveRemoteRecursivelyTask
-			) {
-				setIcon(icon, 'trash')
-			} else if (file instanceof SkippedTask) {
-				setIcon(icon, 'chevron-last')
-			} else {
-				setIcon(icon, 'arrow-left-right')
-			}
-
-			const typeLabel = item.createSpan({
-				cls: 'flex-none w-17 md:w-24 text-[var(--text-normal)] font-500',
-			})
-
-			typeLabel.setText(getTaskName(file))
-
-			const filePath = item.createSpan({
-				cls: 'flex-1 break-all',
-			})
-			filePath.setText(
-				i18n.t('sync.filePath', {
-					path: file.localPath,
-				}),
-			)
+		recentFiles.forEach(({ task, success }) => {
+			this.renderTaskRow(task, success ? 'success' : 'failed')
 		})
+	}
+
+	private renderTaskRow(
+		file: BaseTask,
+		status: 'in-progress' | 'success' | 'failed',
+	): void {
+		const iconCls =
+			status === 'in-progress'
+				? 'text-[var(--text-warning)]'
+				: status === 'failed'
+					? 'text-[var(--text-error)]'
+					: 'text-[var(--text-muted)]'
+		const labelCls =
+			status === 'failed'
+				? 'text-[var(--text-error)]'
+				: 'text-[var(--text-normal)]'
+
+		const item = this.filesList.createDiv({
+			cls: 'flex items-center p-1 rounded text-2.5 gap-2 hover:bg-[var(--background-secondary)]',
+		})
+
+		const icon = item.createSpan({ cls: iconCls })
+
+		if (file instanceof CleanRecordTask) {
+			setIcon(icon, 'archive-x')
+		} else if (file instanceof ConflictResolveTask) {
+			setIcon(icon, 'git-merge')
+		} else if (file instanceof FilenameErrorTask) {
+			setIcon(icon, 'refresh-cw-off')
+		} else if (
+			file instanceof MkdirLocalTask ||
+			file instanceof MkdirRemoteTask ||
+			file instanceof MkdirsRemoteTask
+		) {
+			setIcon(icon, 'folder-plus')
+		} else if (file instanceof PullTask) {
+			setIcon(icon, 'arrow-down-narrow-wide')
+		} else if (file instanceof PushTask) {
+			setIcon(icon, 'arrow-up-narrow-wide')
+		} else if (
+			file instanceof RemoveLocalTask ||
+			file instanceof RemoveRemoteTask ||
+			file instanceof RemoveRemoteRecursivelyTask
+		) {
+			setIcon(icon, 'trash')
+		} else if (file instanceof SkippedTask) {
+			setIcon(icon, 'chevron-last')
+		} else {
+			setIcon(icon, 'arrow-left-right')
+		}
+
+		const typeLabel = item.createSpan({
+			cls: `flex-none w-17 md:w-24 font-500 ${labelCls}`,
+		})
+		typeLabel.setText(getTaskName(file))
+
+		const filePath = item.createSpan({ cls: 'flex-1 break-all' })
+		filePath.setText(i18n.t('sync.filePath', { path: file.localPath }))
 	}
 
 	onOpen() {

@@ -6,7 +6,8 @@ import NutstorePlugin from '..'
 export default class LoggerService {
 	logs: any[] = []
 
-	constructor(private plugin: NutstorePlugin) {
+	constructor(plugin: NutstorePlugin) {
+		void plugin
 		if (IN_DEV) {
 			logger.addReporter({
 				log: (logObj) => {

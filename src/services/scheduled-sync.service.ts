@@ -9,9 +9,11 @@ export default class ScheduledSyncService {
 	private startupSyncTimer: number | null = null
 
 	constructor(
-		private plugin: NutstorePlugin,
+		plugin: NutstorePlugin,
 		private syncExecutor: SyncExecutorService,
-	) {}
+	) {
+		void plugin
+	}
 
 	async start() {
 		const settings = await useSettings()

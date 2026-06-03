@@ -24,7 +24,18 @@ const getDevice = () => {
 	return 'Unknown'
 }
 
-const USER_AGENT = `Obsidian (${getOS()}; ${getDevice()}; ObsidianNutstoreSync/${PLUGIN_VERSION})`
+const MOCK_USER_AGENT =
+	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+const NS_SYNC_USER_AGENT = `Obsidian (${getOS()}; ${getDevice()}; ObsidianNutstoreSync/${PLUGIN_VERSION})`
+
+function shouldAttachUserAgent(url: string) {
+	try {
+		const hostname = new URL(url).hostname
+		return hostname === 'jianguoyun.com' || hostname.endsWith('.jianguoyun.com')
+	} catch {
+		return false
+	}
+}
 
 class RequestUrlError extends Error {
 	constructor(public res: RequestUrlResponse) {
@@ -33,18 +44,29 @@ class RequestUrlError extends Error {
 }
 
 export default async function requestUrl(p: RequestUrlParam | string) {
+	const url = typeof p === 'string' ? p : p.url
+	const originalHeaders = typeof p === 'string' ? {} : p.headers || {}
+	const headers = shouldAttachUserAgent(url)
+		? {
+				...originalHeaders,
+				'User-Agent': MOCK_USER_AGENT,
+			}
+		: {
+				...originalHeaders,
+				'User-Agent': NS_SYNC_USER_AGENT,
+			}
+
 	const params: RequestUrlParam =
 		typeof p === 'string'
 			? {
-					url: p,
+					url,
 					throw: false,
+					headers,
 				}
 			: {
 					...p,
 					throw: false,
-					headers: {
-						...(p.headers || {}),
-					},
+					headers,
 				}
 
 	const res = await req(params)

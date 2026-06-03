@@ -1,5 +1,9 @@
 import type NutstorePlugin from '~/index'
 import type { GlobMatchOptions } from './glob-match'
+import {
+	REMOTE_SYNC_CACHE_DIR,
+	REMOTE_SYNC_CACHE_FILENAME,
+} from './sync-cache-file'
 
 export type ConfigDirSyncMode = 'none' | 'bookmarks' | 'all'
 
@@ -19,6 +23,8 @@ const CONFIG_DIR_SYSTEM_EXCLUSION_SUFFIXES = [
 	'plugins/**/node_modules',
 	'plugins/**/.git',
 	'plugins/**/.pnpm-store',
+	'plugins/nutstore-sync/data.local.json',
+	`${REMOTE_SYNC_CACHE_DIR}/${REMOTE_SYNC_CACHE_FILENAME}`,
 	'workspace',
 	'workspace.json',
 ] as const

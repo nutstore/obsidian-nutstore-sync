@@ -9,7 +9,7 @@ export class StatusService {
 	private updateInterval: number | null = null
 	private baseStatusText: string = ''
 
-	constructor(private plugin: NutstorePlugin) {
+	constructor(plugin: NutstorePlugin) {
 		this.syncStatusBar = plugin.addStatusBarItem()
 	}
 

@@ -28,10 +28,27 @@ export class Setting {
 			setButtonText(text: string): any
 			setWarning(): any
 			setCta(): any
+			setDisabled(disabled: boolean): any
+			buttonEl: {
+				classList: {
+					add(...classes: string[]): void
+				}
+				parentElement?: {
+					appendChild(child: unknown): void
+				}
+			}
 			onClick(handler: () => void): any
 		}) => void,
 	) {
 		const button = {
+			buttonEl: {
+				classList: {
+					add() {},
+				},
+				parentElement: {
+					appendChild() {},
+				},
+			},
 			setButtonText(_text: string) {
 				return button
 			},
@@ -39,6 +56,9 @@ export class Setting {
 				return button
 			},
 			setCta() {
+				return button
+			},
+			setDisabled(_disabled: boolean) {
 				return button
 			},
 			onClick(_handler: () => void) {
@@ -60,6 +80,15 @@ export class WorkspaceLeaf {}
 
 export const MarkdownRenderer = {
 	async render() {},
+}
+
+export const Platform = {
+	isAndroidApp: false,
+	isMobileApp: false,
+}
+
+export function requireApiVersion(_version: string) {
+	return true
 }
 
 export function normalizePath(path: string) {

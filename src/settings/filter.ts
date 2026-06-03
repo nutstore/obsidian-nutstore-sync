@@ -160,19 +160,20 @@ class ConfigDirSyncWarningModal extends Modal {
 	onOpen() {
 		const { contentEl } = this
 		const warningKeys = [
-			'settings.configDirSync.warnSyncs',
-			'settings.configDirSync.warnExcludes',
-			'settings.configDirSync.warnConflict',
-			'settings.configDirSync.warnRisk',
-		] as const
-		const t = (key: (typeof warningKeys)[number]) =>
-			i18n.t(key, { configDir: this.configDir })
-
+			i18n.t('settings.configDirSync.warnSyncs', { configDir: this.configDir }),
+			i18n.t('settings.configDirSync.warnExcludes', {
+				configDir: this.configDir,
+			}),
+			i18n.t('settings.configDirSync.warnConflict', {
+				configDir: this.configDir,
+			}),
+			i18n.t('settings.configDirSync.warnRisk', { configDir: this.configDir }),
+		]
 		contentEl.createEl('h2', {
 			text: i18n.t('settings.configDirSync.warnTitle'),
 		})
-		for (const key of warningKeys) {
-			contentEl.createEl('p', { text: t(key) })
+		for (const text of warningKeys) {
+			contentEl.createEl('p', { text: text })
 		}
 		new Setting(contentEl)
 			.addButton((btn) =>

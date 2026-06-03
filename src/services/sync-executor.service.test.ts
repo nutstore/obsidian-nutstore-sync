@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { startMock, nutstoreSyncCtor } = vi.hoisted(() => ({
+const { emitStopGcMock, startMock, nutstoreSyncCtor } = vi.hoisted(() => ({
+	emitStopGcMock: vi.fn(),
 	startMock: vi.fn(),
 	nutstoreSyncCtor: vi.fn(),
+}))
+
+vi.mock('~/events', () => ({
+	emitStopGc: emitStopGcMock,
 }))
 
 vi.mock('~/sync', () => ({
@@ -32,11 +37,16 @@ function createPlugin(): any {
 		webDAVService: {
 			createWebDAVClient: vi.fn(async () => ({ client: true })),
 		},
+		gcService: {
+			isRunningNow: vi.fn(() => false),
+			waitUntilIdle: vi.fn(async () => undefined),
+		},
 	}
 }
 
 describe('SyncExecutorService', () => {
 	beforeEach(() => {
+		emitStopGcMock.mockReset()
 		startMock.mockReset()
 		nutstoreSyncCtor.mockClear()
 	})
@@ -67,5 +77,41 @@ describe('SyncExecutorService', () => {
 
 		expect(nutstoreSyncCtor).not.toHaveBeenCalled()
 		expect(startMock).not.toHaveBeenCalled()
+	})
+
+	it('returns false when sync is already running', async () => {
+		const plugin = {
+			...createPlugin(),
+			isSyncing: true,
+		} as never
+		const service = new SyncExecutorService(plugin)
+
+		await expect(
+			service.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
+		).resolves.toBe(false)
+
+		expect(nutstoreSyncCtor).not.toHaveBeenCalled()
+		expect(startMock).not.toHaveBeenCalled()
+	})
+
+	it('stops gc and continues sync when gc is running', async () => {
+		startMock.mockResolvedValue(true)
+		const plugin: any = {
+			...createPlugin(),
+			gcService: {
+				isRunningNow: vi.fn(() => true),
+				waitUntilIdle: vi.fn(async () => undefined),
+			},
+		}
+		const service = new SyncExecutorService(plugin)
+
+		await expect(
+			service.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
+		).resolves.toBe(true)
+
+		expect(emitStopGcMock).toHaveBeenCalledTimes(1)
+		expect(plugin.gcService.waitUntilIdle).toHaveBeenCalledTimes(1)
+		expect(nutstoreSyncCtor).toHaveBeenCalledTimes(1)
+		expect(startMock).toHaveBeenCalledWith({ mode: SyncStartMode.AUTO_SYNC })
 	})
 })

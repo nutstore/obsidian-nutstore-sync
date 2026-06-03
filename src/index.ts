@@ -4,20 +4,25 @@ import 'core-js/stable'
 import './polyfill'
 import './webdav-patch'
 
+// @ts-ignore
 import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
-import { normalizePath, Notice, Plugin } from 'obsidian'
+import { Menu, normalizePath, Notice, Plugin } from 'obsidian'
 import { sanitizeDefaultSelections, sanitizeProviders } from './ai/config'
+import { createSelectedTextContextItem } from './chat/user-context'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
-import { emitSsoReceive } from './events/sso-receive'
 import i18n from './i18n'
 import ChatService from './services/chat.service'
 import CommandService from './services/command.service'
 import EventsService from './services/events.service'
+import GcService from './services/gc.service'
 import I18nService from './services/i18n.service'
 import LoggerService from './services/logger.service'
+import ModelsPresetService from './services/models-preset.service'
+import NutstoreLlmGatewayService from './services/nutstore-llm-gateway.service'
+import ProtocolService from './services/protocol.service'
 import { ProgressService } from './services/progress.service'
 import RealtimeSyncService from './services/realtime-sync.service'
 import ScheduledSyncService from './services/scheduled-sync.service'
@@ -25,14 +30,15 @@ import { StatusService } from './services/status.service'
 import SyncExecutorService from './services/sync-executor.service'
 import { WebDAVService } from './services/webdav.service'
 import {
+	DEFAULT_LOCAL_SETTINGS,
+	DEFAULT_SETTINGS,
+	NutstoreLocalSettings,
 	NutstoreSettings,
 	NutstoreSettingTab,
 	setPluginInstance,
-	SyncMode,
 } from './settings'
-import { ConflictStrategy } from './sync/tasks/conflict-resolve.task'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
-import { GlobMatchOptions } from './utils/glob-match'
+import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from './utils/download-chunk-size'
 import logger from './utils/logger'
 import { stdRemotePath } from './utils/std-remote-path'
 import ChatboxView, { CHATBOX_VIEW_TYPE } from './views/chatbox.view'
@@ -40,16 +46,21 @@ import ChatboxView, { CHATBOX_VIEW_TYPE } from './views/chatbox.view'
 export default class NutstorePlugin extends Plugin {
 	public isSyncing: boolean = false
 	public settings!: NutstoreSettings
+	public localSettings!: NutstoreLocalSettings
 
 	public commandService = new CommandService(this)
 	public eventsService = new EventsService(this)
 	public i18nService = new I18nService(this)
 	public loggerService = new LoggerService(this)
+	public modelsPresetService = new ModelsPresetService(this)
+	public nutstoreLlmGatewayService = new NutstoreLlmGatewayService(this)
+	public protocolService = new ProtocolService(this)
 	public progressService = new ProgressService(this)
 	public ribbonManager = new SyncRibbonManager(this)
 	public statusService = new StatusService(this)
 	public webDAVService = new WebDAVService(this)
 	public syncExecutorService = new SyncExecutorService(this)
+	public gcService = new GcService(this)
 	public chatService = new ChatService(this)
 	public realtimeSyncService = new RealtimeSyncService(
 		this,
@@ -62,20 +73,64 @@ export default class NutstorePlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings()
+		await this.loadLocalSettings()
+		this.modelsPresetService.initializeFromLocalSettings()
+		await this.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
 		await this.chatService.initialize()
 		this.addSettingTab(new NutstoreSettingTab(this.app, this))
 		this.registerView(CHATBOX_VIEW_TYPE, (leaf) => new ChatboxView(leaf, this))
+		this.registerEvent(
+			this.app.workspace.on('editor-menu', (menu: Menu, editor, view) => {
+				if (!editor.somethingSelected()) return
+				menu.addItem((item) => {
+					item
+						.setTitle(
+							i18n.language.startsWith('zh') ? '坚果云同步' : 'Nutstore Sync',
+						)
+						.setIcon('cloud')
+					item.setSubmenu()
+					const submenu = item.submenu
+					if (!submenu) return
+					submenu.addItem((subItem) => {
+						subItem
+							.setTitle(i18n.t('chatbox.addToContext'))
+							.setIcon('message-square-plus')
+							.onClick(async () => {
+								const sel = editor.listSelections()[0]
+								if (!sel) return
+								const file = (
+									view as {
+										file?: { path: string; basename: string } | null
+									}
+								).file
+								if (!file) return
+								this.chatService.addUserContext(
+									createSelectedTextContextItem({
+										type: 'selection',
+										filePath: file.path,
+										range: {
+											from: { line: sel.anchor.line, ch: sel.anchor.ch },
+											to: { line: sel.head.line, ch: sel.head.ch },
+										},
+										selectedText: editor.getSelection(),
+									}),
+								)
+								const existingLeaf =
+									this.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
+								const leaf =
+									existingLeaf || this.app.workspace.getRightLeaf(false)
+								if (!leaf) return
+								await leaf.setViewState({
+									type: CHATBOX_VIEW_TYPE,
+									active: true,
+								})
+								this.app.workspace.revealLeaf(leaf)
+							})
+					})
+				})
+			}),
+		)
 
-		this.registerObsidianProtocolHandler('nutstore-sync/sso', async (data) => {
-			if (data?.s) {
-				this.settings.oauthResponseText = data.s
-				await this.saveSettings()
-				new Notice(i18n.t('settings.login.success'), 5000)
-			}
-			emitSsoReceive({
-				token: data?.s,
-			})
-		})
 		setPluginInstance(this)
 		await this.chatService.handleSettingsChanged()
 
@@ -87,6 +142,7 @@ export default class NutstorePlugin extends Plugin {
 		setPluginInstance(null)
 		emitCancelSync()
 		this.scheduledSyncService.unload()
+		this.nutstoreLlmGatewayService.unload()
 		this.progressService.unload()
 		this.eventsService.unload()
 		this.realtimeSyncService.unload()
@@ -94,65 +150,12 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		function createGlobMathOptions(expr: string) {
-			return {
-				expr,
-				options: {
-					caseSensitive: false,
-				},
-			} satisfies GlobMatchOptions
-		}
-		const exclusionRules = [
-			'**/.git',
-			'**/.github',
-			'**/.gitlab',
-			'**/.svn',
-			'**/node_modules',
-			'**/.DS_Store',
-			'**/__MACOSX',
-			'**/desktop.ini',
-			'**/Thumbs.db',
-			'**/.trash',
-			'**/~$*.doc',
-			'**/~$*.docx',
-			'**/~$*.ppt',
-			'**/~$*.pptx',
-			'**/~$*.xls',
-			'**/~$*.xlsx',
-		].map(createGlobMathOptions)
-		const DEFAULT_SETTINGS: NutstoreSettings = {
-			account: '',
-			credential: '',
-			remoteDir: '',
-			remoteCacheDir: '',
-			useGitStyle: false,
-			conflictStrategy: ConflictStrategy.DiffMatchPatch,
-			oauthResponseText: '',
-			loginMode: 'sso',
-			confirmBeforeSync: true,
-			confirmBeforeDeleteInAutoSync: true,
-			syncMode: SyncMode.LOOSE,
-			filterRules: {
-				exclusionRules,
-				inclusionRules: [],
-			},
-			skipLargeFiles: {
-				maxSize: '30 MB',
-			},
-			realtimeSync: false,
-			startupSyncDelaySeconds: 0,
-			autoSyncIntervalSeconds: 300,
-			language: undefined,
-			ai: {
-				providers: {},
-				defaultModel: undefined,
-				yolo: false,
-			},
-			configDirSyncMode: 'none',
-		}
-
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
+		this.settings.mobileAppDownloadFileChunkSize ||=
+			(this.settings as { downloadChunkSize?: string }).downloadChunkSize ||
+			DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE
 		this.settings.ai ??= { providers: {}, defaultModel: undefined, yolo: false }
+		this.settings.ai.nutstoreLlmGateway ??= {}
 		if (Array.isArray(this.settings.ai.providers)) {
 			this.settings.ai.providers = {}
 		}
@@ -186,6 +189,33 @@ export default class NutstorePlugin extends Plugin {
 		await this.chatService.handleSettingsChanged()
 	}
 
+	async loadLocalSettings() {
+		const path = normalizePath(`${this.manifest.dir}/data.local.json`)
+		if (!(await this.app.vault.adapter.exists(path))) {
+			this.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
+			return
+		}
+		try {
+			const raw = await this.app.vault.adapter.read(path)
+			this.localSettings = Object.assign(
+				{},
+				DEFAULT_LOCAL_SETTINGS,
+				JSON.parse(raw),
+			)
+			this.localSettings.ai ??= {}
+		} catch (_e) {
+			this.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
+		}
+	}
+
+	async saveLocalSettings() {
+		const path = normalizePath(`${this.manifest.dir}/data.local.json`)
+		await this.app.vault.adapter.write(
+			path,
+			JSON.stringify(this.localSettings, null, 2),
+		)
+	}
+
 	toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
 		this.ribbonManager.update()
@@ -198,7 +228,12 @@ export default class NutstorePlugin extends Plugin {
 	async getToken() {
 		let token
 		if (this.settings.loginMode === 'sso') {
-			const oauth = await this.getDecryptedOAuthInfo()
+			let oauth
+			try {
+				oauth = await this.getDecryptedOAuthInfo()
+			} catch {
+				throw new Error(i18n.t('sync.error.ssoTokenInvalid'))
+			}
 			token = `${oauth.username}:${oauth.access_token}`
 		} else {
 			token = `${this.settings.account}:${this.settings.credential}`

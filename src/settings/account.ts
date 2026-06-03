@@ -23,8 +23,9 @@ export default class AccountSettings extends BaseSettings {
 					.addOption('manual', i18n.t('settings.loginMode.manual'))
 					.addOption('sso', i18n.t('settings.loginMode.sso'))
 					.setValue(this.plugin.settings.loginMode)
-					.onChange(async (value: 'manual' | 'sso') => {
-						this.plugin.settings.loginMode = value
+					.onChange(async (value) => {
+						this.plugin.settings.loginMode =
+							value === 'manual' ? 'manual' : 'sso'
 						await this.plugin.saveSettings()
 						this.display()
 					}),

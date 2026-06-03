@@ -11,7 +11,7 @@ import PushTask from '~/sync/tasks/push.task'
 import RemoveLocalTask from '~/sync/tasks/remove-local.task'
 import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
 import RemoveRemoteTask from '~/sync/tasks/remove-remote.task'
-import SkippedTask from '~/sync/tasks/skipped.task'
+import SkippedTask, { SkipReason } from '~/sync/tasks/skipped.task'
 import { BaseTask } from '~/sync/tasks/task.interface'
 
 export default function getTaskName(task: BaseTask) {
@@ -52,7 +52,15 @@ export default function getTaskName(task: BaseTask) {
 		return i18n.t('sync.fileOp.removeRemoteRecursively')
 	}
 	if (task instanceof SkippedTask) {
-		const reasonText = i18n.t(`sync.skipReason.${task.options.reason}`)
+		const reasonText = (() => {
+			if (task.options.reason === SkipReason.FileTooLarge) {
+				return i18n.t('sync.skipReason.file-too-large')
+			} else if (
+				task.options.reason === SkipReason.FolderContainsIgnoredItems
+			) {
+				return i18n.t('sync.skipReason.folder-contains-ignored-items')
+			}
+		})()
 		return `${i18n.t('sync.fileOp.skip')}: ${reasonText}`
 	}
 	return i18n.t('sync.fileOp.sync')
