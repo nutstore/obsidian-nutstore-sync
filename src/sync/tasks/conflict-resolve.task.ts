@@ -1,25 +1,21 @@
-import { isEqual, noop } from 'lodash-es'
+import { isEqual } from 'lodash-es'
 import { BufferLike } from 'webdav'
 import i18n from '~/i18n'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
 import { blobStore } from '~/storage/blob'
 import { isMergeablePath } from '~/sync/utils/is-mergeable-path'
+import { downloadRemoteFile } from '~/utils/chunked-download'
 import {
 	existsLocalPath,
 	readLocalBinary,
-	writeLocalBinary,
 	writeLocalText,
 } from '~/utils/local-vault-io'
 import logger from '~/utils/logger'
 import { mergeDigIn } from '~/utils/merge-dig-in'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
-import {
-	LatestTimestampResolution,
-	resolveByIntelligentMerge,
-	resolveByLatestTimestamp,
-} from '../core/merge-utils'
+import { resolveByIntelligentMerge } from '../core/merge-utils'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export enum ConflictStrategy {
@@ -27,6 +23,8 @@ export enum ConflictStrategy {
 	LatestTimeStamp = 'latest-timestamp',
 	Skip = 'skip',
 	DiffMatchPatchOrSkip = 'diff-match-patch-or-skip',
+	LocalPriority = 'local-priority',
+	ServerPriority = 'server-priority',
 }
 
 export default class ConflictResolveTask extends BaseTask {
@@ -37,6 +35,7 @@ export default class ConflictResolveTask extends BaseTask {
 			remoteStat?: StatModel
 			localStat?: StatModel
 			useGitStyle: boolean
+			mobileAppDownloadFileChunkSize?: string
 		},
 	) {
 		super(options)
@@ -79,6 +78,10 @@ export default class ConflictResolveTask extends BaseTask {
 					return { success: true, skipRecord: true } as const
 				case ConflictStrategy.DiffMatchPatchOrSkip:
 					return await this.execIntelligentMergeOrSkip()
+				case ConflictStrategy.LocalPriority:
+					return await this.execLocalPriority()
+				case ConflictStrategy.ServerPriority:
+					return await this.execServerPriority(remote)
 			}
 		} catch (e) {
 			logger.error(this, e)
@@ -95,6 +98,10 @@ export default class ConflictResolveTask extends BaseTask {
 			// so mtime is guaranteed to exist
 			const localMtime = local.mtime!
 			const remoteMtime = remote.mtime!
+			if (remote.isDir) {
+				throw new Error('Remote path is a directory: ' + this.remotePath)
+			}
+			const remoteSize = remote.size
 
 			if (remoteMtime === localMtime) {
 				return { success: true } as const
@@ -110,40 +117,67 @@ export default class ConflictResolveTask extends BaseTask {
 					),
 				}
 			}
-			const localContent = await readLocalBinary(this.vault, this.localPath)
-			const remoteContent = (await this.webdav.getFileContents(
-				this.remotePath,
-				{
-					details: false,
-					format: 'binary',
-				},
-			)) as BufferLike
-
-			const result = resolveByLatestTimestamp({
-				localMtime,
-				remoteMtime,
-				localContent,
-				remoteContent,
-			})
-
-			switch (result.status) {
-				case LatestTimestampResolution.UseRemote:
-					const arrayBuffer =
-						result.content instanceof ArrayBuffer
-							? result.content
-							: new Uint8Array(result.content).buffer
-					await writeLocalBinary(this.vault, this.localPath, arrayBuffer)
-					break
-				case LatestTimestampResolution.UseLocal:
-					await this.webdav.putFileContents(this.remotePath, result.content, {
-						overwrite: true,
-					})
-					break
-				case LatestTimestampResolution.NoChange:
-					noop()
-					break
+			if (remoteMtime > localMtime) {
+				await downloadRemoteFile({
+					vault: this.vault,
+					webdav: this.webdav,
+					remotePath: this.remotePath,
+					localPath: this.localPath,
+					remoteSize,
+					mobileAppDownloadFileChunkSize:
+						this.options.mobileAppDownloadFileChunkSize,
+				})
+			} else {
+				const localContent = await readLocalBinary(this.vault, this.localPath)
+				await this.webdav.putFileContents(this.remotePath, localContent, {
+					overwrite: true,
+				})
 			}
 
+			return { success: true } as const
+		} catch (e) {
+			logger.error(this, e)
+			return { success: false, error: toTaskError(e, this) }
+		}
+	}
+
+	async execLocalPriority() {
+		try {
+			const exists = await existsLocalPath(this.vault, this.localPath)
+			if (!exists) {
+				return {
+					success: false,
+					error: toTaskError(
+						new Error('cannot find file in local fs: ' + this.localPath),
+						this,
+					),
+				}
+			}
+			const localContent = await readLocalBinary(this.vault, this.localPath)
+			await this.webdav.putFileContents(this.remotePath, localContent, {
+				overwrite: true,
+			})
+			return { success: true } as const
+		} catch (e) {
+			logger.error(this, e)
+			return { success: false, error: toTaskError(e, this) }
+		}
+	}
+
+	async execServerPriority(remote: StatModel) {
+		try {
+			if (remote.isDir) {
+				throw new Error('Remote path is a directory: ' + this.remotePath)
+			}
+			await downloadRemoteFile({
+				vault: this.vault,
+				webdav: this.webdav,
+				remotePath: this.remotePath,
+				localPath: this.localPath,
+				remoteSize: remote.size,
+				mobileAppDownloadFileChunkSize:
+					this.options.mobileAppDownloadFileChunkSize,
+			})
 			return { success: true } as const
 		} catch (e) {
 			logger.error(this, e)

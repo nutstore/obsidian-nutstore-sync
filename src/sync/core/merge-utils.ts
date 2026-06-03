@@ -119,7 +119,10 @@ export async function resolveByIntelligentMerge(
 
 	const diffs = dmp.diff_main(baseContentText, remoteContentText)
 	const patches = dmp.patch_make(baseContentText, diffs)
-	let [mergedDmpText, solveResult] = dmp.patch_apply(patches, localContentText)
+	const [mergedDmpText, solveResult] = dmp.patch_apply(
+		patches,
+		localContentText,
+	)
 
 	if (solveResult.includes(false)) {
 		return { success: false }

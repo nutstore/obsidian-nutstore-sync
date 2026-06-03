@@ -1,4 +1,9 @@
 import { NutstoreSync, SyncStartMode } from '~/sync'
+import { Notice } from 'obsidian'
+import { emitStopGc, emitSyncError } from '~/events'
+import i18n from '~/i18n'
+import type { SyncStartResult } from '~/sync'
+import logger from '~/utils/logger'
 import waitUntil from '~/utils/wait-until'
 import type NutstorePlugin from '..'
 
@@ -11,15 +16,30 @@ export default class SyncExecutorService {
 
 	constructor(private plugin: NutstorePlugin) {}
 
+	isRunning() {
+		return this.inFlight || this.plugin.isSyncing
+	}
+
 	async executeSync(options: SyncOptions) {
-		if (this.inFlight || this.plugin.isSyncing) {
+		if (this.isRunning()) {
+			new Notice(i18n.t('sync.blockedBySync'))
 			return false
 		}
+
 		this.inFlight = true
 
+		let result: SyncStartResult | undefined
 		try {
-			// 检查账号配置，未配置时静默返回（自动同步场景）
+			if (this.plugin.gcService.isRunningNow()) {
+				if (options.mode === SyncStartMode.MANUAL_SYNC) {
+					new Notice(i18n.t('sync.stoppingGcForSync'))
+				}
+				emitStopGc()
+				await this.plugin.gcService.waitUntilIdle()
+			}
+
 			if (!this.plugin.isAccountConfigured()) {
+				new Notice(i18n.t('sync.error.accountNotConfigured'))
 				return false
 			}
 
@@ -32,11 +52,22 @@ export default class SyncExecutorService {
 				webdav: await this.plugin.webDAVService.createWebDAVClient(),
 			})
 
-			return await sync.start({
+			result = await sync.start({
 				mode: options.mode,
 			})
+
+			return result.ranTasks
+		} catch (error) {
+			emitSyncError(error as Error)
+			logger.error('Sync error:', error)
+			return false
 		} finally {
 			this.inFlight = false
+			if (result?.ended) {
+				await this.plugin.gcService.runBlobGc().catch((error) => {
+					logger.error('Error running auto GC after sync end:', error)
+				})
+			}
 		}
 	}
 }

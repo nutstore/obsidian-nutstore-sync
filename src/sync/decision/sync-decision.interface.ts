@@ -7,6 +7,7 @@ import { BaseTask } from '../tasks/task.interface'
 
 export interface SyncDecisionSettings {
 	skipLargeFiles: { maxSize: string }
+	mobileAppDownloadFileChunkSize: string
 	conflictStrategy: ConflictStrategy
 	useGitStyle: boolean
 	syncMode: SyncMode
@@ -31,10 +32,12 @@ export interface ConflictTaskOptions extends TaskOptions {
 	localStat: StatModel
 	remoteStat: StatModel
 	useGitStyle: boolean
+	mobileAppDownloadFileChunkSize?: string
 }
 
 export interface PullTaskOptions extends TaskOptions {
 	remoteSize: number
+	mobileAppDownloadFileChunkSize?: string
 }
 
 export type SkippedTaskOptions = TaskOptions &

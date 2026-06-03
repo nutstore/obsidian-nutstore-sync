@@ -5,6 +5,7 @@ import { isSameTime } from '~/utils/is-same-time'
 import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
@@ -12,13 +13,16 @@ import {
 	getIgnoredPathsInFolder,
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
-import { hasFolderContentChanged } from './has-folder-content-changed'
+import BaseSyncDecider from './base.decider'
 import { SyncDecisionInput } from './sync-decision.interface'
 
-/**
- * Files under configDir (.obsidian) must not be text-merged — they are JSON,
- * binary JS, or other non-markdown formats. Always use latest-timestamp for them.
- */
+export default class BidirectionalSyncDecider extends BaseSyncDecider {
+	async decide(): Promise<BaseTask[]> {
+		const input = await this.buildDecisionInput()
+		return bidirectionalDecider(input)
+	}
+}
+
 function pickConflictStrategy(
 	path: string,
 	configDir: string,
@@ -30,7 +34,7 @@ function pickConflictStrategy(
 	return userStrategy
 }
 
-export async function twoWayDecider(
+export async function bidirectionalDecider(
 	input: SyncDecisionInput,
 ): Promise<BaseTask[]> {
 	const {
@@ -50,7 +54,6 @@ export async function twoWayDecider(
 		maxFileSize = bytesParse(maxFileSizeStr, { mode: 'jedec' }) ?? Infinity
 	}
 
-	// Filter out ignored files and extract StatModel from FsWalkResult
 	const localStatsFiltered = localStats
 		.filter((item) => !item.ignored)
 		.map((item) => item.stat)
@@ -159,6 +162,8 @@ export async function twoWayDecider(
 										localStat: local,
 										remoteStat: remote,
 										useGitStyle: settings.useGitStyle,
+										mobileAppDownloadFileChunkSize:
+											settings.mobileAppDownloadFileChunkSize,
 									}),
 								)
 							}
@@ -176,7 +181,7 @@ export async function twoWayDecider(
 									localExists: !!local,
 								},
 							})
-							if (remote.size > maxFileSize) {
+							if (remote.size > maxFileSize || local.size > maxFileSize) {
 								tasks.push(
 									taskFactory.createSkippedTask({
 										...options,
@@ -192,6 +197,8 @@ export async function twoWayDecider(
 								taskFactory.createPullTask({
 									...options,
 									remoteSize: remote.size,
+									mobileAppDownloadFileChunkSize:
+										settings.mobileAppDownloadFileChunkSize,
 								}),
 							)
 							continue
@@ -209,7 +216,7 @@ export async function twoWayDecider(
 									localExists: !!local,
 								},
 							})
-							if (local.size > maxFileSize) {
+							if (local.size > maxFileSize || remote.size > maxFileSize) {
 								tasks.push(
 									taskFactory.createSkippedTask({
 										...options,
@@ -257,6 +264,8 @@ export async function twoWayDecider(
 							taskFactory.createPullTask({
 								...options,
 								remoteSize: remote.size,
+								mobileAppDownloadFileChunkSize:
+									settings.mobileAppDownloadFileChunkSize,
 							}),
 						)
 						continue
@@ -375,6 +384,8 @@ export async function twoWayDecider(
 								localStat: local,
 								remoteStat: remote,
 								useGitStyle: settings.useGitStyle,
+								mobileAppDownloadFileChunkSize:
+									settings.mobileAppDownloadFileChunkSize,
 							}),
 						)
 					}
@@ -404,7 +415,12 @@ export async function twoWayDecider(
 						continue
 					}
 					tasks.push(
-						taskFactory.createPullTask({ ...options, remoteSize: remote.size }),
+						taskFactory.createPullTask({
+							...options,
+							remoteSize: remote.size,
+							mobileAppDownloadFileChunkSize:
+								settings.mobileAppDownloadFileChunkSize,
+						}),
 					)
 					continue
 				}
@@ -448,7 +464,6 @@ export async function twoWayDecider(
 		const local = localStatsMap.get(recordPath)
 		const remote = remoteStatsMap.get(recordPath)
 
-		// If both local and remote don't exist, but record exists, clean the record
 		if (!local && !remote) {
 			logger.debug({
 				reason: 'cleaning orphaned sync record (both local and remote deleted)',
@@ -496,7 +511,6 @@ export async function twoWayDecider(
 				continue
 			}
 		} else if (record) {
-			// Use sub-items check instead of mtime check
 			const remoteChanged = hasFolderContentChanged(
 				remote.path,
 				remoteStatsFiltered,
@@ -612,7 +626,6 @@ export async function twoWayDecider(
 			}
 		} else {
 			if (record) {
-				// Use sub-items check instead of mtime check
 				const localChanged = hasFolderContentChanged(
 					local.path,
 					localStatsFiltered,
@@ -731,7 +744,6 @@ export async function twoWayDecider(
 		}
 	}
 
-	// Sort folder tasks to ensure correct execution order
 	removeRemoteFolderTasks.sort(
 		(a, b) => b.remotePath.length - a.remotePath.length,
 	)
@@ -745,5 +757,6 @@ export async function twoWayDecider(
 	]
 
 	tasks.splice(0, 0, ...allFolderTasks)
+
 	return tasks
 }
