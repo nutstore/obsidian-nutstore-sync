@@ -1,0 +1,543 @@
+{
+	"errors": {
+		"filenameUnsupportedChars": "File {{path}} contains unsupported characters: {{chars}}"
+	},
+	"settings": {
+		"language": {
+			"name": "Language",
+			"desc": "Select interface language",
+			"auto": "Auto detect"
+		},
+		"account": {
+			"name": "Account",
+			"desc": "Enter your WebDAV account",
+			"placeholder": "Enter your account"
+		},
+		"credential": {
+			"name": "Credential",
+			"desc": "Enter your WebDAV credential",
+			"placeholder": "Enter your credential"
+		},
+		"checkConnection": {
+			"name": "Check connection",
+			"desc": "Click to check WebDAV connection",
+			"success": "WebDAV connection successful",
+			"failure": "WebDAV connection failed",
+			"successButton": "Connected ✓",
+			"failureButton": "Failed ×"
+		},
+		"remoteDir": {
+			"name": "Remote directory",
+			"desc": "Enter the remote directory",
+			"placeholder": "Enter the remote directory"
+		},
+		"login": {
+			"name": "Login",
+			"success": "Login successful",
+			"failure": "Login failed, please try again"
+		},
+		"loginMode": {
+			"name": "Login mode",
+			"manual": "Manual input",
+			"sso": "Single sign-on"
+		},
+		"ssoStatus": {
+			"loggedIn": "Logged in",
+			"notLoggedIn": "Not logged in",
+			"logout": "Logout",
+			"logoutSuccess": "Logged out successfully"
+		},
+		"useGitStyle": {
+			"name": "Use git-style conflict markers",
+			"desc": "Use <<<<<<< and >>>>>>> markers for conflicts instead of HTML tags"
+		},
+		"backupWarning": {
+			"name": "Backup warning",
+			"desc": "⚠️ Note: Sync process will modify or delete local files. Please backup important files before syncing."
+		},
+		"conflictStrategy": {
+			"name": "Conflict resolution strategy",
+			"desc": "Choose how to resolve file conflicts. \nNote: We recommend backing up important files before using auto-merge to prevent data loss.",
+			"diffMatchPatch": "Smart merge (recommended)",
+			"latestTimestamp": "Use latest version",
+			"skip": "Skip conflicts",
+			"diffMatchPatchOrSkip": "Smart merge, skip if unresolvable",
+			"localPriority": "Local priority (overwrite server)",
+			"serverPriority": "Server priority (overwrite local)"
+		},
+		"confirmBeforeSync": {
+			"name": "Confirm before sync",
+			"desc": "Show pending tasks and execute after confirmation"
+		},
+		"confirmBeforeDeleteInAutoSync": {
+			"name": "Confirm before deleting files during auto-sync",
+			"desc": "Show a confirmation dialog when local files are about to be deleted during auto-sync, allowing you to choose to delete or re-upload them"
+		},
+		"realtimeSync": {
+			"name": "Real-time sync",
+			"desc": "Automatically sync changes as soon as files are modified"
+		},
+		"syncMode": {
+			"name": "Sync mode",
+			"desc": "Choose between strict or loose sync mode. Loose mode is recommended for users with many files for faster syncing. In loose mode, files with the same name and equal size that have no sync record will be ignored.",
+			"strict": "Strict",
+			"loose": "Loose"
+		},
+		"syncPolicy": {
+			"name": "Sync policy",
+			"desc": "Controls how data is reconciled between your device and the cloud. Overwrite modes delete extra files on the other side — use with care.",
+			"bidirectional": "Two-way sync",
+			"localMirror": "Overwrite cloud with local",
+			"remoteMirror": "Overwrite local with cloud",
+			"modal": {
+				"title": "Confirm sync policy",
+				"bidirectionalDesc": "Local and cloud sync in both directions — additions and deletions on either side are applied to the other.\nIf the same file is edited on both sides, conflicts are resolved by your configured strategy.",
+				"localMirrorDesc": "Your local vault is the master. The cloud is fully overwritten to match local.\nFiles on the cloud that do not exist locally will be deleted.\nBest for using the cloud as a backup of your local vault.",
+				"remoteMirrorDesc": "The cloud is the master. Your local vault is fully overwritten to match the cloud.\nFiles stored locally that do not exist on the cloud will be deleted.\nBest for read-only devices or keeping multiple devices in lockstep with the cloud.",
+				"confirm": "Confirm",
+				"cancel": "Cancel"
+			}
+		},
+		"startupSyncDelay": {
+			"name": "Auto-sync on startup",
+			"desc": "Set the number of seconds after startup to automatically perform a sync. Set to 0 to disable auto-sync on startup.",
+			"placeholder": "Enter seconds (e.g., 5, 0 to disable)",
+			"invalidValue": "Invalid value, reset to 0",
+			"exceedsMax": "Value exceeds maximum limit of {{max}} seconds (1 day), automatically adjusted"
+		},
+		"autoSyncInterval": {
+			"name": "Auto-sync interval",
+			"desc": "Set the interval for automatic background synchronization (in minutes). Set to 0 to disable automatic sync.",
+			"placeholder": "Enter minutes (e.g., 5, 0 to disable)",
+			"invalidValue": "Invalid value, reset to 0",
+			"exceedsMax": "Value exceeds maximum limit of {{max}} minutes (1 day), automatically adjusted"
+		},
+		"sections": {
+			"account": "Account",
+			"common": "General",
+			"filters": "Filter rules",
+			"ai": "AI"
+		},
+		"ai": {
+			"saved": "AI settings saved",
+			"none": "Not set",
+			"unnamedProvider": "Unnamed provider",
+			"unnamedModel": "Unnamed model",
+			"defaultProvider": {
+				"name": "Default provider",
+				"desc": "Optional provider selected for new chat sessions"
+			},
+			"defaultModel": {
+				"name": "Default model",
+				"desc": "Optional model selected for new chat sessions"
+			},
+			"nutstoreLlmGateway": {
+				"name": "Nutstore AI (Experimental)",
+				"providerName": "Nutstore",
+				"desc": "Authorize to use models provided by Nutstore.",
+				"pendingDesc": "Finish authorization in your browser. Current code: {{code}}",
+				"connectedDesc": "Authorized with {{count}} model(s) available.",
+				"authorize": "Authorize",
+				"authorizing": "Authorizing...",
+				"openAuthorizationPage": "Open authorization page",
+				"cancelAuthorization": "Cancel authorization",
+				"authorized": "Nutstore AI authorized",
+				"disconnect": "Disconnect",
+				"disconnected": "Nutstore AI disconnected",
+				"refreshModels": "Refresh",
+				"modelsRefreshed": "Models refreshed",
+				"betaModal": {
+					"title": "Feature in Beta",
+					"message": "Nutstore AI is currently in beta and not yet available to all users. If you are not on the beta list, you may not be able to use the feature after authorizing. We are gradually opening access — please check back later.",
+					"cancel": "Cancel",
+					"confirm": "I understand, continue"
+				},
+				"errors": {
+					"authorizationRequired": "Authorize Nutstore AI first",
+					"authorizationExpired": "Nutstore AI authorization expired. Start again.",
+					"authorizationFailed": "Nutstore AI authorization failed: {{code}} {{message}}",
+					"missingClientId": "Missing LLM_GATEWAY_CLIENT_ID. Nutstore AI authorization cannot start.",
+					"modelsFailed": "Failed to fetch Nutstore AI models: {{status}}",
+					"emptyModels": "Nutstore AI did not return any available models",
+					"refreshFailed": "Failed to refresh Nutstore AI models"
+				}
+			},
+			"providers": {
+				"name": "Providers",
+				"desc": "Manage available AI providers",
+				"summary": "{{count}} provider(s) configured",
+				"manage": "Manage providers",
+				"add": "Add provider",
+				"refreshPresetName": "Get latest model list",
+				"refreshPresetDesc": "Get the latest model list.",
+				"refreshPresetModels": "Get model list",
+				"refreshPresetModelsLoading": "Fetching...",
+				"refreshPresetModelsSuccess": "Fetched ✓ providers {{providers}} models {{models}}",
+				"refreshPresetModelsFailure": "Failed ×",
+				"presetModelsRefreshed": "Latest model list fetched",
+				"presetModelsRefreshFailed": "Update failed. Continuing with local/built-in model list.",
+				"empty": "No provider configured yet.",
+				"openaiDefault": "OpenAI default endpoint",
+				"presetCustom": "Custom (OpenAI Compatible)",
+				"updateModels": "Update models",
+				"updateModelsHint": "{{count}} preset model(s) can be added to this provider.",
+				"updateModelsSuccess": "{{count}} model(s) added"
+			},
+			"provider": {
+				"name": "Provider name",
+				"desc": "Label shown in the chatbox",
+				"baseUrl": {
+					"name": "Base URL",
+					"desc": "Optional override, for example https://api.openai.com/v1"
+				},
+				"apiKey": {
+					"name": "API key",
+					"desc": "Secret used for requests"
+				},
+				"allowBrowserCors": {
+					"name": "Allow browser CORS requests",
+					"desc": "Prefer native browser fetch for providers that support CORS, enabling streaming output"
+				}
+			},
+			"models": {
+				"name": "Models",
+				"desc": "Models available under this provider",
+				"add": "Add model",
+				"empty": "No model configured yet."
+			},
+			"model": {
+				"id": "Model ID",
+				"idDesc": "Model identifier sent to the API (e.g. gpt-4o)",
+				"inputModalities": "Input modalities"
+			},
+			"modals": {
+				"confirmDeleteLabel": "Confirm",
+				"providers": {
+					"title": "Providers",
+					"updateModelsTitle": "Sync preset models",
+					"updateModelsDesc": "{{count}} model(s) will be added to {{provider}}. Please confirm the new models below:",
+					"updateModelsConfirm": "Add models"
+				},
+				"provider": {
+					"createTitle": "Create provider",
+					"editTitle": "Edit provider",
+					"edit": "Edit",
+					"saved": "Provider saved",
+					"deleted": "Provider deleted",
+					"corsConfirmTitle": "Enable browser CORS requests",
+					"corsConfirmMessage": "Not every provider allows direct browser cross-origin access. When enabled, the plugin will prefer native browser fetch to support streaming output. If this provider stops working afterward, return here and turn this option off.",
+					"corsConfirmEnable": "Enable"
+				},
+				"model": {
+					"createTitle": "Create model",
+					"editTitle": "Edit model",
+					"edit": "Edit",
+					"deleted": "Model deleted"
+				}
+			},
+			"yolo": {
+				"name": "Full access",
+				"desc": "⚠️ When enabled, AI can read and write vault files directly without user confirmation"
+			},
+			"errors": {
+				"saveFailed": "Failed to save AI settings",
+				"saveFailedWithReason": "Failed to save AI settings: {{reason}}",
+				"invalidProvidersConfig": "AI provider configuration is invalid. Please fix it in settings. Details: {{reason}}",
+				"emptyModelId": "Model ID cannot be empty",
+				"duplicateModelId": "A model with this ID already exists",
+				"emptyProviderId": "Provider name cannot be empty",
+				"duplicateProviderId": "A provider with this name already exists",
+				"reservedProviderId": "This provider name is reserved by Nutstore AI. Use another name.",
+				"providerNotFoundForProtocolOpen": "Provider not found. It may have been deleted or renamed: {{providerId}}",
+				"browserCorsFallbackToBuiltinTransport": "Browser CORS request failed. Temporarily fell back to the built-in request transport.",
+				"browserCorsFailedWithDisableLink": "Browser CORS request failed. [Open this provider and disable CORS]({{link}})."
+			}
+		},
+		"logout": {
+			"confirmTitle": "Confirm logout",
+			"confirmMessage": "Are you sure you want to log out? You will need to log in again to continue syncing.",
+			"confirm": "Confirm logout",
+			"cancel": "Cancel"
+		},
+		"help": {
+			"name": "How to get WebDAV account and credential?"
+		},
+		"filters": {
+			"add": "Add rule",
+			"remove": "Remove",
+			"confirmRemove": "Confirm remove",
+			"edit": "Edit rules",
+			"save": "Save",
+			"cancel": "Cancel",
+			"placeholder": "e.g.: .DS_Store, *.pdf",
+			"exclude": {
+				"name": "Exclusion rules",
+				"desc": "Files/folders matching these patterns will NOT be synced."
+			},
+			"include": {
+				"name": "Inclusion rules",
+				"desc": "Files/folders matching these patterns WILL be synced (if defined)."
+			}
+		},
+		"configDirSync": {
+			"name": "Config directory sync",
+			"desc": "Control whether {{configDir}} is included in sync.",
+			"none": "Do not sync",
+			"bookmarks": "Sync bookmarks only",
+			"all": "Sync all (experimental)",
+			"bookmarksTitle": "Enable bookmark sync",
+			"bookmarksDesc": "Only {{configDir}}/bookmarks.json will be synced. Other config files are not affected.",
+			"warnTitle": "Enable full config directory sync?",
+			"warnSyncs": "What syncs: plugin settings (data.json), plugin binaries (main.js), themes, snippets, and all other config files.",
+			"warnExcludes": "Auto-excluded: {{configDir}}/plugins/**/node_modules, {{configDir}}/plugins/**/.git, and {{configDir}}/plugins/**/.pnpm-store.",
+			"warnConflict": "Conflict resolution: when both sides have changes, the more recently modified version wins and the other side is overwritten.",
+			"warnRisk": "Risks: running Obsidian on multiple devices simultaneously increases conflict risk; config changes may require restarting Obsidian to take effect.",
+			"confirm": "Enable",
+			"cancel": "Cancel"
+		},
+		"skipLargeFiles": {
+			"name": "Skip large files",
+			"desc": "Files exceeding this size will be skipped during synchronization. If sync issues occur, try lowering this value.",
+			"placeholder": "e.g., 10 MiB or 500 KiB",
+			"invalidFormat": "Invalid file size format. Please use formats like \"10MB\" or \"500KB\"",
+			"exceedsMaxSize": "File size exceeds maximum limit of 500MB"
+		},
+		"mobileAppDownloadFileChunkSize": {
+			"name": "Mobile download chunk size",
+			"desc": "Chunk size used when downloading files on mobile. Smaller values reduce memory usage; larger values reduce request count.",
+			"placeholder": "e.g., 16 MiB",
+			"invalidFormat": "Invalid chunk size format. Please use formats like \"16 MiB\" or \"512 KiB\"",
+			"belowMinSize": "Chunk size cannot be below 64 KiB and was adjusted",
+			"exceedsMaxSize": "Chunk size cannot exceed 64 MiB and was adjusted"
+		},
+		"log": {
+			"title": "Debug logs",
+			"name": "Console logs",
+			"desc": "View console output and debug information",
+			"saveToNote": "Save to note",
+			"savedToNote": "Logs saved to note: {{fileName}}",
+			"saveError": "Failed to save logs",
+			"clear": "Clear",
+			"cleared": "Console logs cleared",
+			"clearName": "Clear logs",
+			"clearDesc": "Delete all console output records"
+		},
+		"cache": {
+			"title": "Cache management",
+			"clearName": "Clear local cache",
+			"clearDesc": "Delete local cache data stored on this device only. This action cannot be undone and will require rebuilding the cache before the next sync. Your Nutstore data remains intact.",
+			"clear": "Clear",
+			"confirm": "Confirm clear",
+			"cleared": "Cache cleared successfully",
+			"clearModal": {
+				"title": "Clear cache",
+				"description": "Select which cache types to clear. This action cannot be undone.",
+				"cancel": "Cancel",
+				"confirm": "Confirm clear",
+				"syncRecordCache": {
+					"name": "Sync record cache",
+					"desc": "Tracks synchronization status for each file."
+				},
+				"blobCache": {
+					"name": "File snapshot cache",
+					"desc": "Stores file snapshots needed for comparing changes during sync."
+				},
+				"traverseWebDAVCache": {
+					"name": "File scan cache",
+					"desc": "Stores remote folder structure to enable faster sync by fetching only changes. If you encounter file list anomalies or data inconsistencies after a plugin update, try clearing this cache. After clearing, the next sync will need to re-scan all remote files, which may take a while."
+				},
+				"nothingSelected": "Please select at least one cache type to clear."
+			},
+			"gcName": "Garbage collection",
+			"gcDesc": "Unused file snapshots are cleaned automatically after each sync. You can still run a manual cleanup here when you want immediate cleanup.",
+			"gc": "Run cleanup",
+			"gcRunning": "Cleaning...",
+			"gcCompleted": "Cleanup complete. Removed {{count}} unused file snapshot(s).",
+			"gcBlockedBySync": "Sync is currently running. Wait for sync to finish before running garbage collection.",
+			"gcBlockedByGc": "Garbage collection is already running. Please try again later.",
+			"generateBlobGarbageName": "GC stress test: generate garbage snapshots",
+			"generateBlobGarbageDesc": "Write {{count}} random file snapshots to blob cache (about {{sizeKiB}} KiB each) for GC testing.",
+			"generateBlobGarbage": "Generate garbage snapshots",
+			"generateBlobGarbageRunning": "Generating garbage snapshots...",
+			"generateBlobGarbageDone": "Generated {{count}} garbage snapshot(s)."
+		}
+	},
+	"aiPermission": {
+		"title": "AI Permission Request",
+		"message": "AI is requesting to perform the following file operations:",
+		"sessionScopeHint": "\"Auto-approve this operation\" only applies to this chat session and resets after restarting Obsidian.",
+		"allowOnce": "Approve",
+		"alwaysAllow": "Auto-approve this operation",
+		"deny": "Deny",
+		"denied": "Permission denied: {{summary}}",
+		"source": "Source",
+		"destination": "Destination",
+		"operations": {
+			"read": "read",
+			"write": "write",
+			"edit": "edit",
+			"delete": "delete",
+			"mkdir": "create directory",
+			"copy": "copy",
+			"move": "move"
+		}
+	},
+	"sync": {
+		"error": {
+			"localPathNotFound": "Local path not found: {{path}}",
+			"mergeNotSupported": "This file type is currently not supported for merging",
+			"failedToAutoMerge": "Failed to auto merge",
+			"failedToUploadMerged": "Failed to upload merged content",
+			"requestsTooFrequent": "Requests too frequent, please wait a few minutes and try again",
+			"accountNotConfigured": "Nutstore account not configured. Please configure your account in settings first.",
+			"ssoTokenInvalid": "Login has expired. Please log in again in settings."
+		},
+		"requestsTooFrequent": "Requests too frequent, plugin will resume sync at {{time}}",
+		"preparing": "📋 Preparing sync",
+		"start": "⌛️ Starting sync",
+		"complete": "✅ Sync completed",
+		"completeWithFailed": "❌ Sync completed with {{failedCount}} failed tasks",
+		"failedWithError": "Sync failed with error: {{error}}",
+		"progress": "Sync progress: {{percent}}%",
+		"blockedBySync": "Sync is already running. Please try again later.",
+		"stoppingGcForSync": "Garbage collection is running. Stopping cleanup and starting sync.",
+		"startButton": "Start sync",
+		"stopButton": "Stop sync",
+		"hideButton": "Hide",
+		"closeButton": "Close",
+		"showProgressButton": "Show sync progress",
+		"notSyncing": "No sync currently in progress",
+		"percentComplete": "{{percent}}%",
+		"currentFile": "{{path}}",
+		"filePath": "{{path}}",
+		"progressTitle": "Sync progress",
+		"progressStats": "Completed: {{completed}} / {{total}} tasks",
+		"completedFilesTitle": "Completed tasks",
+		"syncingFiles": "Syncing files...",
+		"updatingCache": "Updating local cache...",
+		"cacheUpdated": "Local cache updated.",
+		"failedStatus": "Sync failed",
+		"cancelled": "Sync cancelled",
+		"suggestUseClientForManyTasks": "Tip: When there are many sync tasks, we recommend using the Nutstore client for better performance and stability. The plugin is more suitable for mobile use!",
+		"fileOp": {
+			"createLocalDir": "Create local directory",
+			"createRemoteDir": "Create remote directory",
+			"createRemoteDirs": "Create multi-level directories",
+			"download": "Download",
+			"filenameError": "Invalid path characters",
+			"merge": "Merge",
+			"removeLocal": "Remove local",
+			"removeRemote": "Remove remote",
+			"removeRemoteRecursively": "Remove remote recursively",
+			"sync": "Sync",
+			"upload": "Upload",
+			"noop": "Skip",
+			"cleanRecord": "Clean record",
+			"skip": "Skip"
+		},
+		"skipReason": {
+			"file-too-large": "File too large",
+			"folder-contains-ignored-items": "Folder contains ignored items"
+		},
+		"confirmModal": {
+			"title": "Sync confirmation",
+			"message": "⚠️ Please note:\n\n1. Sync operation may modify or delete local files\n2. We recommend backing up important files before syncing\n3. In case of file conflicts, manual resolution may be required\n4. Initial sync will process all files and may take longer, please be patient\n\nAre you sure you want to start syncing?",
+			"confirm": "Confirm sync",
+			"cancel": "Cancel",
+			"remoteDir": "Remote directory: {{dir}}",
+			"strategy": "Sync strategy: {{strategy}}",
+			"policy": "Sync policy: {{policy}}"
+		}
+	},
+	"taskList": {
+		"title": "Sync task list",
+		"instruction": "Please review the tasks below. Click \"Continue\" to execute the selected tasks, or \"Cancel\" to skip this sync.",
+		"continue": "Continue",
+		"cancel": "Cancel"
+	},
+	"deleteConfirm": {
+		"title": "Confirm local file deletion",
+		"instruction": "⚠️ The following local files will be deleted during auto-sync (because they were deleted remotely).\n\nCheck files to delete; unchecked files will be re-uploaded:",
+		"warningNotice": "Local files will be deleted, please confirm",
+		"select": "Select",
+		"filePath": "File path",
+		"deleteAndReupload": "Delete selected, re-upload unchecked",
+		"skipForNow": "Skip for now"
+	},
+	"failedTasks": {
+		"title": "Failed sync tasks",
+		"instruction": "The following tasks failed during sync:",
+		"taskName": "Task",
+		"localPath": "Local path",
+		"errorMessage": "Error",
+		"close": "Close"
+	},
+	"textAreaModal": {
+		"copy": "Copy",
+		"close": "Close",
+		"copied": "Text copied to clipboard"
+	},
+	"time": {
+		"justNow": "just now",
+		"minutesAgo": "{{count}}min ago",
+		"hoursAgo": "{{count}}h ago",
+		"daysAgo": "{{count}}d ago",
+		"longAgo": "long ago"
+	},
+	"chatbox": {
+		"title": "Chatbox",
+		"openCommand": "Open chatbox",
+		"addToContext": "Add to AI context",
+		"newChat": "New chat",
+		"sessionDeleted": "Session deleted",
+		"exportSaved": "Session exported: {{fileName}}",
+		"exportFailed": "Failed to export session",
+		"exportDialog": {
+			"title": "Export session",
+			"description": "Export to a Markdown file in your vault.",
+			"includeToolMessages": "Include tool call messages",
+			"cancel": "Cancel",
+			"confirm": "Export"
+		},
+		"exportRole": {
+			"user": "User",
+			"tool": "Tool"
+		},
+		"exportFrontmatter": {
+			"title": "title",
+			"sessionId": "session_id",
+			"exportedAt": "exported_at",
+			"createdAt": "created_at",
+			"updatedAt": "updated_at",
+			"model": "model",
+			"includeToolMessages": "include_tool_messages"
+		},
+		"exportMeta": {
+			"messageTime": "Time",
+			"emptyContent": "(no text content)",
+			"toolCalls": "Tool calls",
+			"toolName": "Tool name",
+			"toolCallId": "Tool call ID"
+		},
+		"repeatedToolCallsStopped": "The agent repeated the same tool call with the same arguments {{count}} times in a row and was stopped.",
+		"task": {
+			"cancelledSummary": "Task {{task}} was cancelled.",
+			"emptyResult": "Task completed but returned no summary."
+		},
+		"requestFailed": "Request failed",
+		"errors": {
+			"noProvider": "Select a provider before sending",
+			"apiKeyRequired": "The selected provider is missing an API key",
+			"noModel": "Select a model before sending",
+			"unknownTool": "Unknown tool: {{name}}",
+			"toolFieldRequired": "{{field}} is required",
+			"fileNotFound": "File not found: {{path}}",
+			"notFile": "Path is not a file: {{path}}",
+			"editMatchNotFound": "Exact text to replace was not found in the file.",
+			"editMatchNotUnique": "Exact text to replace must match exactly once in the file.",
+			"sessionNotFound": "The target session no longer exists",
+			"taskDepthExceeded": "The task depth limit has been reached",
+			"taskSessionUnavailable": "The task session or model configuration is no longer available"
+		}
+	}
+}

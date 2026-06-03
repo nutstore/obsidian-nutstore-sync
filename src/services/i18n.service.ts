@@ -4,7 +4,8 @@ import logger from '~/utils/logger'
 import NutstorePlugin from '..'
 
 export default class I18nService {
-	constructor(private plugin: NutstorePlugin) {
+	constructor(plugin: NutstorePlugin) {
+		void plugin
 		this.update()
 	}
 

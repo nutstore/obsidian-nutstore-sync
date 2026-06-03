@@ -1,0 +1,543 @@
+{
+	"errors": {
+		"filenameUnsupportedChars": "文件 {{path}} 包含不支持的字符：{{chars}}"
+	},
+	"settings": {
+		"language": {
+			"name": "语言",
+			"desc": "选择界面语言",
+			"auto": "自动检测"
+		},
+		"account": {
+			"name": "账号",
+			"desc": "输入你的 WebDAV 账号",
+			"placeholder": "输入你的账号"
+		},
+		"credential": {
+			"name": "凭证",
+			"desc": "输入你的 WebDAV 凭证",
+			"placeholder": "输入你的凭证"
+		},
+		"remoteDir": {
+			"name": "远程目录",
+			"desc": "输入远程目录",
+			"placeholder": "输入远程目录"
+		},
+		"checkConnection": {
+			"name": "检查连接",
+			"desc": "点击检查 WebDAV 连接",
+			"success": "WebDAV 连接成功",
+			"failure": "WebDAV 连接失败",
+			"successButton": "连接成功 ✓",
+			"failureButton": "连接失败 ×"
+		},
+		"login": {
+			"name": "登录",
+			"success": "登录成功",
+			"failure": "登录失败，请重试"
+		},
+		"useGitStyle": {
+			"name": "使用 Git 样式的冲突标记",
+			"desc": "启用后将使用 <<<<<<< 和 >>>>>>> 等标记来显示冲突，而不是 HTML 标记"
+		},
+		"backupWarning": {
+			"name": "备份提醒",
+			"desc": "⚠️ 请注意：同步过程会修改或删除本地文件，建议在同步前备份重要文件。"
+		},
+		"conflictStrategy": {
+			"name": "冲突解决策略",
+			"desc": "选择解决文件冲突的方式。\n注意：建议在使用自动合并功能前，先手动备份重要文件，以防数据丢失。",
+			"diffMatchPatch": "智能合并（推荐）",
+			"latestTimestamp": "使用最新版本",
+			"skip": "跳过冲突",
+			"diffMatchPatchOrSkip": "智能合并，无法合并时跳过",
+			"localPriority": "本地优先（覆盖服务器）",
+			"serverPriority": "服务器优先（覆盖本地）"
+		},
+		"loginMode": {
+			"name": "登录方式",
+			"manual": "手动输入",
+			"sso": "单点登录"
+		},
+		"ssoStatus": {
+			"loggedIn": "已登录",
+			"notLoggedIn": "未登录",
+			"logout": "退出登录",
+			"logoutSuccess": "已退出登录"
+		},
+		"logout": {
+			"confirmTitle": "确认退出",
+			"confirmMessage": "确定要退出登录吗？退出后需要重新登录才能继续同步。",
+			"confirm": "确认退出",
+			"cancel": "取消"
+		},
+		"help": {
+			"name": "如何获取 WebDAV 账号和凭证？"
+		},
+		"sections": {
+			"account": "账号设置",
+			"common": "通用设置",
+			"filters": "过滤规则",
+			"ai": "AI 设置"
+		},
+		"ai": {
+			"saved": "AI 设置已保存",
+			"none": "未设置",
+			"unnamedProvider": "未命名模型提供商",
+			"unnamedModel": "未命名模型",
+			"defaultProvider": {
+				"name": "默认模型提供商",
+				"desc": "新建对话时可选的默认模型提供商"
+			},
+			"defaultModel": {
+				"name": "默认模型",
+				"desc": "新建对话时可选的默认模型"
+			},
+			"nutstoreLlmGateway": {
+				"name": "坚果云 AI（实验性）",
+				"providerName": "坚果云",
+				"desc": "授权后可使用坚果云提供的模型。",
+				"pendingDesc": "请在浏览器中完成授权，当前验证码：{{code}}",
+				"connectedDesc": "已授权，当前 {{count}} 个模型可用。",
+				"authorize": "授权",
+				"authorizing": "授权中...",
+				"openAuthorizationPage": "打开授权页",
+				"cancelAuthorization": "取消授权",
+				"authorized": "坚果云 AI 授权成功",
+				"disconnect": "断开",
+				"disconnected": "已断开坚果云 AI",
+				"refreshModels": "更新",
+				"modelsRefreshed": "模型列表已更新",
+				"betaModal": {
+					"title": "功能内测中",
+					"message": "坚果云 AI 目前处于内测阶段，尚未向所有用户开放。如果您不在内测名单中，授权后可能暂时无法使用相关功能，请继续等待，我们正在陆续开放中。",
+					"cancel": "取消",
+					"confirm": "我知道了，继续授权"
+				},
+				"errors": {
+					"authorizationRequired": "请先授权坚果云 AI",
+					"authorizationExpired": "坚果云 AI 授权已过期，请重新发起授权",
+					"authorizationFailed": "坚果云 AI 授权失败：{{code}} {{message}}",
+					"missingClientId": "缺少 LLM_GATEWAY_CLIENT_ID，无法启动坚果云 AI 授权",
+					"modelsFailed": "获取坚果云 AI 模型失败：{{status}}",
+					"emptyModels": "坚果云 AI 没有返回可用模型",
+					"refreshFailed": "刷新坚果云 AI 模型失败"
+				}
+			},
+			"providers": {
+				"name": "模型提供商",
+				"desc": "管理可用的 AI 模型提供商",
+				"summary": "已配置 {{count}} 个模型提供商",
+				"manage": "管理模型提供商",
+				"add": "新增模型提供商",
+				"refreshPresetName": "获取最新模型列表",
+				"refreshPresetDesc": "可以获取最新的模型列表。",
+				"refreshPresetModels": "获取模型列表",
+				"refreshPresetModelsLoading": "获取中...",
+				"refreshPresetModelsSuccess": "提供商 {{providers}}，模型 {{models}}",
+				"refreshPresetModelsFailure": "获取失败 ×",
+				"presetModelsRefreshed": "已获取最新模型列表",
+				"presetModelsRefreshFailed": "更新失败，继续使用本地/内置模型列表",
+				"empty": "当前还没有配置模型提供商。",
+				"openaiDefault": "使用 OpenAI 默认端点",
+				"presetCustom": "自定义（OpenAI Compatible）",
+				"updateModels": "更新",
+				"updateModelsHint": "预设中还有 {{count}} 个模型可同步到当前提供商。",
+				"updateModelsSuccess": "已增加 {{count}} 个模型"
+			},
+			"provider": {
+				"name": "模型提供商名称",
+				"desc": "用于在 Chatbox 中显示的名称",
+				"baseUrl": {
+					"name": "Base URL",
+					"desc": "可选覆盖，例如 https://api.openai.com/v1"
+				},
+				"apiKey": {
+					"name": "API Key",
+					"desc": "发送请求时使用的密钥"
+				},
+				"allowBrowserCors": {
+					"name": "允许浏览器跨域请求",
+					"desc": "开启后将优先使用浏览器原生 fetch，可在支持的提供商上获得流式输出"
+				}
+			},
+			"models": {
+				"name": "模型",
+				"desc": "在当前模型提供商下可用的模型",
+				"add": "新增模型",
+				"empty": "当前模型提供商下还没有模型。"
+			},
+			"model": {
+				"id": "模型 ID",
+				"idDesc": "请求 API 时使用的模型标识（如 gpt-4o）",
+				"inputModalities": "输入模态"
+			},
+			"modals": {
+				"confirmDeleteLabel": "确认",
+				"providers": {
+					"title": "模型提供商管理",
+					"updateModelsTitle": "同步预设模型",
+					"updateModelsDesc": "将为 {{provider}} 增加 {{count}} 个模型，请确认以下新增项：",
+					"updateModelsConfirm": "确认增加"
+				},
+				"provider": {
+					"createTitle": "新建提供商",
+					"editTitle": "编辑提供商",
+					"edit": "编辑",
+					"saved": "提供商已保存",
+					"deleted": "提供商已删除",
+					"corsConfirmTitle": "确认启用浏览器跨域请求",
+					"corsConfirmMessage": "并不是所有模型提供商都允许浏览器直接跨域访问。开启后将优先使用浏览器原生 fetch 以支持流式输出；如果之后发现该提供商无法使用，请回到这里关闭此开关。",
+					"corsConfirmEnable": "确认启用"
+				},
+				"model": {
+					"createTitle": "新建模型",
+					"editTitle": "编辑模型",
+					"edit": "编辑",
+					"deleted": "模型已删除"
+				}
+			},
+			"yolo": {
+				"name": "完全访问权限",
+				"desc": "⚠️ 开启后，AI 可直接读写笔记库中的文件，无需用户确认"
+			},
+			"errors": {
+				"saveFailed": "AI 设置保存失败",
+				"saveFailedWithReason": "AI 设置保存失败：{{reason}}",
+				"invalidProvidersConfig": "AI 模型提供商配置无效，请在设置中修正。详情：{{reason}}",
+				"emptyModelId": "模型 ID 不能为空",
+				"duplicateModelId": "已存在相同 ID 的模型",
+				"emptyProviderId": "模型提供商名称不能为空",
+				"duplicateProviderId": "已存在相同名称的模型提供商",
+				"reservedProviderId": "该模型提供商名称由坚果云 AI 保留，请使用其他名称",
+				"providerNotFoundForProtocolOpen": "未找到对应的模型提供商，可能已被删除或重命名：{{providerId}}",
+				"browserCorsFallbackToBuiltinTransport": "浏览器跨域请求失败，已临时回退到内置请求方式。",
+				"browserCorsFailedWithDisableLink": "浏览器跨域请求失败。[打开此提供商并关闭 CORS]({{link}})。"
+			}
+		},
+		"confirmBeforeSync": {
+			"name": "同步前确认",
+			"desc": "同步前显示待执行的任务列表，确认后再执行"
+		},
+		"confirmBeforeDeleteInAutoSync": {
+			"name": "自动同步时删除文件前确认",
+			"desc": "自动同步过程中检测到本地文件将被删除时，弹出确认对话框让你选择删除或重新上传"
+		},
+		"realtimeSync": {
+			"name": "实时同步",
+			"desc": "文件修改后自动进行同步"
+		},
+		"syncMode": {
+			"name": "同步模式",
+			"desc": "建议在文件较多的情况下选择宽松模式，同步速度更快。宽松模式会忽略同名且大小相等但没有同步记录的文件。",
+			"strict": "严格",
+			"loose": "宽松"
+		},
+		"syncPolicy": {
+			"name": "同步策略",
+			"desc": "控制本地与云端之间的数据协调方式。覆盖模式会以一侧为准，删除另一侧多余的文件，请谨慎使用。",
+			"bidirectional": "双向同步",
+			"localMirror": "以本地覆盖云端",
+			"remoteMirror": "以云端覆盖本地",
+			"modal": {
+				"title": "确认同步策略",
+				"bidirectionalDesc": "本地和云端互相同步，各自的新增和删除都会同步到对方。\n同一文件两端都改动时，按冲突策略处理。",
+				"localMirrorDesc": "以本地为准，云端完全同步为本地的状态。\n云端有但本地没有的文件会被删除。\n适合把云端当本地笔记库的备份。",
+				"remoteMirrorDesc": "以云端为准，本地完全同步为云端的状态。\n本地有但云端没有的文件会被删除。\n适合只读设备，或多设备统一以云端内容为准。",
+				"confirm": "确认",
+				"cancel": "取消"
+			}
+		},
+		"startupSyncDelay": {
+			"name": "启动后自动同步",
+			"desc": "设置启动后第几秒自动执行一次同步。设置为 0 则禁用启动时自动同步。",
+			"placeholder": "输入秒数 (例如 5, 0 则禁用)",
+			"invalidValue": "无效的数值，已重置为 0",
+			"exceedsMax": "数值超过最大限制 {{max}} 秒（1天），已自动调整"
+		},
+		"autoSyncInterval": {
+			"name": "定时自动同步",
+			"desc": "设置每隔多长时间在后台自动执行一次同步（分钟）。设置为 0 则禁用定时自动同步。",
+			"placeholder": "输入分钟数 (例如 5, 0 则禁用)",
+			"invalidValue": "无效的数值，已重置为 0",
+			"exceedsMax": "数值超过最大限制 {{max}} 分钟（1天），已自动调整"
+		},
+		"filters": {
+			"add": "添加规则",
+			"remove": "删除",
+			"confirmRemove": "确认删除",
+			"edit": "编辑规则",
+			"save": "保存",
+			"cancel": "取消",
+			"placeholder": "例如: .DS_Store, *.pdf",
+			"exclude": {
+				"name": "排除规则",
+				"desc": "符合规则的文件/文件夹将不会被同步"
+			},
+			"include": {
+				"name": "包含规则",
+				"desc": "符合规则的文件/文件夹会被同步，如果和排除规则有冲突，会优先选择包含规则。"
+			}
+		},
+		"configDirSync": {
+			"name": "配置目录同步",
+			"desc": "控制 {{configDir}} 目录是否参与同步。",
+			"none": "不同步",
+			"bookmarks": "仅同步书签",
+			"all": "同步全部（实验性）",
+			"bookmarksTitle": "启用书签同步",
+			"bookmarksDesc": "仅同步 {{configDir}}/bookmarks.json，其他配置文件不受影响。",
+			"warnTitle": "启用完整配置目录同步？",
+			"warnSyncs": "同步内容：插件设置（data.json）、插件二进制（main.js）、主题、代码片段等所有配置文件。",
+			"warnExcludes": "自动排除：{{configDir}}/plugins/**/node_modules、{{configDir}}/plugins/**/.git 和 {{configDir}}/plugins/**/.pnpm-store。",
+			"warnConflict": "冲突处理：两端同一文件均有修改时，保留修改时间较新的版本，另一端的修改将被覆盖。",
+			"warnRisk": "风险：多台设备同时运行 Obsidian 容易引发冲突；插件设置变更后可能需要重启 Obsidian 才能生效。",
+			"confirm": "启用",
+			"cancel": "取消"
+		},
+		"skipLargeFiles": {
+			"name": "跳过大文件",
+			"desc": "同步时将跳过超过此大小的文件。如遇同步崩溃，可尝试降低此值。",
+			"placeholder": "例如：10 MiB 或 500 KiB",
+			"invalidFormat": "无效的文件大小格式，请使用如 \"10MB\" 或 \"500KB\" 的格式",
+			"exceedsMaxSize": "文件大小超过最大限制 500MB"
+		},
+		"mobileAppDownloadFileChunkSize": {
+			"name": "移动端下载时分块",
+			"desc": "移动端下载文件时使用的分块大小。较小的值可降低内存占用；较大的值可减少请求次数，但是有可能导致软件崩溃。",
+			"placeholder": "例如：16 MiB",
+			"invalidFormat": "无效的分块大小格式，请使用如 \"16 MiB\" 或 \"512 KiB\" 的格式",
+			"belowMinSize": "分块大小不能小于 64 KiB，已自动调整",
+			"exceedsMaxSize": "分块大小不能超过 64 MiB，已自动调整"
+		},
+		"log": {
+			"title": "调试日志",
+			"name": "控制台日志",
+			"desc": "查看控制台输出和调试信息",
+			"saveToNote": "保存到笔记",
+			"savedToNote": "日志已保存到笔记: {{fileName}}",
+			"saveError": "保存日志失败",
+			"clear": "清除",
+			"cleared": "控制台日志已清除",
+			"clearName": "清除日志",
+			"clearDesc": "删除所有控制台输出记录"
+		},
+		"cache": {
+			"title": "缓存管理",
+			"clearName": "清除本地缓存",
+			"clearDesc": "删除当前设备上的本地缓存数据。此操作无法撤销，会导致下次同步前需要重新建立缓存。仅影响当前设备，不会影响您在坚果云中的数据。",
+			"clear": "清除",
+			"confirm": "确认清除",
+			"cleared": "缓存已成功清除",
+			"clearModal": {
+				"title": "清除缓存",
+				"description": "选择需要清除的缓存类型。此操作无法撤销。",
+				"cancel": "取消",
+				"confirm": "确认清除",
+				"syncRecordCache": {
+					"name": "同步记录缓存",
+					"desc": "跟踪每个文件的同步状态。"
+				},
+				"blobCache": {
+					"name": "文件快照缓存",
+					"desc": "存储用于同步时对比变化的文件快照。"
+				},
+				"traverseWebDAVCache": {
+					"name": "文件扫描缓存",
+					"desc": "存储远程文件夹结构，下次同步时只需获取变化的部分，加快同步速度。如果插件更新后同步出现文件列表异常或数据不一致，可尝试清除此缓存。清除后下次同步需要重新扫描所有远程文件，可能需要较长时间。"
+				},
+				"nothingSelected": "请至少选择一种缓存类型进行清除。"
+			},
+			"gcName": "垃圾回收",
+			"gcDesc": "系统会在每次同步结束后自动清理无用文件快照。你也可以在这里手动立即清理一次。",
+			"gc": "开始清理",
+			"gcRunning": "清理中...",
+			"gcCompleted": "清理完成，共删除了 {{count}} 个无用文件快照。",
+			"gcBlockedBySync": "当前正在同步，请等待同步结束后再进行垃圾回收。",
+			"gcBlockedByGc": "垃圾回收正在进行中，请稍后再试。",
+			"generateBlobGarbageName": "GC 压测：生成垃圾快照",
+			"generateBlobGarbageDesc": "向 blob 缓存中写入 {{count}} 个随机文件快照（每个约 {{sizeKiB}} KiB），用于测试 GC 清理效果。",
+			"generateBlobGarbage": "生成垃圾快照",
+			"generateBlobGarbageRunning": "正在生成垃圾快照...",
+			"generateBlobGarbageDone": "已生成 {{count}} 个垃圾快照。"
+		}
+	},
+	"aiPermission": {
+		"title": "AI 权限请求",
+		"message": "AI 正在请求执行以下文件操作：",
+		"sessionScopeHint": "“自动同意该操作”仅在当前会话生效，重启 Obsidian 后将恢复询问。",
+		"allowOnce": "同意",
+		"alwaysAllow": "自动同意该操作",
+		"deny": "拒绝",
+		"denied": "操作已拒绝：{{summary}}",
+		"source": "源路径",
+		"destination": "目标路径",
+		"operations": {
+			"read": "读取",
+			"write": "写入",
+			"edit": "编辑",
+			"delete": "删除",
+			"mkdir": "创建目录",
+			"copy": "复制",
+			"move": "移动"
+		}
+	},
+	"sync": {
+		"error": {
+			"localPathNotFound": "本地路径未找到: {{path}}",
+			"mergeNotSupported": "该文件类型暂不支持合并",
+			"failedToAutoMerge": "自动合并失败",
+			"failedToUploadMerged": "上传合并内容失败",
+			"requestsTooFrequent": "请求过于频繁，请等待几分钟后再试",
+			"accountNotConfigured": "尚未配置坚果云账号，请先在设置中配置账号信息",
+			"ssoTokenInvalid": "登录已失效，请在设置中重新登录。"
+		},
+		"requestsTooFrequent": "请求过于频繁，插件将在 {{time}} 后自动继续同步任务",
+		"preparing": "📋 准备同步",
+		"start": "⌛️ 开始同步",
+		"complete": "✅ 同步完成",
+		"completeWithFailed": "❌ 同步完成，但有 {{failedCount}} 个任务失败",
+		"failedWithError": "同步失败，错误信息: {{error}}",
+		"progress": "同步进度: {{percent}}%",
+		"blockedBySync": "同步正在进行中，请稍后再试。",
+		"stoppingGcForSync": "检测到垃圾回收正在进行，正在停止清理并开始同步。",
+		"startButton": "开始同步",
+		"stopButton": "停止同步",
+		"hideButton": "隐藏",
+		"closeButton": "关闭",
+		"showProgressButton": "显示同步进度",
+		"notSyncing": "尚未开始同步",
+		"percentComplete": "{{percent}}%",
+		"currentFile": "{{path}}",
+		"filePath": "{{path}}",
+		"progressTitle": "同步进度",
+		"progressStats": "已完成: {{completed}} / {{total}} 个任务",
+		"completedFilesTitle": "已完成的任务",
+		"syncingFiles": "正在同步文件...",
+		"updatingCache": "正在更新本地缓存...",
+		"cacheUpdated": "本地缓存已更新。",
+		"failedStatus": "同步失败",
+		"cancelled": "同步已取消",
+		"suggestUseClientForManyTasks": "提示：当同步任务较多时，建议使用坚果云客户端同步，可获得更好的性能和稳定性，插件更适合在移动端使用！",
+		"fileOp": {
+			"createLocalDir": "创建本地目录",
+			"createRemoteDir": "创建远程目录",
+			"createRemoteDirs": "创建多级目录",
+			"download": "下载",
+			"filenameError": "路径含无效字符",
+			"merge": "合并",
+			"removeLocal": "删除本地",
+			"removeRemote": "删除远程",
+			"removeRemoteRecursively": "递归删除远程",
+			"sync": "同步",
+			"upload": "上传",
+			"noop": "跳过",
+			"cleanRecord": "清理记录",
+			"skip": "跳过"
+		},
+		"skipReason": {
+			"file-too-large": "文件过大",
+			"folder-contains-ignored-items": "文件夹包含被忽略的文件"
+		},
+		"confirmModal": {
+			"title": "同步确认",
+			"message": "⚠️ 请注意：\n\n1. 同步操作可能会修改或删除本地文件\n2. 建议在同步前手动备份重要文件\n3. 如果出现文件冲突，可能需要手动解决\n4. 首次同步需要处理所有文件，可能会比较慢，请耐心等待\n\n确定要开始同步吗？",
+			"confirm": "确认同步",
+			"cancel": "取消",
+			"remoteDir": "远程目录：{{dir}}",
+			"strategy": "同步策略：{{strategy}}",
+			"policy": "同步策略：{{policy}}"
+		}
+	},
+	"taskList": {
+		"title": "同步任务列表",
+		"instruction": "请检查以下待执行的任务。点击\"继续\"将执行选中的任务，点击\"取消\"则跳过本次同步。",
+		"continue": "继续",
+		"cancel": "取消"
+	},
+	"deleteConfirm": {
+		"title": "确认删除本地文件",
+		"instruction": "⚠️ 在自动同步过程中检测到以下本地文件将被删除（因远程已删除）。\n\n勾选要删除的文件，未勾选的文件将重新上传到远程：",
+		"warningNotice": "检测到本地文件将被删除，请确认",
+		"select": "选择",
+		"filePath": "文件路径",
+		"deleteAndReupload": "删除选中的，重新上传未选中的",
+		"skipForNow": "暂时忽略"
+	},
+	"failedTasks": {
+		"title": "同步失败任务",
+		"instruction": "以下任务在同步时失败：",
+		"taskName": "任务",
+		"localPath": "本地路径",
+		"errorMessage": "失败原因",
+		"close": "关闭"
+	},
+	"textAreaModal": {
+		"copy": "复制",
+		"close": "关闭",
+		"copied": "文本已复制到剪贴板"
+	},
+	"time": {
+		"justNow": "刚刚",
+		"minutesAgo": "{{count}}分钟前",
+		"hoursAgo": "{{count}}小时前",
+		"daysAgo": "{{count}}天前",
+		"longAgo": "很久前"
+	},
+	"chatbox": {
+		"title": "Chatbox",
+		"openCommand": "打开 Chatbox",
+		"addToContext": "添加到 AI 上下文",
+		"newChat": "新对话",
+		"sessionDeleted": "会话已删除",
+		"exportSaved": "会话已导出：{{fileName}}",
+		"exportFailed": "导出会话失败",
+		"exportDialog": {
+			"title": "导出会话",
+			"description": "导出为 Markdown 文件并保存到笔记库。",
+			"includeToolMessages": "包含工具调用消息",
+			"cancel": "取消",
+			"confirm": "导出"
+		},
+		"exportRole": {
+			"user": "用户",
+			"tool": "工具"
+		},
+		"exportFrontmatter": {
+			"title": "标题",
+			"sessionId": "会话ID",
+			"exportedAt": "导出时间",
+			"createdAt": "创建时间",
+			"updatedAt": "更新时间",
+			"model": "模型",
+			"includeToolMessages": "包含工具消息"
+		},
+		"exportMeta": {
+			"messageTime": "时间",
+			"emptyContent": "（无文本内容）",
+			"toolCalls": "工具调用",
+			"toolName": "工具名称",
+			"toolCallId": "工具调用 ID"
+		},
+		"repeatedToolCallsStopped": "Agent 连续 {{count}} 次调用了完全相同的工具与参数，已停止继续调用。",
+		"task": {
+			"cancelledSummary": "任务 {{task}} 已取消。",
+			"emptyResult": "任务已完成，但没有返回摘要。"
+		},
+		"requestFailed": "请求失败",
+		"errors": {
+			"noProvider": "发送前请先选择模型提供商",
+			"apiKeyRequired": "当前模型提供商缺少 API Key",
+			"noModel": "发送前请先选择模型",
+			"unknownTool": "未知工具：{{name}}",
+			"toolFieldRequired": "{{field}} 为必填项",
+			"fileNotFound": "未找到文件：{{path}}",
+			"notFile": "该路径不是文件：{{path}}",
+			"editMatchNotFound": "文件中未找到要替换的精确文本。",
+			"editMatchNotUnique": "要替换的精确文本必须且只能匹配一次。",
+			"sessionNotFound": "目标会话已不存在",
+			"taskDepthExceeded": "任务拆分深度已达到上限",
+			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用"
+		}
+	}
+}
