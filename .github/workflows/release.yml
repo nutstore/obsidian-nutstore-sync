@@ -14,6 +14,8 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v3
+        with:
+          lfs: true
 
       - name: Use Node.js
         uses: actions/setup-node@v3
@@ -27,6 +29,15 @@ jobs:
         with:
           version: latest
 
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm install
+
+      - name: Update models API catalog
+        run: pnpm run update:models-api
+        continue-on-error: true
+
       - name: Build plugin
         env:
           NS_NSDAV_ENDPOINT: ${{ vars.NS_NSDAV_ENDPOINT }}
@@ -34,9 +45,7 @@ jobs:
           NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pnpm install
-          pnpm run build
+        run: pnpm run build
 
       - name: Package plugin
         run: |

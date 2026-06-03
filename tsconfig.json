@@ -1,22 +1,36 @@
 {
 	"compilerOptions": {
+		"target": "ES6",
+		"strictNullChecks": true,
+		"allowSyntheticDefaultImports": true,
+		"lib": ["DOM", "ES5", "ES6", "ES7"],
+
+		/* solid-js */
+		"jsx": "preserve",
+		"noEmit": true,
+		"skipLibCheck": true,
+		"jsxImportSource": "solid-js",
+		"useDefineForClassFields": true,
+
 		"baseUrl": ".",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
 		"paths": {
 			"~/*": ["./src/*"],
 			"~": ["./src"]
 		},
+		"resolveJsonModule": true,
+		"allowImportingTsExtensions": true,
+
+		"allowJs": true,
+		"strict": true,
+		"noImplicitAny": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"importHelpers": true,
 		"inlineSourceMap": true,
 		"inlineSources": true,
-		"module": "ESNext",
-		"target": "ES6",
-		"allowJs": true,
-		"noImplicitAny": true,
-		"moduleResolution": "bundler",
-		"importHelpers": true,
-		"isolatedModules": true,
-		"strictNullChecks": true,
-		"allowSyntheticDefaultImports": true,
-		"lib": ["DOM", "ES5", "ES6", "ES7"]
+		"isolatedModules": true
 	},
-	"include": ["**/*.ts"]
+	"include": ["**/*.ts", "**/*.tsx", "**/*.mts"]
 }

@@ -32,10 +32,7 @@
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	},
 	"cSpell.words": ["fflate", "jedec", "Mkdirs", "Nutstore", "webdav"],
-	"i18n-ally.localesPaths": [
-		"src/i18n",
-		"src/i18n/locales",
-		"packages/webdav-explorer/src/i18n",
-		"packages/webdav-explorer/src/i18n/locales"
-	]
+	"i18n-ally.localesPaths": ["src/i18n/locales"],
+	"i18n-ally.displayLanguage": "zh",
+	"i18n-ally.keystyle": "nested"
 }

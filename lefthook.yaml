@@ -1,0 +1,13 @@
+pre-commit:
+  jobs:
+    - name: prettier frontend
+      glob: '*.{js,jsx,ts,tsx,mjs,mts,json,md,css,scss,html,yml,yaml}'
+      exclude:
+        - 'pnpm-lock.yaml'
+      stage_fixed: true
+      run: pnpm prettier --write {staged_files}
+
+    - name: lint frontend
+      glob: '*.{js,jsx,mjs,ts,tsx,mts}'
+      stage_fixed: true
+      run: pnpm eslint --fix {staged_files}
