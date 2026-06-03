@@ -5,6 +5,7 @@ import type {
 	ChatTaskRecord,
 	ChatToolCall,
 } from '~/chat/domain'
+import type { UserContextItem } from '~/chat/user-context'
 
 export type {
 	ChatMessageRecord,
@@ -14,6 +15,7 @@ export type {
 	ChatToolCall,
 	ReversibleToolOp,
 } from '~/chat/domain'
+export type { UserContextItem } from '~/chat/user-context'
 
 export interface ChatModelOption {
 	id: string
@@ -63,9 +65,16 @@ export interface ChatboxViewModel {
 	selectedModelId?: string
 	runState: ChatRunState
 	pendingMessages: ChatPendingMessage[]
+	pendingUserContext: UserContextItem[]
+	pendingInputDraft: string
 	canSend: boolean
 	canCreateFragment: boolean
 	canCompress: boolean
+}
+
+export interface RecallMessageResult {
+	text: string
+	userContext: UserContextItem[]
 }
 
 export interface ChatboxProps extends ChatboxViewModel {
@@ -73,18 +82,23 @@ export interface ChatboxProps extends ChatboxViewModel {
 	onNewFragment: () => void
 	onCompressContext: () => Promise<void>
 	onSwitchSession: (sessionId: string) => void
+	onExportSession: (sessionId: string) => Promise<void>
 	onDeleteSession: (sessionId: string) => Promise<void>
 	onSelectProvider: (providerId: string) => void
 	onSelectModel: (modelId: string) => void
-	onSendMessage: (text: string) => Promise<void>
+	onSendMessage: (text: string) => Promise<boolean>
+	onUpdateInputDraft: (text: string) => void
 	onStopActiveRun?: () => void
+	onAddUserContext: (item: UserContextItem) => void
+	onRemoveUserContext: (index: number) => void
+	onDropContextItem: (path: string) => void
 	onCancelTask?: (taskId: string) => void
 	onDeleteMessage?: (messageId: string) => void
 	onRegenerateMessage?: (messageId: string) => void
 	onRecallMessage?: (
 		messageId: string,
 		options?: { restoreFiles?: boolean },
-	) => Promise<void>
+	) => Promise<RecallMessageResult | void>
 	renderMarkdown?: (
 		el: HTMLElement,
 		markdown: string,

@@ -1,4 +1,5 @@
-import { Notice, normalizePath } from 'obsidian'
+import { APICallError } from 'ai'
+import { normalizePath, Notice } from 'obsidian'
 import {
 	getFirstModel,
 	getModelById,
@@ -33,7 +34,9 @@ import {
 	ChatPendingMessage,
 	ChatRunState,
 	ChatSessionIndexItem,
+	ChatUserMessage,
 	cloneMessage,
+	cloneMessageRecord,
 	cloneReversibleToolOp,
 	cloneSession,
 	createQueuedTask,
@@ -46,7 +49,29 @@ import {
 	toFailedTask,
 	toRunningTask,
 } from '~/chat/domain'
-import type { ChatboxProps, ChatProviderOption } from '~/chatbox/types'
+import { exportSessionToMarkdownFile } from '~/chat/export-session'
+import {
+	decodeReversibleFileSnapshot,
+	hasCompressedFileContent,
+} from '~/chat/reversible-content'
+import {
+	blobToDataUrl,
+	ensureUserContextItemHash,
+	formatUserContext,
+	getUserContextItemHash,
+	type UserContextItem,
+} from '~/chat/user-context'
+import {
+	captureWorkspaceContexts,
+	computeChangedContexts,
+	formatAdditionalContext,
+} from '~/chat/workspace-context'
+import type {
+	ChatboxProps,
+	ChatProviderOption,
+	RecallMessageResult,
+} from '~/chatbox/types'
+import SessionExportModal from '~/components/SessionExportModal'
 import i18n from '~/i18n'
 import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
 import createId from '~/utils/create-id'
@@ -58,7 +83,6 @@ const MAX_CONCURRENT_TASKS_PER_SESSION = 3
 const CHAT_META_KEY = 'chat_meta'
 const CHAT_INDEX_KEY = 'chat_index'
 const INTERRUPTED_TASK_CANCEL_REASON = 'interrupted_by_restart'
-const INTERRUPTED_TASK_FAILURE_STAGE = 'interrupted_by_restart'
 const COMPRESSION_PROMPT = [
 	'Summarize the conversation above for continuation in a fresh context.',
 	'Return a compact but information-dense handoff covering:',
@@ -95,10 +119,36 @@ interface SessionRuntimeState {
 	processing?: Promise<void>
 	stopRequested?: boolean
 	pendingMessages: ChatPendingMessage[]
+	pendingUserContext: UserContextItem[]
+	pendingInputDraft: string
 }
 
 function toTextParts(text: string): AIMessageContentPart[] {
 	return [{ type: 'text', text }]
+}
+
+function cloneUserContextItem(item: UserContextItem): UserContextItem {
+	const normalized = ensureUserContextItemHash(item)
+	if (normalized.type === 'file' || normalized.type === 'folder') {
+		return { ...normalized }
+	}
+	if (normalized.type === 'image') {
+		return { ...normalized }
+	}
+	return {
+		hash: normalized.hash,
+		type: 'selection',
+		filePath: normalized.filePath,
+		range: {
+			from: { ...normalized.range.from },
+			to: { ...normalized.range.to },
+		},
+		selectedText: normalized.selectedText,
+	}
+}
+
+function cloneUserContextItems(items: UserContextItem[]) {
+	return items.map(cloneUserContextItem)
 }
 
 function messageToText(message: Pick<ChatMessage, 'content'> | AIMessage) {
@@ -149,27 +199,27 @@ function normalizeReversibleToolOpRecord(
 	if (!normalizedPath) {
 		return null
 	}
+	if (op.operation === 'update') {
+		if (
+			!hasCompressedFileContent(op.before) &&
+			typeof op.before.contentBase64 !== 'string'
+		) {
+			return null
+		}
+	}
+	if (op.operation === 'delete' && op.before.kind === 'file') {
+		if (
+			!hasCompressedFileContent(op.before) &&
+			typeof op.before.contentBase64 !== 'string'
+		) {
+			return null
+		}
+	}
 	const cloned = cloneReversibleToolOp(op)
 	return {
 		...cloned,
 		vaultPath: normalizedPath,
 	}
-}
-
-function decodeBase64ToArrayBuffer(contentBase64: string) {
-	if (typeof Buffer !== 'undefined') {
-		const buffer = Buffer.from(contentBase64, 'base64')
-		return buffer.buffer.slice(
-			buffer.byteOffset,
-			buffer.byteOffset + buffer.byteLength,
-		) as ArrayBuffer
-	}
-	const binary = atob(contentBase64)
-	const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
-	return bytes.buffer.slice(
-		bytes.byteOffset,
-		bytes.byteOffset + bytes.byteLength,
-	) as ArrayBuffer
 }
 
 function isVaultFolder(
@@ -211,6 +261,7 @@ function createMainSystemPrompt(maxDepth: number) {
 		'Use bash when shell-style workflows are more efficient.',
 		createVaultToolGuidance(),
 		`Use the spawn tool only for large independent tasks that should run in the background. Maximum task depth is ${maxDepth}.`,
+		'You may receive workspace context in <AdditionalContext> XML blocks prepended to user messages. Use this information to assist the user, but do not mention or quote the XML structure itself.',
 	].join(' ')
 }
 
@@ -224,6 +275,15 @@ function createSubagentSystemPrompt(canSpawn: boolean) {
 	]
 		.filter(Boolean)
 		.join(' ')
+}
+
+function extractErrorMessage(error: unknown, fallback: string): string {
+	if (APICallError.isInstance(error) && error.responseBody != null) {
+		return typeof error.responseBody === 'string'
+			? error.responseBody
+			: JSON.stringify(error.responseBody)
+	}
+	return error instanceof Error ? error.message : fallback
 }
 
 export default class ChatService {
@@ -315,7 +375,12 @@ export default class ChatService {
 		const activeSession = this.getLoadedActiveSession()
 		const activeRuntime = activeSession
 			? this.getRuntime(activeSession.id)
-			: { runState: 'idle' as const, pendingMessages: [] }
+			: {
+					runState: 'idle' as const,
+					pendingMessages: [],
+					pendingUserContext: [] as UserContextItem[],
+					pendingInputDraft: '',
+				}
 		const fallbackSelection = resolveInitialSelection(
 			this.plugin.settings.ai.providers,
 			this.plugin.settings.ai.defaultModel,
@@ -364,54 +429,39 @@ export default class ChatService {
 			pendingMessages: activeRuntime.pendingMessages.map((item) => ({
 				...item,
 			})),
+			pendingUserContext: activeRuntime.pendingUserContext.slice(),
+			pendingInputDraft: activeRuntime.pendingInputDraft,
 			canSend: true,
 			canCreateFragment: !!activeSession && activeRuntime.runState === 'idle',
 			canCompress:
 				!!activeSession &&
 				activeRuntime.runState === 'idle' &&
 				this.getActiveFragment(activeSession).messages.length > 0,
-			onNewSession: () => {
-				void this.createSession()
+			onNewSession: () => void this.createSession(),
+			onNewFragment: () => this.createFragmentForActiveSession(),
+			onCompressContext: () => this.compressContext(),
+			onSwitchSession: (sessionId: string) =>
+				void this.switchSession(sessionId),
+			onExportSession: (sessionId: string) => this.exportSession(sessionId),
+			onDeleteSession: (sessionId: string) => this.deleteSession(sessionId),
+			onSelectProvider: (providerId: string) => this.selectProvider(providerId),
+			onSelectModel: (modelId: string) => this.selectModel(modelId),
+			onSendMessage: (text: string) => this.sendMessage(text),
+			onUpdateInputDraft: (text: string) => this.updateInputDraft(text),
+			onAddUserContext: (item: UserContextItem) => this.addUserContext(item),
+			onRemoveUserContext: (index: number) => this.removeUserContext(index),
+			onDropContextItem: (_path: string) => {
+				// overridden by the view layer which has access to app.vault
 			},
-			onNewFragment: () => {
-				this.createFragmentForActiveSession()
-			},
-			onCompressContext: async () => {
-				await this.compressContext()
-			},
-			onSwitchSession: (sessionId: string) => {
-				void this.switchSession(sessionId)
-			},
-			onDeleteSession: async (sessionId: string) => {
-				await this.deleteSession(sessionId)
-			},
-			onSelectProvider: (providerId: string) => {
-				this.selectProvider(providerId)
-			},
-			onSelectModel: (modelId: string) => {
-				this.selectModel(modelId)
-			},
-			onSendMessage: async (text: string) => {
-				await this.sendMessage(text)
-			},
-			onStopActiveRun: () => {
-				this.stopActiveSessionRun()
-			},
-			onCancelTask: (taskId: string) => {
-				this.cancelTask(taskId)
-			},
-			onDeleteMessage: (messageId: string) => {
-				this.deleteMessage(messageId)
-			},
-			onRegenerateMessage: async (messageId: string) => {
-				await this.regenerateMessage(messageId)
-			},
-			onRecallMessage: async (
+			onStopActiveRun: () => this.stopActiveSessionRun(),
+			onCancelTask: (taskId: string) => this.cancelTask(taskId),
+			onDeleteMessage: (messageId: string) => this.deleteMessage(messageId),
+			onRegenerateMessage: (messageId: string) =>
+				this.regenerateMessage(messageId),
+			onRecallMessage: (
 				messageId: string,
 				options?: { restoreFiles?: boolean },
-			) => {
-				await this.recallMessage(messageId, options)
-			},
+			) => this.recallMessage(messageId, options),
 		}
 	}
 
@@ -475,6 +525,39 @@ export default class ChatService {
 		await this.persistMetaAndIndex()
 		this.notify()
 		new Notice(i18n.t('chatbox.sessionDeleted'))
+	}
+
+	async exportSession(sessionId: string) {
+		await this.initialize()
+		if (!this.sessionIndex.some((item) => item.id === sessionId)) {
+			new Notice(i18n.t('chatbox.errors.sessionNotFound'))
+			return
+		}
+
+		const options = await SessionExportModal.open(this.plugin.app)
+		if (!options) {
+			return
+		}
+
+		try {
+			const session = await this.loadSessionById(sessionId)
+			const title =
+				this.sessionIndex.find((item) => item.id === sessionId)?.title ||
+				deriveTitle(session)
+			const file = await exportSessionToMarkdownFile({
+				vault: this.plugin.app.vault,
+				manifestId: this.plugin.manifest.id,
+				session,
+				title,
+				includeToolMessages: options.includeToolMessages,
+			})
+			const leaf = this.plugin.app.workspace.getLeaf('tab')
+			await leaf.openFile(file)
+			new Notice(i18n.t('chatbox.exportSaved', { fileName: file.path }))
+		} catch (error) {
+			new Notice(i18n.t('chatbox.exportFailed'))
+			logger.error('Failed to export chat session:', error)
+		}
 	}
 
 	selectProvider(providerId: string) {
@@ -574,30 +657,76 @@ export default class ChatService {
 		this.notify()
 	}
 
-	async sendMessage(text: string) {
+	addUserContext(item: UserContextItem) {
+		const session = this.getLoadedActiveSession()
+		if (!session) return
+		const runtime = this.getRuntime(session.id)
+		const normalized = cloneUserContextItem(item)
+		const hash = getUserContextItemHash(normalized)
+		if (
+			runtime.pendingUserContext.some(
+				(contextItem) => contextItem.hash === hash,
+			)
+		) {
+			return
+		}
+		runtime.pendingUserContext.push(normalized)
+		this.notify()
+	}
+
+	removeUserContext(index: number) {
+		const session = this.getLoadedActiveSession()
+		if (!session) return
+		const runtime = this.getRuntime(session.id)
+		runtime.pendingUserContext.splice(index, 1)
+		this.notify()
+	}
+
+	updateInputDraft(text: string) {
+		const session = this.getLoadedActiveSession()
+		if (!session) return
+		const runtime = this.getRuntime(session.id)
+		runtime.pendingInputDraft = text
+	}
+
+	async sendMessage(text: string): Promise<boolean> {
 		await this.initialize()
 		const normalizedText = text.trim()
-		if (!normalizedText) {
-			return
-		}
-
 		const session =
 			this.getLoadedActiveSession() || (await this.createSession())
-		if (!session || !this.validateSessionSelection(session)) {
-			return
+		if (!session) {
+			return false
 		}
-
 		const runtime = this.getRuntime(session.id)
-		if (runtime.runState !== 'idle' || runtime.processing) {
-			runtime.pendingMessages.push(this.createPendingMessage(normalizedText))
-			this.notify()
-			return
+		if (!normalizedText && runtime.pendingUserContext.length === 0) {
+			return false
 		}
 
+		if (!this.validateSessionSelection(session)) {
+			return false
+		}
+
+		if (runtime.runState !== 'idle' || runtime.processing) {
+			if (normalizedText) {
+				runtime.pendingMessages.push(this.createPendingMessage(normalizedText))
+			}
+			this.notify()
+			return true
+		}
+
+		const pendingUserContext = runtime.pendingUserContext.splice(0)
+		const preparedContext =
+			await this.prepareUserContextForMessage(pendingUserContext)
 		this.appendUserMessage(
 			this.getActiveFragment(session),
 			normalizedText,
 			session,
+			preparedContext.dedupedItems.length > 0
+				? preparedContext.dedupedItems
+				: undefined,
+			preparedContext.imageParts.length > 0
+				? preparedContext.imageParts
+				: undefined,
 		)
 		this.upsertSessionIndexItem(session, deriveTitle(session))
 		runtime.runState = 'thinking'
@@ -605,6 +734,7 @@ export default class ChatService {
 		await this.persistMetaAndIndex()
 		this.notify()
 		await this.startSessionProcessor(session.id)
+		return true
 	}
 
 	createFragmentForActiveSession() {
@@ -646,6 +776,9 @@ export default class ChatService {
 			try {
 				if (sourceFragment.messages.length > 0) {
 					const provider = this.getProviderOrThrow(session)
+					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
+						provider,
+					)
 					const model = this.getModelOrThrow(provider, session)
 					const response = await generateAssistantTurn({
 						provider,
@@ -682,9 +815,7 @@ export default class ChatService {
 				const model = getModelById(provider, session.model?.modelId)
 				this.reportFatalError(
 					session,
-					error instanceof Error
-						? error.message
-						: i18n.t('chatbox.requestFailed'),
+					extractErrorMessage(error, i18n.t('chatbox.requestFailed')),
 					{
 						providerId: provider?.id,
 						providerName: provider?.name,
@@ -811,7 +942,10 @@ export default class ChatService {
 		this.notify()
 	}
 
-	async recallMessage(messageId: string, options?: { restoreFiles?: boolean }) {
+	async recallMessage(
+		messageId: string,
+		options?: { restoreFiles?: boolean },
+	): Promise<RecallMessageResult | void> {
 		const session = this.getLoadedActiveSession()
 		if (!session) {
 			return
@@ -825,6 +959,14 @@ export default class ChatService {
 		if (idx === -1) {
 			return
 		}
+		const recalledMessage = fragment.messages[idx]
+		const recalledText =
+			recalledMessage.message.role === 'user'
+				? messageToText(recalledMessage.message)
+				: ''
+		const recalledUserContext = cloneUserContextItems(
+			recalledMessage.userContext ?? [],
+		)
 		const recallRange = fragment.messages.slice(idx)
 		const reversibleOps = recallRange.flatMap(
 			(record) => record.reversibleOps ?? [],
@@ -834,9 +976,15 @@ export default class ChatService {
 				await this.restoreFilesForRecall(reversibleOps)
 			}
 			fragment.messages.splice(idx)
+			runtime.pendingUserContext = recalledUserContext
 			await this.persistSession(session)
 			this.notify()
+			return {
+				text: recalledText,
+				userContext: cloneUserContextItems(recalledUserContext),
+			}
 		} catch (error) {
+			logger.error(error)
 			new Notice(error instanceof Error ? error.message : String(error))
 		}
 	}
@@ -1127,6 +1275,13 @@ export default class ChatService {
 			(fragment) => fragment.messages,
 		)
 
+		const toolCallById = new Map<string, AIToolCall>()
+		for (const record of flattenedMessages) {
+			for (const tc of getAssistantToolCalls(record.message) || []) {
+				toolCallById.set(tc.id, tc)
+			}
+		}
+
 		return session.fragments.flatMap((fragment) => {
 			const items = fragment.messages.flatMap((message) => {
 				const toolMessage =
@@ -1147,18 +1302,9 @@ export default class ChatService {
 						id: `message:${message.id}`,
 						kind: 'message' as const,
 						createdAt: message.createdAt,
-						message,
+						message: cloneMessageRecord(message),
 						toolCall: toolMessage
-							? flattenedMessages
-									.slice(
-										0,
-										flattenedMessages.findIndex(
-											(item) => item.id === message.id,
-										),
-									)
-									.reverse()
-									.flatMap((item) => getAssistantToolCalls(item.message) || [])
-									.find((toolCall) => toolCall.id === toolMessage.tool_call_id)
+							? toolCallById.get(toolMessage.tool_call_id)
 							: undefined,
 					},
 				]
@@ -1199,7 +1345,8 @@ export default class ChatService {
 			latestRuntime.processing = undefined
 			if (
 				latestRuntime.runState === 'idle' &&
-				latestRuntime.pendingMessages.length
+				(latestRuntime.pendingMessages.length ||
+					latestRuntime.pendingUserContext.length)
 			) {
 				void this.startSessionProcessor(sessionId)
 				return
@@ -1236,7 +1383,7 @@ export default class ChatService {
 					!lastMessage ||
 					(lastMessage.role !== 'user' && lastMessage.role !== 'tool')
 				) {
-					const flushed = this.flushPendingMessages(session)
+					const flushed = await this.flushPendingMessages(session)
 					if (!flushed) {
 						runtime.runState = 'idle'
 						this.notify()
@@ -1248,13 +1395,69 @@ export default class ChatService {
 				this.notify()
 
 				const tools = this.createToolsForContext(session, 0, MAX_TASK_DEPTH)
-				const response = await generateAssistantTurn({
+				await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
 					provider,
-					model: model.id,
-					messages: this.buildMessagesForFragment(fragment, session),
-					tools,
-					...session.inferenceParams,
-				})
+				)
+				const requestMessages = this.buildMessagesForFragment(fragment, session)
+				const assistantMeta = {
+					providerId: provider.id,
+					providerName: provider.name,
+					modelId: model.id,
+					modelName: model.name,
+				}
+				let assistantRecord: AIMessageRecord | undefined
+				const ensureAssistantRecord = () => {
+					if (assistantRecord) {
+						return assistantRecord
+					}
+					assistantRecord = this.createMessageRecord(
+						{
+							role: 'assistant',
+							content: toTextParts(''),
+						},
+						{ meta: assistantMeta },
+					)
+					fragment.messages.push(assistantRecord)
+					fragment.updatedAt = Date.now()
+					session.updatedAt = Date.now()
+					return assistantRecord
+				}
+				let lastStreamNotifyAt = 0
+				const response = await generateAssistantTurn(
+					{
+						provider,
+						model: model.id,
+						messages: requestMessages,
+						tools,
+						...session.inferenceParams,
+					},
+					{
+						onTextDelta: async (delta) => {
+							if (
+								!delta ||
+								this.deletedSessionIds.has(session.id) ||
+								runtime.stopRequested
+							) {
+								return
+							}
+							const record = ensureAssistantRecord()
+							if (record.message.role !== 'assistant') {
+								return
+							}
+							const existing = messageToText(record.message)
+							record.message = {
+								...record.message,
+								content: toTextParts(`${existing}${delta}`),
+							}
+							fragment.updatedAt = Date.now()
+							session.updatedAt = Date.now()
+							if (Date.now() - lastStreamNotifyAt >= 33) {
+								lastStreamNotifyAt = Date.now()
+								this.notify()
+							}
+						},
+					},
+				)
 
 				if (this.deletedSessionIds.has(session.id)) {
 					runtime.stopRequested = false
@@ -1263,19 +1466,17 @@ export default class ChatService {
 				}
 
 				if (runtime.stopRequested) {
-					const record = this.createMessageRecord(response.message, {
-						meta: { ...response.meta, modelId: model.id },
-					})
-					fragment.messages.push(record)
+					const record = ensureAssistantRecord()
+					record.message = response.message
+					record.meta = { ...response.meta, modelId: model.id }
 					this.finishStoppedSessionRun(session, fragment)
 					await this.persistSession(session)
 					return
 				}
 
-				const assistantRecord = this.createMessageRecord(response.message, {
-					meta: { ...response.meta, modelId: model.id },
-				})
-				fragment.messages.push(assistantRecord)
+				const record = ensureAssistantRecord()
+				record.message = response.message
+				record.meta = { ...response.meta, modelId: model.id }
 				fragment.updatedAt = Date.now()
 				session.updatedAt = Date.now()
 				await this.persistSession(session)
@@ -1342,6 +1543,17 @@ export default class ChatService {
 				runtime.runState = 'idle'
 				return
 			}
+			const activeFragment = this.getActiveFragment(session)
+			const lastRecord =
+				activeFragment.messages[activeFragment.messages.length - 1]
+			if (
+				lastRecord &&
+				lastRecord.message.role === 'assistant' &&
+				!lastRecord.message.tool_calls?.length &&
+				!messageToText(lastRecord.message).trim()
+			) {
+				activeFragment.messages.pop()
+			}
 			const activeProvider = getProviderById(
 				this.plugin.settings.ai.providers,
 				session.model?.providerId,
@@ -1349,25 +1561,26 @@ export default class ChatService {
 			const activeModel = getModelById(activeProvider, session.model?.modelId)
 			this.reportFatalError(
 				session,
-				error instanceof Error
-					? error.message
-					: i18n.t('chatbox.requestFailed'),
+				extractErrorMessage(error, i18n.t('chatbox.requestFailed')),
 				{
 					providerId: activeProvider?.id,
 					providerName: activeProvider?.name,
 					modelId: activeModel?.id,
 					modelName: activeModel?.name,
 				},
-				this.getActiveFragment(session),
+				activeFragment,
 			)
 			runtime.runState = 'idle'
 			await this.persistSession(session)
 		}
 	}
 
-	private flushPendingMessages(session: AISession) {
+	private async flushPendingMessages(session: AISession) {
 		const runtime = this.getRuntime(session.id)
-		if (runtime.pendingMessages.length === 0) {
+		if (
+			runtime.pendingMessages.length === 0 &&
+			runtime.pendingUserContext.length === 0
+		) {
 			return false
 		}
 
@@ -1376,13 +1589,26 @@ export default class ChatService {
 			.filter(Boolean)
 			.join('\n\n')
 		runtime.pendingMessages = []
-		if (!mergedText) {
+		const pendingUserContext = runtime.pendingUserContext.splice(0)
+		const preparedContext =
+			await this.prepareUserContextForMessage(pendingUserContext)
+		if (!mergedText && preparedContext.dedupedItems.length === 0) {
 			this.notify()
 			return false
 		}
 
 		const fragment = this.getActiveFragment(session)
-		this.appendUserMessage(fragment, mergedText, session)
+		this.appendUserMessage(
+			fragment,
+			mergedText,
+			session,
+			preparedContext.dedupedItems.length > 0
+				? preparedContext.dedupedItems
+				: undefined,
+			preparedContext.imageParts.length > 0
+				? preparedContext.imageParts
+				: undefined,
+		)
 		this.upsertSessionIndexItem(session, deriveTitle(session))
 		void this.persistSession(session)
 		void this.persistMetaAndIndex()
@@ -1396,6 +1622,8 @@ export default class ChatService {
 			runtime = {
 				runState: 'idle',
 				pendingMessages: [],
+				pendingUserContext: [],
+				pendingInputDraft: '',
 			}
 			this.runtimeBySessionId.set(sessionId, runtime)
 		}
@@ -1443,18 +1671,34 @@ export default class ChatService {
 		fragment: ChatFragment,
 		text: string,
 		session?: AISession,
+		userContext?: UserContextItem[],
+		imageParts?: Extract<AIMessageContentPart, { type: 'image_url' }>[],
 	) {
 		const now = Date.now()
 		fragment.updatedAt = now
 		if (session) {
 			session.updatedAt = now
 		}
-		fragment.messages.push(
-			this.createMessageRecord({
-				role: 'user',
-				content: toTextParts(text),
-			}),
-		)
+		const current = captureWorkspaceContexts(this.plugin.app)
+		const changed = computeChangedContexts(fragment.messages, current)
+		const content: AIMessageContentPart[] = []
+		if (imageParts?.length) {
+			content.push(...imageParts)
+		}
+		if (text) {
+			content.push(...toTextParts(text))
+		}
+		const record = this.createMessageRecord({
+			role: 'user',
+			content,
+		})
+		if (changed.length > 0) {
+			record.workspaceContextDelta = changed
+		}
+		if (userContext && userContext.length > 0) {
+			record.userContext = cloneUserContextItems(userContext)
+		}
+		fragment.messages.push(record)
 	}
 
 	private finishStoppedSessionRun(session: AISession, fragment: ChatFragment) {
@@ -1507,6 +1751,7 @@ export default class ChatService {
 
 		try {
 			const provider = this.getProviderByIdOrThrow(selection.providerId)
+			await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
 			const model = this.getModelByIdsOrThrow(provider, selection.modelId)
 			const result = await this.runBackgroundTaskLoop(
 				task,
@@ -1541,11 +1786,10 @@ export default class ChatService {
 			if (task.status === 'cancelled') {
 				return
 			}
+			logger.error(error)
 			this.finishTaskAsFailed(
 				task,
-				error instanceof Error
-					? error.message
-					: i18n.t('chatbox.requestFailed'),
+				extractErrorMessage(error, i18n.t('chatbox.requestFailed')),
 				'runtime_error',
 			)
 		}
@@ -1589,6 +1833,7 @@ export default class ChatService {
 				}
 			}
 
+			await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
 			const response = await generateAssistantTurn({
 				provider,
 				model: model.id,
@@ -1644,9 +1889,10 @@ export default class ChatService {
 		tools: AIToolDefinition[],
 		context: AIToolExecutionContext,
 	) {
+		const toolsByName = new Map(tools.map((t) => [t.name, t]))
 		const results = await Promise.all(
 			toolCalls.map((toolCall) =>
-				this.resolveSingleToolCall(toolCall, tools, context),
+				this.resolveSingleToolCall(toolCall, toolsByName, context),
 			),
 		)
 
@@ -1668,7 +1914,7 @@ export default class ChatService {
 
 	private async resolveSingleToolCall(
 		toolCall: AIToolCall,
-		tools: AIToolDefinition[],
+		toolsByName: Map<string, AIToolDefinition>,
 		context: AIToolExecutionContext,
 	): Promise<ResolvedToolResult> {
 		if (toolCall.function.name === 'spawn') {
@@ -1683,7 +1929,7 @@ export default class ChatService {
 		}
 
 		const result = await this.executeToolCall(
-			tools,
+			toolsByName,
 			toolCall.function.name,
 			toolCall.function.arguments || '{}',
 			context,
@@ -1797,14 +2043,21 @@ export default class ChatService {
 		return deferred.promise
 	}
 
+	private afterTaskSettled(task: AITaskRecord) {
+		const session = this.loadedSessions.get(task.sessionId)
+		if (session) void this.persistSession(session)
+		this.notify()
+		this.resolveTaskCompletion(task.id, this.buildTaskToolPayload(task))
+		this.cleanupTaskTracking(task.id)
+		if (session) this.startQueuedTasksForSession(session)
+	}
+
 	private finishTaskAsCompleted(
 		task: AITaskRecord,
 		summary: string,
 		sourceCount: number,
 	) {
-		if (task.status !== 'running') {
-			return
-		}
+		if (task.status !== 'running') return
 		mutateTaskRecord(
 			task,
 			toCompletedTask(
@@ -1814,16 +2067,7 @@ export default class ChatService {
 				Date.now(),
 			),
 		)
-		const session = this.loadedSessions.get(task.sessionId)
-		if (session) {
-			void this.persistSession(session)
-		}
-		this.notify()
-		this.resolveTaskCompletion(task.id, this.buildTaskToolPayload(task))
-		this.cleanupTaskTracking(task.id)
-		if (session) {
-			this.startQueuedTasksForSession(session)
-		}
+		this.afterTaskSettled(task)
 	}
 
 	private finishTaskAsFailed(
@@ -1832,23 +2076,12 @@ export default class ChatService {
 		failureStage?: string,
 		sourceCount?: number,
 	) {
-		if (task.status !== 'queued' && task.status !== 'running') {
-			return
-		}
+		if (task.status !== 'queued' && task.status !== 'running') return
 		mutateTaskRecord(
 			task,
 			toFailedTask(task, message, Date.now(), failureStage, sourceCount),
 		)
-		const session = this.loadedSessions.get(task.sessionId)
-		if (session) {
-			void this.persistSession(session)
-		}
-		this.notify()
-		this.resolveTaskCompletion(task.id, this.buildTaskToolPayload(task))
-		this.cleanupTaskTracking(task.id)
-		if (session) {
-			this.startQueuedTasksForSession(session)
-		}
+		this.afterTaskSettled(task)
 	}
 
 	private finishTaskAsCancelled(task: AITaskRecord, cancelReason: string) {
@@ -1863,16 +2096,7 @@ export default class ChatService {
 				),
 			)
 		}
-		const session = this.loadedSessions.get(task.sessionId)
-		if (session) {
-			void this.persistSession(session)
-		}
-		this.notify()
-		this.resolveTaskCompletion(task.id, this.buildTaskToolPayload(task))
-		this.cleanupTaskTracking(task.id)
-		if (session) {
-			this.startQueuedTasksForSession(session)
-		}
+		this.afterTaskSettled(task)
 	}
 
 	private countRunningTasksForSession(session: AISession) {
@@ -1940,12 +2164,12 @@ export default class ChatService {
 	}
 
 	private async executeToolCall(
-		tools: AIToolDefinition[],
+		toolsByName: Map<string, AIToolDefinition>,
 		name: string,
 		args: string,
 		context: AIToolExecutionContext,
 	) {
-		const tool = new Map(tools.map((item) => [item.name, item])).get(name)
+		const tool = toolsByName.get(name)
 		let result: ToolExecutionResult
 
 		try {
@@ -1979,6 +2203,56 @@ export default class ChatService {
 		}
 	}
 
+	private dedupeUserContextItems(items: UserContextItem[]): UserContextItem[] {
+		const deduped: UserContextItem[] = []
+		const seen = new Set<string>()
+		for (const item of items) {
+			const hash = getUserContextItemHash(item)
+			if (seen.has(hash)) {
+				continue
+			}
+			seen.add(hash)
+			deduped.push(cloneUserContextItem(item))
+		}
+		return deduped
+	}
+
+	private async prepareUserContextForMessage(items: UserContextItem[]) {
+		const dedupedItems: UserContextItem[] = []
+		const imageParts: Extract<AIMessageContentPart, { type: 'image_url' }>[] =
+			[]
+		const seen = new Set<string>()
+		for (const item of items) {
+			const hash = getUserContextItemHash(item)
+			if (seen.has(hash)) {
+				continue
+			}
+			seen.add(hash)
+			if (item.type === 'image') {
+				const imageBlob =
+					item.blob.type === item.mimeType
+						? item.blob
+						: new Blob([item.blob], {
+								type: item.mimeType,
+							})
+				const imageUrl = await blobToDataUrl(imageBlob)
+				dedupedItems.push(cloneUserContextItem(item))
+				imageParts.push({
+					type: 'image_url',
+					image_url: {
+						url: imageUrl,
+					},
+				})
+				continue
+			}
+			dedupedItems.push(cloneUserContextItem(item))
+		}
+		return {
+			dedupedItems,
+			imageParts,
+		}
+	}
+
 	private buildMessagesForFragment(
 		fragment: ChatFragment,
 		session: AISession,
@@ -1990,7 +2264,38 @@ export default class ChatService {
 					session.systemPrompt || createMainSystemPrompt(MAX_TASK_DEPTH),
 				),
 			},
-			...fragment.messages.map((item) => item.message),
+			...fragment.messages.map((item) => {
+				if (item.message.role !== 'user') {
+					return item.message
+				}
+				const prefixParts: AIMessageContentPart[] = []
+				if (item.workspaceContextDelta?.length) {
+					prefixParts.push({
+						type: 'text',
+						text: formatAdditionalContext(item.workspaceContextDelta),
+					})
+				}
+				const dedupedContext = item.userContext?.length
+					? this.dedupeUserContextItems(item.userContext)
+					: []
+				const textContext = dedupedContext.filter(
+					(contextItem) => contextItem.type !== 'image',
+				)
+				if (textContext.length) {
+					prefixParts.push({
+						type: 'text',
+						text: formatUserContext(textContext),
+					})
+				}
+				if (!prefixParts.length) return item.message
+				return {
+					...item.message,
+					content: [
+						...prefixParts,
+						...(item.message as ChatUserMessage).content,
+					],
+				}
+			}),
 		]
 	}
 
@@ -2019,7 +2324,13 @@ export default class ChatService {
 
 		const deletePaths = new Set<string>()
 		const restoreDirs = new Set<string>()
-		const restoreFiles = new Map<string, string>()
+		const restoreFiles = new Map<
+			string,
+			Extract<
+				NonNullable<AIMessageRecord['reversibleOps']>[number],
+				{ operation: 'update' }
+			>['before']
+		>()
 
 		for (const operation of earliestByPath.values()) {
 			if (operation.operation === 'create') {
@@ -2027,14 +2338,14 @@ export default class ChatService {
 				continue
 			}
 			if (operation.operation === 'update') {
-				restoreFiles.set(operation.vaultPath, operation.before.contentBase64)
+				restoreFiles.set(operation.vaultPath, operation.before)
 				continue
 			}
 			if (operation.before.kind === 'dir') {
 				restoreDirs.add(operation.vaultPath)
 				continue
 			}
-			restoreFiles.set(operation.vaultPath, operation.before.contentBase64)
+			restoreFiles.set(operation.vaultPath, operation.before)
 		}
 
 		for (const path of [...deletePaths].sort((left, right) => {
@@ -2062,7 +2373,10 @@ export default class ChatService {
 			const depthDelta = getPathDepth(left) - getPathDepth(right)
 			return depthDelta !== 0 ? depthDelta : left.localeCompare(right)
 		})) {
-			await this.writeVaultFile(filePath, restoreFiles.get(filePath) || '')
+			const snapshot = restoreFiles.get(filePath)
+			if (snapshot) {
+				await this.writeVaultFile(filePath, snapshot)
+			}
 		}
 	}
 
@@ -2096,8 +2410,14 @@ export default class ChatService {
 		await this.plugin.app.vault.createFolder(path)
 	}
 
-	private async writeVaultFile(path: string, contentBase64: string) {
-		const data = decodeBase64ToArrayBuffer(contentBase64)
+	private async writeVaultFile(
+		path: string,
+		content: Extract<
+			NonNullable<AIMessageRecord['reversibleOps']>[number],
+			{ operation: 'update' }
+		>['before'],
+	) {
+		const data = await decodeReversibleFileSnapshot(content)
 		const existing = this.plugin.app.vault.getAbstractFileByPath(path)
 		if (existing && isVaultFolder(existing)) {
 			throw new Error(
@@ -2270,44 +2590,30 @@ export default class ChatService {
 		return false
 	}
 
+	private requireProvider(id: string | undefined): AIProviderConfig {
+		const provider = getProviderById(this.plugin.settings.ai.providers, id)
+		if (!provider) throw new Error(i18n.t('chatbox.errors.noProvider'))
+		assertProviderUsable(provider)
+		return provider
+	}
+
+	private requireModel(provider: AIProviderConfig, id: string | undefined) {
+		const model = getModelById(provider, id)
+		if (!model) throw new Error(i18n.t('chatbox.errors.noModel'))
+		return model
+	}
+
 	private getProviderOrThrow(session: AISession) {
-		const provider = getProviderById(
-			this.plugin.settings.ai.providers,
-			session.model?.providerId,
-		)
-		if (!provider) {
-			throw new Error(i18n.t('chatbox.errors.noProvider'))
-		}
-		assertProviderUsable(provider)
-		return provider
+		return this.requireProvider(session.model?.providerId)
 	}
-
-	private getProviderByIdOrThrow(providerId: string) {
-		const provider = getProviderById(
-			this.plugin.settings.ai.providers,
-			providerId,
-		)
-		if (!provider) {
-			throw new Error(i18n.t('chatbox.errors.noProvider'))
-		}
-		assertProviderUsable(provider)
-		return provider
+	private getProviderByIdOrThrow(id: string) {
+		return this.requireProvider(id)
 	}
-
 	private getModelOrThrow(provider: AIProviderConfig, session: AISession) {
-		const model = getModelById(provider, session.model?.modelId)
-		if (!model) {
-			throw new Error(i18n.t('chatbox.errors.noModel'))
-		}
-		return model
+		return this.requireModel(provider, session.model?.modelId)
 	}
-
-	private getModelByIdsOrThrow(provider: AIProviderConfig, modelId: string) {
-		const model = getModelById(provider, modelId)
-		if (!model) {
-			throw new Error(i18n.t('chatbox.errors.noModel'))
-		}
-		return model
+	private getModelByIdsOrThrow(provider: AIProviderConfig, id: string) {
+		return this.requireModel(provider, id)
 	}
 
 	private createEmptySession(): AISession {
@@ -2481,7 +2787,6 @@ export default class ChatService {
 		fragment: ChatFragment = this.getActiveFragment(session),
 	) {
 		logger.error(message)
-		new Notice(message)
 		fragment.messages.push(
 			this.createMessageRecord(
 				{

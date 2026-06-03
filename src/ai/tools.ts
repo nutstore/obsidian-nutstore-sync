@@ -2,6 +2,7 @@ import { App, normalizePath, TFile } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod'
 import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/bash/runtime'
+import { createCompressedFileContent } from '~/chat/reversible-content'
 import i18n from '~/i18n'
 import type { PermissionGuard } from './permission-guard'
 import { AIToolDefinition, ToolExecutionResult } from './types'
@@ -9,13 +10,6 @@ import { AIToolDefinition, ToolExecutionResult } from './types'
 interface ReplaceResult {
 	content: string
 	matchCount: number
-}
-
-function encodeTextBase64(content: string) {
-	if (typeof Buffer !== 'undefined') {
-		return Buffer.from(content).toString('base64')
-	}
-	return btoa(String.fromCharCode(...new TextEncoder().encode(content)))
 }
 
 const textValue = (field: string) =>
@@ -173,7 +167,7 @@ export function createAITools(
 							operation: 'update',
 							before: {
 								kind: 'file',
-								contentBase64: encodeTextBase64(content),
+								contentCompressed: createCompressedFileContent(content),
 							},
 						},
 					],

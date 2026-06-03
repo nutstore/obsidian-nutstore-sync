@@ -1,48 +1,50 @@
 export type {
-	ChatUsage,
-	ChatRunState,
-	ChatTextPart,
-	ChatImageUrlPart,
-	ChatUnknownPart,
-	ChatMessageContentPart,
-	ChatToolCall,
-	ChatMessageMeta,
-	ChatSystemMessage,
-	ChatUserMessage,
+	CancelledChatTask,
+	ChatAssistantMessage,
 	ChatAssistantMessageWithContent,
 	ChatAssistantMessageWithToolCalls,
-	ChatAssistantMessage,
-	ChatToolMessage,
+	ChatImageUrlPart,
 	ChatMessage,
+	ChatMessageContentPart,
+	ChatMessageMeta,
 	ChatMessageRecord,
+	ChatPendingMessage,
+	ChatRunState,
+	ChatSystemMessage,
 	ChatTaskBase,
-	QueuedChatTask,
-	RunningChatTask,
+	ChatTaskRecord,
+	ChatTextPart,
+	ChatToolCall,
+	ChatToolMessage,
+	ChatUnknownPart,
+	ChatUsage,
+	ChatUserMessage,
 	CompletedChatTask,
 	FailedChatTask,
-	CancelledChatTask,
-	ChatTaskRecord,
-	ChatPendingMessage,
+	QueuedChatTask,
+	ReversibleCompressedContent,
+	ReversibleFileSnapshot,
 	ReversibleToolOp,
-} from 'chatbox'
+	RunningChatTask,
+	WorkspaceContextDelta,
+} from '../components/solid-js'
 
 import type {
-	ChatUsage,
+	CancelledChatTask,
 	ChatImageUrlPart,
-	ChatTextPart,
-	ChatUnknownPart,
 	ChatMessage,
 	ChatMessageRecord,
-	ChatMessageMeta,
-	ChatTaskRecord,
 	ChatTaskBase,
-	QueuedChatTask,
-	RunningChatTask,
+	ChatTaskRecord,
+	ChatTextPart,
+	ChatUnknownPart,
+	ChatUsage,
 	CompletedChatTask,
 	FailedChatTask,
-	CancelledChatTask,
+	QueuedChatTask,
 	ReversibleToolOp,
-} from 'chatbox'
+	RunningChatTask,
+} from '../components/solid-js'
 
 export interface ChatFragment {
 	id: string
@@ -133,6 +135,9 @@ export function cloneReversibleToolOp(op: ReversibleToolOp): ReversibleToolOp {
 				operation: 'update',
 				before: {
 					kind: 'file',
+					contentCompressed: op.before.contentCompressed
+						? { ...op.before.contentCompressed }
+						: undefined,
 					contentBase64: op.before.contentBase64,
 				},
 			}
@@ -145,6 +150,9 @@ export function cloneReversibleToolOp(op: ReversibleToolOp): ReversibleToolOp {
 						? { kind: 'dir' }
 						: {
 								kind: 'file',
+								contentCompressed: op.before.contentCompressed
+									? { ...op.before.contentCompressed }
+									: undefined,
 								contentBase64: op.before.contentBase64,
 							},
 			}

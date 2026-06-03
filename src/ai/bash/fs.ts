@@ -1,3 +1,4 @@
+import { fromUint8Array } from 'js-base64'
 import {
 	InMemoryFs,
 	type BufferEncoding,
@@ -23,6 +24,8 @@ import type {
 } from '~/ai/file-operation'
 import type { PermissionGuard } from '~/ai/permission-guard'
 import { cloneReversibleToolOp, type ReversibleToolOp } from '~/chat/domain'
+import { createCompressedFileContent } from '~/chat/reversible-content'
+import { blake3Base64 } from '~/utils/blake3'
 
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
@@ -30,22 +33,20 @@ const VAULT_MOUNT_POINT = '/vault'
 type ReadFileOptions = { encoding?: BufferEncoding | null }
 type WriteFileOptions = { encoding?: BufferEncoding }
 type SnapshotKind = 'file' | 'dir'
-type VaultSnapshotNode = {
-	path: string
-	kind: SnapshotKind
-	contentBase64?: string
-}
-
-function encodeBase64(content: Uint8Array) {
-	if (typeof Buffer !== 'undefined') {
-		return Buffer.from(content).toString('base64')
-	}
-	let binary = ''
-	for (const byte of content) {
-		binary += String.fromCharCode(byte)
-	}
-	return btoa(binary)
-}
+type VaultSnapshotNode =
+	| {
+			path: string
+			kind: 'dir'
+	  }
+	| {
+			path: string
+			kind: 'file'
+			contentHash: string
+			contentCompressed: {
+				compress: 'deflate'
+				blob: Blob
+			}
+	  }
 
 function getEncoding(
 	options?: ReadFileOptions | WriteFileOptions | BufferEncoding | null,
@@ -62,18 +63,9 @@ function decodeContent(
 ) {
 	const encoding = getEncoding(options)
 	if (encoding === 'base64') {
-		if (typeof Buffer !== 'undefined') {
-			return Buffer.from(content).toString('base64')
-		}
-		let binary = ''
-		for (const byte of content) {
-			binary += String.fromCharCode(byte)
-		}
-		return btoa(binary)
+		return fromUint8Array(content, false)
 	}
-	return new TextDecoder(encoding === 'utf-8' ? 'utf-8' : 'utf-8').decode(
-		content,
-	)
+	return new TextDecoder('utf-8').decode(content)
 }
 
 function encodeContent(
@@ -242,7 +234,10 @@ export class ReversibleOpRecorder {
 		})
 	}
 
-	recordUpdate(vaultPath: string, contentBase64: string) {
+	recordUpdate(
+		vaultPath: string,
+		content: Extract<VaultSnapshotNode, { kind: 'file' }>,
+	) {
 		const normalizedPath = normalizeReversibleVaultPath(vaultPath)
 		if (!normalizedPath) {
 			return
@@ -252,7 +247,7 @@ export class ReversibleOpRecorder {
 			operation: 'update',
 			before: {
 				kind: 'file',
-				contentBase64,
+				contentCompressed: content.contentCompressed,
 			},
 		})
 	}
@@ -270,7 +265,7 @@ export class ReversibleOpRecorder {
 					? { kind: 'dir' }
 					: {
 							kind: 'file',
-							contentBase64: snapshot.contentBase64 || '',
+							contentCompressed: snapshot.contentCompressed,
 						},
 		})
 	}
@@ -353,12 +348,15 @@ export class ObsidianVaultFs implements IFileSystem {
 		return target
 	}
 
-	private async readFileContentBase64(target: TFile) {
-		return encodeBase64(
-			new Uint8Array(
-				(await this.vault.readBinary(target as never)) as ArrayBuffer,
-			),
+	private async readFileSnapshotContent(target: TFile) {
+		const content = new Uint8Array(
+			(await this.vault.readBinary(target as never)) as ArrayBuffer,
 		)
+		const [contentHash, contentCompressed] = await Promise.all([
+			blake3Base64(toArrayBuffer(content)),
+			createCompressedFileContent(content),
+		])
+		return { contentHash, contentCompressed }
 	}
 
 	private async snapshotNode(
@@ -388,7 +386,7 @@ export class ObsidianVaultFs implements IFileSystem {
 			{
 				path: virtualPath,
 				kind: 'file',
-				contentBase64: await this.readFileContentBase64(target as TFile),
+				...(await this.readFileSnapshotContent(target as TFile)),
 			},
 		]
 	}
@@ -443,9 +441,10 @@ export class ObsidianVaultFs implements IFileSystem {
 			}
 			if (
 				entry.kind === 'file' &&
-				previous.contentBase64 !== entry.contentBase64
+				previous.kind === 'file' &&
+				previous.contentHash !== entry.contentHash
 			) {
-				this.recorder.recordUpdate(entry.path, previous.contentBase64 || '')
+				this.recorder.recordUpdate(entry.path, previous)
 			}
 		}
 
@@ -547,10 +546,11 @@ export class ObsidianVaultFs implements IFileSystem {
 						`EISDIR: illegal operation on a directory, write '${path}'`,
 					)
 				}
-				this.recorder?.recordUpdate(
+				this.recorder?.recordUpdate(path, {
 					path,
-					await this.readFileContentBase64(target),
-				)
+					kind: 'file',
+					...(await this.readFileSnapshotContent(target)),
+				})
 				await this.vault.modifyBinary(target as never, toArrayBuffer(encoded))
 			} else {
 				await this.vault.createBinary(vaultPath, toArrayBuffer(encoded))

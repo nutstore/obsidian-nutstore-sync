@@ -1,16 +1,51 @@
-import { mount as mountChatbox } from 'chatbox'
-import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf } from 'obsidian'
+import {
+	Component,
+	ItemView,
+	MarkdownRenderer,
+	normalizePath,
+	type TAbstractFile,
+	TFolder,
+	WorkspaceLeaf,
+} from 'obsidian'
+import {
+	createFileContextItem,
+	createFolderContextItem,
+} from '~/chat/user-context'
 import type { ChatboxController, ChatboxProps } from '~/chatbox/types'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
+import { mountChatbox } from '../components/solid-js'
 
 export const CHATBOX_VIEW_TYPE = 'nutstore-sync-chatbox'
+
+function normalizeDroppedVaultPath(path: string): string | null {
+	let value = path.trim()
+	if (!value) return null
+	if (value.startsWith('obsidian://open?')) {
+		try {
+			const url = new URL(value)
+			value = url.searchParams.get('file') ?? value
+		} catch {
+			// Keep the raw value as a fallback candidate.
+		}
+	}
+	try {
+		value = decodeURIComponent(value)
+	} catch {
+		// Keep the raw value when it is not URI-encoded.
+	}
+	value = value.replace(/^\[\[/, '').replace(/\]\]$/, '')
+	value = value.split('|')[0]?.trim() ?? ''
+	value = value.replace(/^\/+/, '').replace(/\/+$/, '').trim()
+	return value ? normalizePath(value) : null
+}
 
 export default class ChatboxView extends ItemView {
 	private rootEl!: HTMLDivElement
 	private controller?: ChatboxController
 	private unsub?: () => void
+	private unsubWindowMigrated?: () => void
 	private readonly renderMarkdown: NonNullable<ChatboxProps['renderMarkdown']> =
 		async (el: HTMLElement, markdown: string) => {
 			const component = new Component()
@@ -18,7 +53,7 @@ export default class ChatboxView extends ItemView {
 			component.load()
 
 			const fallbackText = markdown
-			const renderedEl = document.createElement('div')
+			const renderedEl = el.ownerDocument.createElement('div')
 
 			try {
 				await MarkdownRenderer.render(
@@ -66,11 +101,62 @@ export default class ChatboxView extends ItemView {
 		return 'bot'
 	}
 
+	private resolveDroppedAbstractFile(path: string): TAbstractFile | null {
+		const normalized = normalizeDroppedVaultPath(path)
+		if (!normalized) return null
+		const candidates = [normalized]
+		if (!/\.[^/]+$/.test(normalized)) {
+			candidates.push(`${normalized}.md`)
+		}
+		for (const candidate of candidates) {
+			const abstract = this.plugin.app.vault.getAbstractFileByPath(candidate)
+			if (abstract) return abstract
+		}
+
+		const basename = normalized.split('/').pop()
+		if (!basename) return null
+		const matches = this.plugin.app.vault.getAllLoadedFiles().filter((file) => {
+			const filePath = normalizePath(file.path)
+			const filePathWithoutMd = filePath.replace(/\.md$/i, '')
+			return (
+				file.name === basename ||
+				filePathWithoutMd === normalized ||
+				filePathWithoutMd.endsWith(`/${basename}`)
+			)
+		})
+		return matches.length === 1 ? matches[0] : null
+	}
+
 	private getChatboxProps(): ChatboxProps {
 		return {
 			...this.plugin.chatService.getViewProps(),
 			renderMarkdown: this.renderMarkdown,
+			onAddUserContext: (item) => {
+				this.plugin.chatService.addUserContext(item)
+			},
+			onDropContextItem: (path: string) => {
+				const abstract = this.resolveDroppedAbstractFile(path)
+				if (!abstract) return
+				this.plugin.chatService.addUserContext(
+					abstract instanceof TFolder
+						? createFolderContextItem(abstract.path)
+						: createFileContextItem(abstract.path),
+				)
+			},
+			onRemoveUserContext: (index: number) => {
+				this.plugin.chatService.removeUserContext(index)
+			},
 		}
+	}
+
+	private remountChatbox() {
+		this.unsub?.()
+		this.unsub = undefined
+		this.controller?.destroy()
+		this.controller = mountChatbox(this.rootEl, this.getChatboxProps())
+		this.unsub = this.plugin.chatService.subscribe(() => {
+			this.controller?.update(this.getChatboxProps())
+		})
 	}
 
 	async onOpen() {
@@ -79,15 +165,20 @@ export default class ChatboxView extends ItemView {
 			cls: 'nutstore-chatbox-view h-full',
 		})
 		await this.plugin.chatService.ensureSession()
-		this.controller = mountChatbox(this.rootEl, this.getChatboxProps())
-		this.unsub = this.plugin.chatService.subscribe(() => {
-			this.controller?.update(this.getChatboxProps())
+		this.unsubWindowMigrated?.()
+		this.unsubWindowMigrated = this.rootEl.onWindowMigrated(() => {
+			this.remountChatbox()
 		})
+		this.remountChatbox()
 	}
 
 	async onClose() {
+		this.unsubWindowMigrated?.()
+		this.unsubWindowMigrated = undefined
 		this.unsub?.()
+		this.unsub = undefined
 		this.controller?.destroy()
+		this.controller = undefined
 		this.contentEl.empty()
 	}
 }
