@@ -25,7 +25,7 @@ import type {
 import type { PermissionGuard } from '~/ai/permission-guard'
 import { cloneReversibleToolOp, type ReversibleToolOp } from '~/chat/domain'
 import { createCompressedFileContent } from '~/chat/reversible-content'
-import { blake3Base64 } from '~/utils/blake3'
+import { sha256Base64 } from '~/utils/sha256'
 
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
@@ -353,7 +353,7 @@ export class ObsidianVaultFs implements IFileSystem {
 			(await this.vault.readBinary(target as never)) as ArrayBuffer,
 		)
 		const [contentHash, contentCompressed] = await Promise.all([
-			blake3Base64(toArrayBuffer(content)),
+			sha256Base64(toArrayBuffer(content)),
 			createCompressedFileContent(content),
 		])
 		return { contentHash, contentCompressed }

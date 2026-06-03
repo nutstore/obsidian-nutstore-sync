@@ -14,7 +14,7 @@ import NutstorePlugin from '..'
 export default class EventsService {
 	subscriptions: Subscription[]
 
-	constructor(private plugin: NutstorePlugin) {
+	constructor(plugin: NutstorePlugin) {
 		this.subscriptions = [
 			onPreparingSync().subscribe(({ showNotice }) => {
 				plugin.toggleSyncUI(true)
@@ -39,7 +39,7 @@ export default class EventsService {
 				})
 			}),
 
-			onEndSync().subscribe(async ({ failedCount, showNotice }) => {
+			onEndSync().subscribe(({ failedCount, showNotice }) => {
 				plugin.toggleSyncUI(false)
 				const now = Date.now()
 				plugin.statusService.setLastSyncTime(now, failedCount)

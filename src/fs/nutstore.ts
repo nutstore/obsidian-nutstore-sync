@@ -1,8 +1,6 @@
 import { Vault } from 'obsidian'
 import { isAbsolute } from 'path-browserify'
 import { isNotNil } from 'ramda'
-import { createClient, WebDAVClient } from 'webdav'
-import { NS_DAV_ENDPOINT } from '~/consts'
 import { useSettings } from '~/settings'
 import {
 	ConfigDirSyncMode,
@@ -16,13 +14,12 @@ import GlobMatch, {
 } from '~/utils/glob-match'
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
+import { isSyncCacheLocalPath } from '~/utils/sync-cache-file'
 import { ResumableWebDAVTraversal } from '~/utils/traverse-webdav'
 import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
 export class NutstoreFileSystem implements AbstractFileSystem {
-	private webdav: WebDAVClient
-
 	constructor(
 		private options: {
 			vault: Vault
@@ -35,13 +32,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				configDirSyncMode?: ConfigDirSyncMode
 			}
 		},
-	) {
-		this.webdav = createClient(NS_DAV_ENDPOINT, {
-			headers: {
-				Authorization: `Basic ${this.options.token}`,
-			},
-		})
-	}
+	) {}
 
 	async walk() {
 		const traversal = new ResumableWebDAVTraversal({
@@ -97,8 +88,10 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		const exclusions = this.buildRules(filterRules?.exclusionRules)
 		const inclusions = this.buildRules(filterRules?.inclusionRules)
 
-		const includedStats = stats.filter((stat) =>
-			needIncludeFromGlobRules(stat.path, inclusions, exclusions),
+		const includedStats = stats.filter(
+			(stat) =>
+				!isSyncCacheLocalPath(stat.path, this.options.vault.configDir) &&
+				needIncludeFromGlobRules(stat.path, inclusions, exclusions),
 		)
 		const completeStats = completeLossDir(stats, includedStats)
 		const completeStatPaths = new Set(completeStats.map((s) => s.path))

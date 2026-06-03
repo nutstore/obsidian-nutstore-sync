@@ -28,8 +28,10 @@ export class WebDAVService {
 			const client = await this.createWebDAVClient()
 			return { success: await client.exists('/') }
 		} catch (error) {
+			const normalizedError =
+				error instanceof Error ? error : new Error(String(error))
 			return {
-				error,
+				error: normalizedError,
 				success: false,
 			}
 		}

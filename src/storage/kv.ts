@@ -6,19 +6,21 @@ import useStorage from './use-storage'
 
 const DB_NAME = 'Nutstore_Plugin_Cache'
 
-export const syncRecordKV = useStorage<Map<string, SyncRecordModel>>(
-	localforage.createInstance({
-		name: DB_NAME,
-		storeName: 'sync_record',
-	}),
-)
+function createRecoverableStorage<T>(storeName: string) {
+	return useStorage<T>({
+		getFreshInstance: () =>
+			localforage.createInstance({
+				name: DB_NAME,
+				storeName,
+			}),
+		maxRetries: 1,
+	})
+}
 
-export const blobKV = useStorage<Blob>(
-	localforage.createInstance({
-		name: DB_NAME,
-		storeName: 'base_blob_store',
-	}),
-)
+export const syncRecordKV =
+	createRecoverableStorage<Map<string, SyncRecordModel>>('sync_record')
+
+export const blobKV = createRecoverableStorage<Blob>('base_blob_store')
 
 export interface TraverseWebDAVCache {
 	rootCursor: string
@@ -26,28 +28,25 @@ export interface TraverseWebDAVCache {
 	nodes: Record<string, StatModel[]>
 }
 
-export const traverseWebDAVKV = useStorage<TraverseWebDAVCache>(
-	localforage.createInstance({
-		name: DB_NAME,
-		storeName: 'traverse_webdav_cache',
-	}),
+export const traverseWebDAVKV = createRecoverableStorage<TraverseWebDAVCache>(
+	'traverse_webdav_cache',
 )
+
+export interface CacheUploadMeta {
+	nodesHash: string
+}
+
+export const cacheUploadMetaKV =
+	createRecoverableStorage<CacheUploadMeta>('cache_upload_meta')
 
 export interface ChatMetaRecord {
 	activeSessionId?: string
 	orderedSessionIds: string[]
 }
 
-export const chatSessionKV = useStorage<ChatSession>(
-	localforage.createInstance({
-		name: DB_NAME,
-		storeName: 'chat_sessions',
-	}),
-)
+export const chatSessionKV =
+	createRecoverableStorage<ChatSession>('chat_sessions')
 
-export const chatMetaKV = useStorage<ChatMetaRecord | ChatSessionIndexItem[]>(
-	localforage.createInstance({
-		name: DB_NAME,
-		storeName: 'chat_meta',
-	}),
-)
+export const chatMetaKV = createRecoverableStorage<
+	ChatMetaRecord | ChatSessionIndexItem[]
+>('chat_meta')

@@ -1,188 +1,198 @@
 import { deflateSync, inflateSync } from 'fflate/browser'
-import { Notice } from 'obsidian'
-import { join } from 'path-browserify'
+import { hash as hashObject } from 'ohash'
+import { normalize } from 'path-browserify'
 import superjson from 'superjson'
 import { BufferLike } from 'webdav'
-import { getDirectoryContents } from '~/api/webdav'
-import i18n from '~/i18n'
-import { ExportedStorage } from '~/settings/cache'
-import { traverseWebDAVKV } from '~/storage'
-import { fileStatToStatModel } from '~/utils/file-stat-to-stat-model'
+import {
+	cacheUploadMetaKV,
+	traverseWebDAVKV,
+	type TraverseWebDAVCache,
+} from '~/storage'
 import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import logger from '~/utils/logger'
+import { stdRemotePath } from '~/utils/std-remote-path'
+import { isTraversalCacheCompatible } from '~/utils/traversal-cache-compat'
+import {
+	getRemoteSyncCacheDirPath,
+	getRemoteSyncCacheFilePath,
+	getSyncCacheLocalPath,
+} from '~/utils/sync-cache-file'
 import { uint8ArrayToArrayBuffer } from '~/utils/uint8array-to-arraybuffer'
 import type NutstorePlugin from '..'
 
-/**
- * Service for handling cache operations (save, restore, delete, list)
- */
+export interface ExportedStorage {
+	exportedAt: string
+	remoteBaseDir?: string
+	traverseWebDAVCache?: TraverseWebDAVCache
+}
+
 export default class CacheServiceV1 {
-	constructor(
-		private plugin: NutstorePlugin,
-		private remoteCacheDir: string,
-	) {}
+	constructor(private plugin: NutstorePlugin) {}
 
-	/**
-	 * Save the current cache to a file in the remote cache directory
-	 */
-	async saveCache(filename: string) {
+	async restoreRemoteTraversalCacheIfMissing(): Promise<boolean> {
 		try {
-			const webdav = await this.plugin.webDAVService.createWebDAVClient()
-			const traverseWebDAVCache = await traverseWebDAVKV.get(
-				await getTraversalWebDAVDBKey(
-					await this.plugin.getToken(),
-					this.plugin.remoteBaseDir,
-				),
-			)
-
-			const exportedStorage: ExportedStorage = {
-				traverseWebDAVCache: traverseWebDAVCache || undefined,
-				exportedAt: new Date().toISOString(),
+			const kvKey = await this.getKVKey()
+			const localCache = await traverseWebDAVKV.get(kvKey)
+			if (localCache?.queue?.length === 0) {
+				return false
 			}
 
-			// Encoding pipeline: superjson.stringify -> deflate level 9
-			const serializedStr = superjson.stringify(exportedStorage)
-			if (!serializedStr || serializedStr.length === 0) {
-				throw new Error('Cache data serialization failed')
-			}
-
-			const encoder = new TextEncoder()
-
-			const deflatedStorage = deflateSync(encoder.encode(serializedStr), {
-				level: 9,
-			}) as Uint8Array<ArrayBuffer>
-			const filePath = join(this.remoteCacheDir, filename)
-
-			await webdav.createDirectory(this.remoteCacheDir, { recursive: true })
-			await webdav.putFileContents(
-				filePath,
-				uint8ArrayToArrayBuffer(deflatedStorage),
-				{
-					overwrite: true,
-				},
-			)
-
-			new Notice(i18n.t('settings.cache.saveModal.success'))
-			return Promise.resolve()
-		} catch (error) {
-			logger.error('Error saving cache:', error)
-			new Notice(
-				i18n.t('settings.cache.saveModal.error', {
-					message: error.message,
-				}),
-			)
-			return Promise.reject(error)
-		}
-	}
-
-	/**
-	 * Restore the cache from a file in the remote cache directory
-	 */
-	async restoreCache(filename: string) {
-		try {
 			const webdav = await this.plugin.webDAVService.createWebDAVClient()
-			const filePath = join(this.remoteCacheDir, filename)
-
+			const filePath = this.remoteCacheFilePath
 			const fileExists = await webdav.exists(filePath).catch(() => false)
 			if (!fileExists) {
-				new Notice(i18n.t('settings.cache.restoreModal.fileNotFound'))
-				return Promise.reject(new Error('File not found'))
+				return false
 			}
 
 			const fileContent = (await webdav.getFileContents(filePath, {
 				format: 'binary',
 			})) as BufferLike
-
-			// Check if file content is empty
-			if (!fileContent || fileContent.byteLength === 0) {
-				throw new Error('Cache file is empty')
+			const exportedStorage = this.decodeStorage(fileContent)
+			if (!exportedStorage.traverseWebDAVCache) {
+				return false
 			}
-
-			// Decoding pipeline: inflate -> superjson.parse
-			const inflatedFileContent = inflateSync(new Uint8Array(fileContent))
-			if (!inflatedFileContent || inflatedFileContent.length === 0) {
-				throw new Error('Inflate failed or resulted in empty content')
-			}
-
-			const decoder = new TextDecoder()
-			const decodedContent = decoder.decode(inflatedFileContent)
-			if (!decodedContent || decodedContent.trim() === '') {
-				throw new Error('Cache file content is invalid or empty')
-			}
-
-			const exportedStorage: ExportedStorage = superjson.parse(decodedContent)
-
-			// Validate the structure of exported storage
-			if (!exportedStorage) {
-				throw new Error('Invalid cache file format')
-			}
-			const { traverseWebDAVCache } = exportedStorage
-			if (traverseWebDAVCache) {
-				await traverseWebDAVKV.set(
-					await getTraversalWebDAVDBKey(
-						await this.plugin.getToken(),
-						this.plugin.remoteBaseDir,
-					),
-					traverseWebDAVCache,
+			if (
+				(exportedStorage.remoteBaseDir &&
+					exportedStorage.remoteBaseDir !==
+						stdRemotePath(this.plugin.remoteBaseDir)) ||
+				!isTraversalCacheCompatible(
+					exportedStorage.traverseWebDAVCache,
+					this.plugin.remoteBaseDir,
 				)
+			) {
+				logger.warn(
+					'Skipping remote traversal cache restore: cache belongs to a different remote directory',
+				)
+				return false
 			}
-			new Notice(i18n.t('settings.cache.restoreModal.success'))
-			return Promise.resolve()
+
+			await traverseWebDAVKV.set(kvKey, exportedStorage.traverseWebDAVCache)
+			logger.info('Restored remote traversal cache')
+			return true
 		} catch (error) {
-			logger.error('Error restoring cache:', error)
-			new Notice(
-				i18n.t('settings.cache.restoreModal.error', {
-					message: error.message,
-				}),
-			)
-			return Promise.reject(error)
+			logger.error('Error restoring remote traversal cache:', error)
+			return false
 		}
 	}
 
-	/**
-	 * Delete a cache file from the remote cache directory
-	 */
-	async deleteCache(filename: string): Promise<void> {
+	async saveRemoteTraversalCache(): Promise<boolean> {
 		try {
-			const webdav = await this.plugin.webDAVService.createWebDAVClient()
-			const filePath = join(this.remoteCacheDir, filename)
-
-			await webdav.deleteFile(filePath)
-
-			new Notice(i18n.t('settings.cache.restoreModal.deleteSuccess'))
-			return Promise.resolve()
-		} catch (error) {
-			logger.error('Error deleting cache file:', error)
-			new Notice(
-				i18n.t('settings.cache.restoreModal.deleteError', {
-					message: error.message,
-				}),
+			const traverseWebDAVCache = await traverseWebDAVKV.get(
+				await this.getKVKey(),
 			)
-			return Promise.reject(error)
-		}
-	}
+			if (!traverseWebDAVCache || traverseWebDAVCache.queue.length > 0) {
+				return false
+			}
 
-	/**
-	 * Load the list of cache files from the remote cache directory
-	 */
-	async loadCacheFileList() {
-		try {
+			const filteredCache = this.withoutRemoteSyncCacheFile(traverseWebDAVCache)
+			const nodesHash = hashObject(filteredCache.nodes)
+			const metaKey = await this.getKVKey()
+
 			const webdav = await this.plugin.webDAVService.createWebDAVClient()
-			const dirExists = await webdav
-				.exists(this.remoteCacheDir)
+			const remoteExists = await webdav
+				.exists(this.remoteCacheFilePath)
 				.catch(() => false)
-			if (!dirExists) {
-				await webdav.createDirectory(this.remoteCacheDir, { recursive: true })
-				return []
+
+			if (remoteExists) {
+				const meta = await cacheUploadMetaKV.get(metaKey)
+				if (meta?.nodesHash === nodesHash) {
+					logger.debug('Skipping remote cache upload: content unchanged')
+					return false
+				}
 			}
-			const files = await getDirectoryContents(
-				await this.plugin.getToken(),
-				this.remoteCacheDir,
+
+			const encodedStorage = this.encodeStorage({
+				traverseWebDAVCache: filteredCache,
+				exportedAt: new Date().toISOString(),
+				remoteBaseDir: stdRemotePath(this.plugin.remoteBaseDir),
+			})
+
+			await webdav.createDirectory(this.remoteCacheDirPath, { recursive: true })
+			await webdav.putFileContents(
+				this.remoteCacheFilePath,
+				uint8ArrayToArrayBuffer(encodedStorage),
+				{ overwrite: true },
 			)
-			return files.map(fileStatToStatModel)
+
+			await cacheUploadMetaKV.set(metaKey, { nodesHash })
+			logger.info('Saved remote traversal cache')
+			return true
 		} catch (error) {
-			logger.error('Error loading cache file list:', error)
-			throw error
+			logger.error('Error saving remote traversal cache:', error)
+			return false
 		}
+	}
+
+	private encodeStorage(exportedStorage: ExportedStorage) {
+		const serializedStr = superjson.stringify(exportedStorage)
+		if (!serializedStr) {
+			throw new Error('Cache data serialization failed')
+		}
+		return deflateSync(new TextEncoder().encode(serializedStr), {
+			level: 9,
+		}) as Uint8Array<ArrayBuffer>
+	}
+
+	private decodeStorage(fileContent: BufferLike): ExportedStorage {
+		if (!fileContent || fileContent.byteLength === 0) {
+			throw new Error('Cache file is empty')
+		}
+		const inflatedFileContent = inflateSync(new Uint8Array(fileContent))
+		if (!inflatedFileContent.length) {
+			throw new Error('Inflate failed or resulted in empty content')
+		}
+		const decodedContent = new TextDecoder().decode(inflatedFileContent)
+		if (!decodedContent.trim()) {
+			throw new Error('Cache file content is invalid or empty')
+		}
+		const exportedStorage: ExportedStorage = superjson.parse(decodedContent)
+		if (!exportedStorage) {
+			throw new Error('Invalid cache file format')
+		}
+		return exportedStorage
+	}
+
+	private async getKVKey() {
+		return getTraversalWebDAVDBKey(
+			await this.plugin.getToken(),
+			this.plugin.remoteBaseDir,
+		)
+	}
+
+	private withoutRemoteSyncCacheFile(
+		cache: TraverseWebDAVCache,
+	): TraverseWebDAVCache {
+		const remoteCacheFilePath = normalize(this.remoteCacheFilePath)
+		const localCacheFilePath = normalize(
+			getSyncCacheLocalPath(this.plugin.app.vault.configDir),
+		)
+		const nodes: TraverseWebDAVCache['nodes'] = {}
+
+		for (const [dirPath, stats] of Object.entries(cache.nodes)) {
+			nodes[dirPath] = stats.filter((stat) => {
+				const path = normalize(stat.path)
+				return path !== remoteCacheFilePath && path !== localCacheFilePath
+			})
+		}
+
+		return {
+			rootCursor: cache.rootCursor,
+			queue: [...cache.queue],
+			nodes,
+		}
+	}
+
+	private get remoteCacheFilePath() {
+		return getRemoteSyncCacheFilePath(
+			this.plugin.remoteBaseDir,
+			this.plugin.app.vault.configDir,
+		)
+	}
+
+	private get remoteCacheDirPath() {
+		return getRemoteSyncCacheDirPath(
+			this.plugin.remoteBaseDir,
+			this.plugin.app.vault.configDir,
+		)
 	}
 }

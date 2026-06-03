@@ -12,6 +12,7 @@ import { is503Error } from './is-503-error'
 import logger from './logger'
 import sleep from './sleep'
 import { stdRemotePath } from './std-remote-path'
+import { isTraversalCacheCompatible } from './traversal-cache-compat'
 import { MaybePromise } from './types'
 
 const getContents = apiLimiter.wrap(getDirectoryContents)
@@ -31,7 +32,11 @@ async function executeWithRetry<T>(func: () => MaybePromise<T>): Promise<T> {
 		try {
 			return await func()
 		} catch (err) {
-			if (is503Error(err)) {
+			const normalizedError =
+				err instanceof Error || typeof err === 'string'
+					? err
+					: new Error(String(err))
+			if (is503Error(normalizedError)) {
 				await sleep(30_000)
 			} else {
 				throw err
@@ -499,6 +504,16 @@ export class ResumableWebDAVTraversal {
 	private async loadState(): Promise<void> {
 		const cache = await traverseWebDAVKV.get(this.kvKey)
 		if (cache) {
+			if (!isTraversalCacheCompatible(cache, this.remoteBaseDir)) {
+				logger.warn(
+					'Discarding incompatible traversal cache for current remote directory',
+				)
+				await traverseWebDAVKV.unset(this.kvKey)
+				this.rootCursor = ''
+				this.queue = []
+				this.nodes = {}
+				return
+			}
 			this.rootCursor = cache.rootCursor || ''
 			this.queue = cache.queue || []
 			this.nodes = cache.nodes || {}

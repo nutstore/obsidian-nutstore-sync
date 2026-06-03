@@ -17,6 +17,7 @@ export class ProgressService {
 	public syncProgress: UpdateSyncProgress = {
 		total: 0,
 		completed: [],
+		current: null,
 	}
 
 	syncEnd = false
@@ -52,6 +53,7 @@ export class ProgressService {
 		this.syncProgress = {
 			total: 0,
 			completed: [],
+			current: null,
 		}
 	}
 
