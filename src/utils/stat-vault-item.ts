@@ -10,9 +10,6 @@ export async function statVaultItem(
 	path = normalizePath(path)
 	if (!isAdapterPath(vault, path)) {
 		const file = vault.getAbstractFileByPath(path)
-		if (!file) {
-			return undefined
-		}
 		if (file instanceof TFolder) {
 			return {
 				path,
@@ -31,7 +28,6 @@ export async function statVaultItem(
 				size: file.stat.size,
 			}
 		}
-		return undefined
 	}
 
 	const adapterStat = await vault.adapter.stat(path)

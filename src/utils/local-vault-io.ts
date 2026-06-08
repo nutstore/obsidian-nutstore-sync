@@ -28,7 +28,10 @@ export async function existsLocalPath(vault: Vault, path: string) {
 	if (isAdapterPathNormalized(vault, normalizedPath)) {
 		return await vault.adapter.exists(normalizedPath)
 	}
-	return vault.getAbstractFileByPath(normalizedPath) !== null
+	if (vault.getAbstractFileByPath(normalizedPath) !== null) {
+		return true
+	}
+	return await vault.adapter.exists(normalizedPath)
 }
 
 export async function readLocalBinary(vault: Vault, path: string) {
@@ -61,6 +64,10 @@ export async function writeLocalBinary(
 		await vault.modifyBinary(file, data)
 		return
 	}
+	if (await vault.adapter.exists(normalizedPath)) {
+		await vault.adapter.writeBinary(normalizedPath, data)
+		return
+	}
 	await vault.createBinary(normalizedPath, data)
 }
 
@@ -73,6 +80,10 @@ export async function writeLocalText(vault: Vault, path: string, data: string) {
 	const file = vault.getAbstractFileByPath(normalizedPath)
 	if (file instanceof TFile) {
 		await vault.modify(file, data)
+		return
+	}
+	if (await vault.adapter.exists(normalizedPath)) {
+		await vault.adapter.write(normalizedPath, data)
 		return
 	}
 	await vault.create(normalizedPath, data)
