@@ -138,6 +138,7 @@
 				"refreshPresetModelsFailure": "获取失败 ×",
 				"presetModelsRefreshed": "已获取最新模型列表",
 				"presetModelsRefreshFailed": "更新失败，继续使用本地/内置模型列表",
+				"presetModelsRefreshFailedWithReason": "更新失败，继续使用本地/内置模型列表：{{reason}}",
 				"empty": "当前还没有配置模型提供商。",
 				"openaiDefault": "使用 OpenAI 默认端点",
 				"presetCustom": "自定义（OpenAI Compatible）",

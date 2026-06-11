@@ -176,6 +176,7 @@
 				"refreshPresetModelsFailure": "Failed ×",
 				"presetModelsRefreshed": "Latest model list fetched",
 				"presetModelsRefreshFailed": "Update failed. Continuing with local/built-in model list.",
+				"presetModelsRefreshFailedWithReason": "Update failed. Continuing with local/built-in model list: {{reason}}",
 				"empty": "No provider configured yet.",
 				"openaiDefault": "OpenAI default endpoint",
 				"presetCustom": "Custom (OpenAI Compatible)",

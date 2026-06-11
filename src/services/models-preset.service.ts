@@ -14,6 +14,7 @@ export interface ModelsPresetRefreshResult {
 	success: boolean
 	providersDelta: number
 	modelsDelta: number
+	errorMessage?: string
 }
 
 function countProvidersAndModels(
@@ -48,12 +49,22 @@ export default class ModelsPresetService {
 				method: 'GET',
 			})
 			if (!response.ok) {
-				return { success: false, modelsDelta: 0, providersDelta: 0 }
+				return {
+					success: false,
+					modelsDelta: 0,
+					providersDelta: 0,
+					errorMessage: `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+				}
 			}
 			const payload = await response.json()
 			const providers = sanitizePresetProviders(payload)
 			if (!providers) {
-				return { success: false, modelsDelta: 0, providersDelta: 0 }
+				return {
+					success: false,
+					modelsDelta: 0,
+					providersDelta: 0,
+					errorMessage: 'Invalid models payload',
+				}
 			}
 			const nextCounts = countProvidersAndModels(providers)
 			setPresetProvidersSource(providers)
@@ -69,7 +80,12 @@ export default class ModelsPresetService {
 			}
 		} catch (error) {
 			logger.error(error)
-			return { success: false, modelsDelta: 0, providersDelta: 0 }
+			return {
+				success: false,
+				modelsDelta: 0,
+				providersDelta: 0,
+				errorMessage: error instanceof Error ? error.message : String(error),
+			}
 		}
 	}
 }

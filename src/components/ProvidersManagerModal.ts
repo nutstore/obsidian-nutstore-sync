@@ -103,9 +103,31 @@ export default class ProvidersManagerModal extends Modal {
 							providersDelta: result.providersDelta,
 							modelsDelta: result.modelsDelta,
 						}
+						if (result.success) {
+							new Notice(i18n.t('settings.ai.providers.presetModelsRefreshed'))
+						} else {
+							new Notice(
+								result.errorMessage
+									? i18n.t(
+											'settings.ai.providers.presetModelsRefreshFailedWithReason',
+											{ reason: result.errorMessage },
+										)
+									: i18n.t('settings.ai.providers.presetModelsRefreshFailed'),
+								10000,
+							)
+						}
 					} catch (error) {
 						logger.error(error)
 						this.presetModelsRefreshState = 'error'
+						new Notice(
+							error instanceof Error
+								? i18n.t(
+										'settings.ai.providers.presetModelsRefreshFailedWithReason',
+										{ reason: error.message },
+									)
+								: i18n.t('settings.ai.providers.presetModelsRefreshFailed'),
+							10000,
+						)
 					} finally {
 						this.render()
 					}

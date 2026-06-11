@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type {
 	ChatMessage as DomainChatMessage,
 	ChatMessageContentPart as DomainChatMessageContentPart,
@@ -8,7 +9,6 @@ import type {
 	ChatToolCall as DomainChatToolCall,
 	ChatUsage as DomainChatUsage,
 } from '~/chat/domain'
-import { z } from 'zod'
 
 export const aiModelModalitySchema = z.enum([
 	'text',
@@ -42,7 +42,7 @@ export const aiModelLimitSchema = z.object({
 export const aiModelProviderOverrideSchema = z.object({
 	npm: z.string().optional(),
 	api: z.string().optional(),
-	shape: z.enum(['completions']).optional(),
+	shape: z.string().optional(),
 })
 export const aiModelConfigSchema = z.object({
 	id: z.string(),

@@ -1,16 +1,17 @@
 import { z } from 'zod'
+import logger from '~/utils/logger'
 import modelsApiJson from './models-api.json'
 import {
 	AIModelConfig,
 	AIModelConfigs,
+	AIModelInput,
+	AIModelInputs,
 	AIProviderConfig,
 	AIProviderConfigs,
 	AIProviderDefinition,
 	AIProviderDefinitions,
-	AIProviderInput,
-	AIModelInput,
-	AIModelInputs,
 	aiProviderDefinitionsSchema,
+	AIProviderInput,
 	aiProviderInputsSchema,
 } from './types'
 
@@ -172,6 +173,7 @@ function parsePresetProviders(
 ): { success: true; data: AIProviderDefinitions } | { success: false } {
 	const parsed = aiProviderDefinitionsSchema.safeParse(source)
 	if (!parsed.success) {
+		logger.error(parsed.error)
 		return { success: false }
 	}
 	return { success: true, data: parsed.data }
