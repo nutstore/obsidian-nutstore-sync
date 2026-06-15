@@ -6,9 +6,8 @@ import type {
 	ChatMessageRecord as DomainChatMessageRecord,
 	ChatSession as DomainChatSession,
 	ChatTaskRecord as DomainChatTaskRecord,
-	ChatToolCall as DomainChatToolCall,
-	ChatUsage as DomainChatUsage,
 } from '~/chat/domain'
+import type { ToolCallPart } from 'ai'
 
 export const aiModelModalitySchema = z.enum([
 	'text',
@@ -119,14 +118,8 @@ export type AIProviderInput = z.infer<typeof aiProviderInputSchema>
 export type AIProviderConfigs = z.infer<typeof aiProviderConfigsSchema>
 export type AIProviderInputs = z.infer<typeof aiProviderInputsSchema>
 
-export type AIUsage = DomainChatUsage
-export type AITextPart = Extract<DomainChatMessageContentPart, { type: 'text' }>
-export type AIImageUrlPart = Extract<
-	DomainChatMessageContentPart,
-	{ type: 'image_url' }
->
 export type AIMessageContentPart = DomainChatMessageContentPart
-export type AIToolCall = DomainChatToolCall
+export type AIToolCall = ToolCallPart
 export type AIMessage = DomainChatMessage
 export type AITaskStatus = DomainChatTaskRecord['status']
 export type AIMessageMeta = DomainChatMessageMeta

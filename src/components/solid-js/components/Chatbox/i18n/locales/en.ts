@@ -1,7 +1,7 @@
 const en = {
 	history: 'History',
 	sessionActions: 'Session actions',
-	exportSession: 'Export session',
+	exportAsMarkdown: 'Export as Markdown',
 	deleteSession: 'Delete',
 	deleteSessionTitle: 'Delete Session',
 	deleteSessionMessage:

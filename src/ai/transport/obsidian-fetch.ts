@@ -1,5 +1,5 @@
 import { getReasonPhrase } from 'http-status-codes'
-import type { FetchFunction } from '~/ai/interleaved-message-field'
+import type { FetchFunction } from './provider-fetch'
 import requestUrl from '~/utils/request-url'
 
 function toHeadersRecord(headers?: HeadersInit) {

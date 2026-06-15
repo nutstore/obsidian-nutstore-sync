@@ -1,10 +1,8 @@
-import {
-	createInterleavedMessageFieldFetch,
-	type FetchFunction,
-} from '~/ai/interleaved-message-field'
-import type { AIMessage, AIProviderConfig } from '~/ai/types'
+import type { AIProviderConfig } from '~/ai/types'
 import i18n from '~/i18n'
 import { obsidianFetch } from './obsidian-fetch'
+
+export type FetchFunction = typeof fetch
 
 function isBrowserCorsFailure(error: unknown) {
 	return error instanceof TypeError
@@ -14,29 +12,18 @@ function buildDisableCorsLink(providerId: string) {
 	return `obsidian://nutstore-sync/modal/provider-edit?providerId=${encodeURIComponent(providerId)}`
 }
 
-export function createProviderFetch(
-	provider: AIProviderConfig,
-	options?: {
-		messages?: Iterable<AIMessage>
-		interleavedField?: string
-	},
-): FetchFunction {
+export function createProviderFetch(provider: AIProviderConfig): FetchFunction {
 	const baseFetch: FetchFunction = provider.allowBrowserCors
-		? (input, init) => fetch(input, init)
+		? fetch
 		: obsidianFetch
-	const wrappedFetch = createInterleavedMessageFieldFetch(
-		baseFetch,
-		options?.messages,
-		options?.interleavedField,
-	)
 
 	if (!provider.allowBrowserCors) {
-		return wrappedFetch
+		return baseFetch
 	}
 
 	return async (input, init) => {
 		try {
-			return await wrappedFetch(input, init)
+			return await baseFetch(input, init)
 		} catch (error) {
 			if (!isBrowserCorsFailure(error)) {
 				throw error

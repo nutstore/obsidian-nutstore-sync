@@ -181,12 +181,16 @@ function Chatbox(props: ChatboxProps) {
 			if (item?.kind !== 'message') {
 				continue
 			}
-			const textLength = (item.message.message.content ?? [])
+			const rawContent = item.message.message.content
+			const contentArray = Array.isArray(rawContent)
+				? (rawContent as Array<{ type: string; text?: string }>)
+				: []
+			const textLength = contentArray
 				.filter((part) => part.type === 'text')
-				.reduce((total, part) => total + part.text.length, 0)
+				.reduce((total, part) => total + (part.text?.length ?? 0), 0)
 			const toolCallsLength =
 				item.message.message.role === 'assistant'
-					? (item.message.message.tool_calls?.length ?? 0)
+					? contentArray.filter((p) => p.type === 'tool-call').length
 					: 0
 			return `${item.message.id}:${textLength}:${toolCallsLength}:${item.message.message.role}`
 		}
@@ -511,9 +515,14 @@ function Chatbox(props: ChatboxProps) {
 			props.onUpdateInputDraft(recalled.text)
 			return
 		}
-		const fallbackText = (item.message.message.content ?? [])
+		const rawContent = item.message.message.content
+		const fallbackText = (
+			Array.isArray(rawContent)
+				? (rawContent as Array<{ type: string; text?: string }>)
+				: []
+		)
 			.filter((p) => p.type === 'text')
-			.map((p) => (p as { type: 'text'; text: string }).text)
+			.map((p) => p.text ?? '')
 			.join('\n')
 		setInput(fallbackText)
 		props.onUpdateInputDraft(fallbackText)

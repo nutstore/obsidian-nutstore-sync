@@ -97,7 +97,7 @@ export function SessionHistoryItem(props: {
 									props.onExport(props.session.id)
 								}}
 							>
-								{t('exportSession')}
+								{t('exportAsMarkdown')}
 							</button>
 							<button
 								class="w-full text-xs mod-warning"

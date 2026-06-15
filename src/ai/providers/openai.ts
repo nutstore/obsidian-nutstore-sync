@@ -19,16 +19,13 @@ function assertProviderUsable(provider: AIProviderConfig) {
 
 export const openAIProviderResolver: AIProviderResolver = {
 	assertUsable: assertProviderUsable,
-	createLanguageModel(provider, modelId, context) {
+	createLanguageModel(provider, modelId) {
 		assertProviderUsable(provider)
 		const factory = createOpenAI({
 			name: provider.name || 'openai',
 			baseURL: provider.api,
 			apiKey: provider.apiKey,
-			fetch: createProviderFetch(provider, {
-				messages: context?.messages,
-				interleavedField: context?.interleavedField,
-			}),
+			fetch: createProviderFetch(provider),
 		})
 
 		return {

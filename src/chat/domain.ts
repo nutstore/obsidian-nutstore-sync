@@ -1,50 +1,46 @@
 export type {
+	AssistantModelMessage,
 	CancelledChatTask,
 	ChatAssistantMessage,
-	ChatAssistantMessageWithContent,
-	ChatAssistantMessageWithToolCalls,
-	ChatImageUrlPart,
 	ChatMessage,
 	ChatMessageContentPart,
 	ChatMessageMeta,
 	ChatMessageRecord,
 	ChatPendingMessage,
 	ChatRunState,
-	ChatSystemMessage,
 	ChatTaskBase,
 	ChatTaskRecord,
-	ChatTextPart,
-	ChatToolCall,
 	ChatToolMessage,
-	ChatUnknownPart,
-	ChatUsage,
 	ChatUserMessage,
 	CompletedChatTask,
 	FailedChatTask,
+	ImagePart,
 	QueuedChatTask,
+	ReasoningPart,
 	ReversibleCompressedContent,
 	ReversibleFileSnapshot,
 	ReversibleToolOp,
 	RunningChatTask,
+	TextPart,
+	ToolCallPart,
+	ToolModelMessage,
+	UserModelMessage,
 	WorkspaceContextDelta,
 } from '../components/solid-js'
 
 import type {
 	CancelledChatTask,
-	ChatImageUrlPart,
 	ChatMessage,
 	ChatMessageRecord,
 	ChatTaskBase,
 	ChatTaskRecord,
-	ChatTextPart,
-	ChatUnknownPart,
-	ChatUsage,
 	CompletedChatTask,
 	FailedChatTask,
 	QueuedChatTask,
 	ReversibleToolOp,
 	RunningChatTask,
 } from '../components/solid-js'
+import type { LanguageModelUsage } from 'ai'
 
 export interface ChatFragment {
 	id: string
@@ -78,46 +74,39 @@ export interface ChatSessionIndexItem {
 	updatedAt: number
 }
 
-export function cloneUsage(usage?: ChatUsage) {
+export function cloneUsage(usage?: LanguageModelUsage) {
 	return usage
 		? {
 				...usage,
+				inputTokenDetails: usage.inputTokenDetails
+					? { ...usage.inputTokenDetails }
+					: usage.inputTokenDetails,
+				outputTokenDetails: usage.outputTokenDetails
+					? { ...usage.outputTokenDetails }
+					: usage.outputTokenDetails,
 			}
 		: undefined
 }
 
 export function cloneMessage(message: ChatMessage): ChatMessage {
+	if (!Array.isArray(message.content)) {
+		return { ...message }
+	}
 	return {
 		...message,
-		content: message.content?.map((part) => {
-			if (part.type === 'image_url') {
+		content: (message.content as Array<Record<string, unknown>>).map((part) => {
+			if (
+				part.type === 'tool-call' &&
+				part.input &&
+				typeof part.input === 'object'
+			) {
 				return {
-					type: 'image_url',
-					image_url: {
-						...part.image_url,
-					},
-				} satisfies ChatImageUrlPart
+					...part,
+					input: { ...(part.input as Record<string, unknown>) },
+				}
 			}
-			if (part.type === 'unknown') {
-				return {
-					type: 'unknown',
-					value: part.value,
-				} satisfies ChatUnknownPart
-			}
-			return {
-				type: 'text',
-				text: part.text,
-			} satisfies ChatTextPart
-		}) as ChatMessage['content'],
-		tool_calls:
-			'tool_calls' in message && message.tool_calls
-				? message.tool_calls.map((toolCall) => ({
-						...toolCall,
-						function: {
-							...toolCall.function,
-						},
-					}))
-				: undefined,
+			return { ...part }
+		}),
 	} as ChatMessage
 }
 

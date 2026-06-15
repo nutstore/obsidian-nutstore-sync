@@ -3,18 +3,18 @@ import type {
 	ChatPendingMessage,
 	ChatRunState,
 	ChatTaskRecord,
-	ChatToolCall,
 } from '~/chat/domain'
 import type { UserContextItem } from '~/chat/user-context'
+import type { ToolCallPart } from 'ai'
 
 export type {
 	ChatMessageRecord,
 	ChatPendingMessage,
 	ChatRunState,
 	ChatTaskRecord,
-	ChatToolCall,
 	ReversibleToolOp,
 } from '~/chat/domain'
+export type { ToolCallPart } from 'ai'
 export type { UserContextItem } from '~/chat/user-context'
 
 export interface ChatModelOption {
@@ -46,7 +46,7 @@ export interface ChatTimelineMessageItem {
 	kind: 'message'
 	createdAt: number
 	message: ChatMessageRecord
-	toolCall?: ChatToolCall
+	toolCall?: ToolCallPart
 }
 
 export type ChatTimelineItem =

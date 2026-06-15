@@ -1,5 +1,9 @@
 import { Show } from 'solid-js'
-import type { ChatTimelineMessageItem, ChatboxProps } from '../types'
+import type {
+	ChatMessageContentPart,
+	ChatTimelineMessageItem,
+	ChatboxProps,
+} from '../types'
 import { t } from '../i18n'
 import { formatTime, formatUsage } from '../utils'
 import { CopyButton } from './CopyButton'
@@ -23,7 +27,17 @@ export function MessageCard(props: {
 
 	const roleLabel = () => {
 		if (props.item.message.message.role === 'tool') {
-			return `Tool: ${props.item.message.message.name || t('tool')}`
+			const firstPart = Array.isArray(props.item.message.message.content)
+				? (
+						props.item.message.message.content as Array<{
+							type: string
+							toolName?: string
+						}>
+					)[0]
+				: undefined
+			const toolName =
+				firstPart?.type === 'tool-result' ? firstPart.toolName : undefined
+			return `Tool: ${toolName || t('tool')}`
 		}
 		if (props.item.message.message.role === 'assistant') {
 			return props.item.message.meta?.modelName || 'Assistant'
@@ -34,11 +48,23 @@ export function MessageCard(props: {
 		return 'System'
 	}
 
-	const getText = () =>
-		(content() ?? [])
+	const getText = () => {
+		const parts = (content() ?? []) as Array<{
+			type: string
+			text?: string
+			output?: { type: string; value?: string }
+		}>
+		if (props.item.message.message.role === 'tool') {
+			return parts
+				.filter((p) => p.type === 'tool-result')
+				.map((p) => (p.output?.type === 'text' ? (p.output.value ?? '') : ''))
+				.join('\n')
+		}
+		return parts
 			.filter((p) => p.type === 'text')
-			.map((p) => (p as { type: 'text'; text: string }).text)
+			.map((p) => p.text ?? '')
 			.join('\n')
+	}
 
 	return (
 		<Show
@@ -95,15 +121,25 @@ export function MessageCard(props: {
 								{t('params')}
 							</div>
 							<pre class="m-0 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-secondary)] p-2 text-xs leading-5">
-								{props.item.toolCall?.function.arguments || '{}'}
+								{JSON.stringify(props.item.toolCall?.input ?? {}, null, 2)}
 							</pre>
 						</>
 					</Show>
 					<div class="mt-3 text-xs text-[var(--text-muted)]">{t('result')}</div>
 					<pre class="m-0 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-secondary)] p-2 text-xs leading-5">
-						{content()
-							?.filter((p) => p.type === 'text')
-							.map((p) => (p as { type: 'text'; text: string }).text)
+						{(
+							content() as
+								| Array<{
+										type: string
+										output?: { type: string; value?: string }
+								  }>
+								| null
+								| undefined
+						)
+							?.filter((p) => p.type === 'tool-result')
+							.map((p) =>
+								p.output?.type === 'text' ? (p.output.value ?? '') : '',
+							)
 							.join('\n') || ''}
 					</pre>
 				</details>
@@ -119,7 +155,11 @@ export function MessageCard(props: {
 					<span>{formatTime(props.item.message.createdAt)}</span>
 				</div>
 				<ContentParts
-					content={content()}
+					content={
+						Array.isArray(content())
+							? (content() as ChatMessageContentPart[])
+							: null
+					}
 					renderMarkdown={props.renderMarkdown}
 				/>
 				<Show

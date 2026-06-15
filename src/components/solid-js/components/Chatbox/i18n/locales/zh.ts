@@ -1,7 +1,7 @@
 const zh = {
 	history: '历史',
 	sessionActions: '会话操作',
-	exportSession: '导出会话',
+	exportAsMarkdown: '导出为 Markdown',
 	deleteSession: '删除',
 	deleteSessionTitle: '删除会话',
 	deleteSessionMessage: '确认删除这个会话吗？删除后不可恢复。',

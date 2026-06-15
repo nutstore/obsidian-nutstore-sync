@@ -100,17 +100,17 @@ function detectImageExtensionFromUrl(url: string) {
 }
 
 async function resolveImageArrayBuffer(
-	imagePart: Extract<AIMessageContentPart, { type: 'image_url' }>,
+	imagePart: Extract<AIMessageContentPart, { type: 'image' }>,
 ) {
-	const response = await fetch(imagePart.image_url.url)
+	const url = imagePart.image as string
+	const response = await fetch(url)
 	if (!response.ok) {
 		throw new Error(`Unable to read image content: ${response.status}`)
 	}
 	return {
 		arrayBuffer: await response.arrayBuffer(),
 		mimeType:
-			response.headers.get('content-type') ||
-			detectMimeTypeFromDataUrl(imagePart.image_url.url),
+			response.headers.get('content-type') || detectMimeTypeFromDataUrl(url),
 	}
 }
 
@@ -134,43 +134,62 @@ function resolveUniqueExportPath(
 
 async function saveExportImage(
 	vault: Vault,
-	part: Extract<AIMessageContentPart, { type: 'image_url' }>,
+	part: Extract<AIMessageContentPart, { type: 'image' }>,
 	assetsDirPath: string,
 	assetsMarkdownPrefix: string,
 ) {
+	const url = part.image as string
 	try {
 		const { arrayBuffer, mimeType } = await resolveImageArrayBuffer(part)
 		await mkdirsVault(vault, assetsDirPath)
 		const ext = mimeType
 			? imageExtFromMimeType(mimeType)
-			: detectImageExtensionFromUrl(part.image_url.url)
+			: detectImageExtensionFromUrl(url)
 		const fileName = `${uuidv7()}.${ext}`
 		const filePath = normalizePath(`${assetsDirPath}/${fileName}`)
 		await writeLocalBinary(vault, filePath, arrayBuffer)
 		return `${assetsMarkdownPrefix}/${fileName}`
 	} catch (error) {
 		logger.warn('Failed to persist export image, using source URL', error)
-		return part.image_url.url
+		return url
 	}
+}
+
+type ExportContentPart = {
+	type: string
+	text?: string
+	image?: unknown
+	output?: { type: string; value?: string }
 }
 
 async function buildMessageContentMarkdown(
 	vault: Vault,
-	content: AIMessageContentPart[],
+	content: ExportContentPart[],
 	assetsDirPath: string,
 	assetsMarkdownPrefix: string,
 ) {
 	const lines: string[] = []
 	for (const part of content) {
 		if (part.type === 'text') {
-			const text = part.text.trim()
+			const text = (part.text ?? '').trim()
 			if (text) lines.push(text)
 			continue
 		}
-		if (part.type !== 'image_url') continue
+		if (part.type === 'reasoning') {
+			const text = (part.text ?? '').trim()
+			if (text) lines.push(`> ${text.replace(/\n/g, '\n> ')}`)
+			continue
+		}
+		if (part.type === 'tool-result') {
+			const value =
+				part.output?.type === 'text' ? (part.output.value ?? '') : ''
+			if (value.trim()) lines.push(value.trim())
+			continue
+		}
+		if (part.type !== 'image') continue
 		const imageRef = await saveExportImage(
 			vault,
-			part,
+			part as Extract<AIMessageContentPart, { type: 'image' }>,
 			assetsDirPath,
 			assetsMarkdownPrefix,
 		)
@@ -189,7 +208,19 @@ function findNextMatchingToolMessage(
 		const candidate = messages[index]
 		if (consumedToolMessageIds.has(candidate.id)) continue
 		if (candidate.message.role !== 'tool') continue
-		if (candidate.message.tool_call_id !== toolCallId) continue
+		const firstPart = Array.isArray(candidate.message.content)
+			? (
+					candidate.message.content as Array<{
+						type: string
+						toolCallId?: string
+					}>
+				)[0]
+			: undefined
+		if (
+			firstPart?.type !== 'tool-result' ||
+			firstPart.toolCallId !== toolCallId
+		)
+			continue
 		return candidate
 	}
 	return undefined
@@ -249,20 +280,26 @@ async function buildSessionMarkdown(
 		) {
 			const record = fragment.messages[messageIndex]
 			const role = record.message.role
-			const textContent = messageToText(record.message.content).trim()
-			const hasImageContent = (record.message.content || []).some(
-				(part): part is Extract<AIMessageContentPart, { type: 'image_url' }> =>
-					part.type === 'image_url',
-			)
+			const msgContent = Array.isArray(record.message.content)
+				? (record.message.content as AIMessageContentPart[])
+				: []
+			const textContent = messageToText(msgContent).trim()
+			const hasImageContent = msgContent.some((part) => part.type === 'image')
+			const assistantToolCalls =
+				role === 'assistant'
+					? msgContent.filter(
+							(p): p is Extract<AIMessageContentPart, { type: 'tool-call' }> =>
+								p.type === 'tool-call',
+						)
+					: []
 			if (role === 'system') continue
-			if (role === 'tool' && !includeToolMessages) continue
-			if (role === 'tool' && includeToolMessages) continue
+			if (role === 'tool') continue
 			if (
 				role === 'assistant' &&
 				!includeToolMessages &&
 				!textContent &&
 				!hasImageContent &&
-				(record.message.tool_calls?.length || 0) > 0
+				assistantToolCalls.length > 0
 			) {
 				continue
 			}
@@ -278,8 +315,7 @@ async function buildSessionMarkdown(
 					metaModel && metaProvider
 						? `${metaProvider}/${metaModel}`
 						: metaModel || metaProvider || sessionModel || 'unknown-model'
-				const hasToolCalls = (record.message.tool_calls?.length || 0) > 0
-				const assistantEmoji = hasToolCalls ? '🔧' : '🤖'
+				const assistantEmoji = assistantToolCalls.length > 0 ? '🔧' : '🤖'
 				headingLabel = `${assistantEmoji} ${modelLabel}`
 			} else {
 				headingLabel = `🛠 ${i18n.t('chatbox.exportRole.tool')}`
@@ -293,7 +329,7 @@ async function buildSessionMarkdown(
 
 			const contentLines = await buildMessageContentMarkdown(
 				vault,
-				record.message.content || [],
+				msgContent,
 				assetsDirPath,
 				assetsMarkdownPrefix,
 			)
@@ -303,57 +339,81 @@ async function buildSessionMarkdown(
 				lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
 			}
 
-			if (role === 'assistant' && includeToolMessages) {
-				const toolCalls = record.message.tool_calls || []
-				if (toolCalls.length > 0) {
-					lines.push(`- ${i18n.t('chatbox.exportMeta.toolCalls')}:`)
-					for (const toolCall of toolCalls) {
-						const matchingToolMessage = findNextMatchingToolMessage(
-							fragment.messages,
-							messageIndex,
-							toolCall.id,
-							consumedToolMessageIds,
-						)
-						if (
-							matchingToolMessage &&
-							matchingToolMessage.message.role === 'tool'
-						) {
-							consumedToolMessageIds.add(matchingToolMessage.id)
-							lines.push(
-								`  - \`${toolCall.function.name}\`: \`${toolCall.id}\``,
-								'',
-								'```json',
-								toolCall.function.arguments || '{}',
-								'```',
-							)
-							lines.push(
-								`  - ${i18n.t('chatbox.exportMeta.toolName')}: \`${matchingToolMessage.message.name}\``,
-								`  - ${i18n.t('chatbox.exportMeta.toolCallId')}: \`${matchingToolMessage.message.tool_call_id}\``,
-								'',
-							)
-							const toolContentLines = await buildMessageContentMarkdown(
-								vault,
-								matchingToolMessage.message.content || [],
-								assetsDirPath,
-								assetsMarkdownPrefix,
-							)
-							if (toolContentLines.length > 0) {
-								lines.push(...toolContentLines, '')
-							} else {
-								lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
-							}
-						} else {
-							lines.push(
-								`  - \`${toolCall.function.name}\`: \`${toolCall.id}\``,
-								'',
-								'```json',
-								toolCall.function.arguments || '{}',
-								'```',
-							)
-						}
+			if (
+				role === 'assistant' &&
+				includeToolMessages &&
+				assistantToolCalls.length > 0
+			) {
+				lines.push(`- ${i18n.t('chatbox.exportMeta.toolCalls')}:`)
+				for (const toolCall of assistantToolCalls) {
+					const tc = toolCall as {
+						type: string
+						toolCallId: string
+						toolName: string
+						input: unknown
 					}
-					lines.push('')
+					const matchingToolMessage = findNextMatchingToolMessage(
+						fragment.messages,
+						messageIndex,
+						tc.toolCallId,
+						consumedToolMessageIds,
+					)
+					if (
+						matchingToolMessage &&
+						matchingToolMessage.message.role === 'tool'
+					) {
+						consumedToolMessageIds.add(matchingToolMessage.id)
+						const toolResultPart = Array.isArray(
+							matchingToolMessage.message.content,
+						)
+							? (
+									matchingToolMessage.message.content as Array<{
+										type: string
+										toolCallId?: string
+										toolName?: string
+									}>
+								)[0]
+							: undefined
+						lines.push(
+							`  - \`${tc.toolName}\`: \`${tc.toolCallId}\``,
+							'',
+							'```json',
+							JSON.stringify(tc.input ?? {}, null, 2),
+							'```',
+						)
+						lines.push(
+							`  - ${i18n.t('chatbox.exportMeta.toolName')}: \`${toolResultPart?.toolName ?? tc.toolName}\``,
+							`  - ${i18n.t('chatbox.exportMeta.toolCallId')}: \`${toolResultPart?.toolCallId ?? tc.toolCallId}\``,
+							'',
+						)
+						const toolMsgContent = Array.isArray(
+							matchingToolMessage.message.content,
+						)
+							? (matchingToolMessage.message
+									.content as unknown as ExportContentPart[])
+							: []
+						const toolContentLines = await buildMessageContentMarkdown(
+							vault,
+							toolMsgContent,
+							assetsDirPath,
+							assetsMarkdownPrefix,
+						)
+						if (toolContentLines.length > 0) {
+							lines.push(...toolContentLines, '')
+						} else {
+							lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
+						}
+					} else {
+						lines.push(
+							`  - \`${tc.toolName}\`: \`${tc.toolCallId}\``,
+							'',
+							'```json',
+							JSON.stringify(tc.input ?? {}, null, 2),
+							'```',
+						)
+					}
 				}
+				lines.push('')
 			}
 		}
 	}

@@ -28,6 +28,12 @@ import {
 	AIToolExecutionContext,
 	ToolExecutionResult,
 } from '~/ai/types'
+import type {
+	AssistantModelMessage,
+	ImagePart,
+	TextPart,
+	ToolCallPart,
+} from 'ai'
 import {
 	ChatFragment,
 	ChatMessage,
@@ -123,8 +129,98 @@ interface SessionRuntimeState {
 	pendingInputDraft: string
 }
 
-function toTextParts(text: string): AIMessageContentPart[] {
+function toTextParts(text: string): TextPart[] {
 	return [{ type: 'text', text }]
+}
+
+function migrateMessageFromV0(msg: unknown): ChatMessage {
+	if (!msg || typeof msg !== 'object') {
+		return msg as ChatMessage
+	}
+	const m = msg as Record<string, unknown>
+	const role = m.role as string
+
+	if (role === 'assistant') {
+		const oldContent = Array.isArray(m.content) ? m.content : []
+		const oldToolCalls = Array.isArray(m.tool_calls) ? m.tool_calls : []
+		const contentParts: unknown[] = oldContent.map((part: unknown) => {
+			const p = part as Record<string, unknown>
+			if (p.type === 'image_url' && p.image_url) {
+				const iu = p.image_url as Record<string, unknown>
+				return { type: 'image', image: iu.url }
+			}
+			if (p.type === 'unknown') {
+				return { type: 'text', text: JSON.stringify(p.value) }
+			}
+			return { type: 'text', text: p.text ?? '' }
+		})
+		const toolCallParts = oldToolCalls.map((tc: unknown) => {
+			const t = tc as Record<string, unknown>
+			const fn = (t.function ?? {}) as Record<string, unknown>
+			let input: unknown = {}
+			try {
+				input = JSON.parse((fn.arguments as string) || '{}')
+			} catch (_e) {
+				// keep default empty object
+			}
+			return {
+				type: 'tool-call',
+				toolCallId: t.id,
+				toolName: fn.name,
+				input,
+			}
+		})
+		return {
+			role: 'assistant',
+			content: [...contentParts, ...toolCallParts],
+		} as ChatMessage
+	}
+
+	if (role === 'tool') {
+		const oldContent = Array.isArray(m.content) ? m.content : []
+		const textValue = oldContent
+			.filter((p: unknown) => (p as Record<string, unknown>).type === 'text')
+			.map((p: unknown) => (p as Record<string, string>).text)
+			.join('\n')
+		return {
+			role: 'tool',
+			content: [
+				{
+					type: 'tool-result',
+					toolCallId: m.tool_call_id as string,
+					toolName: m.name as string,
+					output: { type: 'text', value: textValue },
+				},
+			],
+		} as ChatMessage
+	}
+
+	if (role === 'user') {
+		const oldContent = Array.isArray(m.content) ? m.content : []
+		const parts = oldContent.map((part: unknown) => {
+			const p = part as Record<string, unknown>
+			if (p.type === 'image_url' && p.image_url) {
+				const iu = p.image_url as Record<string, unknown>
+				return { type: 'image', image: iu.url }
+			}
+			if (p.type === 'unknown') {
+				return { type: 'text', text: JSON.stringify(p.value) }
+			}
+			return { type: 'text', text: p.text ?? '' }
+		})
+		return { role: 'user', content: parts } as ChatMessage
+	}
+
+	return msg as ChatMessage
+}
+
+function needsV0Migration(msg: unknown): boolean {
+	if (!msg || typeof msg !== 'object') return false
+	const m = msg as Record<string, unknown>
+	return (
+		(m.role === 'assistant' && 'tool_calls' in m) ||
+		(m.role === 'tool' && 'tool_call_id' in m)
+	)
 }
 
 function cloneUserContextItem(item: UserContextItem): UserContextItem {
@@ -155,17 +251,25 @@ function messageToText(message: Pick<ChatMessage, 'content'> | AIMessage) {
 	if (!message.content) {
 		return ''
 	}
-	return message.content
-		.filter(
-			(part): part is Extract<AIMessageContentPart, { type: 'text' }> =>
-				part.type === 'text',
-		)
-		.map((part) => part.text)
+	if (typeof message.content === 'string') {
+		return message.content
+	}
+	return (message.content as Array<{ type: string; text?: string }>)
+		.filter((part) => part.type === 'text')
+		.map((part) => part.text ?? '')
 		.join('\n')
 }
 
-function getAssistantToolCalls(message: ChatMessage) {
-	return message.role === 'assistant' ? message.tool_calls : undefined
+function getAssistantToolCalls(
+	message: ChatMessage,
+): ToolCallPart[] | undefined {
+	if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+		return undefined
+	}
+	const calls = (message.content as Array<{ type: string }>).filter(
+		(p): p is ToolCallPart => p.type === 'tool-call',
+	)
+	return calls.length > 0 ? calls : undefined
 }
 
 function getPathDepth(path: string) {
@@ -916,22 +1020,40 @@ export default class ChatService {
 			}
 			fragment.messages.splice(idx, endIdx - idx)
 		} else if (target.message.role === 'tool') {
-			const { tool_call_id: toolCallId } = target.message
+			const firstPart = Array.isArray(target.message.content)
+				? (
+						target.message.content as Array<{
+							type: string
+							toolCallId?: string
+						}>
+					)[0]
+				: undefined
+			const toolCallId =
+				firstPart?.type === 'tool-result' ? firstPart.toolCallId : undefined
 			// Remove the matching tool call from the nearest preceding assistant message
 			for (let i = idx - 1; i >= 0; i--) {
 				const record = fragment.messages[i]
 				if (record.message.role === 'user') break
 				if (
 					record.message.role === 'assistant' &&
-					record.message.tool_calls?.some((tc) => tc.id === toolCallId)
+					Array.isArray(record.message.content)
 				) {
-					record.message = {
-						...record.message,
-						tool_calls: record.message.tool_calls.filter(
-							(tc) => tc.id !== toolCallId,
-						),
+					const content = record.message.content as Array<
+						{ type: string } & Partial<ToolCallPart>
+					>
+					if (
+						content.some(
+							(p) => p.type === 'tool-call' && p.toolCallId === toolCallId,
+						)
+					) {
+						record.message = {
+							...record.message,
+							content: content.filter(
+								(p) => !(p.type === 'tool-call' && p.toolCallId === toolCallId),
+							),
+						} as AssistantModelMessage
+						break
 					}
-					break
 				}
 			}
 			fragment.messages.splice(idx, 1)
@@ -1201,7 +1323,11 @@ export default class ChatService {
 														>[number] => !!op,
 													)
 											: undefined,
-										message: cloneMessage(message.message),
+										message: cloneMessage(
+											needsV0Migration(message.message)
+												? migrateMessageFromV0(message.message)
+												: message.message,
+										),
 										meta: message.meta
 											? {
 													...message.meta,
@@ -1289,10 +1415,10 @@ export default class ChatService {
 			(fragment) => fragment.messages,
 		)
 
-		const toolCallById = new Map<string, AIToolCall>()
+		const toolCallById = new Map<string, ToolCallPart>()
 		for (const record of flattenedMessages) {
 			for (const tc of getAssistantToolCalls(record.message) || []) {
-				toolCallById.set(tc.id, tc)
+				toolCallById.set(tc.toolCallId, tc)
 			}
 		}
 
@@ -1302,14 +1428,20 @@ export default class ChatService {
 					message.message.role === 'tool' ? message.message : undefined
 				if (
 					message.message.role === 'assistant' &&
-					!messageToText(message.message).trim() &&
-					message.message.content?.every((part) => part.type === 'text') !==
-						false &&
-					Array.isArray(message.message.tool_calls) &&
-					message.message.tool_calls.length > 0
+					Array.isArray(message.message.content) &&
+					(message.message.content as Array<{ type: string }>).every(
+						(p) => p.type === 'tool-call',
+					)
 				) {
 					return []
 				}
+
+				const toolCallId =
+					toolMessage?.role === 'tool' &&
+					Array.isArray(toolMessage.content) &&
+					toolMessage.content[0]?.type === 'tool-result'
+						? (toolMessage.content[0] as { toolCallId: string }).toolCallId
+						: undefined
 
 				return [
 					{
@@ -1317,9 +1449,7 @@ export default class ChatService {
 						kind: 'message' as const,
 						createdAt: message.createdAt,
 						message: cloneMessageRecord(message),
-						toolCall: toolMessage
-							? toolCallById.get(toolMessage.tool_call_id)
-							: undefined,
+						toolCall: toolCallId ? toolCallById.get(toolCallId) : undefined,
 					},
 				]
 			})
@@ -1427,8 +1557,8 @@ export default class ChatService {
 					assistantRecord = this.createMessageRecord(
 						{
 							role: 'assistant',
-							content: toTextParts(''),
-						},
+							content: [],
+						} as AssistantModelMessage,
 						{ meta: assistantMeta },
 					)
 					fragment.messages.push(assistantRecord)
@@ -1458,11 +1588,27 @@ export default class ChatService {
 							if (record.message.role !== 'assistant') {
 								return
 							}
-							const existing = messageToText(record.message)
+							type MutablePart = { type: string; text?: string }
+							const rawContent = (record.message as AssistantModelMessage)
+								.content
+							const content: MutablePart[] = Array.isArray(rawContent)
+								? [...(rawContent as MutablePart[])]
+								: []
+							const textIdx = content.findIndex((p) => p.type === 'text')
+							const existing = textIdx >= 0 ? (content[textIdx].text ?? '') : ''
+							const textPart: MutablePart = {
+								type: 'text',
+								text: `${existing}${delta}`,
+							}
+							if (textIdx >= 0) {
+								content[textIdx] = textPart
+							} else {
+								content.push(textPart)
+							}
 							record.message = {
 								...record.message,
-								content: toTextParts(`${existing}${delta}`),
-							}
+								content,
+							} as AssistantModelMessage
 							fragment.updatedAt = Date.now()
 							session.updatedAt = Date.now()
 							if (Date.now() - lastStreamNotifyAt >= 33) {
@@ -1563,7 +1709,7 @@ export default class ChatService {
 			if (
 				lastRecord &&
 				lastRecord.message.role === 'assistant' &&
-				!lastRecord.message.tool_calls?.length &&
+				!getAssistantToolCalls(lastRecord.message)?.length &&
 				!messageToText(lastRecord.message).trim()
 			) {
 				activeFragment.messages.pop()
@@ -1686,7 +1832,7 @@ export default class ChatService {
 		text: string,
 		session?: AISession,
 		userContext?: UserContextItem[],
-		imageParts?: Extract<AIMessageContentPart, { type: 'image_url' }>[],
+		imageParts?: Extract<AIMessageContentPart, { type: 'image' }>[],
 	) {
 		const now = Date.now()
 		fragment.updatedAt = now
@@ -1695,7 +1841,7 @@ export default class ChatService {
 		}
 		const current = captureWorkspaceContexts(this.plugin.app)
 		const changed = computeChangedContexts(fragment.messages, current)
-		const content: AIMessageContentPart[] = []
+		const content: (TextPart | ImagePart)[] = []
 		if (imageParts?.length) {
 			content.push(...imageParts)
 		}
@@ -1824,9 +1970,7 @@ export default class ChatService {
 		const messages: AIMessage[] = [
 			{
 				role: 'system',
-				content: toTextParts(
-					createSubagentSystemPrompt(task.depth < task.maxDepth),
-				),
+				content: createSubagentSystemPrompt(task.depth < task.maxDepth),
 			},
 			{
 				role: 'user',
@@ -1913,13 +2057,20 @@ export default class ChatService {
 		return toolCalls.map((toolCall, index) => ({
 			message: {
 				role: 'tool' as const,
-				content: toTextParts(
-					typeof results[index].payload === 'string'
-						? results[index].payload
-						: JSON.stringify(results[index].payload, null, 2),
-				),
-				name: toolCall.function.name,
-				tool_call_id: toolCall.id,
+				content: [
+					{
+						type: 'tool-result' as const,
+						toolCallId: toolCall.toolCallId,
+						toolName: toolCall.toolName,
+						output: {
+							type: 'text' as const,
+							value:
+								typeof results[index].payload === 'string'
+									? results[index].payload
+									: JSON.stringify(results[index].payload, null, 2),
+						},
+					},
+				],
 			},
 			isError: results[index].isError,
 			reversibleOps: results[index].reversibleOps,
@@ -1931,11 +2082,9 @@ export default class ChatService {
 		toolsByName: Map<string, AIToolDefinition>,
 		context: AIToolExecutionContext,
 	): Promise<ResolvedToolResult> {
-		if (toolCall.function.name === 'spawn') {
-			const payload = await this.startSpawnedTask(
-				toolCall.function.arguments || '{}',
-				context,
-			)
+		const inputJson = JSON.stringify(toolCall.input ?? {})
+		if (toolCall.toolName === 'spawn') {
+			const payload = await this.startSpawnedTask(inputJson, context)
 			return {
 				payload,
 				isError: payload.status !== 'completed',
@@ -1944,8 +2093,8 @@ export default class ChatService {
 
 		const result = await this.executeToolCall(
 			toolsByName,
-			toolCall.function.name,
-			toolCall.function.arguments || '{}',
+			toolCall.toolName,
+			inputJson,
 			context,
 		)
 		return {
@@ -2233,8 +2382,7 @@ export default class ChatService {
 
 	private async prepareUserContextForMessage(items: UserContextItem[]) {
 		const dedupedItems: UserContextItem[] = []
-		const imageParts: Extract<AIMessageContentPart, { type: 'image_url' }>[] =
-			[]
+		const imageParts: Extract<AIMessageContentPart, { type: 'image' }>[] = []
 		const seen = new Set<string>()
 		for (const item of items) {
 			const hash = getUserContextItemHash(item)
@@ -2252,10 +2400,8 @@ export default class ChatService {
 				const imageUrl = await blobToDataUrl(imageBlob)
 				dedupedItems.push(cloneUserContextItem(item))
 				imageParts.push({
-					type: 'image_url',
-					image_url: {
-						url: imageUrl,
-					},
+					type: 'image',
+					image: imageUrl,
 				})
 				continue
 			}
@@ -2274,15 +2420,13 @@ export default class ChatService {
 		return [
 			{
 				role: 'system',
-				content: toTextParts(
-					session.systemPrompt || createMainSystemPrompt(MAX_TASK_DEPTH),
-				),
+				content: session.systemPrompt || createMainSystemPrompt(MAX_TASK_DEPTH),
 			},
 			...fragment.messages.map((item) => {
 				if (item.message.role !== 'user') {
 					return item.message
 				}
-				const prefixParts: AIMessageContentPart[] = []
+				const prefixParts: TextPart[] = []
 				if (item.workspaceContextDelta?.length) {
 					prefixParts.push({
 						type: 'text',
@@ -2302,13 +2446,13 @@ export default class ChatService {
 					})
 				}
 				if (!prefixParts.length) return item.message
+				const userContent = Array.isArray(item.message.content)
+					? (item.message as ChatUserMessage).content
+					: []
 				return {
 					...item.message,
-					content: [
-						...prefixParts,
-						...(item.message as ChatUserMessage).content,
-					],
-				}
+					content: [...prefixParts, ...userContent],
+				} as AIMessage
 			}),
 		]
 	}
@@ -2447,42 +2591,52 @@ export default class ChatService {
 
 	private removeUnmatchedToolCalls(fragment: ChatFragment) {
 		const resolvedToolCallIds = new Set(
-			fragment.messages.flatMap((item) =>
-				item.message.role === 'tool' && item.message.tool_call_id
-					? [item.message.tool_call_id]
-					: [],
-			),
+			fragment.messages.flatMap((item) => {
+				if (
+					item.message.role !== 'tool' ||
+					!Array.isArray(item.message.content)
+				) {
+					return []
+				}
+				const part = (
+					item.message.content as Array<{ type: string; toolCallId?: string }>
+				)[0]
+				return part?.type === 'tool-result' && part.toolCallId
+					? [part.toolCallId]
+					: []
+			}),
 		)
 
 		fragment.messages = fragment.messages.filter((record) => {
 			if (
 				record.message.role !== 'assistant' ||
-				!record.message.tool_calls?.length
+				!Array.isArray(record.message.content)
 			) {
 				return true
 			}
-
-			const nextToolCalls = record.message.tool_calls.filter((toolCall) =>
-				resolvedToolCallIds.has(toolCall.id),
+			const content = record.message.content as Array<
+				{ type: string } & Partial<ToolCallPart>
+			>
+			const toolCalls = content.filter(
+				(p): p is ToolCallPart => p.type === 'tool-call',
 			)
+			if (toolCalls.length === 0) {
+				return true
+			}
+
+			const nextToolCalls = toolCalls.filter((tc) =>
+				resolvedToolCallIds.has(tc.toolCallId),
+			)
+			const nonToolParts = content.filter((p) => p.type !== 'tool-call')
 			const hasText = !!messageToText(record.message).trim()
 			if (!hasText && nextToolCalls.length === 0) {
 				return false
 			}
 
-			record.message =
-				nextToolCalls.length > 0
-					? {
-							role: 'assistant',
-							content: hasText
-								? record.message.content || toTextParts('')
-								: null,
-							tool_calls: nextToolCalls,
-						}
-					: {
-							role: 'assistant',
-							content: record.message.content || toTextParts(''),
-						}
+			record.message = {
+				...record.message,
+				content: [...nonToolParts, ...nextToolCalls],
+			} as AssistantModelMessage
 			return true
 		})
 	}

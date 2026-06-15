@@ -1,12 +1,47 @@
+import type {
+	AssistantModelMessage,
+	FinishReason,
+	ImagePart,
+	LanguageModelUsage,
+	ModelMessage,
+	TextPart,
+	ToolCallPart,
+	ToolModelMessage,
+	UserModelMessage,
+} from 'ai'
 import type { UserContextItem } from '~/chat/user-context'
 
 export type { UserContextItem } from '~/chat/user-context'
 
-export interface ChatUsage {
-	inputTokens?: number
-	outputTokens?: number
-	totalTokens?: number
-}
+export type {
+	AssistantModelMessage,
+	ImagePart,
+	ModelMessage,
+	TextPart,
+	ToolCallPart,
+	ToolModelMessage,
+	UserModelMessage,
+} from 'ai'
+
+// ReasoningPart is not directly exported from 'ai'; derive it from AssistantModelMessage
+type AssistantContentArray = Extract<
+	AssistantModelMessage['content'],
+	readonly unknown[]
+>
+export type ReasoningPart = Extract<
+	AssistantContentArray[number],
+	{ type: 'reasoning' }
+>
+
+export type ChatMessage = ModelMessage
+export type ChatAssistantMessage = AssistantModelMessage
+export type ChatUserMessage = UserModelMessage
+export type ChatToolMessage = ToolModelMessage
+export type ChatMessageContentPart =
+	| TextPart
+	| ImagePart
+	| ReasoningPart
+	| ToolCallPart
 
 export interface ReversibleCompressedContent {
 	compress: 'deflate'
@@ -42,85 +77,15 @@ export type ChatRunState =
 	| 'compressing'
 	| 'waiting_for_tools'
 
-export interface ChatTextPart {
-	type: 'text'
-	text: string
-}
-
-export interface ChatImageUrlPart {
-	type: 'image_url'
-	image_url: {
-		url: string
-	}
-}
-
-export interface ChatUnknownPart {
-	type: 'unknown'
-	value: unknown
-}
-
-export type ChatMessageContentPart =
-	| ChatTextPart
-	| ChatImageUrlPart
-	| ChatUnknownPart
-
-export interface ChatToolCall {
-	id: string
-	type: 'function'
-	function: {
-		name: string
-		arguments: string
-	}
-}
-
 export interface ChatMessageMeta {
 	providerId?: string
 	providerName?: string
 	modelId?: string
 	modelName?: string
-	usage?: ChatUsage
+	usage?: LanguageModelUsage
+	finishReason?: FinishReason
+	responseId?: string
 }
-
-export interface ChatSystemMessage {
-	role: 'system'
-	content: ChatMessageContentPart[]
-}
-
-export interface ChatUserMessage {
-	role: 'user'
-	content: ChatMessageContentPart[]
-}
-
-export interface ChatAssistantMessageWithContent {
-	role: 'assistant'
-	content: ChatMessageContentPart[]
-	tool_calls?: ChatToolCall[]
-	interleaved?: Record<string, unknown>
-}
-
-export interface ChatAssistantMessageWithToolCalls {
-	role: 'assistant'
-	content?: null
-	tool_calls: ChatToolCall[]
-	interleaved?: Record<string, unknown>
-}
-
-export interface ChatToolMessage {
-	role: 'tool'
-	content: ChatMessageContentPart[]
-	name: string
-	tool_call_id: string
-}
-
-export type ChatAssistantMessage =
-	| ChatAssistantMessageWithContent
-	| ChatAssistantMessageWithToolCalls
-
-export type ChatMessage =
-	| ChatSystemMessage
-	| ChatUserMessage
-	| ChatAssistantMessage
-	| ChatToolMessage
 
 export interface WorkspaceContextDelta {
 	hash: string
@@ -227,7 +192,7 @@ export interface ChatTimelineMessageItem {
 	kind: 'message'
 	createdAt: number
 	message: ChatMessageRecord
-	toolCall?: ChatToolCall
+	toolCall?: ToolCallPart
 }
 
 export type ChatTimelineItem =

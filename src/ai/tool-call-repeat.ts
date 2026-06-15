@@ -24,19 +24,11 @@ function sortJsonValue(value: unknown): unknown {
 	return value
 }
 
-function normalizeToolArguments(argumentsText: string) {
-	try {
-		return JSON.stringify(sortJsonValue(JSON.parse(argumentsText)))
-	} catch {
-		return argumentsText.trim()
-	}
-}
-
 export function createToolCallRoundSignature(toolCalls: AIToolCall[]) {
 	return JSON.stringify(
 		toolCalls.map((toolCall) => ({
-			name: toolCall.function.name,
-			arguments: normalizeToolArguments(toolCall.function.arguments || '{}'),
+			name: toolCall.toolName,
+			arguments: JSON.stringify(sortJsonValue(toolCall.input ?? {})),
 		})),
 	)
 }
