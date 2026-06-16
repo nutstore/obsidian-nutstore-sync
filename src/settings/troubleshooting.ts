@@ -1,28 +1,23 @@
-import { ButtonComponent, Notice, Setting } from 'obsidian'
-import type { Subscription } from 'rxjs'
+import { Notice, Setting } from 'obsidian'
+import { isNotNil } from 'ramda'
 import CacheClearModal from '~/components/CacheClearModal'
 import { IN_DEV } from '~/consts'
-import { onGcProgress } from '~/events/gc-progress'
 import i18n from '~/i18n'
 import { blobStore } from '~/storage/blob'
 import logger from '~/utils/logger'
+import logsStringify from '~/utils/logs-stringify'
 import BaseSettings from './settings.base'
 
-export default class CacheSettings extends BaseSettings {
-	private gcUnlockWatcherActive = false
-	private gcWatcherGeneration = 0
-	private gcButton: ButtonComponent | undefined
-	private gcProgressSub: Subscription | undefined
+export default class TroubleshootingSettings extends BaseSettings {
 	private readonly blobGarbageCount = 5000
 	private readonly blobGarbageSizeBytes = 64 * 1024
 
 	async display() {
 		this.containerEl.empty()
 		new Setting(this.containerEl)
-			.setName(i18n.t('settings.cache.title'))
+			.setName(i18n.t('settings.troubleshooting.title'))
 			.setHeading()
 
-		// clear
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.cache.clearName'))
 			.setDesc(i18n.t('settings.cache.clearDesc'))
@@ -51,49 +46,24 @@ export default class CacheSettings extends BaseSettings {
 					})
 			})
 
-		// garbage collection
-		const gcRunning = this.plugin.gcService.isRunningNow()
-		this.watchGcUnlock(gcRunning)
-
-		this.gcProgressSub?.unsubscribe()
-		this.gcProgressSub = onGcProgress().subscribe(({ current, total }) => {
-			const pct = total === 0 ? 100 : Math.round((current / total) * 100)
-			this.gcButton?.setButtonText(`${pct}%`)
-		})
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.log.name'))
+			.setDesc(i18n.t('settings.log.desc'))
+			.addButton((button) => {
+				button
+					.setButtonText(i18n.t('settings.log.saveToNote'))
+					.onClick(async () => {
+						await this.saveLogsToNote()
+					})
+			})
 
 		new Setting(this.containerEl)
-			.setName(i18n.t('settings.cache.gcName'))
-			.setDesc(i18n.t('settings.cache.gcDesc'))
+			.setName(i18n.t('settings.log.clearName'))
+			.setDesc(i18n.t('settings.log.clearDesc'))
 			.addButton((button) => {
-				this.gcButton = button
-				button.setButtonText(
-					gcRunning
-						? i18n.t('settings.cache.gcRunning')
-						: i18n.t('settings.cache.gc'),
-				)
-				if (gcRunning) {
-					button.setDisabled(true)
-				}
-				button.onClick(() => {
-					button.buttonEl.disabled = true
-					button.setButtonText(i18n.t('settings.cache.gcRunning'))
-					void (async () => {
-						try {
-							const result = await this.plugin.gcService.runBlobGc()
-							if (result.ok) {
-								new Notice(
-									i18n.t('settings.cache.gcCompleted', {
-										count: result.deletedCount,
-									}),
-								)
-							}
-						} catch (error) {
-							logger.error('Error running blob GC:', error)
-							new Notice(`Error: ${(error as Error).message}`)
-						} finally {
-							await this.display()
-						}
-					})()
+				button.setButtonText(i18n.t('settings.log.clear')).onClick(() => {
+					this.plugin.loggerService.clear()
+					new Notice(i18n.t('settings.log.cleared'))
 				})
 			})
 
@@ -130,36 +100,35 @@ export default class CacheSettings extends BaseSettings {
 		}
 	}
 
-	hide() {
-		this.gcWatcherGeneration++
-		this.gcUnlockWatcherActive = false
-		this.gcProgressSub?.unsubscribe()
-		this.gcProgressSub = undefined
-		this.gcButton = undefined
+	hide() {}
+
+	private get logs() {
+		return this.plugin.loggerService.logs
+			.map(logsStringify)
+			.filter(isNotNil)
+			.join('\n\n')
 	}
 
-	private watchGcUnlock(gcRunning: boolean) {
-		if (!gcRunning) {
-			this.gcUnlockWatcherActive = false
-			return
-		}
+	private async saveLogsToNote() {
+		try {
+			const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+			const fileName = `nutstore-logs-${timestamp}.md`
+			const dirPath = 'nutstore-sync/logs'
+			const filePath = `${dirPath}/${fileName}`
+			const content = `# Nutstore Plugin Logs\n\nGenerated at: ${new Date().toLocaleString()}\n\n---\n\n${this.logs}`
 
-		if (this.gcUnlockWatcherActive) {
-			return
-		}
+			const folderExists = await this.app.vault.adapter.exists(dirPath)
+			if (!folderExists) {
+				await this.app.vault.adapter.mkdir(dirPath)
+			}
 
-		this.gcUnlockWatcherActive = true
-		const generation = this.gcWatcherGeneration
-		void this.plugin.gcService.waitUntilIdle().then(() => {
-			if (generation !== this.gcWatcherGeneration) {
-				return
-			}
-			this.gcUnlockWatcherActive = false
-			if (!document.contains(this.containerEl)) {
-				return
-			}
-			void this.display()
-		})
+			const file = await this.app.vault.create(filePath, content)
+			new Notice(i18n.t('settings.log.savedToNote', { fileName: filePath }))
+			await this.app.workspace.getLeaf().openFile(file)
+		} catch (error) {
+			new Notice(i18n.t('settings.log.saveError'))
+			logger.error('Failed to save logs to note:', error)
+		}
 	}
 
 	private async generateBlobGarbage() {

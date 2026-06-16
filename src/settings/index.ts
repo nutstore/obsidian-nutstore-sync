@@ -12,10 +12,9 @@ import { GlobMatchOptions } from '~/utils/glob-match'
 import waitUntil from '~/utils/wait-until'
 import AccountSettings from './account'
 import AISettings from './ai'
-import CacheSettings from './cache'
 import CommonSettings from './common'
 import FilterSettings from './filter'
-import LogSettings from './log'
+import TroubleshootingSettings from './troubleshooting'
 
 export enum SyncMode {
 	STRICT = 'strict',
@@ -156,8 +155,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	accountSettings: AccountSettings
 	commonSettings: CommonSettings
 	filterSettings: FilterSettings
-	logSettings: LogSettings
-	cacheSettings: CacheSettings
+	troubleshootingSettings: TroubleshootingSettings
 	aiSettings: AISettings
 	warningContainerEl: HTMLElement
 
@@ -198,13 +196,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			this,
 			this.containerEl.createDiv(),
 		)
-		this.cacheSettings = new CacheSettings(
-			this.app,
-			this.plugin,
-			this,
-			this.containerEl.createDiv(),
-		)
-		this.logSettings = new LogSettings(
+		this.troubleshootingSettings = new TroubleshootingSettings(
 			this.app,
 			this.plugin,
 			this,
@@ -221,8 +213,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		await this.commonSettings.display()
 		await this.filterSettings.display()
 		await this.aiSettings.display()
-		await this.cacheSettings.display()
-		await this.logSettings.display()
+		await this.troubleshootingSettings.display()
 	}
 
 	get isSSO() {
@@ -246,7 +237,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 
 	async hide() {
 		await this.accountSettings.hide()
-		this.cacheSettings.hide()
+		this.troubleshootingSettings.hide()
 	}
 
 	async onClose() {

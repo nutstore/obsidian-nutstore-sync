@@ -1,5 +1,6 @@
 import { NutstoreSync, SyncStartMode } from '~/sync'
 import { Notice } from 'obsidian'
+import { IN_DEV } from '~/consts'
 import { emitStopGc, emitSyncError } from '~/events'
 import i18n from '~/i18n'
 import type { SyncStartResult } from '~/sync'
@@ -31,7 +32,7 @@ export default class SyncExecutorService {
 		let result: SyncStartResult | undefined
 		try {
 			if (this.plugin.gcService.isRunningNow()) {
-				if (options.mode === SyncStartMode.MANUAL_SYNC) {
+				if (IN_DEV && options.mode === SyncStartMode.MANUAL_SYNC) {
 					new Notice(i18n.t('sync.stoppingGcForSync'))
 				}
 				emitStopGc()

@@ -1,5 +1,6 @@
 import { Mutex } from 'async-mutex'
 import { Notice } from 'obsidian'
+import { IN_DEV } from '~/consts'
 import { emitGcProgress } from '~/events/gc-progress'
 import { onStopGc } from '~/events/gc-stop'
 import i18n from '~/i18n'
@@ -35,12 +36,16 @@ export default class GcService {
 
 	async runBlobGc(): Promise<GcRunResult> {
 		if (this.plugin.syncExecutorService.isRunning()) {
-			new Notice(i18n.t('settings.cache.gcBlockedBySync'))
+			if (IN_DEV) {
+				new Notice(i18n.t('settings.cache.gcBlockedBySync'))
+			}
 			return { ok: false, reason: 'sync' }
 		}
 
 		if (this.lock.isLocked()) {
-			new Notice(i18n.t('settings.cache.gcBlockedByGc'))
+			if (IN_DEV) {
+				new Notice(i18n.t('settings.cache.gcBlockedByGc'))
+			}
 			return { ok: false, reason: 'gc' }
 		}
 

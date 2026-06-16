@@ -323,6 +323,9 @@
 			"clearName": "清除日志",
 			"clearDesc": "删除所有控制台输出记录"
 		},
+		"troubleshooting": {
+			"title": "故障排查"
+		},
 		"cache": {
 			"title": "缓存管理",
 			"clearName": "清除本地缓存",
@@ -349,11 +352,6 @@
 				},
 				"nothingSelected": "请至少选择一种缓存类型进行清除。"
 			},
-			"gcName": "垃圾回收",
-			"gcDesc": "系统会在每次同步结束后自动清理无用文件快照。你也可以在这里手动立即清理一次。",
-			"gc": "开始清理",
-			"gcRunning": "清理中...",
-			"gcCompleted": "清理完成，共删除了 {{count}} 个无用文件快照。",
 			"gcBlockedBySync": "当前正在同步，请等待同步结束后再进行垃圾回收。",
 			"gcBlockedByGc": "垃圾回收正在进行中，请稍后再试。",
 			"generateBlobGarbageName": "GC 压测：生成垃圾快照",

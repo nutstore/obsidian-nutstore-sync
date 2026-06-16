@@ -116,7 +116,7 @@ export default class AISettings extends BaseSettings {
 					.setValue(this.plugin.settings.ai.yolo ?? false)
 					.onChange(async (value) => {
 						this.plugin.settings.ai.yolo = value
-						await this.persist()
+						await this.persist(false)
 					}),
 			)
 	}

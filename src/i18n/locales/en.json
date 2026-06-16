@@ -323,6 +323,9 @@
 			"clearName": "Clear logs",
 			"clearDesc": "Delete all console output records"
 		},
+		"troubleshooting": {
+			"title": "Troubleshooting"
+		},
 		"cache": {
 			"title": "Cache management",
 			"clearName": "Clear local cache",
@@ -349,11 +352,6 @@
 				},
 				"nothingSelected": "Please select at least one cache type to clear."
 			},
-			"gcName": "Garbage collection",
-			"gcDesc": "Unused file snapshots are cleaned automatically after each sync. You can still run a manual cleanup here when you want immediate cleanup.",
-			"gc": "Run cleanup",
-			"gcRunning": "Cleaning...",
-			"gcCompleted": "Cleanup complete. Removed {{count}} unused file snapshot(s).",
 			"gcBlockedBySync": "Sync is currently running. Wait for sync to finish before running garbage collection.",
 			"gcBlockedByGc": "Garbage collection is already running. Please try again later.",
 			"generateBlobGarbageName": "GC stress test: generate garbage snapshots",
