@@ -36,9 +36,13 @@ import BidirectionalSyncDecider from './decision/bidirectional.decider'
 import LocalMirrorSyncDecider from './decision/local-mirror.decider'
 import RemoteMirrorSyncDecider from './decision/remote-mirror.decider'
 import CleanRecordTask from './tasks/clean-record.task'
+import ConflictResolveTask, {
+	ConflictStrategy,
+} from './tasks/conflict-resolve.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import NoopTask from './tasks/noop.task'
 import PushTask from './tasks/push.task'
+import PullTask from './tasks/pull.task'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
 import SkippedTask from './tasks/skipped.task'
@@ -55,6 +59,7 @@ export enum SyncStartMode {
 export interface SyncStartResult {
 	ended: boolean
 	ranTasks: boolean
+	shouldReloadSettings: boolean
 }
 
 export class NutstoreSync {
@@ -124,7 +129,11 @@ export class NutstoreSync {
 			while (!remoteBaseDirExits) {
 				if (this.isCancelled) {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
-					return { ended: false, ranTasks: false }
+					return {
+						ended: false,
+						ranTasks: false,
+						shouldReloadSettings: false,
+					}
 				}
 				try {
 					await webdav.createDirectory(this.options.remoteBaseDir, {
@@ -136,7 +145,11 @@ export class NutstoreSync {
 						await this.handle503Error(60000)
 						if (this.isCancelled) {
 							emitSyncError(new Error(i18n.t('sync.cancelled')))
-							return { ended: false, ranTasks: false }
+							return {
+								ended: false,
+								ranTasks: false,
+								shouldReloadSettings: false,
+							}
 						}
 						remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 					} else {
@@ -158,9 +171,17 @@ export class NutstoreSync {
 			if (tasks.length === 0) {
 				if (preparingEmitted) {
 					emitEndSync({ showNotice, failedCount: 0 })
-					return { ended: true, ranTasks: false }
+					return {
+						ended: true,
+						ranTasks: false,
+						shouldReloadSettings: false,
+					}
 				}
-				return { ended: false, ranTasks: false }
+				return {
+					ended: false,
+					ranTasks: false,
+					shouldReloadSettings: false,
+				}
 			}
 
 			emitPreparingOnce()
@@ -177,7 +198,11 @@ export class NutstoreSync {
 
 			if (this.isCancelled) {
 				emitSyncError(new Error(i18n.t('sync.cancelled')))
-				return { ended: false, ranTasks: false }
+				return {
+					ended: false,
+					ranTasks: false,
+					shouldReloadSettings: false,
+				}
 			}
 
 			if (
@@ -193,7 +218,11 @@ export class NutstoreSync {
 					confirmedTasks = confirmExec.tasks
 				} else {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
-					return { ended: false, ranTasks: false }
+					return {
+						ended: false,
+						ranTasks: false,
+						shouldReloadSettings: false,
+					}
 				}
 			}
 
@@ -445,6 +474,7 @@ export class NutstoreSync {
 			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)
 			const allTasksResult: TaskResult[] = []
+			let shouldReloadSettings = false
 
 			// Track all completed tasks across all chunks
 			const allCompletedTasks: CompletedTask[] = []
@@ -456,6 +486,9 @@ export class NutstoreSync {
 					allCompletedTasks,
 				)
 				allTasksResult.push(...chunkResult)
+				shouldReloadSettings ||= taskChunk.some((task, index) =>
+					this.didTaskReloadPluginSettings(task, chunkResult[index]),
+				)
 				await this.updateMtimeInRecord(taskChunk, chunkResult)
 
 				if (this.isCancelled) {
@@ -465,7 +498,11 @@ export class NutstoreSync {
 
 			if (this.isCancelled) {
 				emitSyncError(new Error(i18n.t('sync.cancelled')))
-				return { ended: false, ranTasks: false }
+				return {
+					ended: false,
+					ranTasks: false,
+					shouldReloadSettings: false,
+				}
 			}
 
 			const failedCount = allTasksResult.filter((r) => !r.success).length
@@ -488,14 +525,49 @@ export class NutstoreSync {
 			}
 
 			emitEndSync({ failedCount, showNotice })
-			return { ended: true, ranTasks: true }
+			return { ended: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
 			emitSyncError(error as Error)
 			logger.error('Sync error:', error)
-			return { ended: false, ranTasks: false }
+			return {
+				ended: false,
+				ranTasks: false,
+				shouldReloadSettings: false,
+			}
 		} finally {
 			this.subscriptions.forEach((sub) => sub.unsubscribe())
 		}
+	}
+
+	private didTaskReloadPluginSettings(task: BaseTask, result?: TaskResult) {
+		if (!result?.success || !this.isPluginSettingsPath(task.localPath)) {
+			return false
+		}
+
+		if (task instanceof PullTask || task instanceof RemoveLocalTask) {
+			return true
+		}
+
+		if (task instanceof ConflictResolveTask) {
+			return [
+				ConflictStrategy.DiffMatchPatch,
+				ConflictStrategy.DiffMatchPatchOrSkip,
+				ConflictStrategy.LatestTimeStamp,
+				ConflictStrategy.ServerPriority,
+			].includes(task.options.strategy)
+		}
+
+		return false
+	}
+
+	private isPluginSettingsPath(localPath: string) {
+		const pluginDir = normalizePath(
+			`${this.vault.configDir}/plugins/${this.plugin.manifest.id}`,
+		)
+		return (
+			localPath === `${pluginDir}/data.json` ||
+			localPath === `${pluginDir}/data.local.json`
+		)
 	}
 
 	private async execTasks(

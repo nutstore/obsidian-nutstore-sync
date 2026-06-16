@@ -191,7 +191,7 @@ export default class NutstoreLlmGatewayService {
 
 		this.settings.pendingAuthorization = pendingAuthorization
 		this.emitAuthState()
-		await this.plugin.saveSettings()
+		await this.plugin.settingsService.saveSettings()
 		this.resumeAuthorizationPolling()
 		return pendingAuthorization
 	}
@@ -279,7 +279,7 @@ export default class NutstoreLlmGatewayService {
 			provider.apiKey = token
 		}
 		if (token !== previousAccessToken) {
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 		}
 	}
 
@@ -287,7 +287,7 @@ export default class NutstoreLlmGatewayService {
 		if (this.settings.pendingAuthorization) {
 			if (this.settings.pendingAuthorization.expiresAt <= Date.now()) {
 				this.settings.pendingAuthorization = undefined
-				await this.plugin.saveSettings()
+				await this.plugin.settingsService.saveSettings()
 			} else {
 				this.emitAuthState()
 				this.resumeAuthorizationPolling()
@@ -302,11 +302,11 @@ export default class NutstoreLlmGatewayService {
 			const refreshed = await this.refreshModels({ removeOnAuthError: true })
 			this.startTokenRefreshTimer()
 			if (refreshed) {
-				await this.plugin.saveSettings()
+				await this.plugin.settingsService.saveSettings()
 			}
 		} catch (error) {
 			this.noticeError(error)
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 			if (this.isAuthorized()) {
 				this.startTokenRefreshTimer()
 			} else {
@@ -318,7 +318,7 @@ export default class NutstoreLlmGatewayService {
 	async disconnect() {
 		await this.cancelPendingAuthorization()
 		this.clearProviderAndAuth()
-		await this.plugin.saveSettings()
+		await this.plugin.settingsService.saveSettings()
 		new Notice(i18n.t('settings.ai.nutstoreLlmGateway.disconnected'))
 	}
 
@@ -432,14 +432,14 @@ export default class NutstoreLlmGatewayService {
 		try {
 			const token = await this.ensureAccessToken({ removeOnAuthError: true })
 			if (!token) {
-				await this.plugin.saveSettings()
+				await this.plugin.settingsService.saveSettings()
 				return
 			}
 			this.updateProviderApiKey(token)
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 		} catch (error) {
 			this.noticeError(error)
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 		}
 	}
 
@@ -527,7 +527,7 @@ export default class NutstoreLlmGatewayService {
 		} catch (error) {
 			this.stopAuthorizationPolling()
 			this.settings.pendingAuthorization = undefined
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 			this.noticeError(error)
 			this.emitAuthState()
 		}
@@ -541,7 +541,7 @@ export default class NutstoreLlmGatewayService {
 			this.startTokenRefreshTimer()
 			new Notice(i18n.t('settings.ai.nutstoreLlmGateway.authorized'))
 		} finally {
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 		}
 	}
 

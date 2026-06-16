@@ -408,7 +408,7 @@ export default class ProvidersManagerModal extends Modal {
 							await this.plugin.nutstoreLlmGatewayService.refreshModels({
 								removeOnAuthError: true,
 							})
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							new Notice(
 								i18n.t('settings.ai.nutstoreLlmGateway.modelsRefreshed'),
 							)

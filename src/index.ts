@@ -8,8 +8,7 @@ import './webdav-patch'
 import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
-import { Menu, normalizePath, Notice, Plugin } from 'obsidian'
-import { sanitizeDefaultSelections, sanitizeProviders } from './ai/config'
+import { Menu, normalizePath, Plugin } from 'obsidian'
 import { createSelectedTextContextItem } from './chat/user-context'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
@@ -26,20 +25,17 @@ import { ProgressService } from './services/progress.service'
 import ProtocolService from './services/protocol.service'
 import RealtimeSyncService from './services/realtime-sync.service'
 import ScheduledSyncService from './services/scheduled-sync.service'
+import SettingsService from './services/settings.service'
 import { StatusService } from './services/status.service'
 import SyncExecutorService from './services/sync-executor.service'
 import { WebDAVService } from './services/webdav.service'
 import {
-	DEFAULT_LOCAL_SETTINGS,
-	DEFAULT_SETTINGS,
 	NutstoreLocalSettings,
 	NutstoreSettings,
 	NutstoreSettingTab,
 	setPluginInstance,
 } from './settings'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
-import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from './utils/download-chunk-size'
-import logger from './utils/logger'
 import { stdRemotePath } from './utils/std-remote-path'
 import ChatboxView, { CHATBOX_VIEW_TYPE } from './views/chatbox.view'
 
@@ -47,6 +43,7 @@ export default class NutstorePlugin extends Plugin {
 	public isSyncing: boolean = false
 	public settings!: NutstoreSettings
 	public localSettings!: NutstoreLocalSettings
+	public settingTab!: NutstoreSettingTab
 
 	public commandService = new CommandService(this)
 	public eventsService = new EventsService(this)
@@ -59,6 +56,7 @@ export default class NutstorePlugin extends Plugin {
 	public ribbonManager = new SyncRibbonManager(this)
 	public statusService = new StatusService(this)
 	public webDAVService = new WebDAVService(this)
+	public settingsService = new SettingsService(this)
 	public syncExecutorService = new SyncExecutorService(this)
 	public gcService = new GcService(this)
 	public chatService = new ChatService(this)
@@ -72,12 +70,10 @@ export default class NutstorePlugin extends Plugin {
 	)
 
 	async onload() {
-		await this.loadSettings()
-		await this.loadLocalSettings()
-		this.modelsPresetService.initializeFromLocalSettings()
-		await this.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
+		await this.settingsService.initialize()
 		await this.chatService.initialize()
-		this.addSettingTab(new NutstoreSettingTab(this.app, this))
+		this.settingTab = new NutstoreSettingTab(this.app, this)
+		this.addSettingTab(this.settingTab)
 		this.registerView(CHATBOX_VIEW_TYPE, (leaf) => new ChatboxView(leaf, this))
 		this.registerEvent(
 			this.app.workspace.on('editor-menu', (menu: Menu, editor, view) => {
@@ -138,6 +134,7 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	async onunload() {
+		this.settingsService.unload()
 		this.app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
 		setPluginInstance(null)
 		emitCancelSync()
@@ -147,73 +144,6 @@ export default class NutstorePlugin extends Plugin {
 		this.eventsService.unload()
 		this.realtimeSyncService.unload()
 		this.statusService.unload()
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
-		this.settings.mobileAppDownloadFileChunkSize ||=
-			(this.settings as { downloadChunkSize?: string }).downloadChunkSize ||
-			DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE
-		this.settings.ai ??= { providers: {}, defaultModel: undefined, yolo: false }
-		this.settings.ai.nutstoreLlmGateway ??= {}
-		if (Array.isArray(this.settings.ai.providers)) {
-			this.settings.ai.providers = {}
-		}
-		let providersValid = true
-		try {
-			this.settings.ai.providers = sanitizeProviders(
-				this.settings.ai.providers ?? {},
-			)
-		} catch (error) {
-			logger.error(error)
-			const detail =
-				error instanceof Error ? error.message : 'Unknown validation error'
-			new Notice(
-				i18n.t('settings.ai.errors.invalidProvidersConfig', {
-					reason: detail,
-				}),
-				10000,
-			)
-			providersValid = false
-		}
-		this.settings.ai.defaultModel = providersValid
-			? sanitizeDefaultSelections(
-					this.settings.ai.providers,
-					this.settings.ai.defaultModel,
-				)
-			: undefined
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings)
-		await this.chatService.handleSettingsChanged()
-	}
-
-	async loadLocalSettings() {
-		const path = normalizePath(`${this.manifest.dir}/data.local.json`)
-		if (!(await this.app.vault.adapter.exists(path))) {
-			this.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
-			return
-		}
-		try {
-			const raw = await this.app.vault.adapter.read(path)
-			this.localSettings = Object.assign(
-				{},
-				DEFAULT_LOCAL_SETTINGS,
-				JSON.parse(raw),
-			)
-			this.localSettings.ai ??= {}
-		} catch (_e) {
-			this.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
-		}
-	}
-
-	async saveLocalSettings() {
-		const path = normalizePath(`${this.manifest.dir}/data.local.json`)
-		await this.app.vault.adapter.write(
-			path,
-			JSON.stringify(this.localSettings, null, 2),
-		)
 	}
 
 	toggleSyncUI(isSyncing: boolean) {

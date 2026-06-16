@@ -26,7 +26,7 @@ export default class AccountSettings extends BaseSettings {
 					.onChange(async (value) => {
 						this.plugin.settings.loginMode =
 							value === 'manual' ? 'manual' : 'sso'
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 						this.display()
 					}),
 			)
@@ -63,7 +63,7 @@ export default class AccountSettings extends BaseSettings {
 					.setValue(this.plugin.settings.account)
 					.onChange(async (value) => {
 						this.plugin.settings.account = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -76,7 +76,7 @@ export default class AccountSettings extends BaseSettings {
 					.setValue(this.plugin.settings.credential)
 					.onChange(async (value) => {
 						this.plugin.settings.credential = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					})
 				text.inputEl.type = 'password'
 			})
@@ -106,7 +106,7 @@ export default class AccountSettings extends BaseSettings {
 						.onClick(() => {
 							new LogoutConfirmModal(this.app, async () => {
 								this.plugin.settings.oauthResponseText = ''
-								await this.plugin.saveSettings()
+								await this.plugin.settingsService.saveSettings()
 								new Notice(i18n.t('settings.ssoStatus.logoutSuccess'))
 								this.display()
 							}).open()

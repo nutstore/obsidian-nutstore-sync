@@ -229,6 +229,21 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		return this.plugin.settings.loginMode === 'sso'
 	}
 
+	isVisible() {
+		return (
+			this.containerEl.isConnected &&
+			document.contains(this.containerEl) &&
+			this.containerEl.offsetParent !== null
+		)
+	}
+
+	async rerenderIfVisible() {
+		if (!this.isVisible()) {
+			return
+		}
+		await this.display()
+	}
+
 	async hide() {
 		await this.accountSettings.hide()
 		this.cacheSettings.hide()

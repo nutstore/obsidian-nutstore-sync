@@ -36,7 +36,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.remoteBaseDir)
 					.onChange(async (value) => {
 						this.plugin.settings.remoteDir = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					})
 				text.inputEl.addEventListener('blur', () => {
 					this.plugin.settings.remoteDir = this.plugin.remoteBaseDir
@@ -52,7 +52,7 @@ export default class CommonSettings extends BaseSettings {
 					}
 					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
 						this.plugin.settings.remoteDir = path
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 						this.display()
 					}).open()
 				})
@@ -85,7 +85,7 @@ export default class CommonSettings extends BaseSettings {
 						).open()
 						if (confirmed) {
 							this.plugin.localSettings.syncPolicy = value as SyncPolicy
-							await this.plugin.saveLocalSettings()
+							await this.plugin.settingsService.saveLocalSettings()
 						} else {
 							syncPolicyDropdown.setValue(prev)
 						}
@@ -156,7 +156,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.conflictStrategy)
 					.onChange(async (value) => {
 						this.plugin.settings.conflictStrategy = value as ConflictStrategy
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -168,7 +168,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.useGitStyle)
 					.onChange(async (value) => {
 						this.plugin.settings.useGitStyle = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -180,7 +180,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.confirmBeforeSync)
 					.onChange(async (value) => {
 						this.plugin.settings.confirmBeforeSync = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -192,7 +192,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.confirmBeforeDeleteInAutoSync)
 					.onChange(async (value) => {
 						this.plugin.settings.confirmBeforeDeleteInAutoSync = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -204,7 +204,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.realtimeSync)
 					.onChange(async (value) => {
 						this.plugin.settings.realtimeSync = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -221,7 +221,7 @@ export default class CommonSettings extends BaseSettings {
 						if (!isNaN(numValue)) {
 							const clampedValue = clamp(numValue, 0, MAX_SECONDS)
 							this.plugin.settings.startupSyncDelaySeconds = clampedValue
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							if (clampedValue !== numValue) {
 								new Notice(
 									i18n.t('settings.startupSyncDelay.exceedsMax', {
@@ -250,7 +250,7 @@ export default class CommonSettings extends BaseSettings {
 
 					text.setValue(finalValue.toString())
 					this.plugin.settings.startupSyncDelaySeconds = finalValue
-					await this.plugin.saveSettings()
+					await this.plugin.settingsService.saveSettings()
 				})
 				text.inputEl.type = 'number'
 				text.inputEl.min = '0'
@@ -274,7 +274,7 @@ export default class CommonSettings extends BaseSettings {
 						if (!isNaN(numValue)) {
 							const clampedValue = clamp(numValue, 0, MAX_MINUTES)
 							this.plugin.settings.autoSyncIntervalSeconds = clampedValue * 60
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							await this.plugin.scheduledSyncService.updateInterval()
 							if (clampedValue !== numValue) {
 								new Notice(
@@ -304,7 +304,7 @@ export default class CommonSettings extends BaseSettings {
 					}
 
 					this.plugin.settings.autoSyncIntervalSeconds = finalValue * 60
-					await this.plugin.saveSettings()
+					await this.plugin.settingsService.saveSettings()
 					await this.plugin.scheduledSyncService.updateInterval()
 				})
 				text.inputEl.type = 'number'
@@ -323,7 +323,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.syncMode)
 					.onChange(async (value: string) => {
 						this.plugin.settings.syncMode = value as SyncMode
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -344,7 +344,7 @@ export default class CommonSettings extends BaseSettings {
 							isNil(value)
 						) {
 							this.plugin.settings.language = value || undefined
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							await this.plugin.i18nService.update()
 							await this.settings.display()
 						}
@@ -372,7 +372,7 @@ export default class CommonSettings extends BaseSettings {
 		// Save to disk only if value actually changed
 		if (this.plugin.settings.skipLargeFiles.maxSize !== value) {
 			this.plugin.settings.skipLargeFiles.maxSize = value
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 		}
 	}
 
@@ -407,7 +407,7 @@ export default class CommonSettings extends BaseSettings {
 		component.setValue(value)
 		if (this.plugin.settings.mobileAppDownloadFileChunkSize !== value) {
 			this.plugin.settings.mobileAppDownloadFileChunkSize = value
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 		}
 	}
 }

@@ -13,7 +13,7 @@ export default class ProtocolService {
 			async (data) => {
 				if (data?.s) {
 					this.plugin.settings.oauthResponseText = data.s
-					await this.plugin.saveSettings()
+					await this.plugin.settingsService.saveSettings()
 					new Notice(i18n.t('settings.login.success'), 5000)
 				}
 				emitSsoReceive({
@@ -58,7 +58,7 @@ export default class ProtocolService {
 					...this.plugin.settings.ai.providers,
 					[providerId]: savedProvider,
 				}
-				await this.plugin.saveSettings()
+				await this.plugin.settingsService.saveSettings()
 				return true
 			},
 			false,

@@ -71,7 +71,7 @@ export default class ModelsPresetService {
 			this.plugin.localSettings.ai.presetModels = providers
 			this.plugin.localSettings.ai.presetModelsUpdatedAt =
 				new Date().toISOString()
-			await this.plugin.saveLocalSettings()
+			await this.plugin.settingsService.saveLocalSettings()
 			return {
 				success: true,
 				providersDelta:

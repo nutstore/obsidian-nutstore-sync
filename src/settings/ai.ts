@@ -137,7 +137,7 @@ export default class AISettings extends BaseSettings {
 				this.plugin.settings.ai.providers,
 				this.plugin.settings.ai.defaultModel,
 			)
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 			if (showNotice) {
 				new Notice(i18n.t('settings.ai.saved'))
 			}

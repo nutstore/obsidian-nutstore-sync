@@ -38,7 +38,7 @@ export default class FilterSettings extends BaseSettings {
 								async (confirmed) => {
 									if (confirmed) {
 										this.plugin.settings.configDirSyncMode = 'bookmarks'
-										await this.plugin.saveSettings()
+										await this.plugin.settingsService.saveSettings()
 									} else {
 										this.display()
 									}
@@ -51,7 +51,7 @@ export default class FilterSettings extends BaseSettings {
 								async (confirmed) => {
 									if (confirmed) {
 										this.plugin.settings.configDirSyncMode = 'all'
-										await this.plugin.saveSettings()
+										await this.plugin.settingsService.saveSettings()
 									} else {
 										this.display()
 									}
@@ -59,7 +59,7 @@ export default class FilterSettings extends BaseSettings {
 							).open()
 						} else {
 							this.plugin.settings.configDirSyncMode = value
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 						}
 					}),
 			)
@@ -75,7 +75,7 @@ export default class FilterSettings extends BaseSettings {
 						this.plugin.settings.filterRules.inclusionRules,
 						async (filters) => {
 							this.plugin.settings.filterRules.inclusionRules = filters
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							this.display()
 						},
 						FilterEditorModal.FilterType.Include,
@@ -94,7 +94,7 @@ export default class FilterSettings extends BaseSettings {
 						this.plugin.settings.filterRules.exclusionRules,
 						async (filters) => {
 							this.plugin.settings.filterRules.exclusionRules = filters
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							this.display()
 						},
 						FilterEditorModal.FilterType.Exclude,

@@ -64,6 +64,9 @@ export default class SyncExecutorService {
 		} finally {
 			this.inFlight = false
 			if (result?.ended) {
+				if (result.shouldReloadSettings) {
+					this.plugin.settingsService.scheduleReloadSettingsFromDisk()
+				}
 				await this.plugin.gcService.runBlobGc().catch((error) => {
 					logger.error('Error running auto GC after sync end:', error)
 				})
