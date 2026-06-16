@@ -165,6 +165,28 @@ input.success {
 	border-radius: 999px;
 }
 
+.ns-chatbox-contained-modal-container {
+	position: absolute;
+	inset: 0;
+	z-index: 220;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+}
+
+.ns-chatbox-contained-modal-container .modal-bg {
+	position: absolute;
+	inset: 0;
+}
+
+.ns-chatbox-contained-modal {
+	position: relative;
+	margin: 0;
+	max-width: min(32rem, calc(100% - 2rem));
+	max-height: calc(100% - 2rem);
+}
+
 .modal.provider-editor-modal {
 	width: min(720px, calc(100vw - 2rem));
 	max-width: 720px;

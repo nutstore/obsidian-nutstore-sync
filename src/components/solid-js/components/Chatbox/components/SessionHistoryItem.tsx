@@ -1,53 +1,27 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js'
-import { t } from '../i18n'
+import { Menu, setIcon } from 'obsidian'
+import { Show } from 'solid-js'
+import { t } from '../../../i18n'
 import type { ChatboxProps } from '../types'
 import { formatTime } from '../utils'
 
 export function SessionHistoryItem(props: {
 	session: ChatboxProps['sessionHistory'][number]
 	isActive: boolean
+	isRunning?: boolean
 	onSelect: (sessionId: string) => void
 	onExport: (sessionId: string) => void
 	onDelete: (sessionId: string) => void
 }) {
-	const [menuOpen, setMenuOpen] = createSignal(false)
-	let menuEl: HTMLDivElement | undefined
-	let actionsButtonEl: HTMLButtonElement | undefined
-
-	createEffect(() => {
-		if (!menuOpen()) {
-			return
-		}
-		const viewDocument = menuEl?.ownerDocument ?? document
-		const onPointerDown = (event: PointerEvent) => {
-			const target = event.target
-			if (!target || typeof target !== 'object' || !('nodeType' in target)) {
-				return
-			}
-			const node = target as Node
-			if (menuEl?.contains(node) || actionsButtonEl?.contains(node)) {
-				return
-			}
-			setMenuOpen(false)
-		}
-		viewDocument.addEventListener('pointerdown', onPointerDown)
-		onCleanup(() => {
-			viewDocument.removeEventListener('pointerdown', onPointerDown)
-		})
-	})
-
 	const activate = () => props.onSelect(props.session.id)
 
 	return (
 		<div
 			role="button"
 			tabIndex={0}
-			class={`group relative w-full rounded-3 border px-3 py-3 text-left transition-colors ${
-				menuOpen() ? 'z-30 overflow-visible' : 'overflow-hidden'
-			} ${
+			class={`group relative w-full rounded-3 border px-3 py-3 text-left transition-colors overflow-hidden ${
 				props.isActive
 					? 'border-[var(--interactive-accent)] bg-[var(--background-secondary)]'
-					: 'border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] hover:bg-[var(--background-modifier-hover)]'
+					: 'border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] hover:bg-[var(--background-modifier-hover)] hover:cursor-pointer'
 			}`}
 			onClick={activate}
 			onKeyDown={(event) => {
@@ -65,53 +39,40 @@ export function SessionHistoryItem(props: {
 					<div class="truncate pr-1 text-sm font-medium text-[var(--text-normal)]">
 						{props.session.title}
 					</div>
-					<div class="mt-2 text-xs text-[var(--text-muted)]">
+					<div class="mt-2 flex items-center gap-1 text-xs text-[var(--text-muted)]">
 						{formatTime(props.session.createdAt)}
+						<Show when={props.isRunning}>
+							<span class="font-medium text-[var(--color-yellow)]">
+								· {t('chatbox.ui.history.sessionRunning')}
+							</span>
+						</Show>
 					</div>
 				</div>
-				<div class="relative shrink-0">
-					<button
-						ref={actionsButtonEl}
-						class="py-1 px-2"
-						type="button"
-						aria-label={t('sessionActions')}
+				<div class="shrink-0">
+					<div
+						ref={(el) => setIcon(el, 'ellipsis-vertical')}
+						class="flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
+						aria-label={t('chatbox.ui.history.sessionActions')}
 						onClick={(event) => {
 							event.preventDefault()
 							event.stopPropagation()
-							setMenuOpen((value) => !value)
+							const menu = new Menu()
+							menu.addItem((item) =>
+								item
+									.setTitle(t('chatbox.ui.actions.exportAsMarkdown'))
+									.setIcon('download')
+									.onClick(() => props.onExport(props.session.id)),
+							)
+							menu.addItem((item) => {
+								item
+									.setTitle(t('chatbox.ui.actions.deleteSession'))
+									.setIcon('trash')
+									.setWarning(true)
+									.onClick(() => props.onDelete(props.session.id))
+							})
+							menu.showAtMouseEvent(event)
 						}}
-					>
-						⋯
-					</button>
-					<Show when={menuOpen()}>
-						<div
-							ref={menuEl}
-							class="absolute right-0 top-8 z-20 min-w-36 rounded-2 bg-[var(--background-primary)] shadow-lg flex flex-col p-1 gap-1 md:p-2 md:gap-2"
-						>
-							<button
-								class="w-full text-xs"
-								onClick={(event) => {
-									event.preventDefault()
-									event.stopPropagation()
-									setMenuOpen(false)
-									props.onExport(props.session.id)
-								}}
-							>
-								{t('exportAsMarkdown')}
-							</button>
-							<button
-								class="w-full text-xs mod-warning"
-								onClick={(event) => {
-									event.preventDefault()
-									event.stopPropagation()
-									setMenuOpen(false)
-									props.onDelete(props.session.id)
-								}}
-							>
-								{t('deleteSession')}
-							</button>
-						</div>
-					</Show>
+					/>
 				</div>
 			</div>
 		</div>

@@ -365,6 +365,7 @@
 	},
 	"aiPermission": {
 		"title": "AI 权限请求",
+		"sessionLabel": "会话「{{title}}」正在请求权限",
 		"message": "AI 正在请求执行以下文件操作：",
 		"sessionScopeHint": "“自动同意该操作”仅在当前会话生效，重启 Obsidian 后将恢复询问。",
 		"allowOnce": "同意",
@@ -525,6 +526,92 @@
 			"cancelledSummary": "任务 {{task}} 已取消。",
 			"emptyResult": "任务已完成，但没有返回摘要。"
 		},
+		"ui": {
+			"history": {
+				"title": "历史",
+				"sessionActions": "会话操作",
+				"sessionRunning": "运行中"
+			},
+			"actions": {
+				"exportAsMarkdown": "导出为 Markdown",
+				"deleteSession": "删除",
+				"cancel": "取消",
+				"send": "发送",
+				"queueSend": "加入挂起",
+				"stopRun": "终止",
+				"newFragment": "新建段",
+				"compressContext": "压缩上下文",
+				"closeTasks": "关闭",
+				"cancelTask": "取消",
+				"copy": "复制",
+				"deleteMessage": "删除消息",
+				"regenerateMessage": "重新生成",
+				"recallMessage": "撤回",
+				"removeContextItem": "移除"
+			},
+			"labels": {
+				"provider": "Provider",
+				"model": "Model",
+				"tool": "工具",
+				"params": "Params",
+				"result": "Result",
+				"tasks": "任务",
+				"currentSession": "当前会话",
+				"otherSessions": "其他会话",
+				"pendingMessages": "挂起消息",
+				"depth": "深度",
+				"sources": "来源",
+				"contextArea": "上下文"
+			},
+			"states": {
+				"empty": "开始发送一条消息",
+				"thinking": "思考中",
+				"compressing": "压缩中",
+				"processingTools": "工具处理中",
+				"noProvider": "未选择 Provider",
+				"noModel": "未选择 Model",
+				"noTasks": "还没有任务",
+				"copied": "已复制",
+				"taskQueued": "排队中",
+				"taskRunning": "运行中",
+				"taskCompleted": "已完成",
+				"taskFailed": "失败",
+				"taskCancelled": "已取消"
+			},
+			"placeholders": {
+				"input": "输入消息，Enter 发送，Shift+Enter 换行"
+			},
+			"dialogs": {
+				"deleteSession": {
+					"title": "删除会话",
+					"message": "确认删除这个会话吗？删除后不可恢复。",
+					"confirm": "确认删除"
+				},
+				"deleteMessage": {
+					"title": "删除消息",
+					"userConfirm": "此操作将删除该用户消息，以及其后所有 AI 回复和工具调用结果，无法恢复。",
+					"assistantConfirm": "此操作将删除该 AI 回复，无法恢复。",
+					"toolConfirm": "此操作将删除该工具调用结果，并从对应的 AI 消息中移除该工具调用记录，无法恢复。",
+					"toolRestoreWarning": "删除后将无法通过撤回消息恢复这些文件修改。",
+					"confirm": "确认删除"
+				},
+				"regenerate": {
+					"title": "重新生成",
+					"message": "此操作将重新生成该 AI 回复，原回复内容将被替换，其后的消息将被保留，无法恢复。",
+					"confirm": "重新生成"
+				},
+				"recall": {
+					"title": "撤回消息",
+					"message": "此操作将把消息内容放回输入框，并撤回该消息及当前段中之后的所有消息，无法恢复。",
+					"onlySecondTitle": "确认仅撤回",
+					"onlySecondMessage": "将仅撤回消息，不还原相关修改。此操作无法恢复，确认继续吗？",
+					"restoreSecondTitle": "确认撤回并还原修改",
+					"restoreSecondMessage": "将撤回消息，并还原相关修改。此操作无法恢复，确认继续吗？",
+					"restoreConfirm": "撤回并还原修改",
+					"onlyConfirm": "仅撤回"
+				}
+			}
+		},
 		"requestFailed": "请求失败",
 		"errors": {
 			"noProvider": "发送前请先选择模型提供商",
@@ -539,6 +626,33 @@
 			"sessionNotFound": "目标会话已不存在",
 			"taskDepthExceeded": "任务拆分深度已达到上限",
 			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用"
+		}
+	},
+	"taskSelectionVirtualList": {
+		"pagination": {
+			"first": "首页",
+			"previous": "上一页",
+			"next": "下一页",
+			"last": "末页",
+			"pageInfo": "第 {{ current }} / {{ total }} 页",
+			"totalItems": "共 {{ count }} 项"
+		},
+		"labels": {
+			"execute": "执行",
+			"action": "操作",
+			"localPath": "本地路径",
+			"remotePath": "远程路径"
+		}
+	},
+	"webdavExplorer": {
+		"actions": {
+			"newFolder": "新建文件夹",
+			"goBack": "返回上一层",
+			"confirm": "确定",
+			"cancel": "取消"
+		},
+		"labels": {
+			"currentPath": "当前路径"
 		}
 	}
 }

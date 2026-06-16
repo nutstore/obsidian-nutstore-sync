@@ -1,5 +1,5 @@
 import { ChatTaskRecord, ChatRunState } from './types'
-import { t } from './i18n'
+import { t } from '../../i18n'
 
 export function formatTime(timestamp: number) {
 	return new Intl.DateTimeFormat(undefined, {
@@ -61,15 +61,15 @@ export function formatUsage(input?: number, output?: number, total?: number) {
 export function statusLabel(status: ChatTaskRecord['status']) {
 	switch (status) {
 		case 'queued':
-			return t('taskQueued')
+			return t('chatbox.ui.states.taskQueued')
 		case 'running':
-			return t('taskRunning')
+			return t('chatbox.ui.states.taskRunning')
 		case 'completed':
-			return t('taskCompleted')
+			return t('chatbox.ui.states.taskCompleted')
 		case 'failed':
-			return t('taskFailed')
+			return t('chatbox.ui.states.taskFailed')
 		case 'cancelled':
-			return t('taskCancelled')
+			return t('chatbox.ui.states.taskCancelled')
 	}
 }
 
@@ -91,11 +91,11 @@ export function statusClass(status: ChatTaskRecord['status']) {
 export function runStateLabel(runState: ChatRunState) {
 	switch (runState) {
 		case 'thinking':
-			return t('thinking')
+			return t('chatbox.ui.states.thinking')
 		case 'compressing':
-			return t('compressing')
+			return t('chatbox.ui.states.compressing')
 		case 'waiting_for_tools':
-			return t('processingTools')
+			return t('chatbox.ui.states.processingTools')
 		default:
 			return ''
 	}

@@ -4,7 +4,7 @@ import { createSignal, Show } from 'solid-js'
 import { createFileList } from './components/FileList'
 import NewFolder from './components/NewFolder'
 import { fs } from './fs'
-import { t } from './i18n'
+import { t } from '../../i18n'
 
 export interface WebDAVExplorerProps {
 	fs: fs
@@ -63,18 +63,20 @@ function App(props: WebDAVExplorerProps) {
 		<div class="flex flex-col gap-4 h-50vh">
 			<SingleCol />
 			<div class="flex gap-2 text-xs">
-				<span>{t('currentPath')}:</span>
+				<span>{t('webdavExplorer.labels.currentPath')}:</span>
 				<span class="break-all">{cwd() ?? '/'}</span>
 			</div>
 			<div class="flex items-center gap-2">
-				<button onClick={pop}>{t('goBack')}</button>
+				<button onClick={pop}>{t('webdavExplorer.actions.goBack')}</button>
 				<a class="no-underline" onClick={() => setShowNewFolder(true)}>
-					{t('newFolder')}
+					{t('webdavExplorer.actions.newFolder')}
 				</a>
 				<div class="flex-1" />
-				<button onClick={() => props.onClose()}>{t('cancel')}</button>
+				<button onClick={() => props.onClose()}>
+					{t('webdavExplorer.actions.cancel')}
+				</button>
 				<button onClick={() => props.onConfirm(cwd() ?? '/')}>
-					{t('confirm')}
+					{t('webdavExplorer.actions.confirm')}
 				</button>
 			</div>
 		</div>

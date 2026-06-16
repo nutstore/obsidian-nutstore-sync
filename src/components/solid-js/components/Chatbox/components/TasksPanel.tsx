@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js'
-import { t } from '../i18n'
+import { t } from '../../../i18n'
 import type { ChatboxProps } from '../types'
 import { TaskCard } from './TaskCard'
 
@@ -12,21 +12,21 @@ export function TasksPanel(props: {
 	return (
 		<div class="flex h-full w-[22rem] shrink-0 flex-col border-l border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)]">
 			<div class="flex items-center justify-between border-b border-[var(--background-modifier-border)] px-3 py-3">
-				<div class="text-sm font-semibold">{t('tasks')}</div>
+				<div class="text-sm font-semibold">{t('chatbox.ui.labels.tasks')}</div>
 				<button type="button" onClick={() => props.onClose()}>
-					{t('closeTasks')}
+					{t('chatbox.ui.actions.closeTasks')}
 				</button>
 			</div>
 			<div class="flex-1 overflow-y-auto px-3 py-3">
 				<div class="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-					{t('currentSession')}
+					{t('chatbox.ui.labels.currentSession')}
 				</div>
 				<div class="mt-2 flex flex-col gap-3">
 					<Show
 						when={props.currentSessionTasks.length > 0}
 						fallback={
 							<div class="rounded-3 border border-dashed border-[var(--background-modifier-border)] px-3 py-4 text-sm text-[var(--text-muted)]">
-								{t('noTasks')}
+								{t('chatbox.ui.states.noTasks')}
 							</div>
 						}
 					>
@@ -43,7 +43,7 @@ export function TasksPanel(props: {
 				</div>
 				<Show when={props.otherSessionTasks.length > 0}>
 					<div class="mt-6 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-						{t('otherSessions')}
+						{t('chatbox.ui.labels.otherSessions')}
 					</div>
 					<div class="mt-2 flex flex-col gap-3">
 						<For each={props.otherSessionTasks}>

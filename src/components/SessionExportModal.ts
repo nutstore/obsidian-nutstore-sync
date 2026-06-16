@@ -1,4 +1,8 @@
 import { App, Modal, Setting } from 'obsidian'
+import {
+	applyObsidianModalMountTarget,
+	type ChatModalMountTarget,
+} from '~/chat/modal-mount'
 import i18n from '~/i18n'
 
 export interface SessionExportOptions {
@@ -14,13 +18,14 @@ export default class SessionExportModal extends Modal {
 		private readonly resolve: (
 			options: SessionExportOptions | undefined,
 		) => void,
+		private readonly mountTarget?: ChatModalMountTarget,
 	) {
 		super(app)
 	}
 
-	static open(app: App) {
+	static open(app: App, mountTarget?: ChatModalMountTarget) {
 		return new Promise<SessionExportOptions | undefined>((resolve) => {
-			new SessionExportModal(app, resolve).open()
+			new SessionExportModal(app, resolve, mountTarget).open()
 		})
 	}
 
@@ -67,5 +72,10 @@ export default class SessionExportModal extends Modal {
 			return
 		}
 		this.resolve(undefined)
+	}
+
+	open() {
+		super.open()
+		applyObsidianModalMountTarget(this, this.mountTarget)
 	}
 }

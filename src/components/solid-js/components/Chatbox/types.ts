@@ -43,6 +43,27 @@ export type ChatMessageContentPart =
 	| ReasoningPart
 	| ToolCallPart
 
+export interface ChatDisplayContentBlock {
+	kind: 'content'
+	parts: Array<Exclude<ChatMessageContentPart, ToolCallPart>>
+}
+
+export interface ChatDisplayToolCallBlock {
+	kind: 'tool-call'
+	toolCall: ToolCallPart
+	toolMessage?: ChatMessageRecord
+}
+
+export interface ChatDisplayToolResultBlock {
+	kind: 'tool-result'
+	toolMessage: ChatMessageRecord
+}
+
+export type ChatDisplayBlock =
+	| ChatDisplayContentBlock
+	| ChatDisplayToolCallBlock
+	| ChatDisplayToolResultBlock
+
 export interface ReversibleCompressedContent {
 	compress: 'deflate'
 	blob: Blob
@@ -192,7 +213,7 @@ export interface ChatTimelineMessageItem {
 	kind: 'message'
 	createdAt: number
 	message: ChatMessageRecord
-	toolCall?: ToolCallPart
+	displayBlocks: ChatDisplayBlock[]
 }
 
 export type ChatTimelineItem =
@@ -206,6 +227,7 @@ export interface ChatboxViewModel {
 	timeline: ChatTimelineItem[]
 	currentSessionTasks: ChatTaskRecord[]
 	otherSessionTasks: ChatTaskRecord[]
+	otherBusySessionIds: string[]
 	providers: ChatProviderOption[]
 	selectedProviderId?: string
 	selectedModelId?: string
@@ -245,6 +267,7 @@ export interface ChatboxProps extends ChatboxViewModel {
 		messageId: string,
 		options?: { restoreFiles?: boolean },
 	) => Promise<RecallMessageResult | void> | void
+	onRecallHasReversibleOps?: (messageId: string) => boolean
 	renderMarkdown?: (
 		el: HTMLElement,
 		markdown: string,

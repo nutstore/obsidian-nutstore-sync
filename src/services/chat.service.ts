@@ -55,7 +55,9 @@ import {
 	toFailedTask,
 	toRunningTask,
 } from '~/chat/domain'
+import { projectFragmentMessageGroups } from '~/chat/display-blocks'
 import { exportSessionToMarkdownFile } from '~/chat/export-session'
+import { resolveChatModalMountTarget } from '~/chat/modal-mount'
 import {
 	decodeReversibleFileSnapshot,
 	hasCompressedFileContent,
@@ -411,6 +413,7 @@ export default class ChatService {
 		string,
 		DeferredTaskCompletion
 	>()
+	private chatModalHostEl?: HTMLElement
 	private initialization?: Promise<void>
 
 	constructor(private plugin: NutstorePlugin) {}
@@ -517,6 +520,7 @@ export default class ChatService {
 						.sort((left, right) => right.createdAt - left.createdAt)
 				: [],
 			otherSessionTasks: this.collectOtherSessionTasks(),
+			otherBusySessionIds: this.collectOtherBusySessionIds(),
 			providers: listProviders(
 				this.plugin.settings.ai.providers,
 			).map<ChatProviderOption>((provider) => ({
@@ -566,6 +570,8 @@ export default class ChatService {
 				messageId: string,
 				options?: { restoreFiles?: boolean },
 			) => this.recallMessage(messageId, options),
+			onRecallHasReversibleOps: (messageId: string) =>
+				this.recallMessageHasReversibleOps(messageId),
 		}
 	}
 
@@ -638,7 +644,10 @@ export default class ChatService {
 			return
 		}
 
-		const options = await SessionExportModal.open(this.plugin.app)
+		const options = await SessionExportModal.open(
+			this.plugin.app,
+			this.getChatModalMountTarget(),
+		)
 		if (!options) {
 			return
 		}
@@ -662,6 +671,10 @@ export default class ChatService {
 			new Notice(i18n.t('chatbox.exportFailed'))
 			logger.error('Failed to export chat session:', error)
 		}
+	}
+
+	setChatModalHost(rootEl?: HTMLElement) {
+		this.chatModalHostEl = rootEl?.isConnected ? rootEl : undefined
 	}
 
 	selectProvider(providerId: string) {
@@ -1111,6 +1124,21 @@ export default class ChatService {
 		}
 	}
 
+	private recallMessageHasReversibleOps(messageId: string): boolean {
+		const session = this.getLoadedActiveSession()
+		if (!session) {
+			return false
+		}
+		const fragment = this.getActiveFragment(session)
+		const idx = fragment.messages.findIndex((record) => record.id === messageId)
+		if (idx === -1) {
+			return false
+		}
+		return fragment.messages
+			.slice(idx)
+			.some((record) => Boolean(record.reversibleOps?.length))
+	}
+
 	async regenerateMessage(messageId: string) {
 		const session = this.getLoadedActiveSession()
 		if (!session || !this.validateSessionSelection(session)) {
@@ -1411,48 +1439,16 @@ export default class ChatService {
 	}
 
 	private buildTimeline(session: AISession): ChatboxProps['timeline'] {
-		const flattenedMessages = session.fragments.flatMap(
-			(fragment) => fragment.messages,
-		)
-
-		const toolCallById = new Map<string, ToolCallPart>()
-		for (const record of flattenedMessages) {
-			for (const tc of getAssistantToolCalls(record.message) || []) {
-				toolCallById.set(tc.toolCallId, tc)
-			}
-		}
-
 		return session.fragments.flatMap((fragment) => {
-			const items = fragment.messages.flatMap((message) => {
-				const toolMessage =
-					message.message.role === 'tool' ? message.message : undefined
-				if (
-					message.message.role === 'assistant' &&
-					Array.isArray(message.message.content) &&
-					(message.message.content as Array<{ type: string }>).every(
-						(p) => p.type === 'tool-call',
-					)
-				) {
-					return []
-				}
-
-				const toolCallId =
-					toolMessage?.role === 'tool' &&
-					Array.isArray(toolMessage.content) &&
-					toolMessage.content[0]?.type === 'tool-result'
-						? (toolMessage.content[0] as { toolCallId: string }).toolCallId
-						: undefined
-
-				return [
-					{
-						id: `message:${message.id}`,
-						kind: 'message' as const,
-						createdAt: message.createdAt,
-						message: cloneMessageRecord(message),
-						toolCall: toolCallId ? toolCallById.get(toolCallId) : undefined,
-					},
-				]
-			})
+			const items = projectFragmentMessageGroups(fragment.messages).map(
+				({ record, blocks }) => ({
+					id: `message:${record.id}`,
+					kind: 'message' as const,
+					createdAt: record.createdAt,
+					message: cloneMessageRecord(record),
+					displayBlocks: blocks,
+				}),
+			)
 
 			return [
 				{
@@ -1470,6 +1466,20 @@ export default class ChatService {
 			.filter((session) => session.id !== this.activeSessionId)
 			.flatMap((session) => session.tasks)
 			.sort((left, right) => right.createdAt - left.createdAt)
+	}
+
+	private collectOtherBusySessionIds() {
+		return Array.from(this.loadedSessions.values())
+			.filter((session) => session.id !== this.activeSessionId)
+			.filter((session) => {
+				const runtime = this.getRuntime(session.id)
+				return (
+					runtime.runState !== 'idle' ||
+					!!runtime.processing ||
+					runtime.pendingMessages.length > 0
+				)
+			})
+			.map((session) => session.id)
 	}
 
 	private getLoadedActiveSession() {
@@ -2309,6 +2319,12 @@ export default class ChatService {
 					this.getAutoApproveRequests(session.id).add(signature)
 				},
 			},
+			{
+				sessionTitle:
+					this.sessionIndex.find((item) => item.id === session.id)?.title ||
+					deriveTitle(session),
+				modalMountTarget: this.getChatModalMountTarget(),
+			},
 		)
 		return createAITools(this.plugin.app, {
 			allowSpawn,
@@ -2324,6 +2340,10 @@ export default class ChatService {
 				async: true,
 			}),
 		})
+	}
+
+	private getChatModalMountTarget() {
+		return resolveChatModalMountTarget(this.chatModalHostEl)
 	}
 
 	private async executeToolCall(
@@ -2506,6 +2526,11 @@ export default class ChatService {
 			restoreFiles.set(operation.vaultPath, operation.before)
 		}
 
+		logger.info(
+			`Recall restore start: ${normalizedOperations.length} recorded ops, ` +
+				`${deletePaths.size} deletes, ${restoreDirs.size} directories, ${restoreFiles.size} files.`,
+		)
+
 		for (const path of [...deletePaths].sort((left, right) => {
 			const depthDelta = getPathDepth(right) - getPathDepth(left)
 			return depthDelta !== 0 ? depthDelta : left.localeCompare(right)
@@ -2536,6 +2561,8 @@ export default class ChatService {
 				await this.writeVaultFile(filePath, snapshot)
 			}
 		}
+
+		logger.info('Recall restore completed.')
 	}
 
 	private async deleteVaultPathIfExists(path: string) {
@@ -2543,6 +2570,11 @@ export default class ChatService {
 		if (!target) {
 			return
 		}
+		if (isVaultFolder(target) && target.children.length > 0) {
+			logger.info(`Recall restore skip non-empty dir: ${path}`)
+			return
+		}
+		logger.info(`Recall restore delete: ${path}`)
 		if (typeof this.plugin.app.vault.delete === 'function') {
 			await this.plugin.app.vault.delete(target, true)
 			return
@@ -2565,6 +2597,7 @@ export default class ChatService {
 			}
 			throw new Error(`Unable to restore ${path}: a file already exists there.`)
 		}
+		logger.info(`Recall restore mkdir: ${path}`)
 		await this.plugin.app.vault.createFolder(path)
 	}
 
@@ -2583,9 +2616,11 @@ export default class ChatService {
 			)
 		}
 		if (existing && isVaultFile(existing)) {
+			logger.info(`Recall restore write: ${path} (overwrite)`)
 			await this.plugin.app.vault.modifyBinary(existing as never, data)
 			return
 		}
+		logger.info(`Recall restore write: ${path} (create)`)
 		await this.plugin.app.vault.createBinary(path, data)
 	}
 
@@ -2914,9 +2949,18 @@ export default class ChatService {
 	}
 
 	private syncPendingSelectionWithSettings() {
-		const normalized = this.getEmptyStateSelection()
-		this.pendingProviderId = normalized.providerId
-		this.pendingModelId = normalized.modelId
+		const defaults = resolveInitialSelection(
+			this.plugin.settings.ai.providers,
+			this.plugin.settings.ai.defaultModel,
+		)
+		const provider = getProviderById(
+			this.plugin.settings.ai.providers,
+			defaults.providerId,
+		)
+		const model =
+			getModelById(provider, defaults.modelId) || getFirstModel(provider)
+		this.pendingProviderId = provider?.id
+		this.pendingModelId = model?.id
 	}
 
 	private findLoadedSessionByTaskId(taskId: string) {

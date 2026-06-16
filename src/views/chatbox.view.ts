@@ -164,9 +164,11 @@ export default class ChatboxView extends ItemView {
 		this.rootEl = this.contentEl.createDiv({
 			cls: 'nutstore-chatbox-view h-full',
 		})
+		this.plugin.chatService.setChatModalHost(this.rootEl)
 		await this.plugin.chatService.ensureSession()
 		this.unsubWindowMigrated?.()
 		this.unsubWindowMigrated = this.rootEl.onWindowMigrated(() => {
+			this.plugin.chatService.setChatModalHost(this.rootEl)
 			this.remountChatbox()
 		})
 		this.remountChatbox()
@@ -179,6 +181,7 @@ export default class ChatboxView extends ItemView {
 		this.unsub = undefined
 		this.controller?.destroy()
 		this.controller = undefined
+		this.plugin.chatService.setChatModalHost(undefined)
 		this.contentEl.empty()
 	}
 }

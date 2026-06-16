@@ -2,6 +2,7 @@ export type {
 	AssistantModelMessage,
 	CancelledChatTask,
 	ChatAssistantMessage,
+	ChatDisplayBlock,
 	ChatMessage,
 	ChatMessageContentPart,
 	ChatMessageMeta,

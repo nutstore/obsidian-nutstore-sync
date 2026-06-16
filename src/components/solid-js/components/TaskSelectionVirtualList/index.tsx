@@ -1,5 +1,4 @@
-import { createStore, reconcile } from 'solid-js/store'
-import { render } from 'solid-js/web'
+import { createMount, MountController } from '../../mount'
 import TaskSelectionVirtualList, {
 	TaskSelectionItem,
 	TaskSelectionVirtualListProps,
@@ -7,28 +6,12 @@ import TaskSelectionVirtualList, {
 
 export type { TaskSelectionItem, TaskSelectionVirtualListProps }
 
-export interface TaskSelectionVirtualListController {
-	update: (items: TaskSelectionItem[]) => void
-	destroy: () => void
-}
+export type TaskSelectionVirtualListController =
+	MountController<TaskSelectionVirtualListProps>
 
 export function mountTaskSelectionVirtualList(
 	el: Element,
-	props: Omit<TaskSelectionVirtualListProps, 'items'> & {
-		items: TaskSelectionItem[]
-	},
+	props: TaskSelectionVirtualListProps,
 ): TaskSelectionVirtualListController {
-	let update = (_items: TaskSelectionItem[]) => {}
-	const destroy = render(() => {
-		const [state, setState] = createStore(props)
-		update = (items: TaskSelectionItem[]) => {
-			setState('items', reconcile(items))
-		}
-		return <TaskSelectionVirtualList {...state} />
-	}, el)
-
-	return {
-		update,
-		destroy,
-	}
+	return createMount(TaskSelectionVirtualList, el, props)
 }

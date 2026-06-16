@@ -1,20 +1,20 @@
 import type {
+	ChatDisplayBlock,
 	ChatMessageRecord,
 	ChatPendingMessage,
 	ChatRunState,
 	ChatTaskRecord,
 } from '~/chat/domain'
 import type { UserContextItem } from '~/chat/user-context'
-import type { ToolCallPart } from 'ai'
 
 export type {
+	ChatDisplayBlock,
 	ChatMessageRecord,
 	ChatPendingMessage,
 	ChatRunState,
 	ChatTaskRecord,
 	ReversibleToolOp,
 } from '~/chat/domain'
-export type { ToolCallPart } from 'ai'
 export type { UserContextItem } from '~/chat/user-context'
 
 export interface ChatModelOption {
@@ -46,7 +46,7 @@ export interface ChatTimelineMessageItem {
 	kind: 'message'
 	createdAt: number
 	message: ChatMessageRecord
-	toolCall?: ToolCallPart
+	displayBlocks: ChatDisplayBlock[]
 }
 
 export type ChatTimelineItem =
@@ -60,6 +60,7 @@ export interface ChatboxViewModel {
 	timeline: ChatTimelineItem[]
 	currentSessionTasks: ChatTaskRecord[]
 	otherSessionTasks: ChatTaskRecord[]
+	otherBusySessionIds: string[]
 	providers: ChatProviderOption[]
 	selectedProviderId?: string
 	selectedModelId?: string
@@ -98,7 +99,8 @@ export interface ChatboxProps extends ChatboxViewModel {
 	onRecallMessage?: (
 		messageId: string,
 		options?: { restoreFiles?: boolean },
-	) => Promise<RecallMessageResult | void>
+	) => Promise<RecallMessageResult | void> | void
+	onRecallHasReversibleOps?: (messageId: string) => boolean
 	renderMarkdown?: (
 		el: HTMLElement,
 		markdown: string,

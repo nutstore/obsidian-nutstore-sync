@@ -365,6 +365,7 @@
 	},
 	"aiPermission": {
 		"title": "AI Permission Request",
+		"sessionLabel": "Session \"{{title}}\" is requesting permission",
 		"message": "AI is requesting to perform the following file operations:",
 		"sessionScopeHint": "\"Auto-approve this operation\" only applies to this chat session and resets after restarting Obsidian.",
 		"allowOnce": "Approve",
@@ -525,6 +526,92 @@
 			"cancelledSummary": "Task {{task}} was cancelled.",
 			"emptyResult": "Task completed but returned no summary."
 		},
+		"ui": {
+			"history": {
+				"title": "History",
+				"sessionActions": "Session actions",
+				"sessionRunning": "Running"
+			},
+			"actions": {
+				"exportAsMarkdown": "Export as Markdown",
+				"deleteSession": "Delete",
+				"cancel": "Cancel",
+				"send": "Send",
+				"queueSend": "Queue Send",
+				"stopRun": "Stop",
+				"newFragment": "New Fragment",
+				"compressContext": "Compress Context",
+				"closeTasks": "Close",
+				"cancelTask": "Cancel",
+				"copy": "Copy",
+				"deleteMessage": "Delete message",
+				"regenerateMessage": "Regenerate",
+				"recallMessage": "Recall",
+				"removeContextItem": "Remove"
+			},
+			"labels": {
+				"provider": "Provider",
+				"model": "Model",
+				"tool": "Tool",
+				"params": "Params",
+				"result": "Result",
+				"tasks": "Tasks",
+				"currentSession": "Current session",
+				"otherSessions": "Other sessions",
+				"pendingMessages": "Pending Messages",
+				"depth": "Depth",
+				"sources": "Sources",
+				"contextArea": "Context"
+			},
+			"states": {
+				"empty": "Start by sending a message",
+				"thinking": "Thinking",
+				"compressing": "Compressing",
+				"processingTools": "Processing Tools",
+				"noProvider": "No provider",
+				"noModel": "No model",
+				"noTasks": "No tasks yet",
+				"copied": "Copied!",
+				"taskQueued": "Queued",
+				"taskRunning": "Running",
+				"taskCompleted": "Completed",
+				"taskFailed": "Failed",
+				"taskCancelled": "Cancelled"
+			},
+			"placeholders": {
+				"input": "Type a message. Enter to send, Shift+Enter for newline"
+			},
+			"dialogs": {
+				"deleteSession": {
+					"title": "Delete Session",
+					"message": "Delete this session permanently? This action cannot be undone.",
+					"confirm": "Delete"
+				},
+				"deleteMessage": {
+					"title": "Delete Message",
+					"userConfirm": "This will delete this message and all following AI responses and tool results. This action cannot be undone.",
+					"assistantConfirm": "This will delete this AI response. This action cannot be undone.",
+					"toolConfirm": "This will delete this tool result and remove the corresponding tool call from the AI message. This action cannot be undone.",
+					"toolRestoreWarning": "After deletion, these file changes can no longer be restored by recalling the message.",
+					"confirm": "Delete"
+				},
+				"regenerate": {
+					"title": "Regenerate",
+					"message": "This will regenerate this AI response in place. The original response will be replaced, and subsequent messages will be preserved. This action cannot be undone.",
+					"confirm": "Regenerate"
+				},
+				"recall": {
+					"title": "Recall Message",
+					"message": "This will put the message content back into the input box and recall this message plus all following messages in the current fragment. This action cannot be undone.",
+					"onlySecondTitle": "Confirm Recall Only",
+					"onlySecondMessage": "This will recall the message without restoring related file changes. This action cannot be undone. Continue?",
+					"restoreSecondTitle": "Confirm Recall and Restore",
+					"restoreSecondMessage": "This will recall the message and restore related file changes. This action cannot be undone. Continue?",
+					"restoreConfirm": "Recall and restore files",
+					"onlyConfirm": "Recall only"
+				}
+			}
+		},
 		"requestFailed": "Request failed",
 		"errors": {
 			"noProvider": "Select a provider before sending",
@@ -539,6 +626,33 @@
 			"sessionNotFound": "The target session no longer exists",
 			"taskDepthExceeded": "The task depth limit has been reached",
 			"taskSessionUnavailable": "The task session or model configuration is no longer available"
+		}
+	},
+	"taskSelectionVirtualList": {
+		"pagination": {
+			"first": "First",
+			"previous": "Prev",
+			"next": "Next",
+			"last": "Last",
+			"pageInfo": "Page {{ current }} / {{ total }}",
+			"totalItems": "Total {{ count }} items"
+		},
+		"labels": {
+			"execute": "Execute",
+			"action": "Action",
+			"localPath": "Local Path",
+			"remotePath": "Remote Path"
+		}
+	},
+	"webdavExplorer": {
+		"actions": {
+			"newFolder": "New Folder",
+			"goBack": "Go Back",
+			"confirm": "Confirm",
+			"cancel": "Cancel"
+		},
+		"labels": {
+			"currentPath": "Current Path"
 		}
 	}
 }

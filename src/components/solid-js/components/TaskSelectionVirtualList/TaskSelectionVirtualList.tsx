@@ -6,7 +6,7 @@ import {
 	getPaginationRowModel,
 } from '@tanstack/solid-table'
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js'
-import { t } from './i18n'
+import { t } from '../../i18n'
 
 export interface TaskSelectionItem {
 	id: string
@@ -63,7 +63,7 @@ export default function TaskSelectionVirtualList(
 		},
 		{
 			id: 'action',
-			header: t('action'),
+			header: t('taskSelectionVirtualList.labels.action'),
 			accessorFn: (row) => row.action,
 			cell: (ctx) => (
 				<div class="px-2 py-2 text-sm text-[var(--text-normal)]">
@@ -73,7 +73,7 @@ export default function TaskSelectionVirtualList(
 		},
 		{
 			id: 'localPath',
-			header: t('localPath'),
+			header: t('taskSelectionVirtualList.labels.localPath'),
 			accessorFn: (row) => row.localPath,
 			cell: (ctx) => (
 				<div class="px-2 py-2 text-sm break-all text-[var(--text-normal)]">
@@ -83,7 +83,7 @@ export default function TaskSelectionVirtualList(
 		},
 		{
 			id: 'remotePath',
-			header: t('remotePath'),
+			header: t('taskSelectionVirtualList.labels.remotePath'),
 			accessorFn: (row) => row.remotePath,
 			cell: (ctx) => (
 				<div class="px-2 py-2 text-sm break-all text-[var(--text-normal)]">
@@ -125,8 +125,12 @@ export default function TaskSelectionVirtualList(
 	}
 	const currentPage = () => (pageCount() === 0 ? 0 : pagination().pageIndex + 1)
 	const pageInfoText = () =>
-		t('pageInfo', { current: currentPage(), total: pageCount() })
-	const totalItemsText = () => t('totalItems', { count: totalItems() })
+		t('taskSelectionVirtualList.pagination.pageInfo', {
+			current: currentPage(),
+			total: pageCount(),
+		})
+	const totalItemsText = () =>
+		t('taskSelectionVirtualList.pagination.totalItems', { count: totalItems() })
 
 	createEffect(() => {
 		const count = pageCount()
@@ -196,7 +200,7 @@ export default function TaskSelectionVirtualList(
 					disabled={!canPreviousPage()}
 					onClick={() => setPagination((prev) => ({ ...prev, pageIndex: 0 }))}
 				>
-					{t('firstPage')}
+					{t('taskSelectionVirtualList.pagination.first')}
 				</button>
 				<button
 					type="button"
@@ -209,7 +213,7 @@ export default function TaskSelectionVirtualList(
 						}))
 					}
 				>
-					{t('previousPage')}
+					{t('taskSelectionVirtualList.pagination.previous')}
 				</button>
 				<button
 					type="button"
@@ -225,7 +229,7 @@ export default function TaskSelectionVirtualList(
 						})
 					}
 				>
-					{t('nextPage')}
+					{t('taskSelectionVirtualList.pagination.next')}
 				</button>
 				<button
 					type="button"
@@ -238,7 +242,7 @@ export default function TaskSelectionVirtualList(
 						}))
 					}
 				>
-					{t('lastPage')}
+					{t('taskSelectionVirtualList.pagination.last')}
 				</button>
 				<div class="flex-1" />
 				<span class="ml-1 text-[var(--text-normal)]">{pageInfoText()}</span>

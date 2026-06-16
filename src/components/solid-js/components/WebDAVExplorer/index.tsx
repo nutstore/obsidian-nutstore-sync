@@ -1,6 +1,11 @@
-import { render } from 'solid-js/web'
+import { createMount, MountController } from '../../mount'
 import WebDAVExplorer, { WebDAVExplorerProps } from './WebDAVExplorer'
 
-export function mountWebDAVExplorer(el: Element, props: WebDAVExplorerProps) {
-	return render(() => <WebDAVExplorer {...props} />, el)
+export type WebDAVExplorerController = MountController<WebDAVExplorerProps>
+
+export function mountWebDAVExplorer(
+	el: Element,
+	props: WebDAVExplorerProps,
+): WebDAVExplorerController {
+	return createMount(WebDAVExplorer, el, props)
 }

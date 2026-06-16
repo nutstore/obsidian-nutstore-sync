@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js'
 import type { UserContextItem } from '~/chat/user-context'
-import { t } from '../i18n'
+import { t } from '../../../i18n'
 
 function basename(path: string): string {
 	return path.split('/').pop() ?? path
@@ -92,7 +92,7 @@ function RemoveButton(props: { onClick: () => void }) {
 		<button
 			class="ml-1 flex items-center justify-center size-3.5 rounded-full opacity-60 hover:opacity-100 !border-none !bg-transparent !shadow-none cursor-pointer p-0"
 			type="button"
-			title={t('removeContextItem')}
+			title={t('chatbox.ui.actions.removeContextItem')}
 			onClick={(e) => {
 				e.stopPropagation()
 				props.onClick()

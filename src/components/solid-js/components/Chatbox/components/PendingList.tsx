@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js'
-import { t } from '../i18n'
+import { t } from '../../../i18n'
 import type { ChatboxProps } from '../types'
 
 export function PendingList(props: {
@@ -9,7 +9,7 @@ export function PendingList(props: {
 		<Show when={props.pendingMessages.length > 0}>
 			<div class="rounded-3 border border-dashed border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
 				<div class="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-					{t('pendingMessages')}
+					{t('chatbox.ui.labels.pendingMessages')}
 				</div>
 				<div class="mt-2 flex flex-col gap-2">
 					<For each={props.pendingMessages}>

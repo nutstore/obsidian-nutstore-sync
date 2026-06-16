@@ -53,7 +53,7 @@ export function MarkdownContent(props: {
 	return (
 		<div
 			ref={el}
-			class="markdown-rendered select-text mt-2 text-sm leading-6 text-[var(--text-normal)]"
+			class="markdown-rendered select-text text-sm leading-6 text-[var(--text-normal)]"
 		/>
 	)
 }

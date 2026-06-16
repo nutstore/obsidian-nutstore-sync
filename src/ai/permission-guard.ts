@@ -1,4 +1,5 @@
 import type { App } from 'obsidian'
+import type { ChatModalMountTarget } from '~/chat/modal-mount'
 import AIPermissionModal from '~/components/AIPermissionModal'
 import i18n from '~/i18n'
 import type { NutstoreSettings } from '~/settings'
@@ -13,6 +14,7 @@ export interface FSSinglePathPermissionRequest {
 		kind: AISinglePathFileOperation
 		path: string
 	}
+	sessionTitle?: string
 }
 
 export interface FSDualPathPermissionRequest {
@@ -22,6 +24,7 @@ export interface FSDualPathPermissionRequest {
 		src: string
 		dest: string
 	}
+	sessionTitle?: string
 }
 
 export type FSPermissionRequest =
@@ -60,6 +63,7 @@ export function createPermissionGuard(
 	app: App,
 	getSettings: () => NutstoreSettings,
 	runtimeAutoApproveOperationStore?: RuntimeAutoApproveOperationStore,
+	context?: { sessionTitle?: string; modalMountTarget?: ChatModalMountTarget },
 ): PermissionGuard {
 	return async (request: PermissionRequest) => {
 		const settings = getSettings()
@@ -73,7 +77,14 @@ export function createPermissionGuard(
 			return
 		}
 
-		const result = await new AIPermissionModal(app, request).open()
+		const result = await new AIPermissionModal(
+			app,
+			{
+				...request,
+				sessionTitle: context?.sessionTitle,
+			},
+			context?.modalMountTarget,
+		).open()
 
 		if (result === 'deny') {
 			throw new Error(

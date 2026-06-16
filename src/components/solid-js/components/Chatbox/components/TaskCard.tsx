@@ -1,5 +1,5 @@
 import { Show } from 'solid-js'
-import { t } from '../i18n'
+import { t } from '../../../i18n'
 import type { ChatTaskRecord, ChatboxProps } from '../types'
 import { formatDuration, formatTime, statusClass, statusLabel } from '../utils'
 
@@ -53,7 +53,8 @@ export function TaskCard(props: {
 			</div>
 			<div class="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
 				<span class="rounded-full bg-[var(--background-secondary)] px-2 py-1">
-					{t('depth')}: {props.task.depth}/{props.task.maxDepth}
+					{t('chatbox.ui.labels.depth')}: {props.task.depth}/
+					{props.task.maxDepth}
 				</span>
 				<Show when={duration()}>
 					<span class="rounded-full bg-[var(--background-secondary)] px-2 py-1">
@@ -62,7 +63,7 @@ export function TaskCard(props: {
 				</Show>
 				<Show when={typeof sourceCount() === 'number'}>
 					<span class="rounded-full bg-[var(--background-secondary)] px-2 py-1">
-						{t('sources')}: {sourceCount()}
+						{t('chatbox.ui.labels.sources')}: {sourceCount()}
 					</span>
 				</Show>
 			</div>
@@ -84,7 +85,7 @@ export function TaskCard(props: {
 							type="button"
 							onClick={() => props.onCancelTask?.(props.task.id)}
 						>
-							{t('cancelTask')}
+							{t('chatbox.ui.actions.cancelTask')}
 						</button>
 					</Show>
 				</div>

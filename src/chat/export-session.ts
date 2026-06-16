@@ -1,6 +1,8 @@
 import { normalizePath, TFile, Vault } from 'obsidian'
+import type { ChatDisplayBlock, ChatMessageRecord } from '~/chat/domain'
 import { v7 as uuidv7 } from 'uuid'
 import type { AIMessageContentPart, AISession } from '~/ai/types'
+import { projectFragmentMessageGroups } from '~/chat/display-blocks'
 import i18n from '~/i18n'
 import { writeLocalBinary, writeLocalText } from '~/utils/local-vault-io'
 import logger from '~/utils/logger'
@@ -42,17 +44,6 @@ function toMarkdownHeadingText(value: string) {
 
 function toYamlKeyLabel(value: string) {
 	return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value)
-}
-
-function messageToText(content: AIMessageContentPart[] | null | undefined) {
-	if (!content) return ''
-	return content
-		.filter(
-			(part): part is Extract<AIMessageContentPart, { type: 'text' }> =>
-				part.type === 'text',
-		)
-		.map((part) => part.text)
-		.join('\n')
 }
 
 function imageExtFromMimeType(mimeType: string | undefined) {
@@ -198,32 +189,81 @@ async function buildMessageContentMarkdown(
 	return lines
 }
 
-function findNextMatchingToolMessage(
-	messages: AISession['fragments'][number]['messages'],
-	afterIndex: number,
-	toolCallId: string,
-	consumedToolMessageIds: Set<string>,
-) {
-	for (let index = afterIndex + 1; index < messages.length; index += 1) {
-		const candidate = messages[index]
-		if (consumedToolMessageIds.has(candidate.id)) continue
-		if (candidate.message.role !== 'tool') continue
-		const firstPart = Array.isArray(candidate.message.content)
-			? (
-					candidate.message.content as Array<{
-						type: string
-						toolCallId?: string
-					}>
-				)[0]
+function getModelLabel(session: AISession, record: ChatMessageRecord) {
+	const sessionModel =
+		session.model?.providerId && session.model?.modelId
+			? `${session.model.providerId}/${session.model.modelId}`
 			: undefined
-		if (
-			firstPart?.type !== 'tool-result' ||
-			firstPart.toolCallId !== toolCallId
-		)
-			continue
-		return candidate
+	const metaModel = record.meta?.modelName || record.meta?.modelId
+	const metaProvider = record.meta?.providerName || record.meta?.providerId
+	return metaModel && metaProvider
+		? `${metaProvider}/${metaModel}`
+		: metaModel || metaProvider || sessionModel || 'unknown-model'
+}
+
+function getBlockHeadingLabel(
+	session: AISession,
+	record: ChatMessageRecord,
+	block: ChatDisplayBlock,
+) {
+	if (record.message.role === 'user') {
+		return `👤 ${i18n.t('chatbox.exportRole.user')}`
 	}
-	return undefined
+	if (record.message.role === 'assistant') {
+		const modelLabel = getModelLabel(session, record)
+		const emoji = block.kind === 'tool-call' ? '🔧' : '🤖'
+		return `${emoji} ${modelLabel}`
+	}
+	return `🛠 ${i18n.t('chatbox.exportRole.tool')}`
+}
+
+async function buildDisplayBlockMarkdown(
+	vault: Vault,
+	block: ChatDisplayBlock,
+	assetsDirPath: string,
+	assetsMarkdownPrefix: string,
+) {
+	if (block.kind === 'content') {
+		return buildMessageContentMarkdown(
+			vault,
+			block.parts as unknown as ExportContentPart[],
+			assetsDirPath,
+			assetsMarkdownPrefix,
+		)
+	}
+	if (block.kind === 'tool-result') {
+		const toolMsgContent = Array.isArray(block.toolMessage.message.content)
+			? (block.toolMessage.message.content as unknown as ExportContentPart[])
+			: []
+		return buildMessageContentMarkdown(
+			vault,
+			toolMsgContent,
+			assetsDirPath,
+			assetsMarkdownPrefix,
+		)
+	}
+	const lines = [
+		`- ${i18n.t('chatbox.exportMeta.toolName')}: \`${block.toolCall.toolName}\``,
+		`- ${i18n.t('chatbox.exportMeta.toolCallId')}: \`${block.toolCall.toolCallId}\``,
+		'',
+		'```json',
+		JSON.stringify(block.toolCall.input ?? {}, null, 2),
+		'```',
+	]
+	if (block.toolMessage) {
+		const toolContentLines = await buildMessageContentMarkdown(
+			vault,
+			(Array.isArray(block.toolMessage.message.content)
+				? block.toolMessage.message.content
+				: []) as unknown as ExportContentPart[],
+			assetsDirPath,
+			assetsMarkdownPrefix,
+		)
+		if (toolContentLines.length > 0) {
+			lines.push('', ...toolContentLines)
+		}
+	}
+	return lines
 }
 
 async function buildSessionMarkdown(
@@ -269,151 +309,35 @@ async function buildSessionMarkdown(
 		fragmentIndex += 1
 	) {
 		const fragment = session.fragments[fragmentIndex]
-		const consumedToolMessageIds = new Set<string>()
 		if (fragmentIndex > 0) {
 			lines.push('---', '')
 		}
-		for (
-			let messageIndex = 0;
-			messageIndex < fragment.messages.length;
-			messageIndex += 1
-		) {
-			const record = fragment.messages[messageIndex]
-			const role = record.message.role
-			const msgContent = Array.isArray(record.message.content)
-				? (record.message.content as AIMessageContentPart[])
-				: []
-			const textContent = messageToText(msgContent).trim()
-			const hasImageContent = msgContent.some((part) => part.type === 'image')
-			const assistantToolCalls =
-				role === 'assistant'
-					? msgContent.filter(
-							(p): p is Extract<AIMessageContentPart, { type: 'tool-call' }> =>
-								p.type === 'tool-call',
-						)
-					: []
-			if (role === 'system') continue
-			if (role === 'tool') continue
-			if (
-				role === 'assistant' &&
-				!includeToolMessages &&
-				!textContent &&
-				!hasImageContent &&
-				assistantToolCalls.length > 0
-			) {
-				continue
-			}
-
-			let headingLabel: string
-			if (role === 'user') {
-				headingLabel = `👤 ${i18n.t('chatbox.exportRole.user')}`
-			} else if (role === 'assistant') {
-				const metaModel = record.meta?.modelName || record.meta?.modelId
-				const metaProvider =
-					record.meta?.providerName || record.meta?.providerId
-				const modelLabel =
-					metaModel && metaProvider
-						? `${metaProvider}/${metaModel}`
-						: metaModel || metaProvider || sessionModel || 'unknown-model'
-				const assistantEmoji = assistantToolCalls.length > 0 ? '🔧' : '🤖'
-				headingLabel = `${assistantEmoji} ${modelLabel}`
-			} else {
-				headingLabel = `🛠 ${i18n.t('chatbox.exportRole.tool')}`
-			}
-
-			lines.push(`### ${headingLabel}`, '')
-			lines.push(
-				`${i18n.t('chatbox.exportMeta.messageTime')}: ${new Date(record.createdAt).toLocaleString()}`,
-				'',
-			)
-
-			const contentLines = await buildMessageContentMarkdown(
-				vault,
-				msgContent,
-				assetsDirPath,
-				assetsMarkdownPrefix,
-			)
-			if (contentLines.length > 0) {
-				lines.push(...contentLines, '')
-			} else if (role !== 'assistant') {
-				lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
-			}
-
-			if (
-				role === 'assistant' &&
-				includeToolMessages &&
-				assistantToolCalls.length > 0
-			) {
-				lines.push(`- ${i18n.t('chatbox.exportMeta.toolCalls')}:`)
-				for (const toolCall of assistantToolCalls) {
-					const tc = toolCall as {
-						type: string
-						toolCallId: string
-						toolName: string
-						input: unknown
-					}
-					const matchingToolMessage = findNextMatchingToolMessage(
-						fragment.messages,
-						messageIndex,
-						tc.toolCallId,
-						consumedToolMessageIds,
-					)
-					if (
-						matchingToolMessage &&
-						matchingToolMessage.message.role === 'tool'
-					) {
-						consumedToolMessageIds.add(matchingToolMessage.id)
-						const toolResultPart = Array.isArray(
-							matchingToolMessage.message.content,
-						)
-							? (
-									matchingToolMessage.message.content as Array<{
-										type: string
-										toolCallId?: string
-										toolName?: string
-									}>
-								)[0]
-							: undefined
-						lines.push(
-							`  - \`${tc.toolName}\`: \`${tc.toolCallId}\``,
-							'',
-							'```json',
-							JSON.stringify(tc.input ?? {}, null, 2),
-							'```',
-						)
-						lines.push(
-							`  - ${i18n.t('chatbox.exportMeta.toolName')}: \`${toolResultPart?.toolName ?? tc.toolName}\``,
-							`  - ${i18n.t('chatbox.exportMeta.toolCallId')}: \`${toolResultPart?.toolCallId ?? tc.toolCallId}\``,
-							'',
-						)
-						const toolMsgContent = Array.isArray(
-							matchingToolMessage.message.content,
-						)
-							? (matchingToolMessage.message
-									.content as unknown as ExportContentPart[])
-							: []
-						const toolContentLines = await buildMessageContentMarkdown(
-							vault,
-							toolMsgContent,
-							assetsDirPath,
-							assetsMarkdownPrefix,
-						)
-						if (toolContentLines.length > 0) {
-							lines.push(...toolContentLines, '')
-						} else {
-							lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
-						}
-					} else {
-						lines.push(
-							`  - \`${tc.toolName}\`: \`${tc.toolCallId}\``,
-							'',
-							'```json',
-							JSON.stringify(tc.input ?? {}, null, 2),
-							'```',
-						)
-					}
+		for (const { record, blocks } of projectFragmentMessageGroups(
+			fragment.messages,
+		)) {
+			for (const block of blocks) {
+				if (
+					!includeToolMessages &&
+					(block.kind === 'tool-call' || block.kind === 'tool-result')
+				) {
+					continue
 				}
-				lines.push('')
+				lines.push(`### ${getBlockHeadingLabel(session, record, block)}`, '')
+				lines.push(
+					`${i18n.t('chatbox.exportMeta.messageTime')}: ${new Date(record.createdAt).toLocaleString()}`,
+					'',
+				)
+				const blockLines = await buildDisplayBlockMarkdown(
+					vault,
+					block,
+					assetsDirPath,
+					assetsMarkdownPrefix,
+				)
+				if (blockLines.length > 0) {
+					lines.push(...blockLines, '')
+				} else if (record.message.role !== 'assistant') {
+					lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
+				}
 			}
 		}
 	}

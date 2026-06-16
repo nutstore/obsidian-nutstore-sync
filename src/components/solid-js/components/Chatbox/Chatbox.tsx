@@ -1,3 +1,5 @@
+import { setIcon } from 'obsidian'
+import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/chat/modal-mount'
 import {
 	For,
 	Match,
@@ -16,9 +18,9 @@ import { MessageCard } from './components/MessageCard'
 import { PaneResizer } from './components/PaneResizer'
 import { PendingList } from './components/PendingList'
 import { RunStateCard } from './components/RunStateCard'
-import { SessionHistoryItem } from './components/SessionHistoryItem'
+import { SessionHistorySheet } from './components/SessionHistorySheet'
 import { TasksPanel } from './components/TasksPanel'
-import { t } from './i18n'
+import { t } from '../../i18n'
 import type {
 	ChatTimelineFragmentItem,
 	ChatTimelineMessageItem,
@@ -120,6 +122,7 @@ const RESIZER_HITBOX_HEIGHT = 10
 const DESKTOP_INPUT_MAX_VIEWPORT_RATIO = 0.6
 
 function Chatbox(props: ChatboxProps) {
+	type RecallConfirmMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
 	const [isComposing, setIsComposing] = createSignal(false)
 	const [historyOpen, setHistoryOpen] = createSignal(false)
@@ -133,13 +136,16 @@ function Chatbox(props: ChatboxProps) {
 		createSignal<ChatTimelineMessageItem>()
 	const [pendingRecallMessage, setPendingRecallMessage] =
 		createSignal<ChatTimelineMessageItem>()
+	const [recallConfirmMode, setRecallConfirmMode] =
+		createSignal<RecallConfirmMode>()
 	const [desktopResizeEnabled, setDesktopResizeEnabled] = createSignal(false)
+	const [chatboxContainerWidth, setChatboxContainerWidth] = createSignal(0)
 	const [inputPaneHeight, setInputPaneHeight] = createSignal<number>()
 	const [stickToBottom, setStickToBottom] = createSignal(true)
+	let chatboxRootEl: HTMLDivElement | undefined
 	let messagesEl: HTMLDivElement | undefined
 	let splitLayoutEl: HTMLDivElement | undefined
 	let inputPaneEl: HTMLDivElement | undefined
-	let historyEl: HTMLDivElement | undefined
 	let modelPickerEl: HTMLDivElement | undefined
 	let previousActiveSessionId: string | undefined
 	let defaultDesktopInputHeight = DEFAULT_DESKTOP_INPUT_HEIGHT
@@ -188,17 +194,34 @@ function Chatbox(props: ChatboxProps) {
 			const textLength = contentArray
 				.filter((part) => part.type === 'text')
 				.reduce((total, part) => total + (part.text?.length ?? 0), 0)
-			const toolCallsLength =
-				item.message.message.role === 'assistant'
-					? contentArray.filter((p) => p.type === 'tool-call').length
-					: 0
-			return `${item.message.id}:${textLength}:${toolCallsLength}:${item.message.message.role}`
+			const blockFingerprint = item.displayBlocks
+				.map((block) => {
+					if (block.kind === 'content') {
+						return `c:${block.parts.length}`
+					}
+					if (block.kind === 'tool-call') {
+						return `tc:${block.toolCall.toolCallId}:${block.toolMessage?.id ?? 'pending'}`
+					}
+					return `tr:${block.toolMessage.id}`
+				})
+				.join('|')
+			return `${item.message.id}:${textLength}:${blockFingerprint}:${item.message.message.role}`
 		}
 		return 'empty'
 	}
 
 	const selectedProvider = () =>
 		props.providers.find((provider) => provider.id === props.selectedProviderId)
+	const dialogMountTarget = () => ({
+		mountEl:
+			chatboxContainerWidth() >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH &&
+			chatboxRootEl
+				? chatboxRootEl
+				: (chatboxRootEl?.ownerDocument?.body ?? document.body),
+		contained:
+			chatboxContainerWidth() >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH &&
+			!!chatboxRootEl,
+	})
 	const modelPickerLabel = () => {
 		const provider = selectedProvider()
 		const selectedModel = provider?.models.find(
@@ -206,7 +229,7 @@ function Chatbox(props: ChatboxProps) {
 		)
 		return (
 			[provider?.name, selectedModel?.name].filter(Boolean).join('/') ||
-			t('noModel')
+			t('chatbox.ui.states.noModel')
 		)
 	}
 
@@ -370,7 +393,7 @@ function Chatbox(props: ChatboxProps) {
 	)
 
 	createEffect(() => {
-		if (!historyOpen() && !modelPickerOpen()) {
+		if (!modelPickerOpen()) {
 			return
 		}
 
@@ -380,10 +403,9 @@ function Chatbox(props: ChatboxProps) {
 				return
 			}
 			const node = target as Node
-			if (historyEl?.contains(node) || modelPickerEl?.contains(node)) {
+			if (modelPickerEl?.contains(node)) {
 				return
 			}
-			setHistoryOpen(false)
 			setModelPickerOpen(false)
 		}
 
@@ -422,6 +444,20 @@ function Chatbox(props: ChatboxProps) {
 			return
 		}
 		setInputPaneHeight(undefined)
+	})
+
+	createEffect(() => {
+		if (!chatboxRootEl) {
+			return
+		}
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0]
+			if (entry) {
+				setChatboxContainerWidth(entry.contentRect.width)
+			}
+		})
+		observer.observe(chatboxRootEl)
+		onCleanup(() => observer.disconnect())
 	})
 
 	createEffect(() => {
@@ -531,6 +567,7 @@ function Chatbox(props: ChatboxProps) {
 	async function confirmRecallMessage() {
 		const item = pendingRecallMessage()
 		if (!item) return
+		setRecallConfirmMode(undefined)
 		setPendingRecallMessage(undefined)
 		await doRecallMessage(item)
 	}
@@ -554,11 +591,11 @@ function Chatbox(props: ChatboxProps) {
 		if (!item) return ''
 		switch (item.message.message.role) {
 			case 'user':
-				return t('deleteUserMessageConfirm')
+				return t('chatbox.ui.dialogs.deleteMessage.userConfirm')
 			case 'tool':
-				return t('deleteToolMessageConfirm')
+				return t('chatbox.ui.dialogs.deleteMessage.toolConfirm')
 			default:
-				return t('deleteAssistantMessageConfirm')
+				return t('chatbox.ui.dialogs.deleteMessage.assistantConfirm')
 		}
 	}
 
@@ -568,48 +605,73 @@ function Chatbox(props: ChatboxProps) {
 	const recallHasReversibleOps = () => {
 		const item = pendingRecallMessage()
 		if (!item) return false
-		let seenTarget = false
-		for (const timelineItem of props.timeline) {
-			if (timelineItem.kind !== 'message') {
-				if (seenTarget) {
-					break
-				}
-				continue
-			}
-			if (!seenTarget) {
-				seenTarget = timelineItem.message.id === item.message.id
-				continue
-			}
-			if (timelineItem.message.reversibleOps?.length) {
-				return true
-			}
+		if (props.onRecallHasReversibleOps) {
+			return props.onRecallHasReversibleOps(item.message.id)
 		}
-		return item.message.reversibleOps?.length ? true : false
+		return Boolean(item.message.reversibleOps?.length)
 	}
 
 	async function confirmRecallAndRestoreMessage() {
 		const item = pendingRecallMessage()
 		if (!item) return
+		setRecallConfirmMode(undefined)
 		setPendingRecallMessage(undefined)
 		await doRecallMessage(item, { restoreFiles: true })
 	}
 
+	const recallSecondConfirmTitle = () => {
+		switch (recallConfirmMode()) {
+			case 'restore':
+				return t('chatbox.ui.dialogs.recall.restoreSecondTitle')
+			case 'only':
+				return t('chatbox.ui.dialogs.recall.onlySecondTitle')
+			default:
+				return undefined
+		}
+	}
+
+	const recallSecondConfirmMessage = () => {
+		switch (recallConfirmMode()) {
+			case 'restore':
+				return t('chatbox.ui.dialogs.recall.restoreSecondMessage')
+			case 'only':
+				return t('chatbox.ui.dialogs.recall.onlySecondMessage')
+			default:
+				return undefined
+		}
+	}
+
+	const recallSecondConfirmLabel = () => {
+		switch (recallConfirmMode()) {
+			case 'restore':
+				return t('chatbox.ui.dialogs.recall.restoreConfirm')
+			case 'only':
+				return t('chatbox.ui.dialogs.recall.onlyConfirm')
+			default:
+				return undefined
+		}
+	}
+
 	return (
-		<div class="relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)]">
+		<div
+			ref={chatboxRootEl}
+			class="relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)]"
+		>
 			<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
 				{/* Header */}
 				<div class="relative flex shrink-0 items-center gap-2 border-b border-[var(--background-modifier-border)] px-3 py-3">
-					<button
-						type="button"
+					<div
+						class="flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
 						onClick={() => {
 							setHistoryOpen((value) => !value)
 							setModelPickerOpen(false)
 						}}
-					>
-						{t('history')}
-					</button>
+						ref={(el) => {
+							setIcon(el, 'history')
+						}}
+					/>
 					<div class="min-w-0 flex-1 truncate text-sm font-semibold">
-						{props.title || t('newChat')}
+						{props.title || t('chatbox.newChat')}
 					</div>
 					<Show when={hasTasks()}>
 						<button
@@ -617,7 +679,7 @@ function Chatbox(props: ChatboxProps) {
 							type="button"
 							onClick={() => setTasksOpen((value) => !value)}
 						>
-							{t('tasks')} ({runningTaskCount()})
+							{t('chatbox.ui.labels.tasks')} ({runningTaskCount()})
 						</button>
 					</Show>
 					<div class="relative" ref={modelPickerEl}>
@@ -634,7 +696,7 @@ function Chatbox(props: ChatboxProps) {
 						<Show when={modelPickerOpen()}>
 							<div class="absolute right-0 top-12 z-10 w-72 rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] p-3 shadow-lg">
 								<div class="mb-2 text-xs text-[var(--text-muted)]">
-									{t('provider')}
+									{t('chatbox.ui.labels.provider')}
 								</div>
 								<select
 									class="w-full"
@@ -643,7 +705,7 @@ function Chatbox(props: ChatboxProps) {
 										props.onSelectProvider(event.currentTarget.value)
 									}
 								>
-									<option value="">{t('noProvider')}</option>
+									<option value="">{t('chatbox.ui.states.noProvider')}</option>
 									<For each={props.providers}>
 										{(provider) => (
 											<option value={provider.id}>{provider.name}</option>
@@ -651,7 +713,7 @@ function Chatbox(props: ChatboxProps) {
 									</For>
 								</select>
 								<div class="mb-2 mt-3 text-xs text-[var(--text-muted)]">
-									{t('model')}
+									{t('chatbox.ui.labels.model')}
 								</div>
 								<select
 									class="w-full"
@@ -662,7 +724,7 @@ function Chatbox(props: ChatboxProps) {
 										setModelPickerOpen(false)
 									}}
 								>
-									<option value="">{t('noModel')}</option>
+									<option value="">{t('chatbox.ui.states.noModel')}</option>
 									<For each={selectedProvider()?.models || []}>
 										{(model) => <option value={model.id}>{model.name}</option>}
 									</For>
@@ -670,54 +732,6 @@ function Chatbox(props: ChatboxProps) {
 							</div>
 						</Show>
 					</div>
-					<Show when={historyOpen()}>
-						<div
-							ref={historyEl}
-							class="absolute left-3 top-12 z-10 w-80 overflow-hidden rounded-4 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] shadow-lg"
-						>
-							<div class="border-b border-[var(--background-modifier-border)] px-4 py-3">
-								<div class="flex items-center justify-between gap-3">
-									<div class="min-w-0">
-										<div class="text-sm font-semibold text-[var(--text-normal)]">
-											{t('history')}
-										</div>
-									</div>
-									<button
-										type="button"
-										onClick={() => {
-											props.onNewSession()
-											setHistoryOpen(false)
-										}}
-									>
-										{t('newChat')}
-									</button>
-								</div>
-							</div>
-							<div class="max-h-80 overflow-auto p-3 scrollbar-default">
-								<div class="flex flex-col gap-2">
-									<For each={props.sessionHistory}>
-										{(session) => (
-											<SessionHistoryItem
-												session={session}
-												isActive={session.id === props.activeSessionId}
-												onSelect={(sessionId) => {
-													props.onSwitchSession(sessionId)
-													setHistoryOpen(false)
-												}}
-												onExport={(sessionId) => {
-													void props.onExportSession(sessionId)
-													setHistoryOpen(false)
-												}}
-												onDelete={(sessionId) => {
-													setSessionPendingDeleteId(sessionId)
-												}}
-											/>
-										)}
-									</For>
-								</div>
-							</div>
-						</div>
-					</Show>
 				</div>
 
 				<div
@@ -737,7 +751,7 @@ function Chatbox(props: ChatboxProps) {
 							}
 							fallback={
 								<div class="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
-									{t('empty')}
+									{t('chatbox.ui.states.empty')}
 								</div>
 							}
 						>
@@ -812,7 +826,7 @@ function Chatbox(props: ChatboxProps) {
 						</Show>
 						<textarea
 							class="chatbox-input w-full resize-none rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"
-							placeholder={t('inputPlaceholder')}
+							placeholder={t('chatbox.ui.placeholders.input')}
 							value={input()}
 							onInput={(event) => {
 								const nextInput = event.currentTarget.value
@@ -865,7 +879,7 @@ function Chatbox(props: ChatboxProps) {
 									disabled={!props.canCreateFragment}
 									onClick={() => props.onNewFragment()}
 								>
-									{t('newFragment')}
+									{t('chatbox.ui.actions.newFragment')}
 								</button>
 								<button
 									class="chatbox-tag-button"
@@ -873,7 +887,7 @@ function Chatbox(props: ChatboxProps) {
 									disabled={!props.canCompress}
 									onClick={() => void props.onCompressContext()}
 								>
-									{t('compressContext')}
+									{t('chatbox.ui.actions.compressContext')}
 								</button>
 							</div>
 							<button
@@ -882,7 +896,9 @@ function Chatbox(props: ChatboxProps) {
 								disabled={!input().trim() && !props.pendingUserContext.length}
 								onClick={() => void submit()}
 							>
-								{isBusy() ? t('queueSend') : t('send')}
+								{isBusy()
+									? t('chatbox.ui.actions.queueSend')
+									: t('chatbox.ui.actions.send')}
 							</button>
 						</div>
 					</div>
@@ -899,12 +915,30 @@ function Chatbox(props: ChatboxProps) {
 				/>
 			</Show>
 
+			{/* History bottom sheet */}
+			<SessionHistorySheet
+				open={historyOpen()}
+				sessions={props.sessionHistory}
+				activeSessionId={props.activeSessionId}
+				otherSessionTasks={props.otherSessionTasks}
+				otherBusySessionIds={props.otherBusySessionIds}
+				mountEl={dialogMountTarget().mountEl}
+				contained={dialogMountTarget().contained}
+				onClose={() => setHistoryOpen(false)}
+				onNewSession={props.onNewSession}
+				onSwitchSession={props.onSwitchSession}
+				onExportSession={(sessionId) => void props.onExportSession(sessionId)}
+				onDelete={(sessionId) => setSessionPendingDeleteId(sessionId)}
+			/>
+
 			{/* Delete session dialog */}
 			<Show when={sessionPendingDeleteId()}>
 				<ConfirmDialog
-					title={t('deleteSessionTitle')}
-					message={t('deleteSessionMessage')}
-					confirmLabel={t('confirmDelete')}
+					title={t('chatbox.ui.dialogs.deleteSession.title')}
+					message={t('chatbox.ui.dialogs.deleteSession.message')}
+					confirmLabel={t('chatbox.ui.dialogs.deleteSession.confirm')}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
 					onCancel={() => setSessionPendingDeleteId(undefined)}
 					onConfirm={() => void confirmDeleteSession()}
 				/>
@@ -913,13 +947,15 @@ function Chatbox(props: ChatboxProps) {
 			{/* Delete message dialog */}
 			<Show when={pendingDeleteMessage()}>
 				<ConfirmDialog
-					title={t('deleteMessageTitle')}
+					title={t('chatbox.ui.dialogs.deleteMessage.title')}
 					message={`${deleteMessageConfirmText()}${
 						deleteMessageHasReversibleOps()
-							? `\n\n${t('deleteToolMessageRestoreWarning')}`
+							? `\n\n${t('chatbox.ui.dialogs.deleteMessage.toolRestoreWarning')}`
 							: ''
 					}`}
-					confirmLabel={t('confirmDelete')}
+					confirmLabel={t('chatbox.ui.dialogs.deleteMessage.confirm')}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
 					onCancel={() => setPendingDeleteMessage(undefined)}
 					onConfirm={confirmDeleteMessage}
 				/>
@@ -928,28 +964,51 @@ function Chatbox(props: ChatboxProps) {
 			{/* Regenerate message dialog */}
 			<Show when={pendingRegenerateMessage()}>
 				<ConfirmDialog
-					title={t('regenerateMessageTitle')}
-					message={t('regenerateMessageConfirm')}
-					confirmLabel={t('regenerateMessage')}
+					title={t('chatbox.ui.dialogs.regenerate.title')}
+					message={t('chatbox.ui.dialogs.regenerate.message')}
+					confirmLabel={t('chatbox.ui.dialogs.regenerate.confirm')}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
 					onCancel={() => setPendingRegenerateMessage(undefined)}
 					onConfirm={confirmRegenerateMessage}
 				/>
 			</Show>
 
 			{/* Recall message dialog */}
-			<Show when={pendingRecallMessage()}>
+			<Show when={pendingRecallMessage() && !recallConfirmMode()}>
 				<ConfirmDialog
-					title={t('recallMessageTitle')}
-					message={t('recallMessageConfirm')}
-					confirmLabel={t('confirmRecall')}
+					title={t('chatbox.ui.dialogs.recall.title')}
+					message={t('chatbox.ui.dialogs.recall.message')}
+					confirmLabel={t('chatbox.ui.dialogs.recall.onlyConfirm')}
 					secondaryConfirmLabel={
 						recallHasReversibleOps()
-							? t('recallMessageRestoreConfirm')
+							? t('chatbox.ui.dialogs.recall.restoreConfirm')
 							: undefined
 					}
-					onCancel={() => setPendingRecallMessage(undefined)}
-					onConfirm={() => void confirmRecallMessage()}
-					onSecondaryConfirm={() => void confirmRecallAndRestoreMessage()}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
+					onCancel={() => {
+						setRecallConfirmMode(undefined)
+						setPendingRecallMessage(undefined)
+					}}
+					onConfirm={() => setRecallConfirmMode('only')}
+					onSecondaryConfirm={() => setRecallConfirmMode('restore')}
+				/>
+			</Show>
+
+			<Show when={pendingRecallMessage() && recallConfirmMode()}>
+				<ConfirmDialog
+					title={recallSecondConfirmTitle()}
+					message={recallSecondConfirmMessage()}
+					confirmLabel={recallSecondConfirmLabel()}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
+					onCancel={() => setRecallConfirmMode(undefined)}
+					onConfirm={() =>
+						recallConfirmMode() === 'restore'
+							? void confirmRecallAndRestoreMessage()
+							: void confirmRecallMessage()
+					}
 				/>
 			</Show>
 		</div>

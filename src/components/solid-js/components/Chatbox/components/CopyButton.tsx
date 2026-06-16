@@ -1,5 +1,5 @@
 import { Show, createSignal, onCleanup } from 'solid-js'
-import { t } from '../i18n'
+import { t } from '../../../i18n'
 
 export function CopyButton(props: { getText: () => string }) {
 	const [copied, setCopied] = createSignal(false)
@@ -19,7 +19,9 @@ export function CopyButton(props: { getText: () => string }) {
 		<button
 			class="cursor-pointer p-1 size-5 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
 			type="button"
-			title={copied() ? t('copied') : t('copy')}
+			title={
+				copied() ? t('chatbox.ui.states.copied') : t('chatbox.ui.actions.copy')
+			}
 			onClick={handleCopy}
 		>
 			<Show

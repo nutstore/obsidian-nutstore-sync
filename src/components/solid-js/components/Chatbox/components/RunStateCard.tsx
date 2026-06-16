@@ -1,5 +1,5 @@
 import { Show } from 'solid-js'
-import { t } from '../i18n'
+import { t } from '../../../i18n'
 import type { ChatboxProps } from '../types'
 import { runStateLabel } from '../utils'
 
@@ -40,7 +40,7 @@ export function RunStateCard(props: {
 							type="button"
 							onClick={() => props.onStop?.()}
 						>
-							{t('stopRun')}
+							{t('chatbox.ui.actions.stopRun')}
 						</button>
 					</Show>
 				</div>

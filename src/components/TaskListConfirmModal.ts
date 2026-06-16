@@ -34,16 +34,26 @@ export default class TaskListConfirmModal extends Modal {
 		const listContainer = contentEl.createDiv({
 			cls: 'h-[50vh] max-h-[50vh] min-h-[16rem] w-full',
 		})
+		const onToggle = (index: number, checked: boolean) => {
+			this.selectedTasks[index] = checked
+			this.listController?.update({
+				items: this.buildListItems(),
+				onToggle,
+				onToggleAll,
+			})
+		}
+		const onToggleAll = (checked: boolean) => {
+			this.selectedTasks.fill(checked)
+			this.listController?.update({
+				items: this.buildListItems(),
+				onToggle,
+				onToggleAll,
+			})
+		}
 		this.listController = mountTaskSelectionVirtualList(listContainer, {
 			items: this.buildListItems(),
-			onToggle: (index, checked) => {
-				this.selectedTasks[index] = checked
-				this.listController?.update(this.buildListItems())
-			},
-			onToggleAll: (checked) => {
-				this.selectedTasks.fill(checked)
-				this.listController?.update(this.buildListItems())
-			},
+			onToggle,
+			onToggleAll,
 		})
 
 		const settingDiv = contentEl.createDiv()
