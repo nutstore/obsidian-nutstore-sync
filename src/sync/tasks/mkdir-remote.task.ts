@@ -8,18 +8,18 @@ export default class MkdirRemoteTask extends BaseTask {
 		try {
 			const localStat = await statVaultItem(this.vault, this.localPath)
 			if (!localStat) {
-				logger.debug('PullTask: local path:', this.localPath)
-				logger.debug('PullTask: local stat is null')
+				logger.debug('[MkdirRemote] local path not found:', this.localPath)
 				throw new Error(
 					i18n.t('sync.error.localPathNotFound', { path: this.localPath }),
 				)
 			}
+			logger.info(`[MkdirRemote] ${this.remotePath}`)
 			await this.webdav.createDirectory(this.remotePath, {
 				recursive: true,
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(`[MkdirRemote] failed: ${this.remotePath}`, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

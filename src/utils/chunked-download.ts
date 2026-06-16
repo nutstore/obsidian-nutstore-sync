@@ -3,6 +3,7 @@ import { dirname } from 'path-browserify'
 import type { BufferLike, WebDAVClient } from 'webdav'
 import { parseMobileAppDownloadFileChunkSize } from './download-chunk-size'
 import { writeLocalBinary } from './local-vault-io'
+import logger from './logger'
 import { mkdirsVault } from './mkdirs-vault'
 
 export interface DownloadRemoteFileOptions {
@@ -80,6 +81,11 @@ async function downloadRemoteFileInChunks({
 			.slice(2)}.download`,
 	)
 	let offset = 0
+	let chunkIndex = 0
+
+	logger.info(
+		`[ChunkedDownload] start ${remotePath} (${remoteSize} bytes, chunkSize=${chunkSize})`,
+	)
 
 	try {
 		while (offset < remoteSize) {
@@ -104,6 +110,12 @@ async function downloadRemoteFileInChunks({
 				await appendBinary(tempPath, chunk)
 			}
 			offset += chunk.byteLength
+			chunkIndex++
+			if (chunkIndex % 5 === 0) {
+				logger.debug(
+					`[ChunkedDownload] progress ${offset}/${remoteSize} bytes (chunk #${chunkIndex})`,
+				)
+			}
 		}
 
 		if (offset !== remoteSize) {
@@ -113,6 +125,7 @@ async function downloadRemoteFileInChunks({
 			await vault.adapter.remove(normalizedLocalPath)
 		}
 		await vault.adapter.rename(tempPath, normalizedLocalPath)
+		logger.info(`[ChunkedDownload] done ${remotePath} (${chunkIndex} chunks)`)
 	} catch (error) {
 		await removeTempDownload(vault, tempPath)
 		throw error

@@ -60,23 +60,6 @@ export async function remoteMirrorDecider(
 	)
 	const mixedPath = new Set([...localStatsMap.keys(), ...remoteStatsMap.keys()])
 
-	logger.debug(
-		'local Stats',
-		localStatsFiltered.map((d) => ({
-			path: d.path,
-			size: d.isDir ? undefined : d.size,
-			isDir: d.isDir,
-		})),
-	)
-	logger.debug(
-		'remote Stats',
-		remoteStatsFiltered.map((d) => ({
-			path: d.path,
-			size: d.isDir ? undefined : d.size,
-			isDir: d.isDir,
-		})),
-	)
-
 	const tasks: BaseTask[] = []
 	const removeLocalFolderTasks: BaseTask[] = []
 	const mkdirLocalTasks: BaseTask[] = []

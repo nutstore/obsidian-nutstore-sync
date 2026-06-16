@@ -39,6 +39,7 @@ import CleanRecordTask from './tasks/clean-record.task'
 import ConflictResolveTask, {
 	ConflictStrategy,
 } from './tasks/conflict-resolve.task'
+import MkdirLocalTask from './tasks/mkdir-local.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import NoopTask from './tasks/noop.task'
 import PushTask from './tasks/push.task'
@@ -167,6 +168,24 @@ export class NutstoreSync {
 						: new BidirectionalSyncDecider(this, syncRecord)
 			const tasks = await decider.decide()
 			await cacheService.saveRemoteTraversalCache()
+
+			logger.info(
+				`[Sync] Decision (policy=${this.localSettings.syncPolicy}):`,
+				{
+					push: tasks.filter((t) => t instanceof PushTask).length,
+					pull: tasks.filter((t) => t instanceof PullTask).length,
+					conflict: tasks.filter((t) => t instanceof ConflictResolveTask)
+						.length,
+					mkdirRemote: tasks.filter((t) => t instanceof MkdirRemoteTask).length,
+					mkdirLocal: tasks.filter((t) => t instanceof MkdirLocalTask).length,
+					removeLocal: tasks.filter((t) => t instanceof RemoveLocalTask).length,
+					removeRemote: tasks.filter((t) => t instanceof RemoveRemoteTask)
+						.length,
+					noop: tasks.filter((t) => t instanceof NoopTask).length,
+					skipped: tasks.filter((t) => t instanceof SkippedTask).length,
+					total: tasks.length,
+				},
+			)
 
 			if (tasks.length === 0) {
 				if (preparingEmitted) {
@@ -506,6 +525,9 @@ export class NutstoreSync {
 			}
 
 			const failedCount = allTasksResult.filter((r) => !r.success).length
+			logger.info(
+				`[Sync] Completed: ${allTasksResult.length - failedCount} success, ${failedCount} failed`,
+			)
 			logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
 
 			if (mode === SyncStartMode.MANUAL_SYNC && failedCount > 0) {
@@ -644,6 +666,7 @@ export class NutstoreSync {
 	 * Automatically handle 503 errors and retry task execution
 	 */
 	private async executeWithRetry(task: BaseTask): Promise<TaskResult> {
+		let retryCount = 0
 		while (true) {
 			if (this.isCancelled) {
 				return {
@@ -653,6 +676,10 @@ export class NutstoreSync {
 			}
 			const taskResult = await task.exec()
 			if (!taskResult.success && is503Error(taskResult.error)) {
+				retryCount++
+				logger.warn(
+					`[Sync] 503 on ${task.localPath}, retry #${retryCount} in 60s`,
+				)
 				await this.handle503Error(60000)
 				if (this.isCancelled) {
 					return {

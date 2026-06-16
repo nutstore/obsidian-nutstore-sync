@@ -11,6 +11,9 @@ export default class PushTask extends BaseTask {
 			}
 
 			const content = await readLocalBinary(this.vault, this.localPath)
+			logger.info(
+				`[PushTask] ${this.localPath} → ${this.remotePath} (${content.byteLength} bytes)`,
+			)
 			const res = await this.webdav.putFileContents(this.remotePath, content, {
 				overwrite: true,
 			})
@@ -19,7 +22,7 @@ export default class PushTask extends BaseTask {
 			}
 			return { success: res }
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(`[PushTask] failed: ${this.localPath}`, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

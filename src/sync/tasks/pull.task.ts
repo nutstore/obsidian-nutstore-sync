@@ -18,6 +18,9 @@ export default class PullTask extends BaseTask {
 
 	async exec() {
 		try {
+			logger.info(
+				`[PullTask] ${this.remotePath} → ${this.localPath} (${this.remoteSize} bytes)`,
+			)
 			await downloadRemoteFile({
 				vault: this.vault,
 				webdav: this.webdav,
@@ -29,7 +32,7 @@ export default class PullTask extends BaseTask {
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(`[PullTask] failed: ${this.localPath}`, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

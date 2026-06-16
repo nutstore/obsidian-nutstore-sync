@@ -43,6 +43,10 @@ export default class ConflictResolveTask extends BaseTask {
 
 	async exec() {
 		try {
+			logger.info(
+				`[ConflictResolve] ${this.localPath} strategy=${this.options.strategy}`,
+			)
+
 			const local =
 				this.options.localStat ??
 				(await statVaultItem(this.vault, this.localPath))
@@ -84,7 +88,7 @@ export default class ConflictResolveTask extends BaseTask {
 					return await this.execServerPriority(remote)
 			}
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(`[ConflictResolve] failed: ${this.localPath}`, e)
 			return {
 				success: false,
 				error: toTaskError(e, this),
@@ -106,6 +110,10 @@ export default class ConflictResolveTask extends BaseTask {
 			if (remoteMtime === localMtime) {
 				return { success: true } as const
 			}
+
+			logger.info(
+				`[ConflictResolve/LatestTimestamp] ${this.localPath}: ${remoteMtime > localMtime ? 'remote newer → pull' : 'local newer → push'}`,
+			)
 
 			const exists = await existsLocalPath(this.vault, this.localPath)
 			if (!exists) {
@@ -136,7 +144,10 @@ export default class ConflictResolveTask extends BaseTask {
 
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(
+				`[ConflictResolve/LatestTimestamp] failed: ${this.localPath}`,
+				e,
+			)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
@@ -159,7 +170,10 @@ export default class ConflictResolveTask extends BaseTask {
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(
+				`[ConflictResolve/LocalPriority] failed: ${this.localPath}`,
+				e,
+			)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
@@ -180,7 +194,10 @@ export default class ConflictResolveTask extends BaseTask {
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(
+				`[ConflictResolve/ServerPriority] failed: ${this.localPath}`,
+				e,
+			)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
@@ -225,6 +242,10 @@ export default class ConflictResolveTask extends BaseTask {
 				baseContentText: baseText,
 			})
 
+			logger.info(
+				`[ConflictResolve/DiffMatchPatchOrSkip] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → skip'}`,
+			)
+
 			if (!mergeResult.success) {
 				throw new Error(i18n.t('sync.error.failedToAutoMerge'))
 			}
@@ -258,7 +279,10 @@ export default class ConflictResolveTask extends BaseTask {
 
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(
+				`[ConflictResolve/DiffMatchPatchOrSkip] failed: ${this.localPath}`,
+				e,
+			)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
@@ -302,6 +326,10 @@ export default class ConflictResolveTask extends BaseTask {
 				remoteContentText: remoteText,
 				baseContentText: baseText,
 			})
+
+			logger.info(
+				`[ConflictResolve/DiffMatchPatch] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → fallback to mergeDigIn'}`,
+			)
 
 			if (!mergeResult.success) {
 				// If patch_apply fails to resolve all, use mergeDigIn as a further fallback
@@ -360,7 +388,10 @@ export default class ConflictResolveTask extends BaseTask {
 
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			logger.error(
+				`[ConflictResolve/DiffMatchPatch] failed: ${this.localPath}`,
+				e,
+			)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
