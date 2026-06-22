@@ -214,6 +214,7 @@ export interface ChatTimelineMessageItem {
 	createdAt: number
 	message: ChatMessageRecord
 	displayBlocks: ChatDisplayBlock[]
+	showHeader: boolean
 }
 
 export type ChatTimelineItem =

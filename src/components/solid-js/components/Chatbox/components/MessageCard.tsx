@@ -58,10 +58,12 @@ export function MessageCard(props: {
 		<div
 			class={`${props.item.message.isError ? 'text-[var(--text-error)]' : ''}`}
 		>
-			<div class="mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
-				<div class="font-medium text-[var(--text-normal)]">{roleLabel()}</div>
-				<span>{formatTime(props.item.message.createdAt)}</span>
-			</div>
+			<Show when={props.item.showHeader}>
+				<div class="mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
+					<div class="font-medium text-[var(--text-normal)]">{roleLabel()}</div>
+					<span>{formatTime(props.item.message.createdAt)}</span>
+				</div>
+			</Show>
 			<div class="flex flex-col gap-2">
 				<For each={props.item.displayBlocks}>
 					{(block) => (

@@ -1439,7 +1439,7 @@ export default class ChatService {
 	}
 
 	private buildTimeline(session: AISession): ChatboxProps['timeline'] {
-		return session.fragments.flatMap((fragment) => {
+		const timeline = session.fragments.flatMap((fragment) => {
 			const items = projectFragmentMessageGroups(fragment.messages).map(
 				({ record, blocks }) => ({
 					id: `message:${record.id}`,
@@ -1447,6 +1447,7 @@ export default class ChatService {
 					createdAt: record.createdAt,
 					message: cloneMessageRecord(record),
 					displayBlocks: blocks,
+					showHeader: true,
 				}),
 			)
 
@@ -1459,6 +1460,51 @@ export default class ChatService {
 				...items,
 			]
 		})
+
+		let activeAgentModelId: string | undefined
+		let previousAgentModelId: string | undefined
+		let canContinueAgentGroup = false
+
+		for (const item of timeline) {
+			if (item.kind === 'fragment') {
+				activeAgentModelId = undefined
+				previousAgentModelId = undefined
+				canContinueAgentGroup = false
+				continue
+			}
+
+			const role = item.message.message.role
+			if (role === 'user') {
+				item.showHeader = true
+				activeAgentModelId = undefined
+				previousAgentModelId = undefined
+				canContinueAgentGroup = false
+				continue
+			}
+
+			if (role !== 'assistant' && role !== 'tool') {
+				item.showHeader = true
+				activeAgentModelId = undefined
+				previousAgentModelId = undefined
+				canContinueAgentGroup = false
+				continue
+			}
+
+			const effectiveModelId =
+				role === 'assistant' ? item.message.meta?.modelId : activeAgentModelId
+			const showHeader =
+				!canContinueAgentGroup ||
+				!effectiveModelId ||
+				effectiveModelId !== previousAgentModelId
+
+			item.showHeader = showHeader
+			activeAgentModelId =
+				role === 'assistant' ? effectiveModelId : activeAgentModelId
+			previousAgentModelId = effectiveModelId
+			canContinueAgentGroup = !!effectiveModelId
+		}
+
+		return timeline
 	}
 
 	private collectOtherSessionTasks() {

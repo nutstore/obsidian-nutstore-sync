@@ -1,5 +1,4 @@
 import { setIcon } from 'obsidian'
-import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/chat/modal-mount'
 import {
 	For,
 	Match,
@@ -10,7 +9,9 @@ import {
 	on,
 	onCleanup,
 } from 'solid-js'
+import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/chat/modal-mount'
 import { createImageContextItem } from '~/chat/user-context'
+import { t } from '../../i18n'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { FragmentDivider } from './components/FragmentDivider'
@@ -20,7 +21,6 @@ import { PendingList } from './components/PendingList'
 import { RunStateCard } from './components/RunStateCard'
 import { SessionHistorySheet } from './components/SessionHistorySheet'
 import { TasksPanel } from './components/TasksPanel'
-import { t } from '../../i18n'
 import type {
 	ChatTimelineFragmentItem,
 	ChatTimelineMessageItem,
@@ -797,7 +797,7 @@ function Chatbox(props: ChatboxProps) {
 					{/* Input */}
 					<div
 						ref={inputPaneEl}
-						class={`chatbox-input-pane shrink-0 px-3 py-3 ${
+						class={`chatbox-input-pane shrink-0 px-3 pb-3 pt-1.5 ${
 							desktopResizeEnabled()
 								? 'chatbox-input-pane--resizable'
 								: 'border-t border-[var(--background-modifier-border)]'
