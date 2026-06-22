@@ -28,6 +28,10 @@ import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
+import {
+	getNutstoreDavEndpoint,
+	getNutstoreNsdavEndpoint,
+} from '~/utils/nutstore-endpoints'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import NutstorePlugin from '..'
@@ -115,6 +119,12 @@ export class NutstoreSync {
 			const settings = this.settings
 			const webdav = this.webdav
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
+			logger.info('[Sync] Endpoint:', {
+				loginMode: settings.loginMode,
+				dav: getNutstoreDavEndpoint(settings),
+				nsdav: getNutstoreNsdavEndpoint(settings),
+				remoteBaseDir,
+			})
 			const syncRecord = new SyncRecord(
 				getDBKey(this.vault.getName(), this.remoteBaseDir),
 				syncRecordKV,

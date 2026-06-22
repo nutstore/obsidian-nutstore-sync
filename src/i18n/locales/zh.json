@@ -74,6 +74,19 @@
 		"help": {
 			"name": "如何获取 WebDAV 账号和凭证？"
 		},
+		"enterpriseBaseUrl": {
+			"name": "企业版坚果云",
+			"desc": "可选配置企业版坚果云 Base URL，留空则使用默认地址。例如：https://dav.jianguoyun.com",
+			"action": "设置",
+			"modalTitle": "设置企业版坚果云 Base URL",
+			"placeholder": "例如 https://dav.jianguoyun.com",
+			"invalid": "Base URL 不合法",
+			"invalidWithReason": "Base URL 不合法：{{reason}}",
+			"errors": {
+				"invalidFormat": "请输入完整的服务器地址，例如：https://dav.jianguoyun.com",
+				"unsupportedProtocol": "地址需要以 http:// 或 https:// 开头"
+			}
+		},
 		"sections": {
 			"account": "账号设置",
 			"common": "通用设置",

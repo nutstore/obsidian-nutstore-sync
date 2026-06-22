@@ -30,6 +30,7 @@ export enum SyncPolicy {
 export interface NutstoreSettings {
 	account: string
 	credential: string
+	nutstoreEnterpriseBaseUrl: string
 	remoteDir: string
 	useGitStyle: boolean
 	conflictStrategy: ConflictStrategy
@@ -71,6 +72,7 @@ function createGlobMathOptions(expr: string) {
 export const DEFAULT_SETTINGS: NutstoreSettings = {
 	account: '',
 	credential: '',
+	nutstoreEnterpriseBaseUrl: '',
 	remoteDir: '',
 	useGitStyle: false,
 	conflictStrategy: ConflictStrategy.DiffMatchPatch,

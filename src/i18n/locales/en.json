@@ -41,6 +41,19 @@
 			"manual": "Manual input",
 			"sso": "Single sign-on"
 		},
+		"enterpriseBaseUrl": {
+			"name": "Nutstore Enterprise",
+			"desc": "Optional Base URL for Nutstore Enterprise. Leave empty to use the default endpoint. Example: https://dav.jianguoyun.com",
+			"action": "Set",
+			"modalTitle": "Set Nutstore Enterprise Base URL",
+			"placeholder": "For example https://dav.jianguoyun.com",
+			"invalid": "Invalid Base URL",
+			"invalidWithReason": "Invalid Base URL: {{reason}}",
+			"errors": {
+				"invalidFormat": "enter a complete server address, for example: https://dav.jianguoyun.com",
+				"unsupportedProtocol": "the address must start with http:// or https://"
+			}
+		},
 		"ssoStatus": {
 			"loggedIn": "Logged in",
 			"notLoggedIn": "Not logged in",

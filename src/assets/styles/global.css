@@ -70,6 +70,43 @@
 	border-color: var(--background-modifier-error);
 }
 
+.settings-helper-links {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.settings-helper-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.2rem 0.55rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 1em;
+	line-height: 1.2;
+	cursor: pointer;
+	transition:
+		border-color 120ms ease,
+		background-color 120ms ease,
+		color 120ms ease;
+	text-decoration: none;
+}
+
+.settings-helper-badge:hover,
+.settings-helper-badge:focus {
+	text-decoration: none;
+}
+
+.settings-helper-badge:hover {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 input.error {
 	border-color: var(--background-modifier-error) !important;
 	box-shadow: none !important;
