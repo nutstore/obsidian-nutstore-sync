@@ -1,7 +1,14 @@
-import type { AssistantModelMessage } from 'ai'
+import type {
+	AssistantModelMessage,
+	FilePart,
+	ImagePart,
+	TextPart,
+	UserModelMessage,
+} from 'ai'
 import { tool as aiTool, stepCountIs, streamText } from 'ai'
 import { getProviderResolver } from './providers/registry'
 import {
+	AIModelConfig,
 	AIMessage,
 	AIMessageMeta,
 	AIProviderConfig,
@@ -24,6 +31,90 @@ export interface GenerateAssistantTurnResult {
 
 export interface GenerateAssistantTurnCallbacks {
 	onTextDelta?: (delta: string) => void | Promise<void>
+}
+
+function inferFilePartModality(
+	part: FilePart,
+): AIModelConfig['modalities']['input'][number] | undefined {
+	const mediaType = part.mediaType.toLowerCase()
+	if (mediaType.startsWith('image/')) return 'image'
+	if (mediaType.startsWith('audio/')) return 'audio'
+	if (mediaType.startsWith('video/')) return 'video'
+	if (mediaType === 'application/pdf') return 'pdf'
+	return undefined
+}
+
+function getPartModality(
+	part: TextPart | ImagePart | FilePart,
+): AIModelConfig['modalities']['input'][number] | undefined {
+	switch (part.type) {
+		case 'text':
+			return 'text'
+		case 'image':
+			return 'image'
+		case 'file':
+			return inferFilePartModality(part)
+		default:
+			return undefined
+	}
+}
+
+function createUnsupportedPartPlaceholder(
+	part: TextPart | ImagePart | FilePart,
+	modality: AIModelConfig['modalities']['input'][number] | undefined,
+): TextPart {
+	if (part.type === 'file') {
+		const label = modality || part.mediaType || 'file'
+		const filename = part.filename ? `: ${part.filename}` : ''
+		return {
+			type: 'text',
+			text: `[${label} attached${filename}, unavailable to this model.]`,
+		}
+	}
+	const label = modality || part.type
+	return {
+		type: 'text',
+		text: `[${label} attached, unavailable to this model.]`,
+	}
+}
+
+function adaptUserContentByModalities(
+	content: UserModelMessage['content'],
+	inputModalities: AIModelConfig['modalities']['input'],
+): UserModelMessage['content'] {
+	const allowed = new Set(inputModalities)
+	if (typeof content === 'string') {
+		return allowed.has('text') ? content : []
+	}
+	if (!Array.isArray(content)) {
+		return content
+	}
+	return content.flatMap((part) => {
+		const modality = getPartModality(part)
+		if (modality && allowed.has(modality)) {
+			return [part]
+		}
+		return allowed.has('text')
+			? [createUnsupportedPartPlaceholder(part, modality)]
+			: []
+	})
+}
+
+function adaptMessagesByInputModalities(
+	messages: AIMessage[],
+	inputModalities: AIModelConfig['modalities']['input'],
+): AIMessage[] {
+	return messages.map((message) =>
+		message.role === 'user'
+			? {
+					...message,
+					content: adaptUserContentByModalities(
+						message.content as UserModelMessage['content'],
+						inputModalities,
+					),
+				}
+			: message,
+	) as AIMessage[]
 }
 
 function mergeAdjacentUserMessages(messages: AIMessage[]): AIMessage[] {
@@ -71,7 +162,11 @@ export async function generateAssistantTurn(
 	const resolver = getProviderResolver(request.provider)
 	const modelName =
 		request.provider.models[request.model]?.name?.trim() || request.model
-	const messages = mergeAdjacentUserMessages(request.messages)
+	const inputModalities = request.provider.models[request.model]?.modalities
+		.input || ['text']
+	const messages = mergeAdjacentUserMessages(
+		adaptMessagesByInputModalities(request.messages, inputModalities),
+	)
 	const { model, providerName } = resolver.createLanguageModel(
 		request.provider,
 		request.model,
