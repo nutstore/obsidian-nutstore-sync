@@ -25,6 +25,10 @@ import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { UserContextManager } from '~/ai/chat/context/user-context-manager'
 import { formatUserContext } from '~/ai/chat/context/user-context'
 import { formatAdditionalContext } from '~/ai/chat/context/workspace-context'
+import {
+	runContextCompression,
+	shouldAutoCompressFragment,
+} from '~/ai/chat/runtime/context-compression'
 import i18n from '~/i18n'
 import type NutstorePlugin from '../../..'
 
@@ -96,6 +100,38 @@ export class SessionProcessor {
 						this.notify()
 						return
 					}
+				}
+
+				if (shouldAutoCompressFragment(fragment, model)) {
+					runtime.runState = 'compressing'
+					this.notify()
+					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
+						provider,
+					)
+					await runContextCompression({
+						provider,
+						model,
+						session,
+						sourceFragment: fragment,
+						runtimeStates: this.runtimeStates,
+						store: this.store,
+						messageFactory: this.messageFactory,
+						isSessionDeleted: () =>
+							this.state.deletedSessionIds.has(session.id),
+					})
+					if (this.state.deletedSessionIds.has(session.id)) {
+						runtime.stopRequested = false
+						runtime.runState = 'idle'
+						return
+					}
+					if (runtime.stopRequested) {
+						runtime.runState = 'idle'
+						await this.store.persistSession(session)
+						this.notify()
+						return
+					}
+					this.notify()
+					continue
 				}
 
 				runtime.runState = 'thinking'

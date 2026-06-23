@@ -6,20 +6,15 @@ import {
 	listProviders,
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
-import { generateAssistantTurn } from '~/ai/core/runtime'
 import { AISession } from '~/ai/core/types'
 import { mutateTaskRecord, toCancelledTask } from '~/ai/chat/domain'
-import {
-	deriveTitle,
-	messageToText,
-	toTextParts,
-} from '~/ai/chat/messages/message-utils'
+import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
-import { COMPRESSION_PROMPT } from '~/ai/chat/prompts'
 import {
 	ChatState,
 	type SessionRuntimeState,
 } from '~/ai/chat/runtime/chat-state'
+import { runContextCompression } from '~/ai/chat/runtime/context-compression'
 import { Notifier } from '~/ai/chat/notifier'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import { Selection } from '~/ai/chat/runtime/selection'
@@ -578,39 +573,17 @@ export default class ChatService {
 						provider,
 					)
 					const model = this.selection.getModelOrThrow(provider, session)
-					const response = await generateAssistantTurn({
+					await runContextCompression({
 						provider,
-						model: model.id,
-						messages: [
-							...sourceFragment.messages.map((item) => item.message),
-							{
-								role: 'user',
-								content: toTextParts(COMPRESSION_PROMPT),
-							},
-						],
-						tools: [],
-						...session.inferenceParams,
-					})
-
-					if (
-						this.state.deletedSessionIds.has(session.id) ||
-						runtime.stopRequested
-					) {
-						return
-					}
-
-					const summary =
-						messageToText(response.message).trim() || COMPRESSION_PROMPT
-					const targetFragment = this.messageFactory.createFragment(session)
-					targetFragment.summary = summary
-					this.messageFactory.appendUserMessage(
-						targetFragment,
-						summary,
+						model,
 						session,
-					)
-					this.store.upsertSessionIndexItem(session, deriveTitle(session))
-					await this.store.persistSession(session)
-					await this.store.persistMetaAndIndex()
+						sourceFragment,
+						runtimeStates: this.runtimeStates,
+						store: this.store,
+						messageFactory: this.messageFactory,
+						isSessionDeleted: () =>
+							this.state.deletedSessionIds.has(session.id),
+					})
 				}
 			} catch (error) {
 				const provider = getProviderById(
