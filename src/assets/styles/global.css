@@ -198,10 +198,6 @@ input.success {
 	white-space: pre;
 }
 
-.chatbox-tag-button {
-	border-radius: 999px;
-}
-
 .ns-chatbox-contained-modal-container {
 	position: absolute;
 	inset: 0;

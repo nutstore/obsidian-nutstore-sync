@@ -613,6 +613,16 @@
 					"toolRestoreWarning": "After deletion, these file changes can no longer be restored by recalling the message.",
 					"confirm": "Delete"
 				},
+				"newFragment": {
+					"title": "New Fragment",
+					"message": "This starts a fresh stretch of chat in the current conversation. Earlier messages are kept, but the AI will rely less on older parts of the conversation.",
+					"confirm": "Create fragment"
+				},
+				"compressContext": {
+					"title": "Compress Context",
+					"message": "This asks the AI to condense the earlier conversation before continuing. It usually helps with long chats, but some details may be simplified.",
+					"confirm": "Compress"
+				},
 				"regenerate": {
 					"title": "Regenerate",
 					"message": "This will regenerate this AI response in place. The original response will be replaced, and subsequent messages will be preserved. This action cannot be undone.",

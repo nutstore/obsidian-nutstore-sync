@@ -76,6 +76,10 @@ function Chatbox(props: ChatboxProps) {
 		createSignal<ChatTimelineMessageItem>()
 	const [pendingRecallMessage, setPendingRecallMessage] =
 		createSignal<ChatTimelineMessageItem>()
+	const [pendingNewFragmentConfirm, setPendingNewFragmentConfirm] =
+		createSignal(false)
+	const [pendingCompressContextConfirm, setPendingCompressContextConfirm] =
+		createSignal(false)
 	const [recallConfirmMode, setRecallConfirmMode] =
 		createSignal<RecallConfirmMode>()
 	const [desktopResizeEnabled, setDesktopResizeEnabled] = createSignal(false)
@@ -89,6 +93,7 @@ function Chatbox(props: ChatboxProps) {
 	let inputPaneEl: HTMLDivElement | undefined
 	let modelPickerEl: HTMLDivElement | undefined
 	let fileInputEl: HTMLInputElement | undefined
+	let inputTextareaEl: HTMLTextAreaElement | undefined
 	let previousActiveSessionId: string | undefined
 	let defaultDesktopInputHeight = DEFAULT_DESKTOP_INPUT_HEIGHT
 	let dragStartHeight = 0
@@ -104,6 +109,28 @@ function Chatbox(props: ChatboxProps) {
 
 	function getViewWindow() {
 		return getViewDocument().defaultView ?? window
+	}
+
+	function dismissInputFocus() {
+		const activeElement = getViewDocument().activeElement
+		if (activeElement instanceof HTMLElement) {
+			activeElement.blur()
+		}
+		inputTextareaEl?.blur()
+	}
+
+	function openNewFragmentConfirm() {
+		dismissInputFocus()
+		getViewWindow().requestAnimationFrame(() => {
+			setPendingNewFragmentConfirm(true)
+		})
+	}
+
+	function openCompressContextConfirm() {
+		dismissInputFocus()
+		getViewWindow().requestAnimationFrame(() => {
+			setPendingCompressContextConfirm(true)
+		})
 	}
 
 	const hasTasks = () =>
@@ -653,6 +680,16 @@ function Chatbox(props: ChatboxProps) {
 		props.onDeleteMessage?.(item.message.id)
 	}
 
+	function confirmNewFragment() {
+		setPendingNewFragmentConfirm(false)
+		props.onNewFragment()
+	}
+
+	async function confirmCompressContext() {
+		setPendingCompressContextConfirm(false)
+		await props.onCompressContext()
+	}
+
 	const deleteMessageConfirmText = () => {
 		const item = pendingDeleteMessage()
 		if (!item) return ''
@@ -900,6 +937,7 @@ function Chatbox(props: ChatboxProps) {
 							/>
 						</Show>
 						<textarea
+							ref={inputTextareaEl}
 							class="chatbox-input w-full resize-none rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"
 							placeholder={t('chatbox.ui.placeholders.input')}
 							value={input()}
@@ -938,27 +976,33 @@ function Chatbox(props: ChatboxProps) {
 						<div class="mt-3 flex items-center justify-between gap-3">
 							<div class="flex flex-wrap items-center gap-2">
 								<button
-									class="chatbox-tag-button"
+									class="inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
 									type="button"
+									title={t('chatbox.ui.actions.selectFile')}
+									aria-label={t('chatbox.ui.actions.selectFile')}
 									onClick={openFilePicker}
 								>
-									{t('chatbox.ui.actions.selectFile')}
+									<span class="i-lucide-paperclip size-4 shrink-0" />
 								</button>
 								<button
-									class="chatbox-tag-button"
+									class="inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
 									type="button"
+									title={t('chatbox.ui.actions.newFragment')}
+									aria-label={t('chatbox.ui.actions.newFragment')}
 									disabled={!props.canCreateFragment}
-									onClick={() => props.onNewFragment()}
+									onClick={openNewFragmentConfirm}
 								>
-									{t('chatbox.ui.actions.newFragment')}
+									<span class="i-lucide-between-horizontal-start size-4 shrink-0" />
 								</button>
 								<button
-									class="chatbox-tag-button"
+									class="inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
 									type="button"
+									title={t('chatbox.ui.actions.compressContext')}
+									aria-label={t('chatbox.ui.actions.compressContext')}
 									disabled={!props.canCompress}
-									onClick={() => void props.onCompressContext()}
+									onClick={openCompressContextConfirm}
 								>
-									{t('chatbox.ui.actions.compressContext')}
+									<span class="i-lucide-minimize-2 size-4 shrink-0" />
 								</button>
 							</div>
 							<button
@@ -1032,6 +1076,30 @@ function Chatbox(props: ChatboxProps) {
 					contained={dialogMountTarget().contained}
 					onCancel={() => setPendingDeleteMessage(undefined)}
 					onConfirm={confirmDeleteMessage}
+				/>
+			</Show>
+
+			<Show when={pendingNewFragmentConfirm()}>
+				<ConfirmDialog
+					title={t('chatbox.ui.dialogs.newFragment.title')}
+					message={t('chatbox.ui.dialogs.newFragment.message')}
+					confirmLabel={t('chatbox.ui.dialogs.newFragment.confirm')}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
+					onCancel={() => setPendingNewFragmentConfirm(false)}
+					onConfirm={confirmNewFragment}
+				/>
+			</Show>
+
+			<Show when={pendingCompressContextConfirm()}>
+				<ConfirmDialog
+					title={t('chatbox.ui.dialogs.compressContext.title')}
+					message={t('chatbox.ui.dialogs.compressContext.message')}
+					confirmLabel={t('chatbox.ui.dialogs.compressContext.confirm')}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
+					onCancel={() => setPendingCompressContextConfirm(false)}
+					onConfirm={() => void confirmCompressContext()}
 				/>
 			</Show>
 

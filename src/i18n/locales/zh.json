@@ -613,6 +613,16 @@
 					"toolRestoreWarning": "删除后将无法通过撤回消息恢复这些文件修改。",
 					"confirm": "确认删除"
 				},
+				"newFragment": {
+					"title": "新建段",
+					"message": "这会清除 AI 的记忆，但界面上仍然保留之前的对话记录。",
+					"confirm": "新建段"
+				},
+				"compressContext": {
+					"title": "压缩上下文",
+					"message": "这会让 AI 先整理前面的聊天内容，再继续当前对话。这样通常能减少长度带来的影响，但部分细节可能会被简化。",
+					"confirm": "开始压缩"
+				},
 				"regenerate": {
 					"title": "重新生成",
 					"message": "此操作将重新生成该 AI 回复，原回复内容将被替换，其后的消息将被保留，无法恢复。",
