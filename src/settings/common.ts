@@ -64,17 +64,22 @@ export default class CommonSettings extends BaseSettings {
 			.setDesc(i18n.t('settings.syncPolicy.desc'))
 			.addDropdown((dropdown) => {
 				syncPolicyDropdown = dropdown
+					.addOption(SyncPolicy.TwoWay, i18n.t('settings.syncPolicy.twoWay'))
 					.addOption(
-						SyncPolicy.Bidirectional,
-						i18n.t('settings.syncPolicy.bidirectional'),
+						SyncPolicy.SendOnly,
+						i18n.t('settings.syncPolicy.sendOnly'),
 					)
 					.addOption(
-						SyncPolicy.LocalMirror,
-						i18n.t('settings.syncPolicy.localMirror'),
+						SyncPolicy.SendOnlyOverrideChanges,
+						i18n.t('settings.syncPolicy.sendOnlyOverrideChanges'),
 					)
 					.addOption(
-						SyncPolicy.RemoteMirror,
-						i18n.t('settings.syncPolicy.remoteMirror'),
+						SyncPolicy.ReceiveOnly,
+						i18n.t('settings.syncPolicy.receiveOnly'),
+					)
+					.addOption(
+						SyncPolicy.ReceiveOnlyRevertLocalChanges,
+						i18n.t('settings.syncPolicy.receiveOnlyRevertLocalChanges'),
 					)
 					.setValue(this.plugin.localSettings.syncPolicy)
 					.onChange(async (value) => {

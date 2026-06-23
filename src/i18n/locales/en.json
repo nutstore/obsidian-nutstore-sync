@@ -98,15 +98,19 @@
 		},
 		"syncPolicy": {
 			"name": "Sync policy",
-			"desc": "Controls how data is reconciled between your device and the cloud. Overwrite modes delete extra files on the other side — use with care.",
-			"bidirectional": "Two-way sync",
-			"localMirror": "Overwrite cloud with local",
-			"remoteMirror": "Overwrite local with cloud",
+			"desc": "Controls how data is reconciled between your device and the cloud. Override and revert policies delete extra files on the target side.",
+			"twoWay": "Two Way",
+			"sendOnly": "Send Only",
+			"sendOnlyOverrideChanges": "Send Only: Override Changes",
+			"receiveOnly": "Receive Only",
+			"receiveOnlyRevertLocalChanges": "Receive Only: Revert Local Changes",
 			"modal": {
 				"title": "Confirm sync policy",
-				"bidirectionalDesc": "Local and cloud sync in both directions — additions and deletions on either side are applied to the other.\nIf the same file is edited on both sides, conflicts are resolved by your configured strategy.",
-				"localMirrorDesc": "Your local vault is the master. The cloud is fully overwritten to match local.\nFiles on the cloud that do not exist locally will be deleted.\nBest for using the cloud as a backup of your local vault.",
-				"remoteMirrorDesc": "The cloud is the master. Your local vault is fully overwritten to match the cloud.\nFiles stored locally that do not exist on the cloud will be deleted.\nBest for read-only devices or keeping multiple devices in lockstep with the cloud.",
+				"twoWayDesc": "Local and cloud sync in both directions — additions and deletions on either side are applied to the other.\nIf the same file is edited on both sides, conflicts are resolved by your configured strategy.",
+				"sendOnlyDesc": "Only send local additions and modifications to the cloud.\nFiles that exist on the cloud but not locally are preserved.\nWhen both sides differ at the same path, the local version overwrites the cloud version.",
+				"sendOnlyOverrideChangesDesc": "Overwrite the cloud with the full current state of your local vault.\nFiles that exist on the cloud but not locally will be deleted.\nBest when you need to force the cloud to converge to local.",
+				"receiveOnlyDesc": "Only receive cloud additions and modifications into your local vault.\nFiles that exist locally but not on the cloud are preserved.\nWhen both sides differ at the same path, the cloud version overwrites the local version.",
+				"receiveOnlyRevertLocalChangesDesc": "Revert your local vault to the full current state of the cloud.\nFiles that exist locally but not on the cloud will be deleted.\nBest for read-only devices or when the cloud must be the source of truth.",
 				"confirm": "Confirm",
 				"cancel": "Cancel"
 			}

@@ -16,10 +16,10 @@ import {
 import BaseSyncDecider from './base.decider'
 import { SyncDecisionInput } from './sync-decision.interface'
 
-export default class BidirectionalSyncDecider extends BaseSyncDecider {
+export default class TwoWaySyncDecider extends BaseSyncDecider {
 	async decide(): Promise<BaseTask[]> {
 		const input = await this.buildDecisionInput()
-		return bidirectionalDecider(input)
+		return twoWayDecider(input)
 	}
 }
 
@@ -34,7 +34,7 @@ function pickConflictStrategy(
 	return userStrategy
 }
 
-export async function bidirectionalDecider(
+export async function twoWayDecider(
 	input: SyncDecisionInput,
 ): Promise<BaseTask[]> {
 	const {

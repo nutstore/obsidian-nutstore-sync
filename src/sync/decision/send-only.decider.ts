@@ -1,5 +1,6 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { SyncMode } from '~/settings'
+import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSameTime } from '~/utils/is-same-time'
 import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
@@ -13,22 +14,30 @@ import {
 import BaseSyncDecider from './base.decider'
 import { SyncDecisionInput } from './sync-decision.interface'
 
-export default class RemoteMirrorSyncDecider extends BaseSyncDecider {
+export default class SendOnlySyncDecider extends BaseSyncDecider {
 	async decide(): Promise<BaseTask[]> {
 		const input = await this.buildDecisionInput()
-		return remoteMirrorDecider(input)
+		return sendOnlyDecider(input, { overrideChanges: false })
+	}
+}
+
+export class SendOnlyOverrideChangesSyncDecider extends BaseSyncDecider {
+	async decide(): Promise<BaseTask[]> {
+		const input = await this.buildDecisionInput()
+		return sendOnlyDecider(input, { overrideChanges: true })
 	}
 }
 
 /**
- * Remote is the source of truth. Local converges to remote.
- * - remote deleted, local exists → RemoveLocal
- * - remote exists, local deleted → Pull (restore local)
- * - both exist, remote newer → Pull
- * Forbidden: Push, RemoveRemote, MkdirRemote, ConflictResolve
+ * Local is the source of truth for paths that exist locally.
+ * - local exists, remote missing → Push
+ * - both exist, local differs → Push
+ * - remote-only paths are preserved unless overrideChanges is enabled
+ * Forbidden: Pull, RemoveLocal, MkdirLocal, ConflictResolve
  */
-export async function remoteMirrorDecider(
+export async function sendOnlyDecider(
 	input: SyncDecisionInput,
+	mode: { overrideChanges: boolean },
 ): Promise<BaseTask[]> {
 	const {
 		settings,
@@ -61,14 +70,14 @@ export async function remoteMirrorDecider(
 	const mixedPath = new Set([...localStatsMap.keys(), ...remoteStatsMap.keys()])
 
 	const tasks: BaseTask[] = []
-	const removeLocalFolderTasks: BaseTask[] = []
-	const mkdirLocalTasks: BaseTask[] = []
+	const removeRemoteFolderTasks: BaseTask[] = []
+	const mkdirRemoteTasks: BaseTask[] = []
 
 	// * sync files
 	for (const p of mixedPath) {
 		const remote = remoteStatsMap.get(p)
 		const local = localStatsMap.get(p)
-		const options = {
+		const taskOptions = {
 			remotePath: p,
 			localPath: p,
 			remoteBaseDir,
@@ -87,17 +96,17 @@ export async function remoteMirrorDecider(
 			) {
 				continue
 			}
-			const remoteChanged = !isSameTime(remote.mtime, local.mtime)
-			if (remoteChanged) {
+			const localChanged = !isSameTime(local.mtime, remote.mtime)
+			if (localChanged) {
 				logger.debug({
-					reason: 'remote-mirror: both exist, remote differs from local',
+					reason: 'send-only: both exist, local differs from remote',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				if (remote.size > maxFileSize || local.size > maxFileSize) {
+				if (local.size > maxFileSize || remote.size > maxFileSize) {
 					tasks.push(
 						taskFactory.createSkippedTask({
-							...options,
+							...taskOptions,
 							reason: SkipReason.FileTooLarge,
 							maxSize: maxFileSize,
 							remoteSize: remote.size,
@@ -106,55 +115,52 @@ export async function remoteMirrorDecider(
 					)
 					continue
 				}
+				if (hasInvalidChar(local.path)) {
+					tasks.push(taskFactory.createFilenameErrorTask(taskOptions))
+				} else {
+					tasks.push(taskFactory.createPushTask(taskOptions))
+				}
+			}
+			continue
+		}
+
+		if (local && !remote) {
+			// Local exists, remote missing → push to restore/create remote
+			logger.debug({
+				reason: 'send-only: local exists, remote missing — push',
+				localPath: p,
+				remotePath: remotePathToAbsolute(remoteBaseDir, p),
+			})
+			if (local.size > maxFileSize) {
 				tasks.push(
-					taskFactory.createPullTask({
-						...options,
-						remoteSize: remote.size,
-						mobileAppDownloadFileChunkSize:
-							settings.mobileAppDownloadFileChunkSize,
+					taskFactory.createSkippedTask({
+						...taskOptions,
+						reason: SkipReason.FileTooLarge,
+						maxSize: maxFileSize,
+						localSize: local.size,
 					}),
 				)
+				continue
+			}
+			if (hasInvalidChar(local.path)) {
+				tasks.push(taskFactory.createFilenameErrorTask(taskOptions))
+			} else {
+				tasks.push(taskFactory.createPushTask(taskOptions))
 			}
 			continue
 		}
 
 		if (!local && remote) {
-			// Remote exists, local missing → pull to restore/create local
-			logger.debug({
-				reason: 'remote-mirror: remote exists, local missing — pull',
-				localPath: p,
-				remotePath: remotePathToAbsolute(remoteBaseDir, p),
-			})
-			if (remote.size > maxFileSize) {
-				tasks.push(
-					taskFactory.createSkippedTask({
-						...options,
-						reason: SkipReason.FileTooLarge,
-						maxSize: maxFileSize,
-						remoteSize: remote.size,
-					}),
-				)
+			if (!mode.overrideChanges) {
 				continue
 			}
-			tasks.push(
-				taskFactory.createPullTask({
-					...options,
-					remoteSize: remote.size,
-					mobileAppDownloadFileChunkSize:
-						settings.mobileAppDownloadFileChunkSize,
-				}),
-			)
-			continue
-		}
-
-		if (local && !remote) {
-			// Local exists, remote missing → remove local
 			logger.debug({
-				reason: 'remote-mirror: local exists, remote missing — remove local',
+				reason:
+					'send-only override: remote exists, local missing — remove remote',
 				localPath: p,
 				remotePath: remotePathToAbsolute(remoteBaseDir, p),
 			})
-			tasks.push(taskFactory.createRemoveLocalTask(options))
+			tasks.push(taskFactory.createRemoveRemoteTask(taskOptions))
 			continue
 		}
 	}
@@ -174,7 +180,7 @@ export async function remoteMirrorDecider(
 		}
 	}
 
-	// * sync folders: remote -> local (remote-mirror: create local folders for remote ones)
+	// * sync folders: remote -> local (override only removes remote folders not in local)
 	for (const remote of remoteStatsFiltered) {
 		if (!remote.isDir) {
 			continue
@@ -189,41 +195,22 @@ export async function remoteMirrorDecider(
 				)
 			}
 		} else {
-			logger.debug({
-				reason: 'remote-mirror: remote folder missing locally — mkdir local',
-				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
-				localPath,
-			})
-			mkdirLocalTasks.push(
-				taskFactory.createMkdirLocalTask({
-					localPath,
-					remotePath: remote.path,
-					remoteBaseDir,
-				}),
-			)
-		}
-	}
-
-	// * sync folders: local -> remote (remote-mirror: remove local folders not in remote)
-	for (const local of localStatsFiltered) {
-		if (!local.isDir) {
-			continue
-		}
-		const remote = remoteStatsMap.get(local.path)
-
-		if (!remote) {
-			if (hasIgnoredInFolder(local.path, localStats)) {
-				const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
+			if (!mode.overrideChanges) {
+				continue
+			}
+			if (hasIgnoredInFolder(remote.path, remoteStats)) {
+				const ignoredPaths = getIgnoredPathsInFolder(remote.path, remoteStats)
 				logger.debug({
 					reason:
-						'remote-mirror: skip removing local folder (contains ignored items)',
-					localPath: local.path,
+						'send-only override: skip removing remote folder (contains ignored items)',
+					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+					localPath,
 					ignoredPaths,
 				})
 				tasks.push(
 					taskFactory.createSkippedTask({
-						localPath: local.path,
-						remotePath: local.path,
+						localPath,
+						remotePath: remote.path,
 						remoteBaseDir,
 						reason: SkipReason.FolderContainsIgnoredItems,
 						ignoredPaths,
@@ -232,17 +219,51 @@ export async function remoteMirrorDecider(
 				continue
 			}
 			logger.debug({
-				reason: 'remote-mirror: local folder missing remotely — remove local',
-				localPath: local.path,
-				remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+				reason:
+					'send-only override: remote folder missing locally — remove remote',
+				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+				localPath,
 			})
-			removeLocalFolderTasks.push(
-				taskFactory.createRemoveLocalTask({
-					localPath: local.path,
-					remotePath: local.path,
+			removeRemoteFolderTasks.push(
+				taskFactory.createRemoveRemoteTask({
+					localPath: remote.path,
+					remotePath: remote.path,
 					remoteBaseDir,
 				}),
 			)
+		}
+	}
+
+	// * sync folders: local -> remote (create remote folders for local ones)
+	for (const local of localStatsFiltered) {
+		if (!local.isDir) {
+			continue
+		}
+		const remote = remoteStatsMap.get(local.path)
+
+		if (!remote) {
+			logger.debug({
+				reason: 'send-only: local folder missing remotely — mkdir remote',
+				localPath: local.path,
+				remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+			})
+			if (hasInvalidChar(local.path)) {
+				tasks.push(
+					taskFactory.createFilenameErrorTask({
+						localPath: local.path,
+						remotePath: local.path,
+						remoteBaseDir,
+					}),
+				)
+			} else {
+				mkdirRemoteTasks.push(
+					taskFactory.createMkdirRemoteTask({
+						localPath: local.path,
+						remotePath: local.path,
+						remoteBaseDir,
+					}),
+				)
+			}
 		} else {
 			if (!remote.isDir) {
 				throw new Error(
@@ -252,8 +273,10 @@ export async function remoteMirrorDecider(
 		}
 	}
 
-	removeLocalFolderTasks.sort((a, b) => b.localPath.length - a.localPath.length)
-	const allFolderTasks = [...removeLocalFolderTasks, ...mkdirLocalTasks]
+	removeRemoteFolderTasks.sort(
+		(a, b) => b.remotePath.length - a.remotePath.length,
+	)
+	const allFolderTasks = [...removeRemoteFolderTasks, ...mkdirRemoteTasks]
 
 	tasks.splice(0, 0, ...allFolderTasks)
 

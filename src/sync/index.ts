@@ -36,9 +36,13 @@ import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import NutstorePlugin from '..'
 import { SyncPolicy } from '~/settings'
-import BidirectionalSyncDecider from './decision/bidirectional.decider'
-import LocalMirrorSyncDecider from './decision/local-mirror.decider'
-import RemoteMirrorSyncDecider from './decision/remote-mirror.decider'
+import TwoWaySyncDecider from './decision/two-way.decider'
+import ReceiveOnlySyncDecider, {
+	ReceiveOnlyRevertLocalChangesSyncDecider,
+} from './decision/receive-only.decider'
+import SendOnlySyncDecider, {
+	SendOnlyOverrideChangesSyncDecider,
+} from './decision/send-only.decider'
 import CleanRecordTask from './tasks/clean-record.task'
 import ConflictResolveTask, {
 	ConflictStrategy,
@@ -170,12 +174,24 @@ export class NutstoreSync {
 			}
 
 			await cacheService.restoreRemoteTraversalCacheIfMissing()
-			const decider =
-				this.localSettings.syncPolicy === SyncPolicy.LocalMirror
-					? new LocalMirrorSyncDecider(this, syncRecord)
-					: this.localSettings.syncPolicy === SyncPolicy.RemoteMirror
-						? new RemoteMirrorSyncDecider(this, syncRecord)
-						: new BidirectionalSyncDecider(this, syncRecord)
+			const decider = (() => {
+				switch (this.localSettings.syncPolicy) {
+					case SyncPolicy.SendOnly:
+						return new SendOnlySyncDecider(this, syncRecord)
+					case SyncPolicy.SendOnlyOverrideChanges:
+						return new SendOnlyOverrideChangesSyncDecider(this, syncRecord)
+					case SyncPolicy.ReceiveOnly:
+						return new ReceiveOnlySyncDecider(this, syncRecord)
+					case SyncPolicy.ReceiveOnlyRevertLocalChanges:
+						return new ReceiveOnlyRevertLocalChangesSyncDecider(
+							this,
+							syncRecord,
+						)
+					case SyncPolicy.TwoWay:
+					default:
+						return new TwoWaySyncDecider(this, syncRecord)
+				}
+			})()
 			const tasks = await decider.decide()
 			await cacheService.saveRemoteTraversalCache()
 

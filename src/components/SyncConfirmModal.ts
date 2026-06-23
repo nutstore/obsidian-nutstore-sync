@@ -1,6 +1,11 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '../i18n'
-import { SyncPolicy, useLocalSettings, useSettings } from '../settings'
+import {
+	getSyncPolicyDescI18nKey,
+	getSyncPolicyNameI18nKey,
+	useLocalSettings,
+	useSettings,
+} from '../settings'
 
 export default class SyncConfirmModal extends Modal {
 	private onConfirm: () => void
@@ -31,24 +36,12 @@ export default class SyncConfirmModal extends Modal {
 		})
 		infoDiv.createEl('p', {
 			text: i18n.t('sync.confirmModal.policy', {
-				policy: i18n.t(
-					`settings.syncPolicy.${policy === SyncPolicy.LocalMirror ? 'localMirror' : policy === SyncPolicy.RemoteMirror ? 'remoteMirror' : 'bidirectional'}`,
-				),
+				policy: i18n.t(getSyncPolicyNameI18nKey(policy)),
 			}),
 		})
-		if (policy === SyncPolicy.LocalMirror) {
-			contentEl.createEl('pre', {
-				text: i18n.t('settings.syncPolicy.modal.localMirrorDesc'),
-			}).style.whiteSpace = 'pre-wrap'
-		} else if (policy === SyncPolicy.RemoteMirror) {
-			contentEl.createEl('pre', {
-				text: i18n.t('settings.syncPolicy.modal.remoteMirrorDesc'),
-			}).style.whiteSpace = 'pre-wrap'
-		} else {
-			contentEl.createEl('pre', {
-				text: i18n.t('settings.syncPolicy.modal.bidirectionalDesc'),
-			}).style.whiteSpace = 'pre-wrap'
-		}
+		contentEl.createEl('pre', {
+			text: i18n.t(getSyncPolicyDescI18nKey(policy)),
+		}).style.whiteSpace = 'pre-wrap'
 		contentEl.createEl('pre', {
 			text: i18n.t('sync.confirmModal.message'),
 		}).style.whiteSpace = 'pre-wrap'

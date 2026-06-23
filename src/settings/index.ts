@@ -22,9 +22,84 @@ export enum SyncMode {
 }
 
 export enum SyncPolicy {
-	Bidirectional = 'bidirectional',
-	LocalMirror = 'local-mirror',
-	RemoteMirror = 'remote-mirror',
+	TwoWay = 'two-way',
+	SendOnly = 'send-only',
+	SendOnlyOverrideChanges = 'send-only-override-changes',
+	ReceiveOnly = 'receive-only',
+	ReceiveOnlyRevertLocalChanges = 'receive-only-revert-local-changes',
+}
+
+export type SyncPolicyI18nKey =
+	| 'twoWay'
+	| 'sendOnly'
+	| 'sendOnlyOverrideChanges'
+	| 'receiveOnly'
+	| 'receiveOnlyRevertLocalChanges'
+
+export type SyncPolicyNameI18nKey =
+	| 'settings.syncPolicy.twoWay'
+	| 'settings.syncPolicy.sendOnly'
+	| 'settings.syncPolicy.sendOnlyOverrideChanges'
+	| 'settings.syncPolicy.receiveOnly'
+	| 'settings.syncPolicy.receiveOnlyRevertLocalChanges'
+
+export type SyncPolicyDescI18nKey =
+	| 'settings.syncPolicy.modal.twoWayDesc'
+	| 'settings.syncPolicy.modal.sendOnlyDesc'
+	| 'settings.syncPolicy.modal.sendOnlyOverrideChangesDesc'
+	| 'settings.syncPolicy.modal.receiveOnlyDesc'
+	| 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
+
+export function getSyncPolicyI18nKey(policy: SyncPolicy): SyncPolicyI18nKey {
+	switch (policy) {
+		case SyncPolicy.SendOnly:
+			return 'sendOnly'
+		case SyncPolicy.SendOnlyOverrideChanges:
+			return 'sendOnlyOverrideChanges'
+		case SyncPolicy.ReceiveOnly:
+			return 'receiveOnly'
+		case SyncPolicy.ReceiveOnlyRevertLocalChanges:
+			return 'receiveOnlyRevertLocalChanges'
+		case SyncPolicy.TwoWay:
+		default:
+			return 'twoWay'
+	}
+}
+
+export function getSyncPolicyNameI18nKey(
+	policy: SyncPolicy,
+): SyncPolicyNameI18nKey {
+	switch (policy) {
+		case SyncPolicy.SendOnly:
+			return 'settings.syncPolicy.sendOnly'
+		case SyncPolicy.SendOnlyOverrideChanges:
+			return 'settings.syncPolicy.sendOnlyOverrideChanges'
+		case SyncPolicy.ReceiveOnly:
+			return 'settings.syncPolicy.receiveOnly'
+		case SyncPolicy.ReceiveOnlyRevertLocalChanges:
+			return 'settings.syncPolicy.receiveOnlyRevertLocalChanges'
+		case SyncPolicy.TwoWay:
+		default:
+			return 'settings.syncPolicy.twoWay'
+	}
+}
+
+export function getSyncPolicyDescI18nKey(
+	policy: SyncPolicy,
+): SyncPolicyDescI18nKey {
+	switch (policy) {
+		case SyncPolicy.SendOnly:
+			return 'settings.syncPolicy.modal.sendOnlyDesc'
+		case SyncPolicy.SendOnlyOverrideChanges:
+			return 'settings.syncPolicy.modal.sendOnlyOverrideChangesDesc'
+		case SyncPolicy.ReceiveOnly:
+			return 'settings.syncPolicy.modal.receiveOnlyDesc'
+		case SyncPolicy.ReceiveOnlyRevertLocalChanges:
+			return 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
+		case SyncPolicy.TwoWay:
+		default:
+			return 'settings.syncPolicy.modal.twoWayDesc'
+	}
 }
 
 export interface NutstoreSettings {
@@ -128,7 +203,7 @@ export interface NutstoreLocalSettings {
 }
 
 export const DEFAULT_LOCAL_SETTINGS: NutstoreLocalSettings = {
-	syncPolicy: SyncPolicy.Bidirectional,
+	syncPolicy: SyncPolicy.TwoWay,
 	ai: {},
 }
 

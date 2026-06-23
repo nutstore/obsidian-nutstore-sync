@@ -1,6 +1,6 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
-import { SyncPolicy } from '~/settings'
+import { getSyncPolicyDescI18nKey, SyncPolicy } from '~/settings'
 
 export default class SyncPolicyModal extends Modal {
 	private policy: SyncPolicy
@@ -31,14 +31,7 @@ export default class SyncPolicyModal extends Modal {
 			text: i18n.t('settings.syncPolicy.modal.title'),
 		})
 
-		let desc: string
-		if (this.policy === SyncPolicy.LocalMirror) {
-			desc = i18n.t('settings.syncPolicy.modal.localMirrorDesc')
-		} else if (this.policy === SyncPolicy.RemoteMirror) {
-			desc = i18n.t('settings.syncPolicy.modal.remoteMirrorDesc')
-		} else {
-			desc = i18n.t('settings.syncPolicy.modal.bidirectionalDesc')
-		}
+		const desc = i18n.t(getSyncPolicyDescI18nKey(this.policy))
 
 		const preEl = contentEl.createEl('pre', { text: desc })
 		preEl.style.whiteSpace = 'pre-wrap'

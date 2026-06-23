@@ -214,9 +214,9 @@ describe('logsStringify', () => {
 		it('formats a sync decision log with object arg', () => {
 			const stats = { push: 3, pull: 5, conflict: 1, noop: 12, total: 21 }
 			const result = logsStringify(
-				makeEntry('info', ['[Sync] Decision (policy=Bidirectional):', stats]),
+				makeEntry('info', ['[Sync] Decision (policy=two-way):', stats]),
 			)!
-			expect(result).toContain('[Sync] Decision (policy=Bidirectional):')
+			expect(result).toContain('[Sync] Decision (policy=two-way):')
 			expect(result).toContain('"push"')
 			expect(result).toContain('3')
 		})
