@@ -403,6 +403,27 @@ input.success {
 	flex-direction: column;
 }
 
+.chatbox-file-drag-active::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	pointer-events: none;
+}
+
+.chatbox-file-drop-overlay {
+	background: color-mix(
+		in srgb,
+		var(--background-primary) 78%,
+		var(--interactive-accent) 22%
+	);
+	border-color: color-mix(
+		in srgb,
+		var(--interactive-accent) 55%,
+		var(--background-modifier-border)
+	);
+}
+
 .chatbox-resizer {
 	flex-shrink: 0;
 	cursor: ns-resize;

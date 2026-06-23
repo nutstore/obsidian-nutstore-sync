@@ -1,4 +1,4 @@
-import type { AIProviderConfig } from '~/ai/types'
+import type { AIProviderConfig } from '~/ai/core/types'
 import i18n from '~/i18n'
 import { obsidianFetch } from './obsidian-fetch'
 

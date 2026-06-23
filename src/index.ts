@@ -9,7 +9,7 @@ import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
 import { Menu, normalizePath, Plugin } from 'obsidian'
-import { createSelectedTextContextItem } from './chat/user-context'
+import { createSelectedTextContextItem } from './ai/chat/context/user-context'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import i18n from './i18n'

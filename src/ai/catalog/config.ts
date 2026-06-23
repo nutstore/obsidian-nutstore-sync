@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import logger from '~/utils/logger'
-import modelsApiJson from './models-api.json'
 import {
 	AIModelConfig,
 	AIModelConfigs,
@@ -13,7 +12,8 @@ import {
 	aiProviderDefinitionsSchema,
 	AIProviderInput,
 	aiProviderInputsSchema,
-} from './types'
+} from '../core/types'
+import modelsApiJson from '../models-api.json'
 
 const DEFAULT_NPM_PACKAGE = '@ai-sdk/openai-compatible'
 

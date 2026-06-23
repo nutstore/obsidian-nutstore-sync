@@ -1,5 +1,5 @@
 import localforage from 'localforage'
-import type { ChatSession, ChatSessionIndexItem } from '~/chat/domain'
+import type { ChatSession, ChatSessionIndexItem } from '~/ai/chat/domain'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
 import useStorage from './use-storage'

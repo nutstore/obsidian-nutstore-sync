@@ -7,7 +7,7 @@ import {
 	listProviders,
 	sanitizeDefaultSelections,
 	sanitizeProviders,
-} from '~/ai/config'
+} from '~/ai/catalog/config'
 import ProvidersManagerModal from '~/components/ProvidersManagerModal'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'

@@ -1,4 +1,4 @@
-import { setIcon } from 'obsidian'
+import { Notice } from 'obsidian'
 import {
 	For,
 	Match,
@@ -9,8 +9,12 @@ import {
 	on,
 	onCleanup,
 } from 'solid-js'
-import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/chat/modal-mount'
-import { createImageContextItem } from '~/chat/user-context'
+import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/ai/chat/ui/modal-mount'
+import {
+	createFileContextItem,
+	createImageContextItem,
+	createPendingContextItem,
+} from '~/ai/chat/context/user-context'
 import { t } from '../../i18n'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
@@ -25,92 +29,8 @@ import type {
 	ChatTimelineFragmentItem,
 	ChatTimelineMessageItem,
 	ChatboxProps,
-} from './types'
-
-function decodeURIComponentRepeatedly(value: string): string {
-	let current = value.trim()
-	for (let i = 0; i < 3; i += 1) {
-		try {
-			const decoded = decodeURIComponent(current)
-			if (decoded === current) break
-			current = decoded
-		} catch {
-			break
-		}
-	}
-	return current
-}
-
-function normalizeDroppedPath(path: string): string | null {
-	const decoded = decodeURIComponentRepeatedly(path)
-		.replace(/^\[\[/, '')
-		.replace(/\]\]$/, '')
-	const withoutAlias = decoded.split('|')[0]?.trim() ?? ''
-	const normalized = withoutAlias.replace(/^\/+/, '').replace(/\/+$/, '').trim()
-	return normalized || null
-}
-
-function addDroppedPathPayload(payload: string, parsed: Set<string>) {
-	const trimmedPayload = payload.trim()
-	if (!trimmedPayload) return
-	if (trimmedPayload.startsWith('{') || trimmedPayload.startsWith('[')) {
-		try {
-			addDroppedJsonPayload(JSON.parse(trimmedPayload), parsed)
-			return
-		} catch {
-			// Fall through to plain text parsing.
-		}
-	}
-	for (const line of trimmedPayload.split(/\r?\n/)) {
-		const trimmed = line.trim()
-		if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('http')) {
-			continue
-		}
-		if (trimmed.startsWith('obsidian://open?')) {
-			try {
-				const url = new URL(trimmed)
-				const file = url.searchParams.get('file')
-				if (file) {
-					const normalized = normalizeDroppedPath(file)
-					if (normalized) parsed.add(normalized)
-				}
-				continue
-			} catch {
-				// Fall through to plain path parsing.
-			}
-		}
-		const normalized = normalizeDroppedPath(trimmed)
-		if (normalized) parsed.add(normalized)
-	}
-}
-
-function addDroppedJsonPayload(value: unknown, parsed: Set<string>) {
-	if (typeof value === 'string') {
-		const normalized = normalizeDroppedPath(value)
-		if (normalized) parsed.add(normalized)
-		return
-	}
-	if (Array.isArray(value)) {
-		for (const item of value) addDroppedJsonPayload(item, parsed)
-		return
-	}
-	if (!value || typeof value !== 'object') return
-	const record = value as Record<string, unknown>
-	for (const key of ['path', 'file', 'files']) {
-		if (key in record) addDroppedJsonPayload(record[key], parsed)
-	}
-}
-
-function parseDroppedObsidianPaths(e: DragEvent): string[] {
-	const parsed = new Set<string>()
-	const dataTransfer = e.dataTransfer
-	if (!dataTransfer) return []
-	for (const type of Array.from(dataTransfer.types)) {
-		if (type === 'Files') continue
-		addDroppedPathPayload(dataTransfer.getData(type) ?? '', parsed)
-	}
-	return Array.from(parsed)
-}
+} from '~/ai/chat/ui/types'
+import { decideDropRoute, hasDragItems } from './drop-utils'
 
 const DESKTOP_RESIZE_MEDIA_QUERY = '(pointer: fine) and (min-width: 1024px)'
 const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.desktop-input-height'
@@ -120,6 +40,26 @@ const DESKTOP_INPUT_ABSOLUTE_MIN_HEIGHT = 72
 const DESKTOP_MESSAGES_MIN_HEIGHT = 200
 const RESIZER_HITBOX_HEIGHT = 10
 const DESKTOP_INPUT_MAX_VIEWPORT_RATIO = 0.6
+const PICKER_ACCEPT = 'image/*,.txt,.md,.markdown'
+const TEXT_FILE_EXTENSIONS = new Set(['txt', 'md', 'markdown'])
+
+function getFileExtension(filename: string): string {
+	const extension = filename.split('.').pop()?.trim().toLowerCase()
+	return extension || ''
+}
+
+function isSupportedTextFile(file: File): boolean {
+	const extension = getFileExtension(file.name)
+	if (TEXT_FILE_EXTENSIONS.has(extension)) {
+		return true
+	}
+	const mimeType = file.type.toLowerCase()
+	return mimeType === 'text/plain' || mimeType === 'text/markdown'
+}
+
+function isSupportedPickedFile(file: File): boolean {
+	return file.type.startsWith('image/') || isSupportedTextFile(file)
+}
 
 function Chatbox(props: ChatboxProps) {
 	type RecallConfirmMode = 'only' | 'restore'
@@ -142,11 +82,13 @@ function Chatbox(props: ChatboxProps) {
 	const [chatboxContainerWidth, setChatboxContainerWidth] = createSignal(0)
 	const [inputPaneHeight, setInputPaneHeight] = createSignal<number>()
 	const [stickToBottom, setStickToBottom] = createSignal(true)
+	const [isFileDragActive, setIsFileDragActive] = createSignal(false)
 	let chatboxRootEl: HTMLDivElement | undefined
 	let messagesEl: HTMLDivElement | undefined
 	let splitLayoutEl: HTMLDivElement | undefined
 	let inputPaneEl: HTMLDivElement | undefined
 	let modelPickerEl: HTMLDivElement | undefined
+	let fileInputEl: HTMLInputElement | undefined
 	let previousActiveSessionId: string | undefined
 	let defaultDesktopInputHeight = DEFAULT_DESKTOP_INPUT_HEIGHT
 	let dragStartHeight = 0
@@ -329,6 +271,108 @@ function Chatbox(props: ChatboxProps) {
 		})
 	}
 
+	async function addPickedFile(file: File) {
+		if (!isSupportedPickedFile(file)) {
+			new Notice(
+				t('chatbox.errors.unsupportedAttachmentType', { name: file.name }),
+			)
+			return
+		}
+		if (file.type.startsWith('image/')) {
+			const pending = createPendingContextItem('image', file.name)
+			props.onAddUserContext(pending)
+			try {
+				const item = await createImageContextItem(file, {
+					mimeType: file.type || 'image/png',
+					name: file.name,
+					size: file.size,
+				})
+				props.onResolvePendingContextItem(pending.id, item)
+			} catch (error) {
+				props.onResolvePendingContextItem(pending.id, null)
+				throw error
+			}
+			return
+		}
+		props.onAddUserContext(
+			createFileContextItem(file, {
+				mimeType: file.type || 'text/plain',
+				filename: file.name,
+				size: file.size,
+			}),
+		)
+	}
+
+	async function addPickedFiles(files: File[]) {
+		await Promise.all(files.map((file) => addPickedFile(file)))
+	}
+
+	function openFilePicker() {
+		fileInputEl?.click()
+	}
+
+	function resetFileDragState() {
+		setIsFileDragActive(false)
+	}
+
+	function handleRootDragEnter(event: DragEvent) {
+		if (!hasDragItems(event)) {
+			return
+		}
+		event.preventDefault()
+		event.stopPropagation()
+		setIsFileDragActive(true)
+	}
+
+	function handleRootDragOver(event: DragEvent) {
+		if (!hasDragItems(event)) {
+			return
+		}
+		event.preventDefault()
+		event.stopPropagation()
+		if (event.dataTransfer) {
+			event.dataTransfer.dropEffect = 'copy'
+		}
+		setIsFileDragActive(true)
+	}
+
+	function handleRootDragLeave(event: DragEvent) {
+		if (!hasDragItems(event)) {
+			return
+		}
+		if (!chatboxRootEl) {
+			return
+		}
+		const rect = chatboxRootEl.getBoundingClientRect()
+		const x = event.clientX
+		const y = event.clientY
+		if (x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom) {
+			return
+		}
+		event.preventDefault()
+		event.stopPropagation()
+		setIsFileDragActive(false)
+	}
+
+	async function handleRootDrop(event: DragEvent) {
+		if (!hasDragItems(event)) {
+			return
+		}
+		event.preventDefault()
+		event.stopPropagation()
+		const { paths, files } = decideDropRoute(event)
+		resetFileDragState()
+		if (paths.length > 0) {
+			for (const path of paths) {
+				await props.onDropContextItem(path)
+			}
+			return
+		}
+		if (files.length > 0) {
+			await addPickedFiles(files)
+		}
+	}
+
 	createEffect(
 		on(
 			() => [
@@ -458,6 +502,29 @@ function Chatbox(props: ChatboxProps) {
 		})
 		observer.observe(chatboxRootEl)
 		onCleanup(() => observer.disconnect())
+	})
+
+	createEffect(() => {
+		if (!chatboxRootEl) {
+			return
+		}
+		const root = chatboxRootEl
+		const onDragEnter = (event: DragEvent) => handleRootDragEnter(event)
+		const onDragOver = (event: DragEvent) => handleRootDragOver(event)
+		const onDragLeave = (event: DragEvent) => handleRootDragLeave(event)
+		const onDrop = (event: DragEvent) => {
+			void handleRootDrop(event)
+		}
+		root.addEventListener('dragenter', onDragEnter, true)
+		root.addEventListener('dragover', onDragOver, true)
+		root.addEventListener('dragleave', onDragLeave, true)
+		root.addEventListener('drop', onDrop, true)
+		onCleanup(() => {
+			root.removeEventListener('dragenter', onDragEnter, true)
+			root.removeEventListener('dragover', onDragOver, true)
+			root.removeEventListener('dragleave', onDragLeave, true)
+			root.removeEventListener('drop', onDrop, true)
+		})
 	})
 
 	createEffect(() => {
@@ -655,19 +722,37 @@ function Chatbox(props: ChatboxProps) {
 	return (
 		<div
 			ref={chatboxRootEl}
-			class="relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)]"
+			class={`relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)] ${
+				isFileDragActive() ? 'chatbox-file-drag-active' : ''
+			}`}
 		>
+			<input
+				ref={fileInputEl}
+				type="file"
+				accept={PICKER_ACCEPT}
+				class="sr-only"
+				onChange={(event) => {
+					const files = Array.from(event.currentTarget.files ?? [])
+					if (!files.length) return
+					void addPickedFiles(files)
+					event.currentTarget.value = ''
+				}}
+			/>
+			<Show when={isFileDragActive()}>
+				<div class="chatbox-file-drop-overlay pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-3xl border-2 border-dashed">
+					<div class="rounded-full bg-[var(--background-primary)]/90 px-4 py-2 text-sm text-[var(--text-normal)] shadow-sm">
+						{t('chatbox.ui.states.dragFilePrompt')}
+					</div>
+				</div>
+			</Show>
 			<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
 				{/* Header */}
 				<div class="relative flex shrink-0 items-center gap-2 border-b border-[var(--background-modifier-border)] px-3 py-3">
 					<div
-						class="flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
+						class="i-lucide-history flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
 						onClick={() => {
 							setHistoryOpen((value) => !value)
 							setModelPickerOpen(false)
-						}}
-						ref={(el) => {
-							setIcon(el, 'history')
 						}}
 					/>
 					<div class="min-w-0 flex-1 truncate text-sm font-semibold">
@@ -807,16 +892,6 @@ function Chatbox(props: ChatboxProps) {
 								? { height: `${inputPaneHeight()}px` }
 								: undefined
 						}
-						onDragOver={(e) => {
-							e.preventDefault()
-							if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
-						}}
-						onDrop={(e) => {
-							e.preventDefault()
-							for (const path of parseDroppedObsidianPaths(e)) {
-								props.onDropContextItem(path)
-							}
-						}}
 					>
 						<Show when={props.pendingUserContext.length > 0}>
 							<ContextArea
@@ -834,7 +909,6 @@ function Chatbox(props: ChatboxProps) {
 								props.onUpdateInputDraft(nextInput)
 							}}
 							onPaste={(event) => {
-								const addUserContext = props.onAddUserContext
 								const imageFiles = Array.from(event.clipboardData?.items ?? [])
 									.filter(
 										(item) =>
@@ -844,17 +918,7 @@ function Chatbox(props: ChatboxProps) {
 									.filter((file): file is File => !!file)
 								if (!imageFiles.length) return
 								event.preventDefault()
-								void Promise.all(
-									imageFiles.map(async (file) => {
-										addUserContext(
-											await createImageContextItem(file, {
-												mimeType: file.type || 'image/png',
-												name: file.name,
-												size: file.size,
-											}),
-										)
-									}),
-								)
+								void addPickedFiles(imageFiles)
 							}}
 							onCompositionStart={() => setIsComposing(true)}
 							onCompositionEnd={() => setIsComposing(false)}
@@ -876,6 +940,13 @@ function Chatbox(props: ChatboxProps) {
 								<button
 									class="chatbox-tag-button"
 									type="button"
+									onClick={openFilePicker}
+								>
+									{t('chatbox.ui.actions.selectFile')}
+								</button>
+								<button
+									class="chatbox-tag-button"
+									type="button"
 									disabled={!props.canCreateFragment}
 									onClick={() => props.onNewFragment()}
 								>
@@ -893,7 +964,10 @@ function Chatbox(props: ChatboxProps) {
 							<button
 								class="mod-cta"
 								type="button"
-								disabled={!input().trim() && !props.pendingUserContext.length}
+								disabled={
+									(!input().trim() && !props.pendingUserContext.length) ||
+									!props.canSend
+								}
 								onClick={() => void submit()}
 							>
 								{isBusy()

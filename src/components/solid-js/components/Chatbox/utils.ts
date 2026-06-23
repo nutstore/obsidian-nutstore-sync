@@ -1,4 +1,4 @@
-import { ChatTaskRecord, ChatRunState } from './types'
+import type { ChatRunState, ChatTaskRecord } from '~/ai/chat/types'
 import { t } from '../../i18n'
 
 export function formatTime(timestamp: number) {

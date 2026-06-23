@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
-import type { PermissionRequest } from '~/ai/permission-guard'
+import type { PermissionRequest } from '~/ai/tools/permission-guard'
 import { createVaultBash, execVaultBash, VAULT_MOUNT_POINT } from './runtime'
 import {
 	listVaultPaths,

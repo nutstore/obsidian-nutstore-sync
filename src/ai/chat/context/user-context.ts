@@ -4,13 +4,9 @@ interface UserContextItemBase {
 	hash: string
 }
 
-export interface FileContextItem extends UserContextItemBase {
-	type: 'file'
-	path: string
-}
-
-export interface FolderContextItem extends UserContextItemBase {
-	type: 'folder'
+export interface VaultPathContextItem extends UserContextItemBase {
+	type: 'vault-path'
+	kind: 'file' | 'folder'
 	path: string
 }
 
@@ -32,26 +28,41 @@ export interface ImageContextItem extends UserContextItemBase {
 	size: number
 }
 
+export interface FileContextItem extends UserContextItemBase {
+	type: 'file'
+	blob: Blob
+	mimeType: string
+	filename: string
+	size: number
+}
+
+export interface PendingContextItem {
+	type: 'pending-context'
+	/** Eventual target context type, e.g. 'image' | 'video' | 'audio' | 'file'. */
+	placeholderType: string
+	/** Correlation id used to resolve this placeholder into a real item. */
+	id: string
+	/** Optional display label for the chip while loading. */
+	placeholder?: string
+}
+
 export type UserContextItem =
-	| FileContextItem
-	| FolderContextItem
+	| VaultPathContextItem
 	| SelectedTextContextItem
 	| ImageContextItem
+	| FileContextItem
+	| PendingContextItem
 
 export type NewSelectedTextContextItem = Omit<SelectedTextContextItem, 'hash'>
 
-export function createFileContextItem(path: string): FileContextItem {
+export function createVaultPathContextItem(
+	path: string,
+	kind: 'file' | 'folder',
+): VaultPathContextItem {
 	return {
-		hash: hashObject({ type: 'file', path }),
-		type: 'file',
-		path,
-	}
-}
-
-export function createFolderContextItem(path: string): FolderContextItem {
-	return {
-		hash: hashObject({ type: 'folder', path }),
-		type: 'folder',
+		hash: hashObject({ type: 'vault-path', kind, path }),
+		type: 'vault-path',
+		kind,
 		path,
 	}
 }
@@ -97,11 +108,53 @@ export async function createImageContextItem(
 	}
 }
 
+export function createFileContextItem(
+	blob: Blob,
+	options: { mimeType?: string; filename: string; size?: number },
+): FileContextItem {
+	const mimeType = options.mimeType || blob.type || 'application/octet-stream'
+	const size = options.size ?? blob.size
+	const lastModified =
+		'lastModified' in blob && typeof blob.lastModified === 'number'
+			? blob.lastModified
+			: undefined
+	return {
+		hash: hashObject({
+			type: 'file',
+			mimeType,
+			filename: options.filename,
+			size,
+			lastModified,
+		}),
+		type: 'file',
+		blob,
+		mimeType,
+		filename: options.filename,
+		size,
+	}
+}
+
+let pendingContextCounter = 0
+
+export function createPendingContextItem(
+	placeholderType: string,
+	placeholder?: string,
+): PendingContextItem {
+	pendingContextCounter += 1
+	const id = `pending-context-${Date.now().toString(36)}-${pendingContextCounter}`
+	return {
+		type: 'pending-context',
+		placeholderType,
+		id,
+		placeholder,
+	}
+}
+
 export function getUserContextItemHash(item: UserContextItem): string {
+	if (item.type === 'pending-context') return item.id
 	if (item.hash) return item.hash
-	if (item.type === 'file') return hashObject({ type: 'file', path: item.path })
-	if (item.type === 'folder') {
-		return hashObject({ type: 'folder', path: item.path })
+	if (item.type === 'vault-path') {
+		return hashObject({ type: 'vault-path', kind: item.kind, path: item.path })
 	}
 	if (item.type === 'selection') {
 		return hashObject({
@@ -109,6 +162,14 @@ export function getUserContextItemHash(item: UserContextItem): string {
 			filePath: item.filePath,
 			range: item.range,
 			selectedText: item.selectedText,
+		})
+	}
+	if (item.type === 'file') {
+		return hashObject({
+			type: 'file',
+			mimeType: item.mimeType,
+			filename: item.filename,
+			size: item.size,
 		})
 	}
 	return hashObject({
@@ -121,10 +182,11 @@ export function getUserContextItemHash(item: UserContextItem): string {
 export function ensureUserContextItemHash(
 	item: UserContextItem,
 ): UserContextItem {
+	if (item.type === 'pending-context') return { ...item }
 	const hash = getUserContextItemHash(item)
-	if (item.type === 'file') return { ...item, hash }
-	if (item.type === 'folder') return { ...item, hash }
+	if (item.type === 'vault-path') return { ...item, hash }
 	if (item.type === 'image') return { ...item, hash }
+	if (item.type === 'file') return { ...item, hash }
 	return {
 		...item,
 		hash,
@@ -133,6 +195,36 @@ export function ensureUserContextItemHash(
 			to: { ...item.range.to },
 		},
 	}
+}
+
+export function cloneUserContextItem(item: UserContextItem): UserContextItem {
+	const normalized = ensureUserContextItemHash(item)
+	if (normalized.type === 'vault-path') {
+		return { ...normalized }
+	}
+	if (normalized.type === 'image') {
+		return { ...normalized }
+	}
+	if (normalized.type === 'file') {
+		return { ...normalized }
+	}
+	if (normalized.type === 'pending-context') {
+		return { ...normalized }
+	}
+	return {
+		hash: normalized.hash,
+		type: 'selection',
+		filePath: normalized.filePath,
+		range: {
+			from: { ...normalized.range.from },
+			to: { ...normalized.range.to },
+		},
+		selectedText: normalized.selectedText,
+	}
+}
+
+export function cloneUserContextItems(items: UserContextItem[]) {
+	return items.map(cloneUserContextItem)
 }
 
 export function blobToDataUrl(blob: Blob): Promise<string> {
@@ -155,17 +247,12 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
 // We intentionally serialize user context entries as JSON records wrapped by
 // <UserProvidedContext> instead of generating per-item XML nodes. The previous
 // XML shape (especially for image items) added little value and made escaping
-// and downstream parsing harder. Image entries are skipped here on purpose:
-// binary image content is already attached to the user message as `image_url`
-// parts in ChatService, so duplicating image metadata in this text block is
-// redundant and noisy.
+// and downstream parsing harder. Binary entries (`image`, `file`) are skipped
+// here on purpose because their payloads are attached elsewhere in ChatService.
 export function formatUserContext(items: UserContextItem[]): string {
 	const parts = items.reduce<Array<Record<string, unknown>>>((acc, item) => {
-		if (item.type === 'file') {
-			acc.push({ type: 'file', path: item.path })
-		}
-		if (item.type === 'folder') {
-			acc.push({ type: 'folder', path: item.path })
+		if (item.type === 'vault-path') {
+			acc.push({ type: item.kind, path: item.path })
 		}
 		if (item.type === 'selection') {
 			acc.push({

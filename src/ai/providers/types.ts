@@ -1,5 +1,5 @@
 import type { LanguageModel } from 'ai'
-import type { AIProviderConfig } from '~/ai/types'
+import type { AIProviderConfig } from '~/ai/core/types'
 
 export interface ResolvedLanguageModel {
 	model: LanguageModel

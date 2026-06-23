@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js'
 import { t } from '../../../i18n'
-import type { ChatboxProps } from '../types'
+import type { ChatboxProps } from '~/ai/chat/ui/types'
 
 export function PendingList(props: {
 	pendingMessages: ChatboxProps['pendingMessages']

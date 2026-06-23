@@ -1,10 +1,10 @@
 import { App, Modal, Setting } from 'obsidian'
-import type { AIFileOperation } from '~/ai/file-operation'
-import type { PermissionRequest } from '~/ai/permission-guard'
+import type { AIFileOperation } from '~/ai/tools/file-operation'
+import type { PermissionRequest } from '~/ai/tools/permission-guard'
 import {
 	applyObsidianModalMountTarget,
 	type ChatModalMountTarget,
-} from '~/chat/modal-mount'
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
 
 export type AIPermissionResult = 'approve' | 'auto-approve-operation' | 'deny'

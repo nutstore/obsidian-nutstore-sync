@@ -1,9 +1,16 @@
 import { LlmGatewayClient } from '@nutstore/sso-js'
 import { Notice } from 'obsidian'
 import { Subscription, timer } from 'rxjs'
-import { createModelConfig, sanitizeDefaultSelections } from '~/ai/config'
+import {
+	createModelConfig,
+	sanitizeDefaultSelections,
+} from '~/ai/catalog/config'
 import { obsidianFetch } from '~/ai/transport/obsidian-fetch'
-import type { AIModelConfig, AIModelInput, AIProviderConfig } from '~/ai/types'
+import type {
+	AIModelConfig,
+	AIModelInput,
+	AIProviderConfig,
+} from '~/ai/core/types'
 import {
 	LLM_GATEWAY_CLIENT_ID,
 	NUTSTORE_LLM_GATEWAY_PROVIDER_ID,

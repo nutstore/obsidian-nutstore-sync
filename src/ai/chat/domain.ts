@@ -1,34 +1,3 @@
-export type {
-	AssistantModelMessage,
-	CancelledChatTask,
-	ChatAssistantMessage,
-	ChatDisplayBlock,
-	ChatMessage,
-	ChatMessageContentPart,
-	ChatMessageMeta,
-	ChatMessageRecord,
-	ChatPendingMessage,
-	ChatRunState,
-	ChatTaskBase,
-	ChatTaskRecord,
-	ChatToolMessage,
-	ChatUserMessage,
-	CompletedChatTask,
-	FailedChatTask,
-	ImagePart,
-	QueuedChatTask,
-	ReasoningPart,
-	ReversibleCompressedContent,
-	ReversibleFileSnapshot,
-	ReversibleToolOp,
-	RunningChatTask,
-	TextPart,
-	ToolCallPart,
-	ToolModelMessage,
-	UserModelMessage,
-	WorkspaceContextDelta,
-} from '../components/solid-js'
-
 import type {
 	CancelledChatTask,
 	ChatMessage,
@@ -40,7 +9,7 @@ import type {
 	QueuedChatTask,
 	ReversibleToolOp,
 	RunningChatTask,
-} from '../components/solid-js'
+} from '~/ai/chat/types'
 import type { LanguageModelUsage } from 'ai'
 
 export interface ChatFragment {

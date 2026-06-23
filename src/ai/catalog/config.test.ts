@@ -7,7 +7,10 @@ import {
 	findPresetModelById,
 	sanitizeProviders,
 } from './config'
-import { aiProviderDefinitionsSchema, type AIProviderDefinition } from './types'
+import {
+	aiProviderDefinitionsSchema,
+	type AIProviderDefinition,
+} from '../core/types'
 
 describe('ai config', () => {
 	it('matches the models-api provider catalog shape', () => {

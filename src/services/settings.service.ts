@@ -1,6 +1,9 @@
 import { debounce } from 'lodash-es'
 import { normalizePath, Notice } from 'obsidian'
-import { sanitizeDefaultSelections, sanitizeProviders } from '~/ai/config'
+import {
+	sanitizeDefaultSelections,
+	sanitizeProviders,
+} from '~/ai/catalog/config'
 import i18n from '~/i18n'
 import {
 	DEFAULT_LOCAL_SETTINGS,

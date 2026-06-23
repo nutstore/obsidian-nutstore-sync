@@ -1,14 +1,11 @@
 import { For, Match, Show, Switch } from 'solid-js'
-import type {
-	ChatDisplayBlock,
-	ChatTimelineMessageItem,
-	ChatboxProps,
-} from '../types'
 import { t } from '../../../i18n'
+import type { ChatDisplayBlock } from '~/ai/chat/types'
+import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
 import { formatTime, formatUsage } from '../utils'
-import { CopyButton } from './CopyButton'
-import { ContextArea } from './ContextArea'
 import { ContentBlock } from './ContentBlock'
+import { ContextArea } from './ContextArea'
+import { CopyButton } from './CopyButton'
 import { ToolCallBlock, ToolResultBlock } from './ToolCallBlock'
 
 export function MessageCard(props: {
@@ -36,6 +33,15 @@ export function MessageCard(props: {
 		return 'Tool'
 	}
 
+	const roleIconClass = () => {
+		if (props.item.message.message.role === 'assistant') {
+			return 'i-lucide-bot'
+		}
+		if (props.item.message.message.role === 'user') {
+			return 'i-lucide-circle-user-round'
+		}
+	}
+
 	const getText = () => {
 		const parts = (content() ?? []) as Array<{
 			type: string
@@ -60,7 +66,13 @@ export function MessageCard(props: {
 		>
 			<Show when={props.item.showHeader}>
 				<div class="mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
-					<div class="font-medium text-[var(--text-normal)]">{roleLabel()}</div>
+					<div class="flex items-center gap-1 font-medium text-[var(--text-normal)]">
+						<span
+							class={`${roleIconClass()} size-4 shrink-0`}
+							aria-hidden="true"
+						/>
+						<span>{roleLabel()}</span>
+					</div>
 					<span>{formatTime(props.item.message.createdAt)}</span>
 				</div>
 			</Show>
@@ -120,22 +132,10 @@ export function MessageCard(props: {
 								title={t('chatbox.ui.actions.deleteMessage')}
 								onClick={() => props.onDeleteMessage?.(props.item.message.id)}
 							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
+								<span
+									class="i-lucide-trash-2 size-3.5 shrink-0"
 									aria-hidden="true"
-								>
-									<polyline points="3 6 5 6 21 6" />
-									<path d="M19 6l-1 14H6L5 6" />
-									<path d="M10 11v6M14 11v6" />
-									<path d="M9 6V4h6v2" />
-								</svg>
+								/>
 							</button>
 						</Show>
 						<Show
@@ -150,20 +150,10 @@ export function MessageCard(props: {
 								title={t('chatbox.ui.actions.recallMessage')}
 								onClick={() => props.onRecallMessage?.(props.item.message.id)}
 							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
+								<span
+									class="i-lucide-undo-2 size-3.5 shrink-0"
 									aria-hidden="true"
-								>
-									<path d="M9 14 4 9l5-5" />
-									<path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
-								</svg>
+								/>
 							</button>
 						</Show>
 						<Show
@@ -180,22 +170,10 @@ export function MessageCard(props: {
 									props.onRegenerateMessage?.(props.item.message.id)
 								}
 							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
+								<span
+									class="i-lucide-refresh-cw size-3.5 shrink-0"
 									aria-hidden="true"
-								>
-									<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-									<path d="M21 3v5h-5" />
-									<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-									<path d="M8 16H3v5" />
-								</svg>
+								/>
 							</button>
 						</Show>
 					</div>

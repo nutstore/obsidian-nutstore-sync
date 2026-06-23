@@ -1,7 +1,7 @@
 import type { App, WorkspaceLeaf } from 'obsidian'
 import { hash as hashObject } from 'ohash'
 
-import type { ChatMessageRecord, WorkspaceContextDelta } from './domain'
+import type { ChatMessageRecord, WorkspaceContextDelta } from '~/ai/chat/types'
 
 type View = WorkspaceLeaf['view'] & {
 	file?: {

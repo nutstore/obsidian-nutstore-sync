@@ -1,5 +1,5 @@
-import GlobMatch from '../utils/glob-match'
-import { isMarkdownPath } from '../utils/mime/is_markdown_path'
+import GlobMatch from '~/utils/glob-match'
+import { isMarkdownPath } from '~/utils/mime/is_markdown_path'
 
 export interface SearchPathEntry {
 	path: string

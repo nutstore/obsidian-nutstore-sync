@@ -4,14 +4,16 @@ import {
 	MarkdownRenderer,
 	normalizePath,
 	type TAbstractFile,
+	TFile,
 	TFolder,
 	WorkspaceLeaf,
 } from 'obsidian'
 import {
-	createFileContextItem,
-	createFolderContextItem,
-} from '~/chat/user-context'
-import type { ChatboxController, ChatboxProps } from '~/chatbox/types'
+	createImageContextItem,
+	createPendingContextItem,
+	createVaultPathContextItem,
+} from '~/ai/chat/context/user-context'
+import type { ChatboxController, ChatboxProps } from '~/ai/chat/ui/types'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
@@ -127,6 +129,20 @@ export default class ChatboxView extends ItemView {
 		return matches.length === 1 ? matches[0] : null
 	}
 
+	private isVaultImageFile(file: TFile): boolean {
+		return file.path.match(/\.(png|jpe?g|gif|webp|bmp)$/i) !== null
+	}
+
+	private async createDroppedImageContextItem(file: TFile) {
+		const extension = file.extension.toLowerCase()
+		const data = await this.app.vault.readBinary(file)
+		return createImageContextItem(new Blob([data]), {
+			mimeType: `image/${extension === 'jpg' ? 'jpeg' : extension}`,
+			name: file.name,
+			size: file.stat.size,
+		})
+	}
+
 	private getChatboxProps(): ChatboxProps {
 		return {
 			...this.plugin.chatService.getViewProps(),
@@ -134,17 +150,45 @@ export default class ChatboxView extends ItemView {
 			onAddUserContext: (item) => {
 				this.plugin.chatService.addUserContext(item)
 			},
-			onDropContextItem: (path: string) => {
+			onDropContextItem: async (path: string) => {
 				const abstract = this.resolveDroppedAbstractFile(path)
 				if (!abstract) return
-				this.plugin.chatService.addUserContext(
-					abstract instanceof TFolder
-						? createFolderContextItem(abstract.path)
-						: createFileContextItem(abstract.path),
-				)
+				if (abstract instanceof TFolder) {
+					this.plugin.chatService.addUserContext(
+						createVaultPathContextItem(abstract.path, 'folder'),
+					)
+					return
+				}
+				if (abstract instanceof TFile) {
+					if (this.isVaultImageFile(abstract)) {
+						const pending = createPendingContextItem('image', abstract.name)
+						this.plugin.chatService.addUserContext(pending)
+						try {
+							const item = await this.createDroppedImageContextItem(abstract)
+							this.plugin.chatService.resolvePendingContextItem(
+								pending.id,
+								item,
+							)
+						} catch (error) {
+							this.plugin.chatService.resolvePendingContextItem(
+								pending.id,
+								null,
+							)
+							throw error
+						}
+						return
+					}
+					this.plugin.chatService.addUserContext(
+						createVaultPathContextItem(abstract.path, 'file'),
+					)
+					return
+				}
 			},
 			onRemoveUserContext: (index: number) => {
 				this.plugin.chatService.removeUserContext(index)
+			},
+			onResolvePendingContextItem: (id: string, replacement) => {
+				this.plugin.chatService.resolvePendingContextItem(id, replacement)
 			},
 		}
 	}

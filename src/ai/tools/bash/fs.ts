@@ -21,10 +21,11 @@ import { posix as pathPosix } from 'path-browserify'
 import type {
 	AIDualPathFileOperation,
 	AISinglePathFileOperation,
-} from '~/ai/file-operation'
-import type { PermissionGuard } from '~/ai/permission-guard'
-import { cloneReversibleToolOp, type ReversibleToolOp } from '~/chat/domain'
-import { createCompressedFileContent } from '~/chat/reversible-content'
+} from '~/ai/tools/file-operation'
+import type { PermissionGuard } from '~/ai/tools/permission-guard'
+import { cloneReversibleToolOp } from '~/ai/chat/domain'
+import type { ReversibleToolOp } from '~/ai/chat/types'
+import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
 import { sha256Base64 } from '~/utils/sha256'
 
 const FILE_MODE = 0o644

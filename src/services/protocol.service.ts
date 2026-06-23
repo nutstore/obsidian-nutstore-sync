@@ -1,5 +1,5 @@
 import { Notice } from 'obsidian'
-import { getProviderById } from '~/ai/config'
+import { getProviderById } from '~/ai/catalog/config'
 import ProviderEditorModal from '~/components/ProviderEditorModal'
 import { emitSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'

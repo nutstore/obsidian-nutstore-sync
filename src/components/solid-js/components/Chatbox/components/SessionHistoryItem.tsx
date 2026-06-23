@@ -1,7 +1,7 @@
-import { Menu, setIcon } from 'obsidian'
+import { Menu } from 'obsidian'
 import { Show } from 'solid-js'
 import { t } from '../../../i18n'
-import type { ChatboxProps } from '../types'
+import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { formatTime } from '../utils'
 
 export function SessionHistoryItem(props: {
@@ -50,8 +50,7 @@ export function SessionHistoryItem(props: {
 				</div>
 				<div class="shrink-0">
 					<div
-						ref={(el) => setIcon(el, 'ellipsis-vertical')}
-						class="flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
+						class="i-lucide-ellipsis-vertical flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
 						aria-label={t('chatbox.ui.history.sessionActions')}
 						onClick={(event) => {
 							event.preventDefault()

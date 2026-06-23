@@ -1,5 +1,5 @@
 import type { App } from 'obsidian'
-import type { ChatModalMountTarget } from '~/chat/modal-mount'
+import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import AIPermissionModal from '~/components/AIPermissionModal'
 import i18n from '~/i18n'
 import type { NutstoreSettings } from '~/settings'

@@ -9,8 +9,8 @@ import {
 	listModels,
 	listPresetProviders,
 	listProviders,
-} from '~/ai/config'
-import { AIProviderConfig } from '~/ai/types'
+} from '~/ai/catalog/config'
+import { AIProviderConfig } from '~/ai/core/types'
 import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
 import { onNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import i18n from '~/i18n'

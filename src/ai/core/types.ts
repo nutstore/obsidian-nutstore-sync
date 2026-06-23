@@ -4,9 +4,9 @@ import type {
 	ChatMessageContentPart as DomainChatMessageContentPart,
 	ChatMessageMeta as DomainChatMessageMeta,
 	ChatMessageRecord as DomainChatMessageRecord,
-	ChatSession as DomainChatSession,
 	ChatTaskRecord as DomainChatTaskRecord,
-} from '~/chat/domain'
+} from '~/ai/chat/types'
+import type { ChatSession as DomainChatSession } from '~/ai/chat/domain'
 import type { ToolCallPart } from 'ai'
 
 export const aiModelModalitySchema = z.enum([

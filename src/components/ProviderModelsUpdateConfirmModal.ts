@@ -1,5 +1,5 @@
 import { App, Modal, Setting } from 'obsidian'
-import { AIModelConfig, AIProviderConfig } from '~/ai/types'
+import { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
 import i18n from '~/i18n'
 
 export default class ProviderModelsUpdateConfirmModal extends Modal {

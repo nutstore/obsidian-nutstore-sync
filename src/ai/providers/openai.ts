@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { wrapLanguageModel } from 'ai'
+import type { AIProviderConfig } from '~/ai/core/types'
 import { createProviderFetch } from '~/ai/transport/provider-fetch'
-import type { AIProviderConfig } from '~/ai/types'
 import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
 import i18n from '~/i18n'
 import type { AIProviderResolver } from './types'
@@ -22,7 +22,7 @@ export const openAIProviderResolver: AIProviderResolver = {
 	createLanguageModel(provider, modelId) {
 		assertProviderUsable(provider)
 		const factory = createOpenAI({
-			name: provider.name || 'openai',
+			name: provider.name,
 			baseURL: provider.api,
 			apiKey: provider.apiKey,
 			fetch: createProviderFetch(provider),
@@ -33,7 +33,7 @@ export const openAIProviderResolver: AIProviderResolver = {
 				model: factory.chat(modelId),
 				middleware: [],
 			}),
-			providerName: provider.name || 'OpenAI',
+			providerName: provider.name,
 		}
 	},
 }

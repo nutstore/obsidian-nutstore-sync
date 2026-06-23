@@ -1,5 +1,6 @@
 import { For, Match, Switch } from 'solid-js'
-import type { ChatDisplayContentBlock, ChatboxProps } from '../types'
+import type { ChatDisplayContentBlock } from '~/ai/chat/types'
+import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { MarkdownContent } from './MarkdownContent'
 
 type AnyPart = {

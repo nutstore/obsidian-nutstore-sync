@@ -6,7 +6,7 @@ import type {
 	UserModelMessage,
 } from 'ai'
 import { tool as aiTool, stepCountIs, streamText } from 'ai'
-import { getProviderResolver } from './providers/registry'
+import { getProviderResolver } from '../providers/registry'
 import {
 	AIModelConfig,
 	AIMessage,

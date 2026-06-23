@@ -29,9 +29,12 @@ importers:
       '@eslint/markdown':
         specifier: ^8.0.1
         version: 8.0.1
+      '@iconify-json/lucide':
+        specifier: ^1.2.114
+        version: 1.2.114
       '@nutstore/sso-js':
-        specifier: ^0.0.8
-        version: 0.0.8
+        specifier: ^0.0.9
+        version: 0.0.9
       '@solid-primitives/i18n':
         specifier: ^2.2.0
         version: 2.2.1(solid-js@1.9.10)
@@ -797,6 +800,9 @@ packages:
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
 
+  '@iconify-json/lucide@1.2.114':
+    resolution: {integrity: sha512-NbvH3B1BYo6wBtS7joLi7f2UVQOqK2dtZodMFf3kkBs+Tnh9TkRuy8oVHr1RM8UK6bUtvAXxfNlGAah0CuvPCw==}
+
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
 
@@ -987,8 +993,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@nutstore/sso-js@0.0.8':
-    resolution: {integrity: sha512-jGs2OqHvYM0ChbJRyQItlN+WSgav3N4kaTntctOw9Dh/ok9+2PFuejy0nbwaDQgDlnt9jvjm6JeyGwzrgzUG4Q==, tarball: https://npm.pkg.github.com/download/@nutstore/sso-js/0.0.8/2230384dc1b22f51a24ce4dc25176b8cb6a53ded}
+  '@nutstore/sso-js@0.0.9':
+    resolution: {integrity: sha512-2yPVymjoqvYShUIJTv/McZWnRJ0RuRAw0rX8NjPmaXbRLoodbpTd2wgzLGY/UnaVCJ4d1xMIV/TzsZ2clSuuDg==, tarball: https://npm.pkg.github.com/download/@nutstore/sso-js/0.0.9/95d4a8e1fa155d3451efc594efaa9c25d55bd563}
 
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
@@ -5201,6 +5207,10 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
+  '@iconify-json/lucide@1.2.114':
+    dependencies:
+      '@iconify/types': 2.0.0
+
   '@iconify/types@2.0.0': {}
 
   '@iconify/utils@2.3.0':
@@ -5375,7 +5385,7 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@nutstore/sso-js@0.0.8': {}
+  '@nutstore/sso-js@0.0.9': {}
 
   '@opentelemetry/api@1.9.0': {}
 

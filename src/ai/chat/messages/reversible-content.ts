@@ -3,7 +3,7 @@ import { toUint8Array } from 'js-base64'
 import type {
 	ReversibleCompressedContent,
 	ReversibleFileSnapshot,
-} from '../components/solid-js'
+} from '~/ai/chat/types'
 
 function toArrayBuffer(content: Uint8Array) {
 	return content.buffer.slice(

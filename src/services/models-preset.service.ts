@@ -3,7 +3,7 @@ import {
 	resetPresetProvidersSource,
 	sanitizePresetProviders,
 	setPresetProvidersSource,
-} from '~/ai/config'
+} from '~/ai/catalog/config'
 import { obsidianFetch } from '~/ai/transport/obsidian-fetch'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'

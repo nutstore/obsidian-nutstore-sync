@@ -1,5 +1,5 @@
 import { createEffect, onCleanup } from 'solid-js'
-import type { ChatboxProps } from '../types'
+import type { ChatboxProps } from '~/ai/chat/ui/types'
 
 export function MarkdownContent(props: {
 	markdown: string

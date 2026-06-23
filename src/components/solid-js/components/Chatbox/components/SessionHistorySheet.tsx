@@ -1,7 +1,7 @@
 import { For } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { t } from '../../../i18n'
-import type { ChatboxProps } from '../types'
+import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { SessionHistoryItem } from './SessionHistoryItem'
 
 export function SessionHistorySheet(props: {

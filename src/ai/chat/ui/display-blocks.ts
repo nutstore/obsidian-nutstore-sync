@@ -3,7 +3,7 @@ import type {
 	ChatMessageContentPart,
 	ChatMessageRecord,
 	ToolCallPart,
-} from '~/chat/domain'
+} from '~/ai/chat/types'
 
 function isContentPart(
 	part: ChatMessageContentPart,

@@ -4,18 +4,8 @@ import type {
 	ChatPendingMessage,
 	ChatRunState,
 	ChatTaskRecord,
-} from '~/chat/domain'
-import type { UserContextItem } from '~/chat/user-context'
-
-export type {
-	ChatDisplayBlock,
-	ChatMessageRecord,
-	ChatPendingMessage,
-	ChatRunState,
-	ChatTaskRecord,
-	ReversibleToolOp,
-} from '~/chat/domain'
-export type { UserContextItem } from '~/chat/user-context'
+} from '~/ai/chat/types'
+import type { UserContextItem } from '~/ai/chat/context/user-context'
 
 export interface ChatModelOption {
 	id: string
@@ -93,7 +83,11 @@ export interface ChatboxProps extends ChatboxViewModel {
 	onStopActiveRun?: () => void
 	onAddUserContext: (item: UserContextItem) => void
 	onRemoveUserContext: (index: number) => void
-	onDropContextItem: (path: string) => void
+	onResolvePendingContextItem: (
+		id: string,
+		replacement: UserContextItem | null,
+	) => void
+	onDropContextItem: (path: string) => Promise<void> | void
 	onCancelTask?: (taskId: string) => void
 	onDeleteMessage?: (messageId: string) => void
 	onRegenerateMessage?: (messageId: string) => void

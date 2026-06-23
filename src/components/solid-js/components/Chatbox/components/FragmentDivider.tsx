@@ -1,4 +1,4 @@
-import type { ChatTimelineFragmentItem } from '../types'
+import type { ChatTimelineFragmentItem } from '~/ai/chat/ui/types'
 import { formatFragmentTime } from '../utils'
 
 export function FragmentDivider(props: { item: ChatTimelineFragmentItem }) {

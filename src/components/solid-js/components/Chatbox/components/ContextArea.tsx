@@ -1,89 +1,96 @@
 import { For, Show } from 'solid-js'
-import type { UserContextItem } from '~/chat/user-context'
+import type { UserContextItem } from '~/ai/chat/context/user-context'
 import { t } from '../../../i18n'
 
 function basename(path: string): string {
 	return path.split('/').pop() ?? path
 }
 
-function FileIcon() {
-	return (
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-			class="shrink-0"
-		>
-			<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-			<polyline points="14 2 14 8 20 8" />
-		</svg>
-	)
+function getExtension(path: string): string {
+	const parts = path.split('.')
+	if (parts.length < 2) return ''
+	return parts[parts.length - 1].toLowerCase()
 }
 
-function FolderIcon() {
-	return (
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-			class="shrink-0"
-		>
-			<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-		</svg>
-	)
+const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
+const TEXT_EXTENSIONS = new Set(['txt', 'text', 'log'])
+const IMAGE_EXTENSIONS = new Set([
+	'png',
+	'jpg',
+	'jpeg',
+	'gif',
+	'webp',
+	'bmp',
+	'svg',
+	'avif',
+	'tiff',
+])
+const CODE_EXTENSIONS = new Set([
+	'js',
+	'ts',
+	'jsx',
+	'tsx',
+	'json',
+	'css',
+	'scss',
+	'html',
+	'xml',
+	'yaml',
+	'yml',
+	'toml',
+	'py',
+	'go',
+	'rs',
+	'java',
+	'c',
+	'cpp',
+	'h',
+	'sh',
+	'rb',
+	'php',
+	'vue',
+	'svelte',
+])
+const DATA_EXTENSIONS = new Set(['csv', 'tsv', 'db', 'sqlite'])
+const ARCHIVE_EXTENSIONS = new Set(['zip', 'tar', 'gz', 'rar', '7z'])
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'])
+const VIDEO_EXTENSIONS = new Set(['mp4', 'mkv', 'mov', 'avi', 'webm'])
+
+function vaultFileIconClass(path: string): string {
+	const ext = getExtension(path)
+	if (MARKDOWN_EXTENSIONS.has(ext)) return 'i-lucide-file-text'
+	if (TEXT_EXTENSIONS.has(ext)) return 'i-lucide-file-text'
+	if (IMAGE_EXTENSIONS.has(ext)) return 'i-lucide-file-image'
+	if (CODE_EXTENSIONS.has(ext)) return 'i-lucide-file-code'
+	if (DATA_EXTENSIONS.has(ext)) return 'i-lucide-file-spreadsheet'
+	if (ARCHIVE_EXTENSIONS.has(ext)) return 'i-lucide-file-archive'
+	if (AUDIO_EXTENSIONS.has(ext)) return 'i-lucide-file-audio'
+	if (VIDEO_EXTENSIONS.has(ext)) return 'i-lucide-file-video'
+	if (ext === 'pdf') return 'i-lucide-file-text'
+	if (ext === 'canvas') return 'i-lucide-layout-dashboard'
+	return 'i-lucide-file'
 }
 
-function TextIcon() {
-	return (
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-			class="shrink-0"
-		>
-			<polyline points="4 7 4 4 20 4 20 7" />
-			<line x1="9" y1="20" x2="15" y2="20" />
-			<line x1="12" y1="4" x2="12" y2="20" />
-		</svg>
-	)
+function contextIconClass(item: UserContextItem): string {
+	if (item.type === 'vault-path') {
+		return item.kind === 'folder'
+			? 'i-lucide-folder'
+			: vaultFileIconClass(item.path)
+	}
+	if (item.type === 'selection') return 'i-lucide-text-select'
+	if (item.type === 'image') return 'i-lucide-image'
+	if (item.type === 'pending-context') return 'i-lucide-loader-circle'
+	if (item.type === 'file') return vaultFileIconClass(item.filename)
+	return 'i-lucide-file'
 }
 
-function ImageIcon() {
+function ContextIcon(props: { item: UserContextItem }) {
 	return (
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-			class="shrink-0"
-		>
-			<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-			<circle cx="8.5" cy="8.5" r="1.5" />
-			<path d="m21 15-5-5L5 21" />
-		</svg>
+		<span
+			class={`${contextIconClass(props.item)} shrink-0${
+				props.item.type === 'pending-context' ? ' animate-spin' : ''
+			}`}
+		/>
 	)
 }
 
@@ -98,20 +105,7 @@ function RemoveButton(props: { onClick: () => void }) {
 				props.onClick()
 			}}
 		>
-			<svg
-				width="10"
-				height="10"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2.5"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<line x1="18" y1="6" x2="6" y2="18" />
-				<line x1="6" y1="6" x2="18" y2="18" />
-			</svg>
+			<span class="i-lucide-x size-2.5 shrink-0" />
 		</button>
 	)
 }
@@ -130,27 +124,27 @@ export function ContextArea(props: {
 							title={
 								item.type === 'selection'
 									? item.selectedText
-									: item.type === 'image'
-										? item.name ||
-											`${item.mimeType} ${Math.round(item.size / 1024)}KB`
-										: item.path
+									: item.type === 'file'
+										? `${item.filename} ${Math.max(1, Math.round(item.size / 1024))}KB`
+										: item.type === 'image'
+											? item.name ||
+												`${item.mimeType} ${Math.round(item.size / 1024)}KB`
+											: item.type === 'pending-context'
+												? item.placeholder ||
+													t('chatbox.ui.states.loadingContextItem')
+												: item.path
 							}
 						>
-							{item.type === 'folder' ? (
-								<FolderIcon />
-							) : item.type === 'selection' ? (
-								<TextIcon />
-							) : item.type === 'image' ? (
-								<ImageIcon />
-							) : (
-								<FileIcon />
-							)}
+							<ContextIcon item={item} />
 							<span class="truncate">
-								{item.type === 'file' && basename(item.path)}
-								{item.type === 'folder' && basename(item.path)}
+								{item.type === 'vault-path' && basename(item.path)}
+								{item.type === 'file' && item.filename}
 								{item.type === 'image' &&
 									(item.name ||
 										`${item.mimeType.split('/')[1] || 'image'} ${Math.max(1, Math.round(item.size / 1024))}KB`)}
+								{item.type === 'pending-context' &&
+									(item.placeholder ||
+										t('chatbox.ui.states.loadingContextItem'))}
 								{item.type === 'selection' &&
 									`${basename(item.filePath)} L${item.range.from.line + 1}:${item.range.from.ch}-L${item.range.to.line + 1}:${item.range.to.ch}`}
 							</span>

@@ -1,6 +1,6 @@
 import { Bash } from 'just-bash/browser'
 import type { App } from 'obsidian'
-import type { PermissionGuard } from '~/ai/permission-guard'
+import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import {
 	listVaultPaths,
 	MountedVaultFs,

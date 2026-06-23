@@ -2,7 +2,7 @@ import { App, Modal, Setting } from 'obsidian'
 import {
 	applyObsidianModalMountTarget,
 	type ChatModalMountTarget,
-} from '~/chat/modal-mount'
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
 
 export interface SessionExportOptions {

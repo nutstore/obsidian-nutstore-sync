@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian'
 import { Subscription } from 'rxjs'
-import { AIProviderConfigs, AIProviderDefinitions } from '~/ai/types'
+import { AIProviderConfigs, AIProviderDefinitions } from '~/ai/core/types'
 import { onNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import { onSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'

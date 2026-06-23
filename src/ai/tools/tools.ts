@@ -1,11 +1,11 @@
 import { App, normalizePath, TFile } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod'
-import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/bash/runtime'
-import { createCompressedFileContent } from '~/chat/reversible-content'
+import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/tools/bash/runtime'
+import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
+import type { AIToolDefinition, ToolExecutionResult } from '~/ai/core/types'
 import i18n from '~/i18n'
 import type { PermissionGuard } from './permission-guard'
-import { AIToolDefinition, ToolExecutionResult } from './types'
 
 interface ReplaceResult {
 	content: string
