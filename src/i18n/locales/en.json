@@ -569,6 +569,7 @@
 				"provider": "Provider",
 				"model": "Model",
 				"tool": "Tool",
+				"toolCall": "Tool call",
 				"params": "Params",
 				"result": "Result",
 				"tasks": "Tasks",

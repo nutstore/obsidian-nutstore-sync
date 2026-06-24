@@ -8,6 +8,72 @@ import { ContextArea } from './ContextArea'
 import { CopyButton } from './CopyButton'
 import { ToolCallBlock, ToolResultBlock } from './ToolCallBlock'
 
+type CopyToolResultPart = {
+	type: string
+	output?: { type?: string; value?: string }
+}
+
+function fencedCode(language: string, value: string) {
+	const longestBacktickRun = Math.max(
+		0,
+		...Array.from(value.matchAll(/`+/g), (match) => match[0].length),
+	)
+	const fence = '`'.repeat(Math.max(3, longestBacktickRun + 1))
+	return `${fence}${language}\n${value}\n${fence}`
+}
+
+function stringifyToolInput(input: unknown) {
+	try {
+		return JSON.stringify(input ?? {}, null, 2)
+	} catch {
+		return String(input ?? {})
+	}
+}
+
+function toolResultText(toolMessage?: { message: { content?: unknown } }) {
+	const parts = Array.isArray(toolMessage?.message.content)
+		? (toolMessage?.message.content as CopyToolResultPart[])
+		: []
+	return parts
+		.filter((part) => part.type === 'tool-result')
+		.map((part) =>
+			part.output?.type === 'text' ? (part.output.value ?? '') : '',
+		)
+		.join('\n')
+}
+
+function copyTextForContentBlock(
+	block: Extract<ChatDisplayBlock, { kind: 'content' }>,
+) {
+	return block.parts
+		.filter((part) => part.type === 'text')
+		.map((part) => part.text ?? '')
+		.join('\n')
+		.trim()
+}
+
+function copyTextForToolCallBlock(
+	block: Extract<ChatDisplayBlock, { kind: 'tool-call' }>,
+) {
+	const resultText = toolResultText(block.toolMessage).trim()
+	const lines = [
+		`${t('chatbox.ui.labels.toolCall')}: ${block.toolCall.toolName}`,
+		'',
+		`${t('chatbox.ui.labels.params')}:`,
+		fencedCode('json', stringifyToolInput(block.toolCall.input)),
+	]
+
+	if (resultText) {
+		lines.push(
+			'',
+			`${t('chatbox.ui.labels.result')}:`,
+			fencedCode('text', resultText),
+		)
+	}
+
+	return lines.join('\n')
+}
+
 export function MessageCard(props: {
 	item: ChatTimelineMessageItem
 	renderMarkdown?: ChatboxProps['renderMarkdown']
@@ -15,7 +81,6 @@ export function MessageCard(props: {
 	onRegenerateMessage?: ChatboxProps['onRegenerateMessage']
 	onRecallMessage?: ChatboxProps['onRecallMessage']
 }) {
-	const content = () => props.item.message.message.content
 	const usageText = () =>
 		formatUsage(
 			props.item.message.meta?.usage?.inputTokens,
@@ -43,21 +108,18 @@ export function MessageCard(props: {
 	}
 
 	const getText = () => {
-		const parts = (content() ?? []) as Array<{
-			type: string
-			text?: string
-			output?: { type: string; value?: string }
-		}>
-		if (props.item.message.message.role === 'tool') {
-			return parts
-				.filter((p) => p.type === 'tool-result')
-				.map((p) => (p.output?.type === 'text' ? (p.output.value ?? '') : ''))
-				.join('\n')
-		}
-		return parts
-			.filter((p) => p.type === 'text')
-			.map((p) => p.text ?? '')
-			.join('\n')
+		return props.item.displayBlocks
+			.map((block) => {
+				if (block.kind === 'content') {
+					return copyTextForContentBlock(block)
+				}
+				if (block.kind === 'tool-call') {
+					return copyTextForToolCallBlock(block)
+				}
+				return toolResultText(block.toolMessage).trim()
+			})
+			.filter(Boolean)
+			.join('\n\n')
 	}
 
 	return (
