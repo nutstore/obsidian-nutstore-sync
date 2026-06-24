@@ -5,6 +5,7 @@ import type {
 	ChatRunState,
 	ChatTaskRecord,
 } from '~/ai/chat/types'
+import type { LanguageModelUsage } from 'ai'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
 
 export interface ChatModelOption {
@@ -46,6 +47,7 @@ export type ChatTimelineItem =
 
 export interface ChatboxViewModel {
 	title: string
+	activeFilePath?: string
 	sessionHistory: ChatSessionHistoryItem[]
 	activeSessionId?: string
 	timeline: ChatTimelineItem[]
@@ -62,6 +64,14 @@ export interface ChatboxViewModel {
 	canSend: boolean
 	canCreateFragment: boolean
 	canCompress: boolean
+	/**
+	 * Most recent assistant token usage record in the active fragment, or
+	 * undefined when no usage data is available yet. Carries inputTokens,
+	 * outputTokens, and their breakdowns — the UI decides how to present them.
+	 */
+	usage?: LanguageModelUsage
+	/** Total context window (tokens) of the active model, or undefined when no model is selected. */
+	contextWindow?: number
 }
 
 export interface RecallMessageResult {

@@ -8,7 +8,6 @@ import {
 import { assertProviderUsable } from '~/ai/core/runtime'
 import type { AIProviderConfig, AISession } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
-import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '../../..'
@@ -22,7 +21,6 @@ export class Selection {
 	constructor(
 		private plugin: NutstorePlugin,
 		private state: ChatState,
-		private runtimeStates: RuntimeStates,
 		private notify: () => void,
 		private persistSession: (session: AISession) => Promise<void>,
 	) {}
@@ -57,9 +55,6 @@ export class Selection {
 			return
 		}
 
-		if (this.runtimeStates.get(session.id).runState !== 'idle') {
-			return
-		}
 		if (!providerId) {
 			session.model = undefined
 			void this.persistSession(session)
@@ -106,9 +101,6 @@ export class Selection {
 			return
 		}
 
-		if (this.runtimeStates.get(session.id).runState !== 'idle') {
-			return
-		}
 		if (!modelId) {
 			session.model = undefined
 			void this.persistSession(session)

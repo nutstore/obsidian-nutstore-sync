@@ -553,7 +553,6 @@
 				"cancel": "取消",
 				"selectFile": "选择文件",
 				"send": "发送",
-				"queueSend": "加入挂起",
 				"stopRun": "终止",
 				"newFragment": "新建段",
 				"compressContext": "压缩上下文",
@@ -564,6 +563,9 @@
 				"regenerateMessage": "重新生成",
 				"recallMessage": "撤回",
 				"removeContextItem": "移除"
+			},
+			"tooltips": {
+				"contextUsage": "上下文：已用 {{used}}%（窗口 {{total}} tokens · 总计 {{usedTokens}}）"
 			},
 			"labels": {
 				"provider": "Provider",

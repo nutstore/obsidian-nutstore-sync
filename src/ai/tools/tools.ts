@@ -1,9 +1,9 @@
 import { App, normalizePath, TFile } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod'
-import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/tools/bash/runtime'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
 import type { AIToolDefinition, ToolExecutionResult } from '~/ai/core/types'
+import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/tools/bash/runtime'
 import i18n from '~/i18n'
 import type { PermissionGuard } from './permission-guard'
 
@@ -70,6 +70,16 @@ function replaceUniqueOccurrence(
 	oldText: string,
 	newText: string,
 ) {
+	if (oldText === '') {
+		if (content !== '') {
+			throw new Error(i18n.t('chatbox.errors.editMatchNotUnique'))
+		}
+		return {
+			content: newText,
+			matchCount: 1,
+		} satisfies ReplaceResult
+	}
+
 	let matchIndex = content.indexOf(oldText)
 	let matchCount = 0
 
@@ -112,12 +122,7 @@ export function createAITools(
 						1,
 						i18n.t('chatbox.errors.toolFieldRequired', { field: 'path' }),
 					),
-				oldText: z
-					.string()
-					.min(
-						1,
-						i18n.t('chatbox.errors.toolFieldRequired', { field: 'oldText' }),
-					),
+				oldText: z.string(),
 				newText: textValue('newText'),
 			}),
 			execute: async (params): Promise<ToolExecutionResult> => {
@@ -157,9 +162,7 @@ export function createAITools(
 
 				return {
 					result: {
-						path: normalizedPath,
 						replaced: true,
-						matchCount: replaced.matchCount,
 					},
 					reversibleOps: [
 						{

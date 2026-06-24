@@ -449,11 +449,12 @@ input.success {
 @media (pointer: fine) and (min-width: 1024px) {
 	.chatbox-input-pane--resizable {
 		border-top-width: 0;
+		min-height: 0;
 	}
 
 	.chatbox-input-pane--resizable .chatbox-input {
 		flex: 1 1 auto;
-		height: auto;
+		height: 100%;
 		min-height: 4rem;
 		min-width: 0;
 	}

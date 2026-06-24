@@ -2,6 +2,7 @@ import type {
 	ChatState,
 	SessionRuntimeState,
 } from '~/ai/chat/runtime/chat-state'
+import { createAbortError } from '~/ai/transport/abort'
 
 export class RuntimeStates {
 	constructor(private state: ChatState) {}
@@ -27,5 +28,24 @@ export class RuntimeStates {
 			this.state.autoApproveRequestsBySessionId.set(sessionId, requests)
 		}
 		return requests
+	}
+
+	createAbortController(sessionId: string) {
+		const runtime = this.get(sessionId)
+		const controller = new AbortController()
+		runtime.abortController = controller
+		return controller
+	}
+
+	clearAbortController(sessionId: string, controller?: AbortController) {
+		const runtime = this.get(sessionId)
+		if (!controller || runtime.abortController === controller) {
+			runtime.abortController = undefined
+		}
+	}
+
+	abortActiveRequest(sessionId: string, reason?: string) {
+		const runtime = this.get(sessionId)
+		runtime.abortController?.abort(createAbortError(reason || 'Aborted'))
 	}
 }

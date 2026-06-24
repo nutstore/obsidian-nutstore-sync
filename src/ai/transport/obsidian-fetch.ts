@@ -1,5 +1,7 @@
 import { getReasonPhrase } from 'http-status-codes'
 import type { FetchFunction } from './provider-fetch'
+import { raceWithAbort } from './abortable'
+import { throwIfAborted } from './abort'
 import requestUrl from '~/utils/request-url'
 
 function toHeadersRecord(headers?: HeadersInit) {
@@ -46,14 +48,20 @@ export const obsidianFetch: FetchFunction = async (
 	input: RequestInfo | URL,
 	init?: RequestInit,
 ) => {
+	const signal = init?.signal ?? undefined
+	throwIfAborted(signal)
 	const request = await toRequestParts(input, init)
-	const response = await requestUrl({
-		url: request.url,
-		method: request.method,
-		headers: request.headers,
-		body: request.body,
-		throw: false,
-	})
+	const response = await raceWithAbort(
+		requestUrl({
+			url: request.url,
+			method: request.method,
+			headers: request.headers,
+			body: request.body,
+			throw: false,
+		}),
+		signal,
+	)
+	throwIfAborted(signal)
 	const statusText = getReasonPhrase(response.status)
 
 	return new Response(

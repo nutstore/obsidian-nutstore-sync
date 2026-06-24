@@ -9,15 +9,22 @@ import {
 	on,
 	onCleanup,
 } from 'solid-js'
-import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/ai/chat/ui/modal-mount'
 import {
 	createFileContextItem,
 	createImageContextItem,
 	createPendingContextItem,
 } from '~/ai/chat/context/user-context'
+import { resolveUsedContextTokens } from '~/ai/chat/domain'
+import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/ai/chat/ui/modal-mount'
+import type {
+	ChatTimelineFragmentItem,
+	ChatTimelineMessageItem,
+	ChatboxProps,
+} from '~/ai/chat/ui/types'
 import { t } from '../../i18n'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
+import { ContextRing } from './components/ContextRing'
 import { FragmentDivider } from './components/FragmentDivider'
 import { MessageCard } from './components/MessageCard'
 import { PaneResizer } from './components/PaneResizer'
@@ -25,23 +32,20 @@ import { PendingList } from './components/PendingList'
 import { RunStateCard } from './components/RunStateCard'
 import { SessionHistorySheet } from './components/SessionHistorySheet'
 import { TasksPanel } from './components/TasksPanel'
-import type {
-	ChatTimelineFragmentItem,
-	ChatTimelineMessageItem,
-	ChatboxProps,
-} from '~/ai/chat/ui/types'
 import { decideDropRoute, hasDragItems } from './drop-utils'
 
 const DESKTOP_RESIZE_MEDIA_QUERY = '(pointer: fine) and (min-width: 1024px)'
 const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.desktop-input-height'
 const DEFAULT_DESKTOP_INPUT_HEIGHT = 184
-const DESKTOP_INPUT_MIN_HEIGHT = 120
+const DESKTOP_INPUT_MIN_HEIGHT = 128
 const DESKTOP_INPUT_ABSOLUTE_MIN_HEIGHT = 72
 const DESKTOP_MESSAGES_MIN_HEIGHT = 200
 const RESIZER_HITBOX_HEIGHT = 10
 const DESKTOP_INPUT_MAX_VIEWPORT_RATIO = 0.6
+const ACTIVE_FILE_HINT_MIN_HEIGHT = 148
 const PICKER_ACCEPT = 'image/*,.txt,.md,.markdown'
 const TEXT_FILE_EXTENSIONS = new Set(['txt', 'md', 'markdown'])
+const ACTIVE_FILE_HINT_PREFIX = '⧉'
 
 function getFileExtension(filename: string): string {
 	const extension = filename.split('.').pop()?.trim().toLowerCase()
@@ -59,6 +63,10 @@ function isSupportedTextFile(file: File): boolean {
 
 function isSupportedPickedFile(file: File): boolean {
 	return file.type.startsWith('image/') || isSupportedTextFile(file)
+}
+
+function basename(path: string): string {
+	return path.split('/').pop() ?? path
 }
 
 function Chatbox(props: ChatboxProps) {
@@ -141,6 +149,26 @@ function Chatbox(props: ChatboxProps) {
 		props.otherSessionTasks.filter((task) => task.status === 'running').length
 	const isBusy = () => props.runState !== 'idle'
 
+	const contextUsedTokens = () => resolveUsedContextTokens(props.usage)
+	const contextUsageRatio = () => {
+		const total = props.contextWindow
+		if (!total || total <= 0) return 0
+		const used = contextUsedTokens()
+		if (used <= 0) return 0
+		return Math.min(1, Math.max(0, used / total))
+	}
+	const contextUsageTitle = () => {
+		const total = props.contextWindow
+		if (!total) return undefined
+		const usedPct = Math.round(contextUsageRatio() * 100)
+		const used = contextUsedTokens()
+		return t('chatbox.ui.tooltips.contextUsage', {
+			used: usedPct,
+			total,
+			usedTokens: used,
+		})
+	}
+
 	function isMessagesNearBottom(threshold = 48) {
 		if (!messagesEl) {
 			return true
@@ -200,6 +228,17 @@ function Chatbox(props: ChatboxProps) {
 			[provider?.name, selectedModel?.name].filter(Boolean).join('/') ||
 			t('chatbox.ui.states.noModel')
 		)
+	}
+	const activeFileLabel = () => {
+		const activeFilePath = props.activeFilePath?.trim()
+		if (!activeFilePath) return undefined
+		return basename(activeFilePath)
+	}
+	const shouldShowActiveFileLabel = () => {
+		if (!activeFileLabel()) return false
+		if (!desktopResizeEnabled()) return true
+		const height = inputPaneHeight()
+		return typeof height !== 'number' || height > ACTIVE_FILE_HINT_MIN_HEIGHT
 	}
 
 	function readStoredInputPaneHeight() {
@@ -840,7 +879,7 @@ function Chatbox(props: ChatboxProps) {
 								<select
 									class="w-full"
 									value={props.selectedModelId || ''}
-									disabled={!selectedProvider()?.models.length || isBusy()}
+									disabled={!selectedProvider()?.models.length}
 									onChange={(event) => {
 										props.onSelectModel(event.currentTarget.value)
 										setModelPickerOpen(false)
@@ -936,43 +975,55 @@ function Chatbox(props: ChatboxProps) {
 								onRemove={props.onRemoveUserContext}
 							/>
 						</Show>
-						<textarea
-							ref={inputTextareaEl}
-							class="chatbox-input w-full resize-none rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"
-							placeholder={t('chatbox.ui.placeholders.input')}
-							value={input()}
-							onInput={(event) => {
-								const nextInput = event.currentTarget.value
-								setInput(nextInput)
-								props.onUpdateInputDraft(nextInput)
-							}}
-							onPaste={(event) => {
-								const imageFiles = Array.from(event.clipboardData?.items ?? [])
-									.filter(
-										(item) =>
-											item.kind === 'file' && item.type.startsWith('image/'),
+						<div class="relative min-h-0 flex-1">
+							<textarea
+								ref={inputTextareaEl}
+								class="chatbox-input h-full w-full resize-none rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] pb-7 pr-24 text-sm outline-none"
+								placeholder={t('chatbox.ui.placeholders.input')}
+								value={input()}
+								onInput={(event) => {
+									const nextInput = event.currentTarget.value
+									setInput(nextInput)
+									props.onUpdateInputDraft(nextInput)
+								}}
+								onPaste={(event) => {
+									const imageFiles = Array.from(
+										event.clipboardData?.items ?? [],
 									)
-									.map((item) => item.getAsFile())
-									.filter((file): file is File => !!file)
-								if (!imageFiles.length) return
-								event.preventDefault()
-								void addPickedFiles(imageFiles)
-							}}
-							onCompositionStart={() => setIsComposing(true)}
-							onCompositionEnd={() => setIsComposing(false)}
-							onKeyDown={(event) => {
-								if (
-									event.key === 'Enter' &&
-									!event.shiftKey &&
-									!isComposing() &&
-									!event.isComposing &&
-									event.keyCode !== 229
-								) {
+										.filter(
+											(item) =>
+												item.kind === 'file' && item.type.startsWith('image/'),
+										)
+										.map((item) => item.getAsFile())
+										.filter((file): file is File => !!file)
+									if (!imageFiles.length) return
 									event.preventDefault()
-									void submit()
-								}
-							}}
-						/>
+									void addPickedFiles(imageFiles)
+								}}
+								onCompositionStart={() => setIsComposing(true)}
+								onCompositionEnd={() => setIsComposing(false)}
+								onKeyDown={(event) => {
+									if (
+										event.key === 'Enter' &&
+										!event.shiftKey &&
+										!isComposing() &&
+										!event.isComposing &&
+										event.keyCode !== 229
+									) {
+										event.preventDefault()
+										void submit()
+									}
+								}}
+							/>
+							<Show when={shouldShowActiveFileLabel()}>
+								<span class="pointer-events-none absolute bottom-2.5 right-3 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-1 text-xs text-[var(--text-muted)]">
+									<span>{ACTIVE_FILE_HINT_PREFIX}</span>
+									<span class="inline-block max-w-[15ch] truncate align-bottom">
+										{activeFileLabel()}
+									</span>
+								</span>
+							</Show>
+						</div>
 						<div class="mt-3 flex items-center justify-between gap-3">
 							<div class="flex flex-wrap items-center gap-2">
 								<button
@@ -1006,17 +1057,25 @@ function Chatbox(props: ChatboxProps) {
 								</button>
 							</div>
 							<button
-								class="mod-cta"
+								class="mod-cta inline-flex items-center gap-1.5"
 								type="button"
 								disabled={
 									(!input().trim() && !props.pendingUserContext.length) ||
 									!props.canSend
 								}
 								onClick={() => void submit()}
+								title={contextUsageTitle()}
 							>
-								{isBusy()
-									? t('chatbox.ui.actions.queueSend')
-									: t('chatbox.ui.actions.send')}
+								<Show when={props.contextWindow}>
+									<ContextRing
+										used={contextUsedTokens()}
+										total={props.contextWindow!}
+										size={16}
+										stroke={3}
+										title={contextUsageTitle()}
+									/>
+								</Show>
+								{t('chatbox.ui.actions.send')}
 							</button>
 						</div>
 					</div>
@@ -1038,6 +1097,12 @@ function Chatbox(props: ChatboxProps) {
 				open={historyOpen()}
 				sessions={props.sessionHistory}
 				activeSessionId={props.activeSessionId}
+				activeSessionIsRunning={
+					props.runState !== 'idle' ||
+					props.currentSessionTasks.some(
+						(task) => task.status === 'running' || task.status === 'queued',
+					)
+				}
 				otherSessionTasks={props.otherSessionTasks}
 				otherBusySessionIds={props.otherBusySessionIds}
 				mountEl={dialogMountTarget().mountEl}

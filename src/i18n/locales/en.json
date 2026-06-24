@@ -553,7 +553,6 @@
 				"cancel": "Cancel",
 				"selectFile": "Select File",
 				"send": "Send",
-				"queueSend": "Queue Send",
 				"stopRun": "Stop",
 				"newFragment": "New Fragment",
 				"compressContext": "Compress Context",
@@ -564,6 +563,9 @@
 				"regenerateMessage": "Regenerate",
 				"recallMessage": "Recall",
 				"removeContextItem": "Remove"
+			},
+			"tooltips": {
+				"contextUsage": "Context: {{used}}% used (window {{total}} tokens · total {{usedTokens}})"
 			},
 			"labels": {
 				"provider": "Provider",

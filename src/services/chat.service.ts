@@ -6,15 +6,19 @@ import {
 	listProviders,
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
-import { AISession } from '~/ai/core/types'
+import { AISession, type AIModelConfig } from '~/ai/core/types'
 import { mutateTaskRecord, toCancelledTask } from '~/ai/chat/domain'
+import type { LanguageModelUsage } from 'ai'
 import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
 import {
 	ChatState,
 	type SessionRuntimeState,
 } from '~/ai/chat/runtime/chat-state'
-import { runContextCompression } from '~/ai/chat/runtime/context-compression'
+import {
+	runContextCompression,
+	resolveContextWindow,
+} from '~/ai/chat/runtime/context-compression'
 import { Notifier } from '~/ai/chat/notifier'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import { Selection } from '~/ai/chat/runtime/selection'
@@ -38,6 +42,7 @@ import type {
 	ChatProviderOption,
 	RecallMessageResult,
 } from '~/ai/chat/ui/types'
+import { isAbortError } from '~/ai/transport/abort'
 import SessionExportModal from '~/components/SessionExportModal'
 import i18n from '~/i18n'
 import { chatSessionKV } from '~/storage'
@@ -96,7 +101,6 @@ export default class ChatService {
 		this.selection = new Selection(
 			plugin,
 			this.state,
-			this.runtimeStates,
 			() => this.notify(),
 			(session) => this.store.persistSession(session),
 		)
@@ -215,6 +219,18 @@ export default class ChatService {
 		const activeSession = this.getLoadedActiveSession()
 		const activeRuntime = this.getViewRuntime(activeSession)
 		const selection = this.resolveViewSelection(activeSession)
+		const selectedProvider = getProviderById(
+			this.plugin.settings.ai.providers,
+			selection.selectedProviderId,
+		)
+		const selectedModel = getModelById(
+			selectedProvider,
+			selection.selectedModelId,
+		)
+		const { usage, contextWindow } = this.resolveContextUsage(
+			activeSession,
+			selectedModel,
+		)
 
 		return {
 			title: this.getActiveSessionTitle(),
@@ -249,8 +265,34 @@ export default class ChatService {
 				activeRuntime.runState === 'idle' &&
 				this.messageFactory.getActiveFragment(activeSession).messages.length >
 					0,
+			usage,
+			contextWindow,
 			...this.bindViewActions(),
 		}
+	}
+
+	/**
+	 * Resolves raw context usage stats for the active fragment: the most recent
+	 * assistant `LanguageModelUsage` record, plus the active model's context
+	 * window. Returns empty values when no usage data or model is available —
+	 * the UI layer decides how to present that (e.g. hide the ring, show "—",
+	 * keep the last known value, etc.). Keeping the raw usage object lets the
+	 * UI surface outputTokens, cached tokens, and other details later without
+	 * changing this service.
+	 */
+	private resolveContextUsage(
+		activeSession?: AISession,
+		model?: AIModelConfig,
+	): { usage?: LanguageModelUsage; contextWindow?: number } {
+		if (!activeSession || !model) return {}
+		const contextWindow = resolveContextWindow(model)
+		const fragment = this.messageFactory.getActiveFragment(activeSession)
+		const latestUsage = [...fragment.messages]
+			.reverse()
+			.find((item) => item.message.role === 'assistant' && item.meta?.usage)
+			?.meta?.usage
+		if (!latestUsage) return { contextWindow }
+		return { usage: latestUsage, contextWindow }
 	}
 
 	private getViewRuntime(activeSession?: AISession): ChatboxViewRuntime {
@@ -363,9 +405,13 @@ export default class ChatService {
 		this.state.activeSessionId = session.id
 		this.store.upsertSessionIndexItem(session, i18n.t('chatbox.newChat'), true)
 		this.runtimeStates.get(session.id)
-		await this.store.persistSession(session)
-		await this.store.persistMetaAndIndex()
 		this.notify()
+		void this.store.persistSession(session).catch((error) => {
+			logger.error('Failed to persist new chat session', error)
+		})
+		void this.store.persistMetaAndIndex().catch((error) => {
+			logger.error('Failed to persist chat session index', error)
+		})
 		return session
 	}
 
@@ -523,9 +569,19 @@ export default class ChatService {
 		)
 		this.store.upsertSessionIndexItem(session, deriveTitle(session))
 		runtime.runState = 'thinking'
-		await this.store.persistSession(session)
-		await this.store.persistMetaAndIndex()
 		this.notify()
+		void this.store.persistSession(session).catch((error) => {
+			logger.error(
+				'Failed to persist chat session before processing send',
+				error,
+			)
+		})
+		void this.store.persistMetaAndIndex().catch((error) => {
+			logger.error(
+				'Failed to persist chat session index before processing send',
+				error,
+			)
+		})
 		await this.sessionProcessor.start(session.id)
 		return true
 	}
@@ -572,20 +628,36 @@ export default class ChatService {
 					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
 						provider,
 					)
+					if (runtime.stopRequested) {
+						runtime.stopRequested = false
+						return
+					}
 					const model = this.selection.getModelOrThrow(provider, session)
-					await runContextCompression({
-						provider,
-						model,
-						session,
-						sourceFragment,
-						runtimeStates: this.runtimeStates,
-						store: this.store,
-						messageFactory: this.messageFactory,
-						isSessionDeleted: () =>
-							this.state.deletedSessionIds.has(session.id),
-					})
+					const abortController = this.runtimeStates.createAbortController(
+						session.id,
+					)
+					try {
+						await runContextCompression({
+							provider,
+							model,
+							session,
+							sourceFragment,
+							runtimeStates: this.runtimeStates,
+							store: this.store,
+							messageFactory: this.messageFactory,
+							isSessionDeleted: () =>
+								this.state.deletedSessionIds.has(session.id),
+							abortSignal: abortController.signal,
+						})
+					} finally {
+						this.runtimeStates.clearAbortController(session.id, abortController)
+					}
 				}
 			} catch (error) {
+				if (isAbortError(error) && runtime.stopRequested) {
+					runtime.stopRequested = false
+					return
+				}
 				const provider = getProviderById(
 					this.plugin.settings.ai.providers,
 					session.model?.providerId,
@@ -697,6 +769,7 @@ export default class ChatService {
 		}
 
 		runtime.stopRequested = true
+		this.runtimeStates.abortActiveRequest(session.id, 'Stopped by user')
 
 		const changed = this.taskManager.cancelAllNonTerminalTasks(
 			session,

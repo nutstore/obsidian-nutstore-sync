@@ -58,6 +58,14 @@ export function cloneUsage(usage?: LanguageModelUsage) {
 		: undefined
 }
 
+export function resolveUsedContextTokens(usage?: LanguageModelUsage) {
+	if (!usage) return 0
+	if (typeof usage.totalTokens === 'number' && usage.totalTokens > 0) {
+		return usage.totalTokens
+	}
+	return Math.max(0, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0))
+}
+
 export function cloneMessage(message: ChatMessage): ChatMessage {
 	if (!Array.isArray(message.content)) {
 		return { ...message }

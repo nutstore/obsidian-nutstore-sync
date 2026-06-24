@@ -89,6 +89,16 @@ export default class ChatboxView extends ItemView {
 		private plugin: NutstorePlugin,
 	) {
 		super(leaf)
+		this.registerEvent(
+			this.app.workspace.on('active-leaf-change', () => {
+				this.controller?.update(this.getChatboxProps())
+			}),
+		)
+		this.registerEvent(
+			this.app.workspace.on('file-open', () => {
+				this.controller?.update(this.getChatboxProps())
+			}),
+		)
 	}
 
 	getViewType() {
@@ -146,6 +156,7 @@ export default class ChatboxView extends ItemView {
 	private getChatboxProps(): ChatboxProps {
 		return {
 			...this.plugin.chatService.getViewProps(),
+			activeFilePath: this.app.workspace.getActiveFile()?.path,
 			renderMarkdown: this.renderMarkdown,
 			onAddUserContext: (item) => {
 				this.plugin.chatService.addUserContext(item)

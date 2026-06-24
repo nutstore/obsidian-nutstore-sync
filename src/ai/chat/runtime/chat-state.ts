@@ -7,6 +7,7 @@ export interface SessionRuntimeState {
 	runState: ChatRunState
 	processing?: Promise<void>
 	stopRequested?: boolean
+	abortController?: AbortController
 	pendingMessages: ChatPendingMessage[]
 	pendingUserContext: UserContextItem[]
 	pendingInputDraft: string

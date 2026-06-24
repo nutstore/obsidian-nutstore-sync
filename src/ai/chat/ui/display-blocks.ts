@@ -13,6 +13,17 @@ function isContentPart(
 	)
 }
 
+function hasRenderableContent(
+	part: Exclude<ChatMessageContentPart, ToolCallPart>,
+) {
+	if (part.type === 'image') {
+		return typeof part.image === 'string'
+			? part.image.trim().length > 0
+			: Boolean(part.image)
+	}
+	return (part.text ?? '').trim().length > 0
+}
+
 function getToolResultCallId(record: ChatMessageRecord) {
 	if (
 		record.message.role !== 'tool' ||
@@ -68,6 +79,9 @@ function buildMessageDisplayBlocks(
 
 	for (const part of parts) {
 		if (isContentPart(part)) {
+			if (!hasRenderableContent(part)) {
+				continue
+			}
 			pendingContent.push(part)
 			continue
 		}

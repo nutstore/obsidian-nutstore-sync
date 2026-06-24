@@ -1,4 +1,8 @@
-import type { ChatFragment } from '~/ai/chat/domain'
+import {
+	cloneMessageRecord,
+	resolveUsedContextTokens,
+	type ChatFragment,
+} from '~/ai/chat/domain'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import {
 	deriveTitle,
@@ -8,6 +12,7 @@ import {
 import { COMPRESSION_PROMPT } from '~/ai/chat/prompts'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { SessionStore } from '~/ai/chat/session/session-store'
+import type { ChatMessageRecord } from '~/ai/chat/types'
 import { generateAssistantTurn } from '~/ai/core/runtime'
 import type {
 	AIModelConfig,
@@ -18,6 +23,18 @@ import type {
 const FALLBACK_CONTEXT_WINDOW = 256 * 1024
 const MIN_AUTO_COMPRESSION_THRESHOLD = 4096 * 4
 const AUTO_COMPRESSION_CONTEXT_RATIO = 0.1
+
+function collectTrailingUserRecords(fragment: ChatFragment) {
+	const trailingUserRecords: ChatMessageRecord[] = []
+	for (let index = fragment.messages.length - 1; index >= 0; index -= 1) {
+		const record = fragment.messages[index]
+		if (record.message.role !== 'user') {
+			break
+		}
+		trailingUserRecords.push(cloneMessageRecord(record))
+	}
+	return trailingUserRecords.reverse()
+}
 
 export function resolveContextWindow(model?: AIModelConfig) {
 	const configuredLimit = model?.limit?.context
@@ -41,13 +58,13 @@ export function shouldAutoCompressFragment(
 		.reverse()
 		.find((item) => item.message.role === 'assistant' && item.meta?.usage)
 		?.meta?.usage
-	const inputTokens = latestUsage?.inputTokens
-	if (!inputTokens || inputTokens <= 0) {
+	const usedTokens = resolveUsedContextTokens(latestUsage)
+	if (usedTokens <= 0) {
 		return false
 	}
 
 	const contextWindow = resolveContextWindow(model)
-	const remainingContext = contextWindow - inputTokens
+	const remainingContext = contextWindow - usedTokens
 	return remainingContext < resolveAutoCompressionThreshold(contextWindow)
 }
 
@@ -60,6 +77,7 @@ export interface CompressContextRunnerOptions {
 	store: SessionStore
 	messageFactory: MessageFactory
 	isSessionDeleted?: () => boolean
+	abortSignal?: AbortSignal
 }
 
 export async function runContextCompression({
@@ -71,6 +89,7 @@ export async function runContextCompression({
 	store,
 	messageFactory,
 	isSessionDeleted,
+	abortSignal,
 }: CompressContextRunnerOptions) {
 	if (sourceFragment.messages.length === 0) {
 		return
@@ -87,6 +106,7 @@ export async function runContextCompression({
 			},
 		],
 		tools: [],
+		abortSignal,
 		...session.inferenceParams,
 	})
 
@@ -96,9 +116,15 @@ export async function runContextCompression({
 	}
 
 	const summary = messageToText(response.message).trim() || COMPRESSION_PROMPT
+	const trailingUserRecords = collectTrailingUserRecords(sourceFragment)
 	const targetFragment = messageFactory.createFragment(session)
 	targetFragment.summary = summary
 	messageFactory.appendUserMessage(targetFragment, summary, session)
+	if (trailingUserRecords.length > 0) {
+		targetFragment.messages.push(...trailingUserRecords)
+		targetFragment.updatedAt = Date.now()
+		session.updatedAt = targetFragment.updatedAt
+	}
 	store.upsertSessionIndexItem(session, deriveTitle(session))
 	await store.persistSession(session)
 	await store.persistMetaAndIndex()

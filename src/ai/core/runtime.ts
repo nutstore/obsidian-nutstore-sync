@@ -22,6 +22,7 @@ export interface GenerateAssistantTurnRequest {
 	tools: AIToolDefinition[]
 	temperature?: number
 	maxTokens?: number
+	abortSignal?: AbortSignal
 }
 
 export interface GenerateAssistantTurnResult {
@@ -177,6 +178,7 @@ export async function generateAssistantTurn(
 		messages: messages,
 		tools: toAISDKTools(request.tools),
 		stopWhen: stepCountIs(1),
+		abortSignal: request.abortSignal,
 		temperature: request.temperature,
 		maxOutputTokens: request.maxTokens,
 		onError: ({ error }) => {

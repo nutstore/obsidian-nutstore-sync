@@ -8,6 +8,7 @@ export function SessionHistorySheet(props: {
 	open: boolean
 	sessions: ChatboxProps['sessionHistory']
 	activeSessionId: string | undefined
+	activeSessionIsRunning: boolean
 	otherSessionTasks: ChatboxProps['otherSessionTasks']
 	otherBusySessionIds: ChatboxProps['otherBusySessionIds']
 	mountEl: HTMLElement | undefined
@@ -20,6 +21,9 @@ export function SessionHistorySheet(props: {
 }) {
 	const runningSessionIds = () =>
 		new Set([
+			...(props.activeSessionId && props.activeSessionIsRunning
+				? [props.activeSessionId]
+				: []),
 			...props.otherBusySessionIds,
 			...props.otherSessionTasks
 				.filter((t) => t.status === 'running' || t.status === 'queued')

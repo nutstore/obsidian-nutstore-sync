@@ -26,7 +26,10 @@ import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { cloneReversibleToolOp } from '~/ai/chat/domain'
 import type { ReversibleToolOp } from '~/ai/chat/types'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
+import { mkdirsVault } from '~/utils/mkdirs-vault'
+import { existsLocalPath } from '~/utils/local-vault-io'
 import { sha256Base64 } from '~/utils/sha256'
+import { statVaultItem } from '~/utils/stat-vault-item'
 
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
@@ -123,37 +126,6 @@ function normalizeReversibleVaultPath(path: string) {
 		return ''
 	}
 	return normalizePath(normalized.slice(1))
-}
-
-function mapStat(stat: {
-	type: 'file' | 'folder'
-	size: number
-	mtime: number
-}): FsStat {
-	return {
-		isFile: stat.type === 'file',
-		isDirectory: stat.type === 'folder',
-		isSymbolicLink: false,
-		mode: stat.type === 'folder' ? DIR_MODE : FILE_MODE,
-		size: stat.type === 'file' ? stat.size : 0,
-		mtime: new Date(stat.mtime),
-	}
-}
-
-function mapAbstractFileStat(file: TAbstractFile): FsStat {
-	if (file instanceof TFolder) {
-		return mapStat({
-			type: 'folder',
-			size: 0,
-			mtime: 0,
-		})
-	}
-
-	return mapStat({
-		type: 'file',
-		size: (file as TFile).stat.size,
-		mtime: (file as TFile).stat.mtime,
-	})
 }
 
 async function copyRecursive(
@@ -339,14 +311,6 @@ export class ObsidianVaultFs implements IFileSystem {
 	private toVaultPath(inputPath: string) {
 		const normalized = ensureNotEscapingRoot(inputPath)
 		return normalized === '/' ? '' : normalizePath(normalized.slice(1))
-	}
-
-	private async statInternal(inputPath: string) {
-		const target = this.vault.getAbstractFileByPath(this.toVaultPath(inputPath))
-		if (!target) {
-			throw new Error(`ENOENT: no such file or directory, stat '${inputPath}'`)
-		}
-		return target
 	}
 
 	private async readFileSnapshotContent(target: TFile) {
@@ -584,13 +548,12 @@ export class ObsidianVaultFs implements IFileSystem {
 		if (normalized === '/') {
 			return true
 		}
-		return Boolean(
-			this.vault.getAbstractFileByPath(this.toVaultPath(normalized)),
-		)
+		return await existsLocalPath(this.vault, this.toVaultPath(normalized))
 	}
 
 	async stat(path: string): Promise<FsStat> {
-		if (ensureNotEscapingRoot(path) === '/') {
+		const normalized = ensureNotEscapingRoot(path)
+		if (normalized === '/') {
 			return {
 				isFile: false,
 				isDirectory: true,
@@ -600,7 +563,18 @@ export class ObsidianVaultFs implements IFileSystem {
 				mtime: new Date(0),
 			}
 		}
-		return mapAbstractFileStat(await this.statInternal(path))
+		const stat = await statVaultItem(this.vault, this.toVaultPath(normalized))
+		if (!stat) {
+			throw new Error(`ENOENT: no such file or directory, stat '${path}'`)
+		}
+		return {
+			isFile: !stat.isDir,
+			isDirectory: stat.isDir,
+			isSymbolicLink: false,
+			mode: stat.isDir ? DIR_MODE : FILE_MODE,
+			size: stat.isDir ? 0 : (stat.size ?? 0),
+			mtime: new Date(stat.mtime ?? 0),
+		}
 	}
 
 	async mkdir(path: string, options?: MkdirOptions): Promise<void> {
@@ -609,23 +583,21 @@ export class ObsidianVaultFs implements IFileSystem {
 			return
 		}
 		await this.checkPermission({ kind: 'mkdir', path })
-
-		const segments = normalized.split('/').filter(Boolean)
-		let current = ''
-		for (let index = 0; index < segments.length; index += 1) {
-			current = `${current}/${segments[index]}`
-			if (await this.exists(current)) {
-				continue
-			}
-			if (!options?.recursive && index !== segments.length - 1) {
+		if (!options?.recursive) {
+			const parent = pathPosix.dirname(normalized)
+			if (!(await this.exists(parent))) {
 				throw new Error(
 					`ENOENT: no such file or directory, mkdir '${normalized}'`,
 				)
 			}
-			await this.vault.createFolder(this.toVaultPath(current))
-			this.recorder?.recordCreate(current, 'dir')
-			this.recordPath(current)
 		}
+		const before = await this.snapshotSubtree(normalized)
+		await mkdirsVault(this.vault, this.toVaultPath(normalized))
+		const after = await this.snapshotSubtree(normalized)
+		if (before.length === 0 && after.length > 0) {
+			this.recordTargetDiff(before, after)
+		}
+		this.recordPath(normalized)
 	}
 
 	async readdir(path: string): Promise<string[]> {

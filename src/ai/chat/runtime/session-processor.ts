@@ -29,6 +29,7 @@ import {
 	runContextCompression,
 	shouldAutoCompressFragment,
 } from '~/ai/chat/runtime/context-compression'
+import { isAbortError } from '~/ai/transport/abort'
 import i18n from '~/i18n'
 import type NutstorePlugin from '../../..'
 
@@ -108,17 +109,31 @@ export class SessionProcessor {
 					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
 						provider,
 					)
-					await runContextCompression({
-						provider,
-						model,
-						session,
-						sourceFragment: fragment,
-						runtimeStates: this.runtimeStates,
-						store: this.store,
-						messageFactory: this.messageFactory,
-						isSessionDeleted: () =>
-							this.state.deletedSessionIds.has(session.id),
-					})
+					if (runtime.stopRequested) {
+						runtime.runState = 'idle'
+						await this.store.persistSession(session)
+						this.notify()
+						return
+					}
+					const abortController = this.runtimeStates.createAbortController(
+						session.id,
+					)
+					try {
+						await runContextCompression({
+							provider,
+							model,
+							session,
+							sourceFragment: fragment,
+							runtimeStates: this.runtimeStates,
+							store: this.store,
+							messageFactory: this.messageFactory,
+							isSessionDeleted: () =>
+								this.state.deletedSessionIds.has(session.id),
+							abortSignal: abortController.signal,
+						})
+					} finally {
+						this.runtimeStates.clearAbortController(session.id, abortController)
+					}
 					if (this.state.deletedSessionIds.has(session.id)) {
 						runtime.stopRequested = false
 						runtime.runState = 'idle'
@@ -145,6 +160,11 @@ export class SessionProcessor {
 				await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
 					provider,
 				)
+				if (runtime.stopRequested) {
+					this.messageFactory.finishStoppedSessionRun(session, fragment)
+					await this.store.persistSession(session)
+					return
+				}
 				const requestMessages = await this.buildMessagesForFragment(
 					fragment,
 					session,
@@ -173,57 +193,68 @@ export class SessionProcessor {
 					return assistantRecord
 				}
 				let lastStreamNotifyAt = 0
-				const response = await generateAssistantTurn(
-					{
-						provider,
-						model: model.id,
-						messages: requestMessages,
-						tools,
-						...session.inferenceParams,
-					},
-					{
-						onTextDelta: async (delta) => {
-							if (
-								!delta ||
-								this.state.deletedSessionIds.has(session.id) ||
-								runtime.stopRequested
-							) {
-								return
-							}
-							const record = ensureAssistantRecord()
-							if (record.message.role !== 'assistant') {
-								return
-							}
-							type MutablePart = { type: string; text?: string }
-							const rawContent = (record.message as AssistantModelMessage)
-								.content
-							const content: MutablePart[] = Array.isArray(rawContent)
-								? [...(rawContent as MutablePart[])]
-								: []
-							const textIdx = content.findIndex((p) => p.type === 'text')
-							const existing = textIdx >= 0 ? (content[textIdx].text ?? '') : ''
-							const textPart: MutablePart = {
-								type: 'text',
-								text: `${existing}${delta}`,
-							}
-							if (textIdx >= 0) {
-								content[textIdx] = textPart
-							} else {
-								content.push(textPart)
-							}
-							record.message = {
-								...record.message,
-								content,
-							} as AssistantModelMessage
-							fragment.updatedAt = Date.now()
-							session.updatedAt = Date.now()
-							if (Date.now() - lastStreamNotifyAt >= 33) {
-								lastStreamNotifyAt = Date.now()
-								this.notify()
-							}
-						},
-					},
+				const abortController = this.runtimeStates.createAbortController(
+					session.id,
 				)
+				const response = await (async () => {
+					try {
+						return await generateAssistantTurn(
+							{
+								provider,
+								model: model.id,
+								messages: requestMessages,
+								tools,
+								abortSignal: abortController.signal,
+								...session.inferenceParams,
+							},
+							{
+								onTextDelta: async (delta) => {
+									if (
+										!delta ||
+										this.state.deletedSessionIds.has(session.id) ||
+										runtime.stopRequested
+									) {
+										return
+									}
+									const record = ensureAssistantRecord()
+									if (record.message.role !== 'assistant') {
+										return
+									}
+									type MutablePart = { type: string; text?: string }
+									const rawContent = (record.message as AssistantModelMessage)
+										.content
+									const content: MutablePart[] = Array.isArray(rawContent)
+										? [...(rawContent as MutablePart[])]
+										: []
+									const textIdx = content.findIndex((p) => p.type === 'text')
+									const existing =
+										textIdx >= 0 ? (content[textIdx].text ?? '') : ''
+									const textPart: MutablePart = {
+										type: 'text',
+										text: `${existing}${delta}`,
+									}
+									if (textIdx >= 0) {
+										content[textIdx] = textPart
+									} else {
+										content.push(textPart)
+									}
+									record.message = {
+										...record.message,
+										content,
+									} as AssistantModelMessage
+									fragment.updatedAt = Date.now()
+									session.updatedAt = Date.now()
+									if (Date.now() - lastStreamNotifyAt >= 33) {
+										lastStreamNotifyAt = Date.now()
+										this.notify()
+									}
+								},
+							},
+						)
+					} finally {
+						this.runtimeStates.clearAbortController(session.id, abortController)
+					}
+				})()
 
 				if (this.state.deletedSessionIds.has(session.id)) {
 					runtime.stopRequested = false
@@ -307,6 +338,14 @@ export class SessionProcessor {
 		} catch (error) {
 			if (this.state.deletedSessionIds.has(session.id)) {
 				runtime.runState = 'idle'
+				return
+			}
+			if (isAbortError(error) && runtime.stopRequested) {
+				this.messageFactory.finishStoppedSessionRun(
+					session,
+					this.messageFactory.getActiveFragment(session),
+				)
+				await this.store.persistSession(session)
 				return
 			}
 			const activeFragment = this.messageFactory.getActiveFragment(session)
