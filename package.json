@@ -13,6 +13,7 @@
 		"postinstall": "lefthook install"
 	},
 	"devDependencies": {
+		"@ai-sdk/anthropic": "^3.0.86",
 		"@ai-sdk/openai": "^3.0.48",
 		"@electron/remote": "^2.1.2",
 		"@eslint/compat": "^2.1.0",

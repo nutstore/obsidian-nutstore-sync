@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai'
+import { createAnthropic } from '@ai-sdk/anthropic'
 import {
 	assertProviderApiKeyUsable,
 	createProviderSettings,
@@ -6,11 +6,11 @@ import {
 } from './common'
 import type { AIProviderResolver } from './types'
 
-export const openAIProviderResolver: AIProviderResolver = {
+export const anthropicProviderResolver: AIProviderResolver = {
 	assertUsable: assertProviderApiKeyUsable,
 	createLanguageModel(provider, modelId) {
 		assertProviderApiKeyUsable(provider)
-		const factory = createOpenAI(createProviderSettings(provider))
-		return createResolvedLanguageModel(provider, factory.chat(modelId))
+		const factory = createAnthropic(createProviderSettings(provider))
+		return createResolvedLanguageModel(provider, factory(modelId))
 	},
 }

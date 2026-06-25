@@ -12,6 +12,7 @@ import {
 	AIMessage,
 	AIMessageMeta,
 	AIProviderConfig,
+	AIModelProviderOverride,
 	AIToolDefinition,
 } from './types'
 
@@ -32,6 +33,20 @@ export interface GenerateAssistantTurnResult {
 
 export interface GenerateAssistantTurnCallbacks {
 	onTextDelta?: (delta: string) => void | Promise<void>
+}
+
+function resolveEffectiveProviderConfig(
+	provider: AIProviderConfig,
+	override?: AIModelProviderOverride,
+): AIProviderConfig {
+	if (!override?.npm && !override?.api) {
+		return provider
+	}
+	return {
+		...provider,
+		npm: override.npm?.trim() || provider.npm,
+		api: override.api?.trim() || provider.api,
+	}
 }
 
 function inferFilePartModality(
@@ -160,16 +175,20 @@ export async function generateAssistantTurn(
 	request: GenerateAssistantTurnRequest,
 	callbacks?: GenerateAssistantTurnCallbacks,
 ): Promise<GenerateAssistantTurnResult> {
-	const resolver = getProviderResolver(request.provider)
+	const modelConfig = request.provider.models[request.model]
+	const provider = resolveEffectiveProviderConfig(
+		request.provider,
+		modelConfig?.provider,
+	)
+	const resolver = getProviderResolver(provider)
 	const modelName =
-		request.provider.models[request.model]?.name?.trim() || request.model
-	const inputModalities = request.provider.models[request.model]?.modalities
-		.input || ['text']
+		modelConfig?.name?.trim() || request.model
+	const inputModalities = modelConfig?.modalities.input || ['text']
 	const messages = mergeAdjacentUserMessages(
 		adaptMessagesByInputModalities(request.messages, inputModalities),
 	)
 	const { model, providerName } = resolver.createLanguageModel(
-		request.provider,
+		provider,
 		request.model,
 	)
 	let streamError: unknown

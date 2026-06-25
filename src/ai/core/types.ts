@@ -44,6 +44,9 @@ export const aiModelProviderOverrideSchema = z.object({
 	api: z.string().optional(),
 	shape: z.string().optional(),
 })
+export type AIModelProviderOverride = z.infer<
+	typeof aiModelProviderOverrideSchema
+>
 export const aiModelConfigSchema = z.object({
 	id: z.string(),
 	name: z.string(),
