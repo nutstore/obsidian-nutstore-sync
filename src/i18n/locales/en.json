@@ -454,7 +454,9 @@
 		},
 		"skipReason": {
 			"file-too-large": "File too large",
-			"folder-contains-ignored-items": "Folder contains ignored items"
+			"folder-contains-ignored-items": "Folder contains ignored items",
+			"conflict-in-send-only-mode": "Both local and cloud changed; send-only mode preserved the cloud version",
+			"conflict-in-receive-only-mode": "Both local and cloud changed; receive-only mode preserved the local version"
 		},
 		"confirmModal": {
 			"title": "Sync confirmation",

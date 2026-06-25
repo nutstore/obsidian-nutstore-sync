@@ -1,5 +1,4 @@
 import { parse as bytesParse } from 'bytes-iec'
-import { SyncMode } from '~/settings'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSameTime } from '~/utils/is-same-time'
 import logger from '~/utils/logger'
@@ -14,6 +13,7 @@ import {
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
 import BaseSyncDecider from './base.decider'
+import { areLooseEqualFiles } from './loose-equality'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export default class TwoWaySyncDecider extends BaseSyncDecider {
@@ -316,17 +316,8 @@ export async function twoWayDecider(
 		} else {
 			if (remote) {
 				if (local) {
-					if (
-						settings.syncMode === SyncMode.LOOSE &&
-						!remote.isDeleted &&
-						!remote.isDir &&
-						remote.size === local.size
-					) {
-						tasks.push(
-							taskFactory.createNoopTask({
-								...options,
-							}),
-						)
+					if (areLooseEqualFiles(settings.syncMode, local, remote)) {
+						tasks.push(taskFactory.createNoopTask(options))
 						continue
 					}
 					logger.debug({

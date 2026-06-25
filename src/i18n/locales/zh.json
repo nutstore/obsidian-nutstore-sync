@@ -454,7 +454,9 @@
 		},
 		"skipReason": {
 			"file-too-large": "文件过大",
-			"folder-contains-ignored-items": "文件夹包含被忽略的文件"
+			"folder-contains-ignored-items": "文件夹包含被忽略的文件",
+			"conflict-in-send-only-mode": "本地和云端都已变更；当前为仅发送模式，已保留云端版本",
+			"conflict-in-receive-only-mode": "本地和云端都已变更；当前为仅接收模式，已保留本地版本"
 		},
 		"confirmModal": {
 			"title": "同步确认",

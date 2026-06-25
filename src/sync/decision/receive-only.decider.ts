@@ -1,5 +1,4 @@
 import { parse as bytesParse } from 'bytes-iec'
-import { SyncMode } from '~/settings'
 import { isSameTime } from '~/utils/is-same-time'
 import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
@@ -11,6 +10,7 @@ import {
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
 import BaseSyncDecider from './base.decider'
+import { areLooseEqualFiles } from './loose-equality'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export default class ReceiveOnlySyncDecider extends BaseSyncDecider {
@@ -72,10 +72,46 @@ export async function receiveOnlyDecider(
 	const removeLocalFolderTasks: BaseTask[] = []
 	const mkdirLocalTasks: BaseTask[] = []
 
+	const pullRemoteFile = (
+		p: string,
+		remoteSize: number,
+		localSize?: number,
+	): boolean => {
+		const taskOptions = {
+			remotePath: p,
+			localPath: p,
+			remoteBaseDir,
+		}
+		if (
+			remoteSize > maxFileSize ||
+			(localSize !== undefined && localSize > maxFileSize)
+		) {
+			tasks.push(
+				taskFactory.createSkippedTask({
+					...taskOptions,
+					reason: SkipReason.FileTooLarge,
+					maxSize: maxFileSize,
+					remoteSize,
+					...(localSize === undefined ? {} : { localSize }),
+				}),
+			)
+			return false
+		}
+		tasks.push(
+			taskFactory.createPullTask({
+				...taskOptions,
+				remoteSize,
+				mobileAppDownloadFileChunkSize: settings.mobileAppDownloadFileChunkSize,
+			}),
+		)
+		return true
+	}
+
 	// * sync files
 	for (const p of mixedPath) {
 		const remote = remoteStatsMap.get(p)
 		const local = localStatsMap.get(p)
+		const record = syncRecords.get(p)
 		const taskOptions = {
 			remotePath: p,
 			localPath: p,
@@ -86,72 +122,70 @@ export async function receiveOnlyDecider(
 		}
 
 		if (local && remote) {
-			// Only loose mode may treat equal-size files as unchanged without further checks.
-			if (
-				settings.syncMode === SyncMode.LOOSE &&
-				!remote.isDeleted &&
-				!remote.isDir &&
-				remote.size === local.size
-			) {
+			// In loose mode, same-path same-type same-size files are considered equal.
+			if (!record && areLooseEqualFiles(settings.syncMode, local, remote)) {
+				tasks.push(taskFactory.createNoopTask(taskOptions))
 				continue
 			}
-			const remoteChanged = !isSameTime(remote.mtime, local.mtime)
-			if (remoteChanged) {
+			if (!record) {
 				logger.debug({
-					reason: 'receive-only: both exist, remote differs from local',
+					reason: 'receive-only: both exist without record — pull from remote',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				if (remote.size > maxFileSize || local.size > maxFileSize) {
-					tasks.push(
-						taskFactory.createSkippedTask({
-							...taskOptions,
-							reason: SkipReason.FileTooLarge,
-							maxSize: maxFileSize,
-							remoteSize: remote.size,
-							localSize: local.size,
-						}),
-					)
-					continue
-				}
+				pullRemoteFile(p, remote.size, local.size)
+				continue
+			}
+			const remoteChanged = !isSameTime(remote.mtime, record.remote.mtime)
+			const localChanged = !isSameTime(local.mtime, record.local.mtime)
+			const shouldPull = mode.revertLocalChanges
+				? remoteChanged || localChanged
+				: remoteChanged && !localChanged
+			if (shouldPull) {
+				logger.debug({
+					reason: 'receive-only: both exist, source state changed',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				pullRemoteFile(p, remote.size, local.size)
+			} else if (localChanged && remoteChanged && !mode.revertLocalChanges) {
+				logger.debug({
+					reason: 'receive-only: both local and remote changed — skip',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
 				tasks.push(
-					taskFactory.createPullTask({
+					taskFactory.createSkippedTask({
 						...taskOptions,
-						remoteSize: remote.size,
-						mobileAppDownloadFileChunkSize:
-							settings.mobileAppDownloadFileChunkSize,
+						reason: SkipReason.ConflictInReceiveOnlyMode,
 					}),
 				)
+			} else if (localChanged && !mode.revertLocalChanges) {
+				logger.debug({
+					reason: 'receive-only: preserve local change until revert',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
 			}
 			continue
 		}
 
 		if (!local && remote) {
+			if (record && !mode.revertLocalChanges) {
+				logger.debug({
+					reason: 'receive-only: preserve local deletion until revert',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				continue
+			}
 			// Remote exists, local missing → pull to restore/create local
 			logger.debug({
 				reason: 'receive-only: remote exists, local missing — pull',
 				localPath: p,
 				remotePath: remotePathToAbsolute(remoteBaseDir, p),
 			})
-			if (remote.size > maxFileSize) {
-				tasks.push(
-					taskFactory.createSkippedTask({
-						...taskOptions,
-						reason: SkipReason.FileTooLarge,
-						maxSize: maxFileSize,
-						remoteSize: remote.size,
-					}),
-				)
-				continue
-			}
-			tasks.push(
-				taskFactory.createPullTask({
-					...taskOptions,
-					remoteSize: remote.size,
-					mobileAppDownloadFileChunkSize:
-						settings.mobileAppDownloadFileChunkSize,
-				}),
-			)
+			pullRemoteFile(p, remote.size)
 			continue
 		}
 
@@ -195,6 +229,29 @@ export async function receiveOnlyDecider(
 
 		if (local) {
 			if (!local.isDir) {
+				if (mode.revertLocalChanges) {
+					logger.debug({
+						reason:
+							'receive-only revert local changes: replace local file with remote folder',
+						remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+						localPath,
+					})
+					removeLocalFolderTasks.push(
+						taskFactory.createRemoveLocalTask({
+							localPath,
+							remotePath: remote.path,
+							remoteBaseDir,
+						}),
+					)
+					mkdirLocalTasks.push(
+						taskFactory.createMkdirLocalTask({
+							localPath,
+							remotePath: remote.path,
+							remoteBaseDir,
+						}),
+					)
+					continue
+				}
 				throw new Error(
 					`Folder conflict: remote path ${remote.path} is a folder but local path ${localPath} is a file`,
 				)
@@ -256,10 +313,49 @@ export async function receiveOnlyDecider(
 					localPath: local.path,
 					remotePath: local.path,
 					remoteBaseDir,
+					recursive: true,
 				}),
 			)
 		} else {
 			if (!remote.isDir) {
+				if (mode.revertLocalChanges) {
+					if (hasIgnoredInFolder(local.path, localStats)) {
+						const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
+						logger.debug({
+							reason:
+								'receive-only revert local changes: skip replacing local folder with remote file (contains ignored items)',
+							localPath: local.path,
+							ignoredPaths,
+						})
+						tasks.push(
+							taskFactory.createSkippedTask({
+								localPath: local.path,
+								remotePath: local.path,
+								remoteBaseDir,
+								reason: SkipReason.FolderContainsIgnoredItems,
+								ignoredPaths,
+							}),
+						)
+						continue
+					}
+					logger.debug({
+						reason:
+							'receive-only revert local changes: replace local folder with remote file',
+						localPath: local.path,
+						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+					})
+					if (pullRemoteFile(local.path, remote.size)) {
+						removeLocalFolderTasks.push(
+							taskFactory.createRemoveLocalTask({
+								localPath: local.path,
+								remotePath: local.path,
+								remoteBaseDir,
+								recursive: true,
+							}),
+						)
+					}
+					continue
+				}
 				throw new Error(
 					`Folder conflict: local path ${local.path} is a folder but remote path ${remote.path} is a file`,
 				)

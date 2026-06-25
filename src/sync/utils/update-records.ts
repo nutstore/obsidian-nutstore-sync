@@ -96,8 +96,10 @@ export async function updateMtimeInRecord(
 							records.delete(k)
 						}
 					}
-					records.delete(localPath)
-					return
+					if (!local || !remote) {
+						records.delete(localPath)
+						return
+					}
 				}
 
 				if (!local && !remote) {

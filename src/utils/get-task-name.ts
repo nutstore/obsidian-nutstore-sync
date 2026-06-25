@@ -59,6 +59,10 @@ export default function getTaskName(task: BaseTask) {
 				task.options.reason === SkipReason.FolderContainsIgnoredItems
 			) {
 				return i18n.t('sync.skipReason.folder-contains-ignored-items')
+			} else if (task.options.reason === SkipReason.ConflictInSendOnlyMode) {
+				return i18n.t('sync.skipReason.conflict-in-send-only-mode')
+			} else if (task.options.reason === SkipReason.ConflictInReceiveOnlyMode) {
+				return i18n.t('sync.skipReason.conflict-in-receive-only-mode')
 			}
 		})()
 		return `${i18n.t('sync.fileOp.skip')}: ${reasonText}`
