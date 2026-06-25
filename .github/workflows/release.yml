@@ -42,6 +42,7 @@ jobs:
         env:
           NS_NSDAV_ENDPOINT: ${{ vars.NS_NSDAV_ENDPOINT }}
           NS_DAV_ENDPOINT: ${{ vars.NS_DAV_ENDPOINT }}
+          LLM_GATEWAY_CLIENT_ID: ${{ vars.LLM_GATEWAY_CLIENT_ID }}
           NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
