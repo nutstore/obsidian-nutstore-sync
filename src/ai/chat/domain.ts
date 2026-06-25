@@ -4,6 +4,7 @@ import type {
 	ChatMessageRecord,
 	ChatTaskBase,
 	ChatTaskRecord,
+	ChatTodoItem,
 	CompletedChatTask,
 	FailedChatTask,
 	QueuedChatTask,
@@ -139,12 +140,19 @@ export function cloneMessageRecord(
 					usage: cloneUsage(record.meta.usage),
 				}
 			: undefined,
+		todos: record.todos?.map(cloneTodo),
 	}
 }
 
 export function cloneTask(task: ChatTaskRecord): ChatTaskRecord {
 	return {
 		...task,
+	}
+}
+
+export function cloneTodo(todo: ChatTodoItem): ChatTodoItem {
+	return {
+		...todo,
 	}
 }
 
@@ -161,6 +169,25 @@ export function cloneSession(session: ChatSession): ChatSession {
 		})),
 		tasks: session.tasks.map(cloneTask),
 	}
+}
+
+export function getActiveFragment(
+	session: ChatSession,
+): ChatFragment | undefined {
+	return (
+		session.fragments.find((item) => item.id === session.activeFragmentId) ||
+		session.fragments[session.fragments.length - 1]
+	)
+}
+
+export function findLatestTodos(session: ChatSession): ChatTodoItem[] {
+	const fragment = getActiveFragment(session)
+	if (!fragment) return []
+	for (let i = fragment.messages.length - 1; i >= 0; i -= 1) {
+		const todos = fragment.messages[i]?.todos
+		if (todos) return todos.map(cloneTodo)
+	}
+	return []
 }
 
 export function isTerminalTask(task: ChatTaskRecord) {

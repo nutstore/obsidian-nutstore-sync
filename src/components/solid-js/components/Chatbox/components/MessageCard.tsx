@@ -7,6 +7,7 @@ import { ContentBlock } from './ContentBlock'
 import { ContextArea } from './ContextArea'
 import { CopyButton } from './CopyButton'
 import { ToolCallBlock, ToolResultBlock } from './ToolCallBlock'
+import { TodoListBlock } from './TodoListBlock'
 
 type CopyToolResultPart = {
 	type: string
@@ -55,6 +56,24 @@ function copyTextForContentBlock(
 function copyTextForToolCallBlock(
 	block: Extract<ChatDisplayBlock, { kind: 'tool-call' }>,
 ) {
+	const todos = block.toolMessage?.todos
+	if (block.toolCall.toolName === 'todowrite' && Array.isArray(todos)) {
+		const lines = [`${t('chatbox.ui.labels.todoList')}:`, '']
+		for (const todo of todos) {
+			const checked =
+				todo.status === 'completed'
+					? 'x'
+					: todo.status === 'cancelled'
+						? '-'
+						: ' '
+			lines.push(`- [${checked}] ${todo.content}`)
+		}
+		if (todos.length === 0) {
+			lines.push(`- ${t('chatbox.ui.states.todoEmpty')}`)
+		}
+		return lines.join('\n')
+	}
+
 	const resultText = toolResultText(block.toolMessage).trim()
 	const lines = [
 		`${t('chatbox.ui.labels.toolCall')}: ${block.toolCall.toolName}`,
@@ -151,11 +170,36 @@ export function MessageCard(props: {
 								/>
 							</Match>
 							<Match when={block.kind === 'tool-call'}>
-								<ToolCallBlock
-									block={
-										block as Extract<ChatDisplayBlock, { kind: 'tool-call' }>
+								<Show
+									when={
+										(block as Extract<ChatDisplayBlock, { kind: 'tool-call' }>)
+											.toolCall.toolName === 'todowrite' &&
+										Array.isArray(
+											(
+												block as Extract<
+													ChatDisplayBlock,
+													{ kind: 'tool-call' }
+												>
+											).toolMessage?.todos,
+										)
 									}
-								/>
+									fallback={
+										<ToolCallBlock
+											block={
+												block as Extract<
+													ChatDisplayBlock,
+													{ kind: 'tool-call' }
+												>
+											}
+										/>
+									}
+								>
+									<TodoListBlock
+										block={
+											block as Extract<ChatDisplayBlock, { kind: 'tool-call' }>
+										}
+									/>
+								</Show>
 							</Match>
 							<Match when={block.kind === 'tool-result'}>
 								<ToolResultBlock

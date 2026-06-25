@@ -329,6 +329,7 @@ export class SessionProcessor {
 						this.messageFactory.createMessageRecord(item.message, {
 							isError: item.isError,
 							reversibleOps: item.reversibleOps,
+							todos: item.todos,
 						}),
 					)
 				}

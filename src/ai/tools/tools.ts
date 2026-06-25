@@ -4,6 +4,11 @@ import { z } from 'zod'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
 import type { AIToolDefinition, ToolExecutionResult } from '~/ai/core/types'
 import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/tools/bash/runtime'
+import {
+	executeTodoWrite,
+	todoWriteInputSchema,
+	type TodoWriteInput,
+} from '~/ai/tools/todowrite'
 import i18n from '~/i18n'
 import type { PermissionGuard } from './permission-guard'
 
@@ -63,6 +68,7 @@ interface CreateAIToolsOptions {
 	spawnTask?: SpawnToolHandler
 	allowSpawn?: boolean
 	permissionGuard?: PermissionGuard
+	enableTodoWrite?: boolean
 }
 
 function replaceUniqueOccurrence(
@@ -110,6 +116,22 @@ export function createAITools(
 ): AIToolDefinition[] {
 	const { permissionGuard } = options
 	const tools: AIToolDefinition[] = [
+		...(options.enableTodoWrite
+			? [
+					{
+						name: 'todowrite' as const,
+						description:
+							'Create, update, query, and maintain a structured todo list for the current coding session. Use it proactively when work has more than three steps, needs planning, or the user explicitly asks for task tracking. Call without todos to query the current list. Call with the complete current todos array to save the list. Each todo contains only content, status, and priority. Status values are pending, in_progress, completed, or cancelled. Priority values are high, medium, or low. Keep exactly one active todo in in_progress when possible, update progress in real time, and do not batch-complete multiple todos at the end.',
+						inputSchema: todoWriteInputSchema,
+						execute: async (
+							params: TodoWriteInput,
+							context,
+						): Promise<ToolExecutionResult> => {
+							return executeTodoWrite(params, context.session)
+						},
+					} satisfies AIToolDefinition,
+				]
+			: []),
 		{
 			name: 'edit_file',
 			description:

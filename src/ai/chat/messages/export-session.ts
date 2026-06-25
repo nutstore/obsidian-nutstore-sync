@@ -245,11 +245,30 @@ async function buildDisplayBlockMarkdown(
 	const lines = [
 		`- ${i18n.t('chatbox.exportMeta.toolName')}: \`${block.toolCall.toolName}\``,
 		`- ${i18n.t('chatbox.exportMeta.toolCallId')}: \`${block.toolCall.toolCallId}\``,
+	]
+	const todos = block.toolMessage?.todos
+	if (block.toolCall.toolName === 'todowrite' && Array.isArray(todos)) {
+		lines.push('')
+		for (const todo of todos) {
+			const checked =
+				todo.status === 'completed'
+					? 'x'
+					: todo.status === 'cancelled'
+						? '-'
+						: ' '
+			lines.push(`- [${checked}] ${todo.content}`)
+		}
+		if (todos.length === 0) {
+			lines.push(`- ${i18n.t('chatbox.ui.states.todoEmpty')}`)
+		}
+		return lines
+	}
+	lines.push(
 		'',
 		'```json',
 		JSON.stringify(block.toolCall.input ?? {}, null, 2),
 		'```',
-	]
+	)
 	if (block.toolMessage) {
 		const toolContentLines = await buildMessageContentMarkdown(
 			vault,

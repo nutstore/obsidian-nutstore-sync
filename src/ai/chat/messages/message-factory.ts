@@ -68,6 +68,7 @@ export class MessageFactory {
 			meta?: AIMessageRecord['meta']
 			isError?: boolean
 			reversibleOps?: AIMessageRecord['reversibleOps']
+			todos?: AIMessageRecord['todos']
 		},
 	): AIMessageRecord {
 		return {
@@ -82,6 +83,7 @@ export class MessageFactory {
 					(op): op is NonNullable<AIMessageRecord['reversibleOps']>[number] =>
 						!!op,
 				),
+			todos: options?.todos?.map((todo) => ({ ...todo })),
 		}
 	}
 

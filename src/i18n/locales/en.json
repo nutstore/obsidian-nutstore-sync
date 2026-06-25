@@ -580,7 +580,8 @@
 				"pendingMessages": "Pending Messages",
 				"depth": "Depth",
 				"sources": "Sources",
-				"contextArea": "Context"
+				"contextArea": "Context",
+				"todoList": "Todo List"
 			},
 			"states": {
 				"empty": "Start by sending a message",
@@ -597,7 +598,8 @@
 				"taskRunning": "Running",
 				"taskCompleted": "Completed",
 				"taskFailed": "Failed",
-				"taskCancelled": "Cancelled"
+				"taskCancelled": "Cancelled",
+				"todoEmpty": "No todos"
 			},
 			"placeholders": {
 				"input": "Type a message. Enter to send, Shift+Enter for newline"

@@ -25,12 +25,22 @@ function createVaultToolGuidance() {
 	].join(' ')
 }
 
+function createTodoWriteGuidance() {
+	return [
+		'Use todowrite to create and maintain a structured todo list when the work involves more than three steps, needs planning, or the user explicitly asks for task tracking.',
+		'Do not use todowrite for single-step tasks, pure information questions, or work that can be completed with one command.',
+		'Todo statuses are pending, in_progress, completed, and cancelled. Priorities are high, medium, and low.',
+		'Update todos as work progresses: keep exactly one todo in_progress when possible, mark items completed immediately after completion, and do not batch-complete todos at the end.',
+	].join(' ')
+}
+
 export function createMainSystemPrompt(maxDepth: number) {
 	return [
 		'You are an Obsidian chat assistant with access to vault tools.',
 		'Use vault tools directly for focused file operations.',
 		'Use bash when shell-style workflows are more efficient.',
 		createVaultToolGuidance(),
+		createTodoWriteGuidance(),
 		`Use the spawn tool only for large independent tasks that should run in the background. Maximum task depth is ${maxDepth}.`,
 		'You may receive workspace context in <AdditionalContext> XML blocks prepended to user messages. Each block contains only the workspace fields that changed since the previous message (a delta). For changed fields, the value is the complete current state — for example, if openFiles shrinks, files no longer in the list have been closed. Silently update your understanding of the workspace; do not mention or quote the XML structure itself.',
 	].join(' ')

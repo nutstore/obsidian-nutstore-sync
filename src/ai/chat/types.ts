@@ -9,6 +9,7 @@ import type {
 	ToolModelMessage,
 	UserModelMessage,
 } from 'ai'
+import { z } from 'zod'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
 
 export type {
@@ -121,6 +122,7 @@ export interface ChatMessageRecord {
 	isError?: boolean
 	reversibleOps?: ReversibleToolOp[]
 	userContext?: UserContextItem[]
+	todos?: ChatTodoItem[]
 }
 
 export interface ChatTaskBase {
@@ -175,6 +177,25 @@ export type ChatTaskRecord =
 	| CompletedChatTask
 	| FailedChatTask
 	| CancelledChatTask
+
+export const chatTodoStatusSchema = z.enum([
+	'pending',
+	'in_progress',
+	'completed',
+	'cancelled',
+])
+
+export const chatTodoPrioritySchema = z.enum(['high', 'medium', 'low'])
+
+export const chatTodoItemSchema = z.object({
+	content: z.string().trim().min(1),
+	status: chatTodoStatusSchema,
+	priority: chatTodoPrioritySchema.default('medium'),
+})
+
+export type ChatTodoStatus = z.infer<typeof chatTodoStatusSchema>
+export type ChatTodoPriority = z.infer<typeof chatTodoPrioritySchema>
+export type ChatTodoItem = z.infer<typeof chatTodoItemSchema>
 
 export interface ChatPendingMessage {
 	id: string

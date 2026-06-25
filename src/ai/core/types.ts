@@ -5,6 +5,7 @@ import type {
 	ChatMessageMeta as DomainChatMessageMeta,
 	ChatMessageRecord as DomainChatMessageRecord,
 	ChatTaskRecord as DomainChatTaskRecord,
+	ChatTodoItem as DomainChatTodoItem,
 } from '~/ai/chat/types'
 import type { ChatSession as DomainChatSession } from '~/ai/chat/domain'
 import type { ToolCallPart } from 'ai'
@@ -126,6 +127,7 @@ export type AIMessageMeta = DomainChatMessageMeta
 export type AIMessageRecord = DomainChatMessageRecord
 export type AISession = DomainChatSession
 export type AITaskRecord = DomainChatTaskRecord
+export type AITodoItem = DomainChatTodoItem
 
 export interface AIToolExecutionContext {
 	session: AISession
@@ -137,6 +139,7 @@ export interface AIToolExecutionContext {
 export interface ToolExecutionResult {
 	result: string | Record<string, unknown>
 	reversibleOps?: DomainChatMessageRecord['reversibleOps']
+	todos?: DomainChatTodoItem[]
 }
 
 export interface AIToolDefinition {

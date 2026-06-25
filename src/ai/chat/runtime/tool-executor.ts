@@ -6,6 +6,7 @@ import type {
 	AIToolCall,
 	AIToolDefinition,
 	AIToolExecutionContext,
+	AITodoItem,
 	ToolExecutionResult,
 } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
@@ -21,6 +22,7 @@ export interface ResolvedToolResult {
 	payload: string | Record<string, unknown>
 	isError: boolean
 	reversibleOps?: AIMessageRecord['reversibleOps']
+	todos?: AITodoItem[]
 }
 
 export type SpawnTaskHandler = (
@@ -76,6 +78,7 @@ export class ToolExecutor {
 		return createAITools(this.plugin.app, {
 			allowSpawn,
 			permissionGuard,
+			enableTodoWrite: depth === 0,
 			spawnTask: async (params) => ({
 				task_id: null,
 				parent_task_id: parentTaskId || params.parentTaskId || null,
@@ -121,6 +124,7 @@ export class ToolExecutor {
 			},
 			isError: results[index].isError,
 			reversibleOps: results[index].reversibleOps,
+			todos: results[index].todos,
 		}))
 	}
 
@@ -147,6 +151,7 @@ export class ToolExecutor {
 		return {
 			payload: result.payload,
 			reversibleOps: result.reversibleOps,
+			todos: result.todos,
 			isError: typeof result.payload === 'object' && !!result.payload.error,
 		}
 	}
@@ -188,6 +193,7 @@ export class ToolExecutor {
 					(op): op is NonNullable<AIMessageRecord['reversibleOps']>[number] =>
 						!!op,
 				),
+			todos: result.todos,
 		}
 	}
 

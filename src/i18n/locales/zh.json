@@ -580,7 +580,8 @@
 				"pendingMessages": "挂起消息",
 				"depth": "深度",
 				"sources": "来源",
-				"contextArea": "上下文"
+				"contextArea": "上下文",
+				"todoList": "待办列表"
 			},
 			"states": {
 				"empty": "开始发送一条消息",
@@ -597,7 +598,8 @@
 				"taskRunning": "运行中",
 				"taskCompleted": "已完成",
 				"taskFailed": "失败",
-				"taskCancelled": "已取消"
+				"taskCancelled": "已取消",
+				"todoEmpty": "暂无待办"
 			},
 			"placeholders": {
 				"input": "输入消息，Enter 发送，Shift+Enter 换行"
