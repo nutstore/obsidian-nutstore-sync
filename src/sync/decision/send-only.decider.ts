@@ -10,6 +10,7 @@ import {
 	getIgnoredPathsInFolder,
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
+import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import BaseSyncDecider from './base.decider'
 import { areLooseEqualFiles } from './loose-equality'
 import { SyncDecisionInput } from './sync-decision.interface'
@@ -32,7 +33,8 @@ export class SendOnlyOverrideChangesSyncDecider extends BaseSyncDecider {
  * Local is the source of truth for paths that exist locally.
  * - local exists, remote missing → Push
  * - both exist, local differs → Push
- * - remote-only paths are preserved unless overrideChanges is enabled
+ * - recorded remote-only paths are removed when remote is unchanged; otherwise preserved
+ * - unrecorded remote-only paths are preserved unless overrideChanges is enabled
  * Forbidden: Pull, RemoveLocal, MkdirLocal, ConflictResolve
  */
 export async function sendOnlyDecider(
@@ -189,16 +191,46 @@ export async function sendOnlyDecider(
 		}
 
 		if (!local && remote) {
-			if (!mode.overrideChanges) {
+			if (mode.overrideChanges) {
+				logger.debug({
+					reason:
+						'send-only override: remote exists, local missing — remove remote',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				tasks.push(taskFactory.createRemoveRemoteTask(taskOptions))
 				continue
 			}
-			logger.debug({
-				reason:
-					'send-only override: remote exists, local missing — remove remote',
-				localPath: p,
-				remotePath: remotePathToAbsolute(remoteBaseDir, p),
-			})
-			tasks.push(taskFactory.createRemoveRemoteTask(taskOptions))
+			if (!record) {
+				logger.debug({
+					reason: 'send-only: remote-only without record — preserve remote',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				continue
+			}
+			const remoteChanged = !isSameTime(remote.mtime, record.remote.mtime)
+			if (!remoteChanged) {
+				logger.debug({
+					reason: 'send-only: local deleted, remote unchanged — remove remote',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				tasks.push(taskFactory.createRemoveRemoteTask(taskOptions))
+			} else {
+				logger.debug({
+					reason:
+						'send-only: local deleted, remote changed — skip to protect remote change',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				tasks.push(
+					taskFactory.createSkippedTask({
+						...taskOptions,
+						reason: SkipReason.DeletedLocallyButChangedRemotely,
+					}),
+				)
+			}
 			continue
 		}
 	}
@@ -273,42 +305,108 @@ export async function sendOnlyDecider(
 				)
 			}
 		} else {
-			if (!mode.overrideChanges) {
-				continue
-			}
-			if (hasIgnoredInFolder(remote.path, remoteStats)) {
-				const ignoredPaths = getIgnoredPathsInFolder(remote.path, remoteStats)
+			if (mode.overrideChanges) {
+				if (hasIgnoredInFolder(remote.path, remoteStats)) {
+					const ignoredPaths = getIgnoredPathsInFolder(remote.path, remoteStats)
+					logger.debug({
+						reason:
+							'send-only override: skip removing remote folder (contains ignored items)',
+						remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+						localPath,
+						ignoredPaths,
+					})
+					tasks.push(
+						taskFactory.createSkippedTask({
+							localPath,
+							remotePath: remote.path,
+							remoteBaseDir,
+							reason: SkipReason.FolderContainsIgnoredItems,
+							ignoredPaths,
+						}),
+					)
+					continue
+				}
 				logger.debug({
 					reason:
-						'send-only override: skip removing remote folder (contains ignored items)',
+						'send-only override: remote folder missing locally — remove remote',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 					localPath,
-					ignoredPaths,
+				})
+				removeRemoteFolderTasks.push(
+					taskFactory.createRemoveRemoteTask({
+						localPath: remote.path,
+						remotePath: remote.path,
+						remoteBaseDir,
+					}),
+				)
+				continue
+			}
+			const folderRecord = syncRecords.get(localPath)
+			if (!folderRecord) {
+				logger.debug({
+					reason:
+						'send-only: remote folder missing locally without record — preserve remote',
+					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+					localPath,
+				})
+				continue
+			}
+			const remoteFolderChanged = hasFolderContentChanged(
+				remote.path,
+				remoteStatsFiltered,
+				syncRecords,
+				'remote',
+			)
+			if (!remoteFolderChanged) {
+				if (hasIgnoredInFolder(remote.path, remoteStats)) {
+					const ignoredPaths = getIgnoredPathsInFolder(remote.path, remoteStats)
+					logger.debug({
+						reason:
+							'send-only: skip removing remote folder (contains ignored items)',
+						remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+						localPath,
+						ignoredPaths,
+					})
+					tasks.push(
+						taskFactory.createSkippedTask({
+							localPath,
+							remotePath: remote.path,
+							remoteBaseDir,
+							reason: SkipReason.FolderContainsIgnoredItems,
+							ignoredPaths,
+						}),
+					)
+					continue
+				}
+				logger.debug({
+					reason:
+						'send-only: local folder deleted, remote folder unchanged — remove remote',
+					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+					localPath,
+				})
+				removeRemoteFolderTasks.push(
+					taskFactory.createRemoveRemoteTask({
+						localPath: remote.path,
+						remotePath: remote.path,
+						remoteBaseDir,
+					}),
+				)
+			} else {
+				logger.debug({
+					reason:
+						'send-only: local folder deleted, remote folder changed — skip to protect remote change',
+					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+					localPath,
 				})
 				tasks.push(
 					taskFactory.createSkippedTask({
 						localPath,
 						remotePath: remote.path,
 						remoteBaseDir,
-						reason: SkipReason.FolderContainsIgnoredItems,
-						ignoredPaths,
+						reason: SkipReason.DeletedLocallyButChangedRemotely,
 					}),
 				)
-				continue
 			}
-			logger.debug({
-				reason:
-					'send-only override: remote folder missing locally — remove remote',
-				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
-				localPath,
-			})
-			removeRemoteFolderTasks.push(
-				taskFactory.createRemoveRemoteTask({
-					localPath: remote.path,
-					remotePath: remote.path,
-					remoteBaseDir,
-				}),
-			)
 		}
 	}
 

@@ -5,6 +5,8 @@ export enum SkipReason {
 	FolderContainsIgnoredItems = 'folder-contains-ignored-items',
 	ConflictInSendOnlyMode = 'conflict-in-send-only-mode',
 	ConflictInReceiveOnlyMode = 'conflict-in-receive-only-mode',
+	DeletedLocallyButChangedRemotely = 'deleted-locally-but-changed-remotely',
+	DeletedRemotelyButChangedLocally = 'deleted-remotely-but-changed-locally',
 }
 
 export type SkippedTaskReasonOptions =
@@ -35,6 +37,12 @@ export type SkippedTaskReasonOptions =
 	  }
 	| {
 			reason: SkipReason.ConflictInReceiveOnlyMode
+	  }
+	| {
+			reason: SkipReason.DeletedLocallyButChangedRemotely
+	  }
+	| {
+			reason: SkipReason.DeletedRemotelyButChangedLocally
 	  }
 
 export type SkippedTaskOptions = BaseTaskOptions & SkippedTaskReasonOptions
