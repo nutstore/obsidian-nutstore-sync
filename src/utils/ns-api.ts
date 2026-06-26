@@ -1,5 +1,7 @@
-import { NS_NSDAV_ENDPOINT } from '~/consts'
+import { useSettings } from '~/settings'
+import { getNutstoreNsdavEndpoint } from './nutstore-endpoints'
 
-export function NSAPI(name: 'delta' | 'latestDeltaCursor') {
-	return `${NS_NSDAV_ENDPOINT}/${name}`
+export async function NSAPI(name: 'delta' | 'latestDeltaCursor') {
+	const settings = await useSettings()
+	return `${getNutstoreNsdavEndpoint(settings)}/${name}`
 }

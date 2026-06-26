@@ -1,11 +1,11 @@
 import { App, Modal } from 'obsidian'
 import NutstorePlugin from '..'
 
-import { mount as mountWebDAVExplorer } from 'webdav-explorer'
 import { getDirectoryContents } from '~/api/webdav'
 import { fileStatToStatModel } from '~/utils/file-stat-to-stat-model'
 import { mkdirsWebDAV } from '~/utils/mkdirs-webdav'
 import { stdRemotePath } from '~/utils/std-remote-path'
+import { mountWebDAVExplorer } from '../components/solid-js'
 
 export default class SelectRemoteBaseDirModal extends Modal {
 	constructor(
@@ -26,12 +26,12 @@ export default class SelectRemoteBaseDirModal extends Modal {
 
 		mountWebDAVExplorer(explorer, {
 			fs: {
-				ls: async (target) => {
+				ls: async (target: string) => {
 					const token = await this.plugin.getToken()
 					const items = await getDirectoryContents(token, target)
 					return items.map(fileStatToStatModel)
 				},
-				mkdirs: async (path) => {
+				mkdirs: async (path: string) => {
 					await mkdirsWebDAV(webdav, path)
 				},
 			},

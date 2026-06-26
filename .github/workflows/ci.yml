@@ -11,6 +11,8 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v3
+        with:
+          lfs: true
 
       - name: Use Node.js
         uses: actions/setup-node@v3
@@ -22,17 +24,22 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: latest
+          version: latest-9
 
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install
 
+      - name: Update models API catalog
+        run: pnpm run update:models-api
+        continue-on-error: true
+
       - name: Build plugin
         env:
           NS_NSDAV_ENDPOINT: ${{ vars.NS_NSDAV_ENDPOINT }}
           NS_DAV_ENDPOINT: ${{ vars.NS_DAV_ENDPOINT }}
+          LLM_GATEWAY_CLIENT_ID: ${{ vars.LLM_GATEWAY_CLIENT_ID }}
           NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

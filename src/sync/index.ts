@@ -11,6 +11,7 @@ import {
 	emitPreparingSync,
 	emitStartSync,
 	emitSyncError,
+	CompletedTask,
 	emitSyncProgress,
 	onCancelSync,
 } from '~/events'
@@ -18,6 +19,7 @@ import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
+import CacheService from '~/services/cache.service.v1'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import breakableSleep from '~/utils/breakable-sleep'
@@ -26,14 +28,30 @@ import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
+import {
+	getNutstoreDavEndpoint,
+	getNutstoreNsdavEndpoint,
+} from '~/utils/nutstore-endpoints'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import NutstorePlugin from '..'
+import { SyncPolicy } from '~/settings'
 import TwoWaySyncDecider from './decision/two-way.decider'
+import ReceiveOnlySyncDecider, {
+	ReceiveOnlyRevertLocalChangesSyncDecider,
+} from './decision/receive-only.decider'
+import SendOnlySyncDecider, {
+	SendOnlyOverrideChangesSyncDecider,
+} from './decision/send-only.decider'
 import CleanRecordTask from './tasks/clean-record.task'
+import ConflictResolveTask, {
+	ConflictStrategy,
+} from './tasks/conflict-resolve.task'
+import MkdirLocalTask from './tasks/mkdir-local.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import NoopTask from './tasks/noop.task'
 import PushTask from './tasks/push.task'
+import PullTask from './tasks/pull.task'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
 import SkippedTask from './tasks/skipped.task'
@@ -45,6 +63,12 @@ import { updateMtimeInRecord as updateMtimeInRecordUtil } from './utils/update-r
 export enum SyncStartMode {
 	MANUAL_SYNC = 'manual_sync',
 	AUTO_SYNC = 'auto_sync',
+}
+
+export interface SyncStartResult {
+	ended: boolean
+	ranTasks: boolean
+	shouldReloadSettings: boolean
 }
 
 export class NutstoreSync {
@@ -81,7 +105,7 @@ export class NutstoreSync {
 		)
 	}
 
-	async start({ mode }: { mode: SyncStartMode }): Promise<boolean> {
+	async start({ mode }: { mode: SyncStartMode }): Promise<SyncStartResult> {
 		try {
 			const showNotice = mode === SyncStartMode.MANUAL_SYNC
 			let preparingEmitted = false
@@ -99,10 +123,17 @@ export class NutstoreSync {
 			const settings = this.settings
 			const webdav = this.webdav
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
+			logger.info('[Sync] Endpoint:', {
+				loginMode: settings.loginMode,
+				dav: getNutstoreDavEndpoint(settings),
+				nsdav: getNutstoreNsdavEndpoint(settings),
+				remoteBaseDir,
+			})
 			const syncRecord = new SyncRecord(
 				getDBKey(this.vault.getName(), this.remoteBaseDir),
 				syncRecordKV,
 			)
+			const cacheService = new CacheService(this.plugin)
 
 			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 
@@ -113,7 +144,11 @@ export class NutstoreSync {
 			while (!remoteBaseDirExits) {
 				if (this.isCancelled) {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
-					return false
+					return {
+						ended: false,
+						ranTasks: false,
+						shouldReloadSettings: false,
+					}
 				}
 				try {
 					await webdav.createDirectory(this.options.remoteBaseDir, {
@@ -125,7 +160,11 @@ export class NutstoreSync {
 						await this.handle503Error(60000)
 						if (this.isCancelled) {
 							emitSyncError(new Error(i18n.t('sync.cancelled')))
-							return false
+							return {
+								ended: false,
+								ranTasks: false,
+								shouldReloadSettings: false,
+							}
 						}
 						remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 					} else {
@@ -134,13 +173,60 @@ export class NutstoreSync {
 				}
 			}
 
-			const tasks = await new TwoWaySyncDecider(this, syncRecord).decide()
+			await cacheService.restoreRemoteTraversalCacheIfMissing()
+			const decider = (() => {
+				switch (this.localSettings.syncPolicy) {
+					case SyncPolicy.SendOnly:
+						return new SendOnlySyncDecider(this, syncRecord)
+					case SyncPolicy.SendOnlyOverrideChanges:
+						return new SendOnlyOverrideChangesSyncDecider(this, syncRecord)
+					case SyncPolicy.ReceiveOnly:
+						return new ReceiveOnlySyncDecider(this, syncRecord)
+					case SyncPolicy.ReceiveOnlyRevertLocalChanges:
+						return new ReceiveOnlyRevertLocalChangesSyncDecider(
+							this,
+							syncRecord,
+						)
+					case SyncPolicy.TwoWay:
+					default:
+						return new TwoWaySyncDecider(this, syncRecord)
+				}
+			})()
+			const tasks = await decider.decide()
+			await cacheService.saveRemoteTraversalCache()
+
+			logger.info(
+				`[Sync] Decision (policy=${this.localSettings.syncPolicy}):`,
+				{
+					push: tasks.filter((t) => t instanceof PushTask).length,
+					pull: tasks.filter((t) => t instanceof PullTask).length,
+					conflict: tasks.filter((t) => t instanceof ConflictResolveTask)
+						.length,
+					mkdirRemote: tasks.filter((t) => t instanceof MkdirRemoteTask).length,
+					mkdirLocal: tasks.filter((t) => t instanceof MkdirLocalTask).length,
+					removeLocal: tasks.filter((t) => t instanceof RemoveLocalTask).length,
+					removeRemote: tasks.filter((t) => t instanceof RemoveRemoteTask)
+						.length,
+					noop: tasks.filter((t) => t instanceof NoopTask).length,
+					skipped: tasks.filter((t) => t instanceof SkippedTask).length,
+					total: tasks.length,
+				},
+			)
 
 			if (tasks.length === 0) {
 				if (preparingEmitted) {
 					emitEndSync({ showNotice, failedCount: 0 })
+					return {
+						ended: true,
+						ranTasks: false,
+						shouldReloadSettings: false,
+					}
 				}
-				return false
+				return {
+					ended: false,
+					ranTasks: false,
+					shouldReloadSettings: false,
+				}
 			}
 
 			emitPreparingOnce()
@@ -157,7 +243,11 @@ export class NutstoreSync {
 
 			if (this.isCancelled) {
 				emitSyncError(new Error(i18n.t('sync.cancelled')))
-				return false
+				return {
+					ended: false,
+					ranTasks: false,
+					shouldReloadSettings: false,
+				}
 			}
 
 			if (
@@ -173,7 +263,11 @@ export class NutstoreSync {
 					confirmedTasks = confirmExec.tasks
 				} else {
 					emitSyncError(new Error(i18n.t('sync.cancelled')))
-					return false
+					return {
+						ended: false,
+						ranTasks: false,
+						shouldReloadSettings: false,
+					}
 				}
 			}
 
@@ -274,6 +368,7 @@ export class NutstoreSync {
 							// Directory exists, mark it and all parents as existing
 							markPathAndParentsAsExisting(parentRemotePath)
 						} catch (e) {
+							logger.error(e)
 							// Directory doesn't exist, create mkdir task
 							// No need to check parent's parent since createDirectory uses recursive: true
 							const mkdirTask = new MkdirRemoteTask({
@@ -415,7 +510,7 @@ export class NutstoreSync {
 			// Emit start sync event after all confirmations are done
 			emitStartSync({ showNotice })
 			if (totalDisplayableTasks.length > 0) {
-				emitSyncProgress(totalDisplayableTasks.length, [])
+				emitSyncProgress(totalDisplayableTasks.length, [], null)
 			}
 			if (showNotice && hasSubstantialTask) {
 				this.plugin.progressService.showProgressModal()
@@ -424,9 +519,10 @@ export class NutstoreSync {
 			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)
 			const allTasksResult: TaskResult[] = []
+			let shouldReloadSettings = false
 
 			// Track all completed tasks across all chunks
-			const allCompletedTasks: BaseTask[] = []
+			const allCompletedTasks: CompletedTask[] = []
 
 			for (const taskChunk of taskChunks) {
 				const chunkResult = await this.execTasks(
@@ -435,6 +531,9 @@ export class NutstoreSync {
 					allCompletedTasks,
 				)
 				allTasksResult.push(...chunkResult)
+				shouldReloadSettings ||= taskChunk.some((task, index) =>
+					this.didTaskReloadPluginSettings(task, chunkResult[index]),
+				)
 				await this.updateMtimeInRecord(taskChunk, chunkResult)
 
 				if (this.isCancelled) {
@@ -442,7 +541,19 @@ export class NutstoreSync {
 				}
 			}
 
+			if (this.isCancelled) {
+				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				return {
+					ended: false,
+					ranTasks: false,
+					shouldReloadSettings: false,
+				}
+			}
+
 			const failedCount = allTasksResult.filter((r) => !r.success).length
+			logger.info(
+				`[Sync] Completed: ${allTasksResult.length - failedCount} success, ${failedCount} failed`,
+			)
 			logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
 
 			if (mode === SyncStartMode.MANUAL_SYNC && failedCount > 0) {
@@ -462,20 +573,55 @@ export class NutstoreSync {
 			}
 
 			emitEndSync({ failedCount, showNotice })
-			return true
+			return { ended: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
 			emitSyncError(error as Error)
 			logger.error('Sync error:', error)
-			return false
+			return {
+				ended: false,
+				ranTasks: false,
+				shouldReloadSettings: false,
+			}
 		} finally {
 			this.subscriptions.forEach((sub) => sub.unsubscribe())
 		}
 	}
 
+	private didTaskReloadPluginSettings(task: BaseTask, result?: TaskResult) {
+		if (!result?.success || !this.isPluginSettingsPath(task.localPath)) {
+			return false
+		}
+
+		if (task instanceof PullTask || task instanceof RemoveLocalTask) {
+			return true
+		}
+
+		if (task instanceof ConflictResolveTask) {
+			return [
+				ConflictStrategy.DiffMatchPatch,
+				ConflictStrategy.DiffMatchPatchOrSkip,
+				ConflictStrategy.LatestTimeStamp,
+				ConflictStrategy.ServerPriority,
+			].includes(task.options.strategy)
+		}
+
+		return false
+	}
+
+	private isPluginSettingsPath(localPath: string) {
+		const pluginDir = normalizePath(
+			`${this.vault.configDir}/plugins/${this.plugin.manifest.id}`,
+		)
+		return (
+			localPath === `${pluginDir}/data.json` ||
+			localPath === `${pluginDir}/data.local.json`
+		)
+	}
+
 	private async execTasks(
 		tasks: BaseTask[],
 		totalDisplayableTasks: BaseTask[],
-		allCompletedTasks: BaseTask[],
+		allCompletedTasks: CompletedTask[],
 	) {
 		const res: TaskResult[] = []
 		// Filter out NoopTask and CleanRecordTask from total count for progress display
@@ -497,6 +643,10 @@ export class NutstoreSync {
 				break
 			}
 
+			const isDisplayable = !(
+				task instanceof NoopTask || task instanceof CleanRecordTask
+			)
+
 			logger.debug(
 				`Executing task [${i + 1}/${tasks.length}] ${task.localPath}`,
 				{
@@ -504,6 +654,10 @@ export class NutstoreSync {
 					taskPath: task.localPath,
 				},
 			)
+
+			if (isDisplayable) {
+				emitSyncProgress(totalDisplayableTasks.length, allCompletedTasks, task)
+			}
 
 			const taskResult = await this.executeWithRetry(task)
 
@@ -517,10 +671,10 @@ export class NutstoreSync {
 			)
 
 			res[i] = taskResult
-			// Only add substantial tasks to completed list for progress display
-			if (!(task instanceof NoopTask || task instanceof CleanRecordTask)) {
-				allCompletedTasks.push(task)
-				emitSyncProgress(totalDisplayableTasks.length, allCompletedTasks)
+			if (isDisplayable) {
+				allCompletedTasks.push({ task, success: taskResult.success })
+				// Keep current=task so the header doesn't flicker between tasks
+				emitSyncProgress(totalDisplayableTasks.length, allCompletedTasks, task)
 			}
 		}
 
@@ -538,6 +692,7 @@ export class NutstoreSync {
 	 * Automatically handle 503 errors and retry task execution
 	 */
 	private async executeWithRetry(task: BaseTask): Promise<TaskResult> {
+		let retryCount = 0
 		while (true) {
 			if (this.isCancelled) {
 				return {
@@ -547,6 +702,10 @@ export class NutstoreSync {
 			}
 			const taskResult = await task.exec()
 			if (!taskResult.success && is503Error(taskResult.error)) {
+				retryCount++
+				logger.warn(
+					`[Sync] 503 on ${task.localPath}, retry #${retryCount} in 60s`,
+				)
 				await this.handle503Error(60000)
 				if (this.isCancelled) {
 					return {
@@ -600,5 +759,9 @@ export class NutstoreSync {
 
 	get settings() {
 		return this.plugin.settings
+	}
+
+	get localSettings() {
+		return this.plugin.localSettings
 	}
 }

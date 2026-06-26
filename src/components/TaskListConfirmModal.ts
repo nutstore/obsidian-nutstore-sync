@@ -1,11 +1,18 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
 import getTaskName from '~/utils/get-task-name'
+import {
+	mountTaskSelectionVirtualList,
+	type TaskSelectionItem,
+	type TaskSelectionVirtualListController,
+} from '../components/solid-js'
 import { BaseTask } from '../sync/tasks/task.interface'
 
 export default class TaskListConfirmModal extends Modal {
 	private result: boolean = false
 	private selectedTasks: boolean[] = []
+	private listController?: TaskSelectionVirtualListController
+	private resolveOpen?: (value: { confirm: boolean; tasks: BaseTask[] }) => void
 
 	constructor(
 		app: App,
@@ -24,40 +31,29 @@ export default class TaskListConfirmModal extends Modal {
 		const instruction = contentEl.createEl('p')
 		instruction.setText(i18n.t('taskList.instruction'))
 
-		const tableContainer = contentEl.createDiv({
-			cls: 'max-h-50vh overflow-y-auto',
+		const listContainer = contentEl.createDiv({
+			cls: 'h-[50vh] max-h-[50vh] min-h-[16rem] w-full',
 		})
-		const table = tableContainer.createEl('table', { cls: 'task-list-table' })
-
-		const thead = table.createEl('thead')
-		const headerRow = thead.createEl('tr')
-		headerRow.createEl('th', { text: i18n.t('taskList.execute') })
-		headerRow.createEl('th', { text: i18n.t('taskList.action') })
-		headerRow.createEl('th', { text: i18n.t('taskList.localPath') })
-		headerRow.createEl('th', { text: i18n.t('taskList.remotePath') })
-
-		const tbody = table.createEl('tbody')
-		this.tasks.forEach((task, index) => {
-			const row = tbody.createEl('tr')
-			const checkboxCell = row.createEl('td')
-			const checkbox = checkboxCell.createEl('input')
-			checkbox.type = 'checkbox'
-			checkbox.checked = this.selectedTasks[index]
-			checkbox.addEventListener('change', (e) => {
-				this.selectedTasks[index] = checkbox.checked
-				e.stopPropagation()
+		const onToggle = (index: number, checked: boolean) => {
+			this.selectedTasks[index] = checked
+			this.listController?.update({
+				items: this.buildListItems(),
+				onToggle,
+				onToggleAll,
 			})
-			row.addEventListener('click', (e) => {
-				if (e.target === checkbox) {
-					return
-				}
-				checkbox.checked = !checkbox.checked
-				this.selectedTasks[index] = checkbox.checked
-				e.stopPropagation()
+		}
+		const onToggleAll = (checked: boolean) => {
+			this.selectedTasks.fill(checked)
+			this.listController?.update({
+				items: this.buildListItems(),
+				onToggle,
+				onToggleAll,
 			})
-			row.createEl('td', { text: getTaskName(task) })
-			row.createEl('td', { text: task.localPath })
-			row.createEl('td', { text: task.remotePath })
+		}
+		this.listController = mountTaskSelectionVirtualList(listContainer, {
+			items: this.buildListItems(),
+			onToggle,
+			onToggleAll,
 		})
 
 		const settingDiv = contentEl.createDiv()
@@ -81,17 +77,33 @@ export default class TaskListConfirmModal extends Modal {
 	}
 
 	async open(): Promise<{ confirm: boolean; tasks: BaseTask[] }> {
-		super.open()
 		return new Promise((resolve) => {
-			this.onClose = () => {
-				const selectedTasks = this.tasks.filter(
-					(_, index) => this.selectedTasks[index],
-				)
-				resolve({
-					confirm: this.result,
-					tasks: selectedTasks,
-				})
-			}
+			this.resolveOpen = resolve
+			super.open()
 		})
+	}
+
+	onClose() {
+		this.listController?.destroy()
+		this.listController = undefined
+		const selectedTasks = this.tasks.filter(
+			(_, index) => this.selectedTasks[index],
+		)
+		this.resolveOpen?.({
+			confirm: this.result,
+			tasks: selectedTasks,
+		})
+		this.resolveOpen = undefined
+		this.contentEl.empty()
+	}
+
+	private buildListItems(): TaskSelectionItem[] {
+		return this.tasks.map((task, index) => ({
+			id: `${index}-${task.localPath}-${task.remotePath}`,
+			action: getTaskName(task),
+			localPath: task.localPath,
+			remotePath: task.remotePath,
+			checked: this.selectedTasks[index],
+		}))
 	}
 }

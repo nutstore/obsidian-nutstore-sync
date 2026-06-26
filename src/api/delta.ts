@@ -37,7 +37,7 @@ export const getDelta = apiLimiter.wrap(
                   <s:cursor>${cursor ?? ''}</s:cursor>
               </s:delta>`
 		const response = await requestUrl({
-			url: NSAPI('delta'),
+			url: await NSAPI('delta'),
 			method: 'POST',
 			headers: {
 				Authorization: `Basic ${token}`,

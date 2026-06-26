@@ -15,7 +15,7 @@ export default class FilterEditorModal extends Modal {
 	filters: GlobMatchOptions[]
 
 	constructor(
-		private plugin: NutstorePlugin,
+		plugin: NutstorePlugin,
 		filters: GlobMatchOptions[] = [],
 		private onSave: (filters: GlobMatchOptions[]) => void,
 		private filterType: FilterType = FilterType.Exclude,

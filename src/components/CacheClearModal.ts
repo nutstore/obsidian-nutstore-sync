@@ -18,7 +18,7 @@ export default class CacheClearModal extends Modal {
 	}
 
 	constructor(
-		private plugin: NutstorePlugin,
+		plugin: NutstorePlugin,
 		private onSuccess?: (options: CacheClearOptions) => void,
 	) {
 		super(plugin.app)

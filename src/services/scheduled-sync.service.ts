@@ -7,6 +7,7 @@ import type SyncExecutorService from './sync-executor.service'
 export default class ScheduledSyncService {
 	private autoSyncTimer: number | null = null
 	private startupSyncTimer: number | null = null
+	private startupSyncCompleted = false
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -14,21 +15,10 @@ export default class ScheduledSyncService {
 	) {}
 
 	async start() {
-		const settings = await useSettings()
-
-		if (settings.startupSyncDelaySeconds > 0) {
-			this.startupSyncTimer = window.setTimeout(async () => {
-				try {
-					await this.syncExecutor.executeSync({
-						mode: SyncStartMode.AUTO_SYNC,
-					})
-				} finally {
-					this.startTimer(settings.autoSyncIntervalSeconds)
-				}
-			}, settings.startupSyncDelaySeconds * 1000)
-		} else {
-			this.startTimer(settings.autoSyncIntervalSeconds)
-		}
+		this.stopTimer()
+		this.clearStartupTimer()
+		this.startupSyncCompleted = false
+		await this.scheduleStartupOrInterval()
 	}
 
 	private startTimer(intervalSeconds: number) {
@@ -46,6 +36,35 @@ export default class ScheduledSyncService {
 		}
 	}
 
+	private clearStartupTimer() {
+		if (this.startupSyncTimer !== null) {
+			window.clearTimeout(this.startupSyncTimer)
+			this.startupSyncTimer = null
+		}
+	}
+
+	private async scheduleStartupOrInterval() {
+		const settings = await useSettings()
+
+		if (!this.startupSyncCompleted && settings.startupSyncDelaySeconds > 0) {
+			this.startupSyncTimer = window.setTimeout(async () => {
+				this.startupSyncTimer = null
+				this.startupSyncCompleted = true
+				try {
+					await this.syncExecutor.executeSync({
+						mode: SyncStartMode.AUTO_SYNC,
+					})
+				} finally {
+					this.startTimer(this.plugin.settings.autoSyncIntervalSeconds)
+				}
+			}, settings.startupSyncDelaySeconds * 1000)
+			return
+		}
+
+		this.startupSyncCompleted = true
+		this.startTimer(settings.autoSyncIntervalSeconds)
+	}
+
 	private stopTimer() {
 		if (this.autoSyncTimer !== null) {
 			window.clearInterval(this.autoSyncTimer)
@@ -54,15 +73,18 @@ export default class ScheduledSyncService {
 	}
 
 	async updateInterval() {
-		const settings = await useSettings()
-		this.startTimer(settings.autoSyncIntervalSeconds)
+		this.stopTimer()
+		if (!this.startupSyncCompleted) {
+			this.clearStartupTimer()
+			await this.scheduleStartupOrInterval()
+			return
+		}
+
+		this.startTimer(this.plugin.settings.autoSyncIntervalSeconds)
 	}
 
 	unload() {
 		this.stopTimer()
-		if (this.startupSyncTimer !== null) {
-			window.clearTimeout(this.startupSyncTimer)
-			this.startupSyncTimer = null
-		}
+		this.clearStartupTimer()
 	}
 }

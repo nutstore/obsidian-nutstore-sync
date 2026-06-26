@@ -10,6 +10,7 @@ node_modules
 
 # obsidian
 data.json
+data.local.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store

@@ -1,6 +1,10 @@
 import { App, Modal, Setting } from 'obsidian'
-import type { AIFileOperation } from '~/ai/file-operation'
-import type { PermissionRequest } from '~/ai/permission-guard'
+import type { AIFileOperation } from '~/ai/tools/file-operation'
+import type { PermissionRequest } from '~/ai/tools/permission-guard'
+import {
+	applyObsidianModalMountTarget,
+	type ChatModalMountTarget,
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
 
 export type AIPermissionResult = 'approve' | 'auto-approve-operation' | 'deny'
@@ -32,6 +36,7 @@ export default class AIPermissionModal extends Modal {
 	constructor(
 		app: App,
 		private readonly request: PermissionRequest,
+		private readonly mountTarget?: ChatModalMountTarget,
 	) {
 		super(app)
 	}
@@ -97,6 +102,15 @@ export default class AIPermissionModal extends Modal {
 		const { contentEl } = this
 		contentEl.empty()
 
+		if (this.request.sessionTitle) {
+			const sessionEl = contentEl.createEl('p', {
+				text: i18n.t('aiPermission.sessionLabel', {
+					title: this.request.sessionTitle,
+				}),
+			})
+			sessionEl.style.fontWeight = '600'
+		}
+
 		contentEl.createEl('p', {
 			text: i18n.t('aiPermission.message'),
 		})
@@ -150,6 +164,7 @@ export default class AIPermissionModal extends Modal {
 		return new Promise((resolve) => {
 			this.resolve = resolve
 			super.open()
+			applyObsidianModalMountTarget(this, this.mountTarget)
 		})
 	}
 }

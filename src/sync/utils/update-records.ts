@@ -32,7 +32,7 @@ export async function updateMtimeInRecord(
 		return
 	}
 	// Filter out tasks that don't need record updates
-	const tasksNeedingUpdate = tasks.filter((task, idx) => {
+	const tasksNeedingUpdate = tasks.filter((_task, idx) => {
 		return results[idx]?.success && !results[idx]?.skipRecord
 	})
 
@@ -58,7 +58,6 @@ export async function updateMtimeInRecord(
 	const records = await syncRecord.getRecords()
 	const startAt = Date.now()
 	let completedCount = 0
-	let successfulTasksCount = 0
 
 	const debouncedSetRecords = debounce(
 		(records) => syncRecord.setRecords(records),
@@ -97,8 +96,10 @@ export async function updateMtimeInRecord(
 							records.delete(k)
 						}
 					}
-					records.delete(localPath)
-					return
+					if (!local || !remote) {
+						records.delete(localPath)
+						return
+					}
 				}
 
 				if (!local && !remote) {
@@ -109,32 +110,28 @@ export async function updateMtimeInRecord(
 					return
 				}
 				// Calculate base for file content
-				let base: { key: string } | undefined
-				let baseKey: string | undefined
-				if (!local.isDir) {
-					const buffer = await readLocalBinary(vault, localPath)
-					const isMergeable = isMergeablePath(localPath)
-					if (!isMergeable) {
-						baseKey = undefined
-					} else {
+				const base: { key: string } | undefined = await (async () => {
+					let baseKey: string | undefined
+					if (!local.isDir && isMergeablePath(localPath)) {
+						const buffer = await readLocalBinary(vault, localPath)
 						const { key } = await blobStore.store(buffer)
 						baseKey = key
 					}
-				}
-				base = isNil(baseKey) ? undefined : { key: baseKey }
+					return isNil(baseKey) ? undefined : { key: baseKey }
+				})()
 
 				records.set(localPath, {
 					remote: remote.stat,
 					local,
 					base,
 				})
-				successfulTasksCount++
 			} catch (e) {
+				const normalizedError = e instanceof Error ? e : new Error(String(e))
 				logger.error(
 					'updateMtimeInRecord',
 					{
-						errorName: e.name,
-						errorMsg: e.message,
+						errorName: normalizedError.name,
+						errorMsg: normalizedError.message,
 					},
 					task.toJSON(),
 				)

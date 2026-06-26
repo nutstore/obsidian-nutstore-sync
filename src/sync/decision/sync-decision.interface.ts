@@ -2,11 +2,12 @@ import { FsWalkResult } from '~/fs/fs.interface'
 import { StatModel } from '~/model/stat.model'
 import { SyncMode } from '~/settings'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
-import { SkipReason } from '../tasks/skipped.task'
+import { SkippedTaskReasonOptions } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 
 export interface SyncDecisionSettings {
 	skipLargeFiles: { maxSize: string }
+	mobileAppDownloadFileChunkSize: string
 	conflictStrategy: ConflictStrategy
 	useGitStyle: boolean
 	syncMode: SyncMode
@@ -23,6 +24,7 @@ export interface TaskOptions {
 	remotePath: string
 	localPath: string
 	remoteBaseDir: string
+	recursive?: boolean
 }
 
 export interface ConflictTaskOptions extends TaskOptions {
@@ -31,37 +33,15 @@ export interface ConflictTaskOptions extends TaskOptions {
 	localStat: StatModel
 	remoteStat: StatModel
 	useGitStyle: boolean
+	mobileAppDownloadFileChunkSize?: string
 }
 
 export interface PullTaskOptions extends TaskOptions {
 	remoteSize: number
+	mobileAppDownloadFileChunkSize?: string
 }
 
-export type SkippedTaskOptions = TaskOptions &
-	(
-		| {
-				reason: SkipReason.FileTooLarge
-				maxSize: number
-				remoteSize: number
-				localSize?: number
-		  }
-		| {
-				reason: SkipReason.FileTooLarge
-				maxSize: number
-				remoteSize?: number
-				localSize: number
-		  }
-		| {
-				reason: SkipReason.FileTooLarge
-				maxSize: number
-				remoteSize: number
-				localSize: number
-		  }
-		| {
-				reason: SkipReason.FolderContainsIgnoredItems
-				ignoredPaths: string[]
-		  }
-	)
+export type SkippedTaskOptions = TaskOptions & SkippedTaskReasonOptions
 
 export interface TaskFactory {
 	createPullTask(options: PullTaskOptions): BaseTask

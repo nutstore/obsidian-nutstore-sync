@@ -1,12 +1,17 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { clamp, isNil } from 'lodash-es'
-import { Notice, Setting, TextComponent } from 'obsidian'
-import { isNotNil } from 'ramda'
+import { DropdownComponent, Notice, Setting, TextComponent } from 'obsidian'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
+import SyncPolicyModal from '~/components/SyncPolicyModal'
 import i18n from '~/i18n'
 import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
-import { isNumeric } from '~/utils/is-numeric'
-import { SyncMode } from './index'
+import {
+	DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE,
+	MAX_MOBILE_APP_DOWNLOAD_FILE_CHUNK_BYTES,
+	MIN_MOBILE_APP_DOWNLOAD_FILE_CHUNK_BYTES,
+	normalizeByteSizeInput,
+} from '~/utils/download-chunk-size'
+import { SyncPolicy, SyncMode } from './index'
 import BaseSettings from './settings.base'
 
 /**
@@ -31,7 +36,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.remoteBaseDir)
 					.onChange(async (value) => {
 						this.plugin.settings.remoteDir = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					})
 				text.inputEl.addEventListener('blur', () => {
 					this.plugin.settings.remoteDir = this.plugin.remoteBaseDir
@@ -47,10 +52,49 @@ export default class CommonSettings extends BaseSettings {
 					}
 					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
 						this.plugin.settings.remoteDir = path
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 						this.display()
 					}).open()
 				})
+			})
+
+		let syncPolicyDropdown!: DropdownComponent
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.syncPolicy.name'))
+			.setDesc(i18n.t('settings.syncPolicy.desc'))
+			.addDropdown((dropdown) => {
+				syncPolicyDropdown = dropdown
+					.addOption(SyncPolicy.TwoWay, i18n.t('settings.syncPolicy.twoWay'))
+					.addOption(
+						SyncPolicy.SendOnly,
+						i18n.t('settings.syncPolicy.sendOnly'),
+					)
+					.addOption(
+						SyncPolicy.SendOnlyOverrideChanges,
+						i18n.t('settings.syncPolicy.sendOnlyOverrideChanges'),
+					)
+					.addOption(
+						SyncPolicy.ReceiveOnly,
+						i18n.t('settings.syncPolicy.receiveOnly'),
+					)
+					.addOption(
+						SyncPolicy.ReceiveOnlyRevertLocalChanges,
+						i18n.t('settings.syncPolicy.receiveOnlyRevertLocalChanges'),
+					)
+					.setValue(this.plugin.localSettings.syncPolicy)
+					.onChange(async (value) => {
+						const prev = this.plugin.localSettings.syncPolicy
+						const confirmed = await new SyncPolicyModal(
+							this.app,
+							value as SyncPolicy,
+						).open()
+						if (confirmed) {
+							this.plugin.localSettings.syncPolicy = value as SyncPolicy
+							await this.plugin.settingsService.saveLocalSettings()
+						} else {
+							syncPolicyDropdown.setValue(prev)
+						}
+					})
 			})
 
 		new Setting(this.containerEl)
@@ -64,6 +108,24 @@ export default class CommonSettings extends BaseSettings {
 
 				text.inputEl.addEventListener('blur', () => {
 					this.handleMaxFileSizeBlur(text)
+				})
+			})
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.mobileAppDownloadFileChunkSize.name'))
+			.setDesc(i18n.t('settings.mobileAppDownloadFileChunkSize.desc'))
+			.addText((text) => {
+				text
+					.setPlaceholder(
+						i18n.t('settings.mobileAppDownloadFileChunkSize.placeholder'),
+					)
+					.setValue(
+						this.plugin.settings.mobileAppDownloadFileChunkSize ||
+							DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE,
+					)
+
+				text.inputEl.addEventListener('blur', () => {
+					this.handleMobileAppDownloadFileChunkSizeBlur(text)
 				})
 			})
 
@@ -88,10 +150,18 @@ export default class CommonSettings extends BaseSettings {
 						ConflictStrategy.DiffMatchPatchOrSkip,
 						i18n.t('settings.conflictStrategy.diffMatchPatchOrSkip'),
 					)
+					.addOption(
+						ConflictStrategy.LocalPriority,
+						i18n.t('settings.conflictStrategy.localPriority'),
+					)
+					.addOption(
+						ConflictStrategy.ServerPriority,
+						i18n.t('settings.conflictStrategy.serverPriority'),
+					)
 					.setValue(this.plugin.settings.conflictStrategy)
-					.onChange(async (value: ConflictStrategy) => {
-						this.plugin.settings.conflictStrategy = value
-						await this.plugin.saveSettings()
+					.onChange(async (value) => {
+						this.plugin.settings.conflictStrategy = value as ConflictStrategy
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -103,7 +173,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.useGitStyle)
 					.onChange(async (value) => {
 						this.plugin.settings.useGitStyle = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -115,7 +185,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.confirmBeforeSync)
 					.onChange(async (value) => {
 						this.plugin.settings.confirmBeforeSync = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -127,7 +197,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.confirmBeforeDeleteInAutoSync)
 					.onChange(async (value) => {
 						this.plugin.settings.confirmBeforeDeleteInAutoSync = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -139,7 +209,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.realtimeSync)
 					.onChange(async (value) => {
 						this.plugin.settings.realtimeSync = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -156,7 +226,7 @@ export default class CommonSettings extends BaseSettings {
 						if (!isNaN(numValue)) {
 							const clampedValue = clamp(numValue, 0, MAX_SECONDS)
 							this.plugin.settings.startupSyncDelaySeconds = clampedValue
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							if (clampedValue !== numValue) {
 								new Notice(
 									i18n.t('settings.startupSyncDelay.exceedsMax', {
@@ -185,7 +255,7 @@ export default class CommonSettings extends BaseSettings {
 
 					text.setValue(finalValue.toString())
 					this.plugin.settings.startupSyncDelaySeconds = finalValue
-					await this.plugin.saveSettings()
+					await this.plugin.settingsService.saveSettings()
 				})
 				text.inputEl.type = 'number'
 				text.inputEl.min = '0'
@@ -209,7 +279,7 @@ export default class CommonSettings extends BaseSettings {
 						if (!isNaN(numValue)) {
 							const clampedValue = clamp(numValue, 0, MAX_MINUTES)
 							this.plugin.settings.autoSyncIntervalSeconds = clampedValue * 60
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							await this.plugin.scheduledSyncService.updateInterval()
 							if (clampedValue !== numValue) {
 								new Notice(
@@ -239,7 +309,7 @@ export default class CommonSettings extends BaseSettings {
 					}
 
 					this.plugin.settings.autoSyncIntervalSeconds = finalValue * 60
-					await this.plugin.saveSettings()
+					await this.plugin.settingsService.saveSettings()
 					await this.plugin.scheduledSyncService.updateInterval()
 				})
 				text.inputEl.type = 'number'
@@ -258,7 +328,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.syncMode)
 					.onChange(async (value: string) => {
 						this.plugin.settings.syncMode = value as SyncMode
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -279,7 +349,7 @@ export default class CommonSettings extends BaseSettings {
 							isNil(value)
 						) {
 							this.plugin.settings.language = value || undefined
-							await this.plugin.saveSettings()
+							await this.plugin.settingsService.saveSettings()
 							await this.plugin.i18nService.update()
 							await this.settings.display()
 						}
@@ -288,18 +358,7 @@ export default class CommonSettings extends BaseSettings {
 	}
 
 	private async handleMaxFileSizeBlur(component: TextComponent) {
-		let value = component.getValue().trim()
-		// Empty value: restore to default max size
-		if (!value) {
-			value = MAX_FILE_SIZE
-		}
-		// Plain number without unit: append 'B' for better UX
-		else if (
-			isNumeric(value) ||
-			(isNil(bytesParse(value)) && isNotNil(bytesParse(value + 'B')))
-		) {
-			value += 'B'
-		}
+		let value = normalizeByteSizeInput(component.getValue(), MAX_FILE_SIZE)
 		// Validate the input format
 		const parsedBytes = bytesParse(value, { mode: 'jedec' })
 		// Invalid format (e.g., "100FOO"): show error and revert to last saved value
@@ -318,7 +377,42 @@ export default class CommonSettings extends BaseSettings {
 		// Save to disk only if value actually changed
 		if (this.plugin.settings.skipLargeFiles.maxSize !== value) {
 			this.plugin.settings.skipLargeFiles.maxSize = value
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
+		}
+	}
+
+	private async handleMobileAppDownloadFileChunkSizeBlur(
+		component: TextComponent,
+	) {
+		let value = normalizeByteSizeInput(
+			component.getValue(),
+			DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE,
+		)
+		const parsedBytes = bytesParse(value, { mode: 'jedec' })
+		if (parsedBytes === null) {
+			new Notice(
+				i18n.t('settings.mobileAppDownloadFileChunkSize.invalidFormat'),
+			)
+			component.setValue(
+				this.plugin.settings.mobileAppDownloadFileChunkSize ||
+					DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE,
+			)
+			return
+		}
+		if (parsedBytes < MIN_MOBILE_APP_DOWNLOAD_FILE_CHUNK_BYTES) {
+			new Notice(i18n.t('settings.mobileAppDownloadFileChunkSize.belowMinSize'))
+			value = '64 KiB'
+		} else if (parsedBytes > MAX_MOBILE_APP_DOWNLOAD_FILE_CHUNK_BYTES) {
+			new Notice(
+				i18n.t('settings.mobileAppDownloadFileChunkSize.exceedsMaxSize'),
+			)
+			value = '64 MiB'
+		}
+
+		component.setValue(value)
+		if (this.plugin.settings.mobileAppDownloadFileChunkSize !== value) {
+			this.plugin.settings.mobileAppDownloadFileChunkSize = value
+			await this.plugin.settingsService.saveSettings()
 		}
 	}
 }

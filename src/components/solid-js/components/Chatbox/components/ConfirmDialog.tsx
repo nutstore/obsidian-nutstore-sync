@@ -1,0 +1,55 @@
+import { Show } from 'solid-js'
+import { Portal } from 'solid-js/web'
+import { t } from '../../../i18n'
+
+export function ConfirmDialog(props: {
+	title: string | undefined
+	message: string | undefined
+	confirmLabel: string | undefined
+	confirmClass?: string
+	secondaryConfirmLabel?: string | undefined
+	secondaryConfirmClass?: string
+	mountEl?: HTMLElement
+	contained?: boolean
+	onCancel: () => void
+	onConfirm: () => void
+	onSecondaryConfirm?: () => void
+}) {
+	return (
+		<Portal mount={props.mountEl ?? document.body}>
+			<div
+				class={`${props.contained ? 'absolute' : 'fixed'} inset-0 z-[220] flex items-center justify-center bg-black/40 px-4`}
+			>
+				<div class="w-full max-w-sm rounded-4 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] p-4 shadow-xl">
+					<div class="text-base font-semibold text-[var(--text-normal)]">
+						{props.title}
+					</div>
+					<div class="mt-3 text-sm leading-6 text-[var(--text-muted)]">
+						{props.message}
+					</div>
+					<div class="mt-4 flex justify-end gap-2">
+						<button type="button" onClick={() => props.onCancel()}>
+							{t('chatbox.ui.actions.cancel')}
+						</button>
+						<Show when={props.secondaryConfirmLabel}>
+							<button
+								class={props.secondaryConfirmClass}
+								type="button"
+								onClick={() => props.onSecondaryConfirm?.()}
+							>
+								{props.secondaryConfirmLabel}
+							</button>
+						</Show>
+						<button
+							class={props.confirmClass}
+							type="button"
+							onClick={() => props.onConfirm()}
+						>
+							{props.confirmLabel}
+						</button>
+					</div>
+				</div>
+			</div>
+		</Portal>
+	)
+}

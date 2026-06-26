@@ -7,7 +7,7 @@ import {
 	listProviders,
 	sanitizeDefaultSelections,
 	sanitizeProviders,
-} from '~/ai/config'
+} from '~/ai/catalog/config'
 import ProvidersManagerModal from '~/components/ProvidersManagerModal'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
@@ -25,7 +25,7 @@ export default class AISettings extends BaseSettings {
 			.setName(i18n.t('settings.ai.providers.name'))
 			.setDesc(
 				i18n.t('settings.ai.providers.summary', {
-					count: listProviders(this.plugin.settings.ai.providers).length,
+					count: this.listUserManagedProviders().length,
 				}),
 			)
 			.addButton((button) =>
@@ -116,9 +116,16 @@ export default class AISettings extends BaseSettings {
 					.setValue(this.plugin.settings.ai.yolo ?? false)
 					.onChange(async (value) => {
 						this.plugin.settings.ai.yolo = value
-						await this.persist()
+						await this.persist(false)
 					}),
 			)
+	}
+
+	private listUserManagedProviders() {
+		return listProviders(this.plugin.settings.ai.providers).filter(
+			(provider) =>
+				!this.plugin.nutstoreLlmGatewayService.isManagedProvider(provider),
+		)
 	}
 
 	private async persist(showNotice: boolean = true) {
@@ -130,7 +137,7 @@ export default class AISettings extends BaseSettings {
 				this.plugin.settings.ai.providers,
 				this.plugin.settings.ai.defaultModel,
 			)
-			await this.plugin.saveSettings()
+			await this.plugin.settingsService.saveSettings()
 			if (showNotice) {
 				new Notice(i18n.t('settings.ai.saved'))
 			}

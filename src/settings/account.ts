@@ -1,6 +1,7 @@
 import { createOAuthUrl } from '@nutstore/sso-js'
 import { Notice, Setting } from 'obsidian'
 import LogoutConfirmModal from '~/components/LogoutConfirmModal'
+import NutstoreEnterpriseBaseUrlModal from '~/components/NutstoreEnterpriseBaseUrlModal'
 import i18n from '~/i18n'
 import { OAuthResponse } from '~/utils/decrypt-ticket-response'
 import { is503Error } from '~/utils/is-503-error'
@@ -23,9 +24,10 @@ export default class AccountSettings extends BaseSettings {
 					.addOption('manual', i18n.t('settings.loginMode.manual'))
 					.addOption('sso', i18n.t('settings.loginMode.sso'))
 					.setValue(this.plugin.settings.loginMode)
-					.onChange(async (value: 'manual' | 'sso') => {
-						this.plugin.settings.loginMode = value
-						await this.plugin.saveSettings()
+					.onChange(async (value) => {
+						this.plugin.settings.loginMode =
+							value === 'manual' ? 'manual' : 'sso'
+						await this.plugin.settingsService.saveSettings()
 						this.display()
 					}),
 			)
@@ -46,12 +48,22 @@ export default class AccountSettings extends BaseSettings {
 
 	private displayManualLoginSettings(): void {
 		const helper = new Setting(this.containerEl)
+		helper.descEl.addClass('settings-helper-links')
 		const anchor = helper.descEl.createEl('a', {
 			href: 'https://help.jianguoyun.com/?p=2064',
-			cls: 'no-underline',
+			cls: 'settings-helper-badge no-underline',
 			text: i18n.t('settings.help.name'),
 		})
 		anchor.target = '_blank'
+		const enterpriseAnchor = helper.descEl.createEl('a', {
+			href: '#',
+			cls: 'settings-helper-badge no-underline',
+			text: i18n.t('settings.enterpriseBaseUrl.name'),
+		})
+		enterpriseAnchor.addEventListener('click', (event) => {
+			event.preventDefault()
+			new NutstoreEnterpriseBaseUrlModal(this.plugin).open()
+		})
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.account.name'))
@@ -62,7 +74,7 @@ export default class AccountSettings extends BaseSettings {
 					.setValue(this.plugin.settings.account)
 					.onChange(async (value) => {
 						this.plugin.settings.account = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					}),
 			)
 
@@ -75,7 +87,7 @@ export default class AccountSettings extends BaseSettings {
 					.setValue(this.plugin.settings.credential)
 					.onChange(async (value) => {
 						this.plugin.settings.credential = value
-						await this.plugin.saveSettings()
+						await this.plugin.settingsService.saveSettings()
 					})
 				text.inputEl.type = 'password'
 			})
@@ -105,7 +117,7 @@ export default class AccountSettings extends BaseSettings {
 						.onClick(() => {
 							new LogoutConfirmModal(this.app, async () => {
 								this.plugin.settings.oauthResponseText = ''
-								await this.plugin.saveSettings()
+								await this.plugin.settingsService.saveSettings()
 								new Notice(i18n.t('settings.ssoStatus.logoutSuccess'))
 								this.display()
 							}).open()

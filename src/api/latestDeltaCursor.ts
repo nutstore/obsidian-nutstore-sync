@@ -19,7 +19,7 @@ export const getLatestDeltaCursor = apiLimiter.wrap(
 			'Content-Type': 'application/xml',
 		}
 		const response = await requestUrl({
-			url: NSAPI('latestDeltaCursor'),
+			url: await NSAPI('latestDeltaCursor'),
 			method: 'POST',
 			headers,
 			body,

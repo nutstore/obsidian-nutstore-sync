@@ -1,3 +1,4 @@
+export * from './gc-stop'
 export * from './sync-cancel'
 export * from './sync-end'
 export * from './sync-error'

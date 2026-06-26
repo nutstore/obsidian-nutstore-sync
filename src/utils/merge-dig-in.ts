@@ -41,7 +41,7 @@ export function mergeDigIn(
 		} else {
 			const c = diffComm(region.conflict!.a, region.conflict!.b)
 			for (let j = 0; j < c.length; j++) {
-				let inner = c[j]
+				const inner = c[j]
 				if (inner.common) {
 					result = result.concat(inner.common)
 				} else {

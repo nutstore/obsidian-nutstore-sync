@@ -1,30 +1,10 @@
 import {
-	Platform,
 	requestUrl as req,
 	RequestUrlParam,
 	RequestUrlResponse,
 } from 'obsidian'
-import { PLUGIN_VERSION } from '~/consts'
 import logger from './logger'
-
-const getOS = () => {
-	if (Platform.isWin) return 'Windows'
-	if (Platform.isMacOS) return 'macOS'
-	if (Platform.isLinux) return 'Linux'
-	if (Platform.isAndroidApp) return 'Android'
-	if (Platform.isIosApp) return 'iOS'
-	return 'Unknown'
-}
-
-const getDevice = () => {
-	if (Platform.isTablet) return 'Tablet'
-	if (Platform.isPhone) return 'Phone'
-	if (Platform.isDesktopApp) return 'Desktop'
-	if (Platform.isMobileApp) return 'Mobile'
-	return 'Unknown'
-}
-
-const USER_AGENT = `Obsidian (${getOS()}; ${getDevice()}; ObsidianNutstoreSync/${PLUGIN_VERSION})`
+import { isNutstoreHost, MOCK_USER_AGENT, NS_SYNC_USER_AGENT } from './ua'
 
 class RequestUrlError extends Error {
 	constructor(public res: RequestUrlResponse) {
@@ -33,18 +13,29 @@ class RequestUrlError extends Error {
 }
 
 export default async function requestUrl(p: RequestUrlParam | string) {
+	const url = typeof p === 'string' ? p : p.url
+	const originalHeaders = typeof p === 'string' ? {} : p.headers || {}
+	const headers = isNutstoreHost(url)
+		? {
+				...originalHeaders,
+				'User-Agent': NS_SYNC_USER_AGENT,
+			}
+		: {
+				...originalHeaders,
+				'User-Agent': MOCK_USER_AGENT,
+			}
+
 	const params: RequestUrlParam =
 		typeof p === 'string'
 			? {
-					url: p,
+					url,
 					throw: false,
+					headers,
 				}
 			: {
 					...p,
 					throw: false,
-					headers: {
-						...(p.headers || {}),
-					},
+					headers,
 				}
 
 	const res = await req(params)

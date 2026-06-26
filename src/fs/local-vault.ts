@@ -11,6 +11,7 @@ import GlobMatch, {
 	needIncludeFromGlobRules,
 } from '~/utils/glob-match'
 import { traverseLocalVault } from '~/utils/traverse-local-vault'
+import { isSyncCacheLocalPath } from '~/utils/sync-cache-file'
 import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
@@ -46,8 +47,10 @@ export class LocalVaultFileSystem implements AbstractFileSystem {
 			this.options.vault,
 			this.options.vault.getRoot().path,
 		)
-		const includedStats = stats.filter((stat) =>
-			needIncludeFromGlobRules(stat.path, inclusions, exclusions),
+		const includedStats = stats.filter(
+			(stat) =>
+				!isSyncCacheLocalPath(stat.path, this.options.vault.configDir) &&
+				needIncludeFromGlobRules(stat.path, inclusions, exclusions),
 		)
 		const completeStats = completeLossDir(stats, includedStats)
 		const completeStatPaths = new Set(completeStats.map((s) => s.path))

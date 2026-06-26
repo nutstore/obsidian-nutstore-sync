@@ -38,4 +38,17 @@ declare module 'obsidian' {
 		 */
 		setting?: ObsidianSetting
 	}
+
+	interface MenuItem {
+		/**
+		 * Creates a submenu for this menu item.
+		 * Internal Obsidian API, available at runtime but missing from older typings.
+		 */
+		setSubmenu(): this
+
+		/**
+		 * Submenu instance created by setSubmenu().
+		 */
+		submenu?: Menu
+	}
 }
