@@ -107,9 +107,9 @@
 			"modal": {
 				"title": "Confirm sync policy",
 				"twoWayDesc": "Local and cloud sync in both directions — additions and deletions on either side are applied to the other.\nIf the same file is edited on both sides, conflicts are resolved by your configured strategy.",
-				"sendOnlyDesc": "Only send local additions and modifications to the cloud.\nFiles that exist on the cloud but not locally are preserved.\nWhen both sides differ at the same path, the local version overwrites the cloud version.",
+				"sendOnlyDesc": "Send all local changes (additions, modifications, deletions) to the cloud.\n\n• Local new/modified files → uploaded to the cloud\n• Files deleted locally with no cloud changes → removed from the cloud\n• Cloud-only new or modified files → preserved\n• Deleted locally while the cloud also has changes → skipped (to protect cloud edits)\n\nBest for: local as source of truth, cloud as secondary.",
 				"sendOnlyOverrideChangesDesc": "Overwrite the cloud with the full current state of your local vault.\nFiles that exist on the cloud but not locally will be deleted.\nBest when you need to force the cloud to converge to local.",
-				"receiveOnlyDesc": "Only receive cloud additions and modifications into your local vault.\nFiles that exist locally but not on the cloud are preserved.\nWhen both sides differ at the same path, the cloud version overwrites the local version.",
+				"receiveOnlyDesc": "Receive all cloud changes (additions, modifications, deletions) into your local vault.\n\n• Cloud new/modified files → downloaded to local\n• Files deleted on the cloud with no local changes → removed from local\n• Local-only new or modified files → preserved\n• Deleted on the cloud while local also has changes → skipped (to protect local edits)\n\nBest for: read-only devices, or cloud as source of truth.",
 				"receiveOnlyRevertLocalChangesDesc": "Revert your local vault to the full current state of the cloud.\nFiles that exist locally but not on the cloud will be deleted.\nBest for read-only devices or when the cloud must be the source of truth.",
 				"confirm": "Confirm",
 				"cancel": "Cancel"
@@ -456,7 +456,9 @@
 			"file-too-large": "File too large",
 			"folder-contains-ignored-items": "Folder contains ignored items",
 			"conflict-in-send-only-mode": "Both local and cloud changed; send-only mode preserved the cloud version",
-			"conflict-in-receive-only-mode": "Both local and cloud changed; receive-only mode preserved the local version"
+			"conflict-in-receive-only-mode": "Both local and cloud changed; receive-only mode preserved the local version",
+			"deleted-locally-but-changed-remotely": "Deleted locally, but the cloud has changes; skipped to protect cloud edits",
+			"deleted-remotely-but-changed-locally": "Deleted on the cloud, but local has changes; skipped to protect local edits"
 		},
 		"confirmModal": {
 			"title": "Sync confirmation",
