@@ -57,7 +57,7 @@ export default class SyncExecutorService {
 				mode: options.mode,
 			})
 
-			return result.ranTasks
+			return result.ended
 		} catch (error) {
 			emitSyncError(error as Error)
 			logger.error('Sync error:', error)

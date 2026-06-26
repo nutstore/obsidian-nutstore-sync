@@ -134,6 +134,7 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	async onunload() {
+		this.settingTab?.unload()
 		this.settingsService.unload()
 		this.app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
 		setPluginInstance(null)

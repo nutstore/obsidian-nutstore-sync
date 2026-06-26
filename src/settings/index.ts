@@ -238,10 +238,10 @@ export class NutstoreSettingTab extends PluginSettingTab {
 
 	private readonly subscriptions: Subscription[] = [
 		onSsoReceive().subscribe(() => {
-			this.display()
+			void this.rerenderIfVisible()
 		}),
 		onNutstoreLlmGatewayAuth().subscribe(() => {
-			this.display()
+			void this.rerenderIfVisible()
 		}),
 	]
 
@@ -312,13 +312,12 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		await this.display()
 	}
 
-	async hide() {
+	async onClose() {
 		await this.accountSettings.hide()
 		this.troubleshootingSettings.hide()
 	}
 
-	async onClose() {
-		await this.hide()
+	unload() {
 		for (const subscription of this.subscriptions) {
 			subscription.unsubscribe()
 		}

@@ -40,6 +40,10 @@ function createPlugin(): any {
 		gcService: {
 			isRunningNow: vi.fn(() => false),
 			waitUntilIdle: vi.fn(async () => undefined),
+			runBlobGc: vi.fn(async () => undefined),
+		},
+		settingsService: {
+			scheduleReloadSettingsFromDisk: vi.fn(),
 		},
 	}
 }
@@ -52,7 +56,11 @@ describe('SyncExecutorService', () => {
 	})
 
 	it('delegates directly to NutstoreSync.start and returns its result', async () => {
-		startMock.mockResolvedValue(true)
+		startMock.mockResolvedValue({
+			ended: true,
+			ranTasks: true,
+			shouldReloadSettings: false,
+		})
 		const plugin = createPlugin()
 		const service = new SyncExecutorService(plugin)
 
@@ -95,12 +103,17 @@ describe('SyncExecutorService', () => {
 	})
 
 	it('stops gc and continues sync when gc is running', async () => {
-		startMock.mockResolvedValue(true)
+		startMock.mockResolvedValue({
+			ended: true,
+			ranTasks: true,
+			shouldReloadSettings: false,
+		})
 		const plugin: any = {
 			...createPlugin(),
 			gcService: {
 				isRunningNow: vi.fn(() => true),
 				waitUntilIdle: vi.fn(async () => undefined),
+				runBlobGc: vi.fn(async () => undefined),
 			},
 		}
 		const service = new SyncExecutorService(plugin)
@@ -113,5 +126,19 @@ describe('SyncExecutorService', () => {
 		expect(plugin.gcService.waitUntilIdle).toHaveBeenCalledTimes(1)
 		expect(nutstoreSyncCtor).toHaveBeenCalledTimes(1)
 		expect(startMock).toHaveBeenCalledWith({ mode: SyncStartMode.AUTO_SYNC })
+	})
+
+	it('returns true when sync completes without runnable tasks', async () => {
+		startMock.mockResolvedValue({
+			ended: true,
+			ranTasks: false,
+			shouldReloadSettings: false,
+		})
+		const plugin = createPlugin()
+		const service = new SyncExecutorService(plugin)
+
+		await expect(
+			service.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
+		).resolves.toBe(true)
 	})
 })
