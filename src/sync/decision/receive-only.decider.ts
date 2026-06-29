@@ -290,6 +290,15 @@ export async function receiveOnlyDecider(
 				)
 			}
 		} else {
+			const folderRecord = syncRecords.get(localPath)
+			if (folderRecord && !mode.revertLocalChanges) {
+				logger.debug({
+					reason: 'receive-only: preserve local folder deletion until revert',
+					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+					localPath,
+				})
+				continue
+			}
 			logger.debug({
 				reason: 'receive-only: remote folder missing locally — mkdir local',
 				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),

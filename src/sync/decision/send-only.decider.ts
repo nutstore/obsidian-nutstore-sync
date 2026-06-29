@@ -418,6 +418,15 @@ export async function sendOnlyDecider(
 		const remote = remoteStatsMap.get(local.path)
 
 		if (!remote) {
+			const folderRecord = syncRecords.get(local.path)
+			if (folderRecord && !mode.overrideChanges) {
+				logger.debug({
+					reason: 'send-only: preserve remote folder deletion until override',
+					localPath: local.path,
+					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+				})
+				continue
+			}
 			logger.debug({
 				reason: 'send-only: local folder missing remotely — mkdir remote',
 				localPath: local.path,
