@@ -8,11 +8,11 @@ import type {
 import { tool as aiTool, stepCountIs, streamText } from 'ai'
 import { getProviderResolver } from '../providers/registry'
 import {
-	AIModelConfig,
 	AIMessage,
 	AIMessageMeta,
-	AIProviderConfig,
+	AIModelConfig,
 	AIModelProviderOverride,
+	AIProviderConfig,
 	AIToolDefinition,
 } from './types'
 
@@ -181,8 +181,7 @@ export async function generateAssistantTurn(
 		modelConfig?.provider,
 	)
 	const resolver = getProviderResolver(provider)
-	const modelName =
-		modelConfig?.name?.trim() || request.model
+	const modelName = modelConfig?.name?.trim() || request.model
 	const inputModalities = modelConfig?.modalities.input || ['text']
 	const messages = mergeAdjacentUserMessages(
 		adaptMessagesByInputModalities(request.messages, inputModalities),
@@ -215,14 +214,19 @@ export async function generateAssistantTurn(
 	}
 
 	const text = await result.text
-	const reasoning = await result.reasoning
+	const finalStep = await result.finalStep
+	const reasoning = finalStep.reasoning
 	const toolCalls = await result.toolCalls
-	const usage = await result.totalUsage
+	const usage = await result.usage
 	const finishReason = await result.finishReason
-	const response = await result.response
+	const response = finalStep.response
 
 	const content: AssistantModelMessage['content'] = [
-		...reasoning.map((r) => ({ type: 'reasoning' as const, text: r.text })),
+		...reasoning
+			.filter(
+				(r): r is { type: 'reasoning'; text: string } => r.type === 'reasoning',
+			)
+			.map((r) => ({ type: 'reasoning' as const, text: r.text })),
 		...(text ? [{ type: 'text' as const, text }] : []),
 		...toolCalls,
 	]
