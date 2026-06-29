@@ -1,7 +1,6 @@
 import type {
 	AssistantModelMessage,
 	FilePart,
-	ImagePart,
 	TextPart,
 	UserModelMessage,
 } from 'ai'
@@ -20,6 +19,7 @@ export interface GenerateAssistantTurnRequest {
 	provider: AIProviderConfig
 	model: string
 	messages: AIMessage[]
+	systemPrompt?: string
 	tools: AIToolDefinition[]
 	temperature?: number
 	maxTokens?: number
@@ -53,15 +53,16 @@ function inferFilePartModality(
 	part: FilePart,
 ): AIModelConfig['modalities']['input'][number] | undefined {
 	const mediaType = part.mediaType.toLowerCase()
-	if (mediaType.startsWith('image/')) return 'image'
-	if (mediaType.startsWith('audio/')) return 'audio'
-	if (mediaType.startsWith('video/')) return 'video'
+	const topLevel = mediaType.split('/')[0]
+	if (mediaType === 'image' || topLevel === 'image') return 'image'
+	if (mediaType === 'audio' || topLevel === 'audio') return 'audio'
+	if (mediaType === 'video' || topLevel === 'video') return 'video'
 	if (mediaType === 'application/pdf') return 'pdf'
 	return undefined
 }
 
 function getPartModality(
-	part: TextPart | ImagePart | FilePart,
+	part: TextPart | FilePart | { type: 'image' },
 ): AIModelConfig['modalities']['input'][number] | undefined {
 	switch (part.type) {
 		case 'text':
@@ -76,7 +77,7 @@ function getPartModality(
 }
 
 function createUnsupportedPartPlaceholder(
-	part: TextPart | ImagePart | FilePart,
+	part: TextPart | FilePart | { type: 'image' },
 	modality: AIModelConfig['modalities']['input'][number] | undefined,
 ): TextPart {
 	if (part.type === 'file') {
@@ -185,7 +186,7 @@ export async function generateAssistantTurn(
 	const inputModalities = modelConfig?.modalities.input || ['text']
 	const messages = mergeAdjacentUserMessages(
 		adaptMessagesByInputModalities(request.messages, inputModalities),
-	)
+	).filter((message) => message.role !== 'system')
 	const { model, providerName } = resolver.createLanguageModel(
 		provider,
 		request.model,
@@ -194,6 +195,7 @@ export async function generateAssistantTurn(
 	const result = streamText({
 		model,
 		messages: messages,
+		instructions: request.systemPrompt,
 		tools: toAISDKTools(request.tools),
 		stopWhen: stepCountIs(1),
 		abortSignal: request.abortSignal,

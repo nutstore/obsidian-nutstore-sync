@@ -165,10 +165,9 @@ export class SessionProcessor {
 					await this.store.persistSession(session)
 					return
 				}
-				const requestMessages = await this.buildMessagesForFragment(
-					fragment,
-					session,
-				)
+				const requestMessages = await this.buildMessagesForFragment(fragment)
+				const systemPrompt =
+					session.systemPrompt || createMainSystemPrompt(MAX_TASK_DEPTH)
 				const assistantMeta = {
 					providerId: provider.id,
 					providerName: provider.name,
@@ -203,6 +202,7 @@ export class SessionProcessor {
 								provider,
 								model: model.id,
 								messages: requestMessages,
+								systemPrompt,
 								tools,
 								abortSignal: abortController.signal,
 								...session.inferenceParams,
@@ -413,8 +413,8 @@ export class SessionProcessor {
 			preparedContext.dedupedItems.length > 0
 				? preparedContext.dedupedItems
 				: undefined,
-			preparedContext.imageParts.length > 0
-				? preparedContext.imageParts
+			preparedContext.fileParts.length > 0
+				? preparedContext.fileParts
 				: undefined,
 		)
 		this.store.upsertSessionIndexItem(session, deriveTitle(session))
@@ -426,7 +426,6 @@ export class SessionProcessor {
 
 	private async buildMessagesForFragment(
 		fragment: ChatFragment,
-		session: AISession,
 	): Promise<AIMessage[]> {
 		const messages = await Promise.all(
 			fragment.messages.map(async (item) => {
@@ -474,12 +473,6 @@ export class SessionProcessor {
 				} as AIMessage
 			}),
 		)
-		return [
-			{
-				role: 'system',
-				content: session.systemPrompt || createMainSystemPrompt(MAX_TASK_DEPTH),
-			},
-			...messages,
-		]
+		return messages
 	}
 }
