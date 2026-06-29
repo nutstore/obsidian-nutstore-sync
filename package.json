@@ -17,6 +17,8 @@
 		"@ai-sdk/google": "^4.0.2",
 		"@ai-sdk/openai": "^4.0.2",
 		"@ai-sdk/xai": "^4.0.2",
+		"@codemirror/state": "6.5.2",
+		"@codemirror/view": "6.36.4",
 		"@electron/remote": "^2.1.2",
 		"@eslint/compat": "^2.1.0",
 		"@eslint/css": "^1.2.0",

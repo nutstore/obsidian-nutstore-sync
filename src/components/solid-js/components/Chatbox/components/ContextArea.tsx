@@ -146,7 +146,7 @@ export function ContextArea(props: {
 									(item.placeholder ||
 										t('chatbox.ui.states.loadingContextItem'))}
 								{item.type === 'selection' &&
-									`${basename(item.filePath)} L${item.range.from.line + 1}:${item.range.from.ch}-L${item.range.to.line + 1}:${item.range.to.ch}`}
+									`${basename(item.filePath)} L${item.range.from.line + 1}:${item.range.from.ch + 1}-L${item.range.to.line + 1}:${item.range.to.ch + 1}`}
 							</span>
 							<Show when={props.onRemove}>
 								<RemoveButton onClick={() => props.onRemove!(index())} />

@@ -20,6 +20,12 @@ importers:
       '@ai-sdk/xai':
         specifier: ^4.0.2
         version: 4.0.2(zod@4.3.6)
+      '@codemirror/state':
+        specifier: 6.5.2
+        version: 6.5.2
+      '@codemirror/view':
+        specifier: 6.36.4
+        version: 6.36.4
       '@electron/remote':
         specifier: ^2.1.2
         version: 2.1.3(electron@35.0.3)

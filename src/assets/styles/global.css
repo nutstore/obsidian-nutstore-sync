@@ -220,6 +220,11 @@ input.success {
 	max-height: calc(100% - 2rem);
 }
 
+/* Keep Obsidian menus above the chatbox history sheet and contained modals. */
+.menu {
+	z-index: 230 !important;
+}
+
 .modal.provider-editor-modal {
 	width: min(720px, calc(100vw - 2rem));
 	max-width: 720px;
@@ -397,6 +402,8 @@ input.success {
 .chatbox-input-pane {
 	display: flex;
 	flex-direction: column;
+	min-height: 0;
+	border-top: 1px solid var(--background-modifier-border);
 }
 
 .chatbox-file-drag-active::after {
@@ -446,21 +453,23 @@ input.success {
 	user-select: none !important;
 }
 
-@media (pointer: fine) and (min-width: 1024px) {
-	.chatbox-input-pane--resizable {
-		border-top-width: 0;
-		min-height: 0;
-	}
+.chatbox-input-pane--resizable {
+	border-top-width: 0;
+}
 
-	.chatbox-input-pane--resizable .chatbox-input {
-		flex: 1 1 auto;
-		height: 100%;
-		min-height: 4rem;
-		min-width: 0;
-	}
+.chatbox-input-pane--resizable .chatbox-input {
+	flex: 0 0 auto;
+	min-height: 4rem;
+	min-width: 0;
+	resize: none;
 }
 
 @media (max-width: 768px) {
+	.chatbox-resizer {
+		padding-bottom: 8px;
+		padding-top: 8px;
+	}
+
 	.chatbox-input {
 		height: 5.5rem;
 		padding: 0.625rem;

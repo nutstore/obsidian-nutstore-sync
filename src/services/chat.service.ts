@@ -234,6 +234,7 @@ export default class ChatService {
 
 		return {
 			title: this.getActiveSessionTitle(),
+			activeContextItems: [],
 			sessionHistory: this.state.sessionIndex.map((item) => ({ ...item })),
 			activeSessionId: this.state.activeSessionId,
 			timeline: activeSession ? buildTimeline(activeSession) : [],
@@ -524,7 +525,10 @@ export default class ChatService {
 		this.userContextManager.updateInputDraft(text)
 	}
 
-	async sendMessage(text: string): Promise<boolean> {
+	async sendMessage(
+		text: string,
+		activeContextItems: UserContextItem[] = [],
+	): Promise<boolean> {
 		await this.initialize()
 		const normalizedText = text.trim()
 		const session =
@@ -533,7 +537,11 @@ export default class ChatService {
 			return false
 		}
 		const runtime = this.runtimeStates.get(session.id)
-		if (!normalizedText && runtime.pendingUserContext.length === 0) {
+		if (
+			!normalizedText &&
+			runtime.pendingUserContext.length === 0 &&
+			activeContextItems.length === 0
+		) {
 			return false
 		}
 
@@ -551,7 +559,9 @@ export default class ChatService {
 			return true
 		}
 
-		const pendingUserContext = runtime.pendingUserContext.splice(0)
+		const pendingUserContext = runtime.pendingUserContext
+			.splice(0)
+			.concat(activeContextItems)
 		const preparedContext =
 			await this.userContextManager.prepareUserContextForMessage(
 				pendingUserContext,
