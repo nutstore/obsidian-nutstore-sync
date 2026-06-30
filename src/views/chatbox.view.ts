@@ -260,7 +260,10 @@ export default class ChatboxView extends ItemView {
 		const markdownView = this.resolveMarkdownView(allowFallback)
 		if (!markdownView) {
 			const activeFile = this.app.workspace.getActiveFile()
-			if (!activeFile) {
+			if (activeFile) {
+				this.activeFilePathSnapshot = activeFile.path
+				this.activeSelectionSnapshot = undefined
+			} else {
 				this.clearActiveContextSnapshot()
 			}
 			this.clearSelectionHighlight()
