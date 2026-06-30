@@ -992,17 +992,19 @@ function Chatbox(props: ChatboxProps) {
 					{/* Input */}
 					<div
 						ref={inputPaneEl}
-						class={`chatbox-input-pane shrink-0 px-3 pb-3 pt-1.5 ${'chatbox-input-pane--resizable'}`}
+						class={`chatbox-input-pane shrink-0 px-2 pb-1 ${'chatbox-input-pane--resizable'}`}
 					>
-						<Show when={props.activeContextItems.length > 0}>
-							<ContextArea items={props.activeContextItems} />
-						</Show>
-						<Show when={props.draft.userContext.length > 0}>
-							<ContextArea
-								items={props.draft.userContext}
-								onRemove={props.onRemoveUserContext}
-							/>
-						</Show>
+						<div class="chatbox-context-header">
+							<Show when={props.activeContextItems.length > 0}>
+								<ContextArea items={props.activeContextItems} />
+							</Show>
+							<Show when={props.draft.userContext.length > 0}>
+								<ContextArea
+									items={props.draft.userContext}
+									onRemove={props.onRemoveUserContext}
+								/>
+							</Show>
+						</div>
 						<textarea
 							ref={inputTextareaEl}
 							class="chatbox-input flex-1 w-full rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"

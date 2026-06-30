@@ -406,6 +406,16 @@ input.success {
 	border-top: 1px solid var(--background-modifier-border);
 }
 
+.chatbox-context-header {
+	flex: 0 1 auto;
+	max-height: clamp(3rem, 22vh, 8rem);
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding-right: 2px;
+}
+
 .chatbox-file-drag-active::after {
 	content: '';
 	position: absolute;
@@ -474,5 +484,9 @@ input.success {
 		height: 5.5rem;
 		padding: 0.625rem;
 		line-height: 1.4;
+	}
+
+	.chatbox-context-header {
+		max-height: clamp(2.5rem, 18vh, 6rem);
 	}
 }
