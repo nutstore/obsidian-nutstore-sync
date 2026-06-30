@@ -2,6 +2,25 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 增加对 Anthropic AI 提供商的原生支持 | Added native support for Anthropic AI provider.
+- 增加坚果云企业版自定义基础 URL 支持及坚果云 LLM 网关集成 | Added support for Nutstore Enterprise custom base URL and integrated Nutstore LLM Gateway.
+- 同步策略从 3 种扩展至 5 种模式，增加镜像、仅发送和仅接收变体，并支持冲突检测 | Expanded sync policies from 3 to 5 modes with mirror, send-only, and receive-only variants, including conflict detection.
+- 新增 `todowrite` AI 工具用于结构化任务跟踪 | Added `todowrite` AI tool for structured task tracking.
+- 支持编辑器选中内容作为对话上下文及文件拖拽输入 | Supported capturing editor selection as chat context and file drag-and-drop.
+- 引入上下文压缩模块，支持自动压缩、上下文使用环及确认对话框 | Introduced context compression module with auto-compression, context usage ring, and confirmation dialogs.
+- 优化对话界面：自动合并连续的助手/工具消息头，根据模型模态过滤消息内容，并优化工具调用块的复制格式 | Optimized chat UI: collapsed consecutive assistant/tool headers, filtered content by model modalities, and formatted tool call copy text.
+- 更新 AI SDK 依赖，重构消息类型以适配 AI SDK 标准 | Updated AI SDK dependencies and refactored chat messages to use AI SDK types.
+- 重构国际化系统：将语言文件迁移至 JSON，统一挂载模式并增加显示块 | Overhauled i18n: migrated locales to JSON, unified mount patterns, and added display blocks.
+- 重构设置页面：提取 `SettingsService`，将缓存/日志设置合并至故障排除页面，支持同步更改后自动重载 | Refactored settings: extracted `SettingsService`, consolidated troubleshooting settings, and added auto-reload on sync changes.
+- 增强同步引擎：支持分块下载、GC 服务、安全删除同步及内存块组装回退 | Enhanced sync engine: added chunked download, GC service, safe deletion sync, and in-memory chunk assembly fallback.
+- 改进日志系统：引入结构化日志条目和更完善的错误序列化 | Improved logging with structured entries and better Error serialization.
+- 修复对话视图中活动文件处理、上下文页眉高度限制及系统提示词处理问题 | Fixed active file handling, chat header height constraints, and system prompt processing.
+- 优化文件系统交互：修复 Vault 元数据缓存缺失时的回退逻辑及过时的插件页签过滤 | Fixed fallback logic for vault metadata cache misses and stale workspace leaf filtering.
+- 修复 CI 流程：恢复发布日志中的日期显示，并更新 pnpm 版本 | Fixed CI workflows: restored release dates in changelog and updated pnpm version.
+
+
 ## [1.2.2] - 2026-05-07
 
 - 重构同步机制：将手动与边栏触发统一由 `SyncExecutorService` 管理，并增加并发保护防止重复触发 (Refactor sync mechanism: funnel manual/ribbon triggers through `SyncExecutorService` and add single-flight guard)
