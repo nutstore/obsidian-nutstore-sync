@@ -137,7 +137,8 @@ export class MessageOps {
 				await this.restoreFilesForRecall(reversibleOps)
 			}
 			fragment.messages.splice(idx)
-			runtime.pendingUserContext = recalledUserContext
+			runtime.draft.userContext = recalledUserContext
+			runtime.draft.text = recalledText
 			await this.store.persistSession(session)
 			this.notify()
 			return {

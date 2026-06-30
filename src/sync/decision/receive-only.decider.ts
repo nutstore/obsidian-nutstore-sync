@@ -9,6 +9,7 @@ import {
 	getIgnoredPathsInFolder,
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
+import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import BaseSyncDecider from './base.decider'
 import { areLooseEqualFiles } from './loose-equality'
 import { SyncDecisionInput } from './sync-decision.interface'
@@ -31,7 +32,8 @@ export class ReceiveOnlyRevertLocalChangesSyncDecider extends BaseSyncDecider {
  * Remote is the source of truth for paths that exist remotely.
  * - remote exists, local missing → Pull
  * - both exist, remote differs → Pull
- * - local-only paths are preserved unless revertLocalChanges is enabled
+ * - recorded local-only paths are removed when local is unchanged; otherwise preserved
+ * - unrecorded local-only paths are preserved unless revertLocalChanges is enabled
  * Forbidden: Push, RemoveRemote, MkdirRemote, ConflictResolve
  */
 export async function receiveOnlyDecider(
@@ -190,16 +192,47 @@ export async function receiveOnlyDecider(
 		}
 
 		if (local && !remote) {
-			if (!mode.revertLocalChanges) {
+			if (mode.revertLocalChanges) {
+				logger.debug({
+					reason:
+						'receive-only revert local changes: local exists, remote missing — remove local',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
 				continue
 			}
-			logger.debug({
-				reason:
-					'receive-only revert local changes: local exists, remote missing — remove local',
-				localPath: p,
-				remotePath: remotePathToAbsolute(remoteBaseDir, p),
-			})
-			tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+			if (!record) {
+				logger.debug({
+					reason: 'receive-only: local-only without record — preserve local',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				continue
+			}
+			const localChanged = !isSameTime(local.mtime, record.local.mtime)
+			if (!localChanged) {
+				logger.debug({
+					reason:
+						'receive-only: remote deleted, local unchanged — remove local',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+			} else {
+				logger.debug({
+					reason:
+						'receive-only: remote deleted, local changed — skip to protect local change',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				tasks.push(
+					taskFactory.createSkippedTask({
+						...taskOptions,
+						reason: SkipReason.DeletedRemotelyButChangedLocally,
+					}),
+				)
+			}
 			continue
 		}
 	}
@@ -257,6 +290,15 @@ export async function receiveOnlyDecider(
 				)
 			}
 		} else {
+			const folderRecord = syncRecords.get(localPath)
+			if (folderRecord && !mode.revertLocalChanges) {
+				logger.debug({
+					reason: 'receive-only: preserve local folder deletion until revert',
+					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
+					localPath,
+				})
+				continue
+			}
 			logger.debug({
 				reason: 'receive-only: remote folder missing locally — mkdir local',
 				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
@@ -280,42 +322,108 @@ export async function receiveOnlyDecider(
 		const remote = remoteStatsMap.get(local.path)
 
 		if (!remote) {
-			if (!mode.revertLocalChanges) {
-				continue
-			}
-			if (hasIgnoredInFolder(local.path, localStats)) {
-				const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
+			if (mode.revertLocalChanges) {
+				if (hasIgnoredInFolder(local.path, localStats)) {
+					const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
+					logger.debug({
+						reason:
+							'receive-only revert local changes: skip removing local folder (contains ignored items)',
+						localPath: local.path,
+						ignoredPaths,
+					})
+					tasks.push(
+						taskFactory.createSkippedTask({
+							localPath: local.path,
+							remotePath: local.path,
+							remoteBaseDir,
+							reason: SkipReason.FolderContainsIgnoredItems,
+							ignoredPaths,
+						}),
+					)
+					continue
+				}
 				logger.debug({
 					reason:
-						'receive-only revert local changes: skip removing local folder (contains ignored items)',
+						'receive-only revert local changes: local folder missing remotely — remove local',
 					localPath: local.path,
-					ignoredPaths,
+					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+				})
+				removeLocalFolderTasks.push(
+					taskFactory.createRemoveLocalTask({
+						localPath: local.path,
+						remotePath: local.path,
+						remoteBaseDir,
+						recursive: true,
+					}),
+				)
+				continue
+			}
+			const folderRecord = syncRecords.get(local.path)
+			if (!folderRecord) {
+				logger.debug({
+					reason:
+						'receive-only: local folder missing remotely without record — preserve local',
+					localPath: local.path,
+					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+				})
+				continue
+			}
+			const localFolderChanged = hasFolderContentChanged(
+				local.path,
+				localStatsFiltered,
+				syncRecords,
+				'local',
+			)
+			if (!localFolderChanged) {
+				if (hasIgnoredInFolder(local.path, localStats)) {
+					const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
+					logger.debug({
+						reason:
+							'receive-only: skip removing local folder (contains ignored items)',
+						localPath: local.path,
+						ignoredPaths,
+					})
+					tasks.push(
+						taskFactory.createSkippedTask({
+							localPath: local.path,
+							remotePath: local.path,
+							remoteBaseDir,
+							reason: SkipReason.FolderContainsIgnoredItems,
+							ignoredPaths,
+						}),
+					)
+					continue
+				}
+				logger.debug({
+					reason:
+						'receive-only: remote folder deleted, local folder unchanged — remove local',
+					localPath: local.path,
+					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+				})
+				removeLocalFolderTasks.push(
+					taskFactory.createRemoveLocalTask({
+						localPath: local.path,
+						remotePath: local.path,
+						remoteBaseDir,
+						recursive: true,
+					}),
+				)
+			} else {
+				logger.debug({
+					reason:
+						'receive-only: remote folder deleted, local folder changed — skip to protect local change',
+					localPath: local.path,
+					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 				})
 				tasks.push(
 					taskFactory.createSkippedTask({
 						localPath: local.path,
 						remotePath: local.path,
 						remoteBaseDir,
-						reason: SkipReason.FolderContainsIgnoredItems,
-						ignoredPaths,
+						reason: SkipReason.DeletedRemotelyButChangedLocally,
 					}),
 				)
-				continue
 			}
-			logger.debug({
-				reason:
-					'receive-only revert local changes: local folder missing remotely — remove local',
-				localPath: local.path,
-				remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
-			})
-			removeLocalFolderTasks.push(
-				taskFactory.createRemoveLocalTask({
-					localPath: local.path,
-					remotePath: local.path,
-					remoteBaseDir,
-					recursive: true,
-				}),
-			)
 		} else {
 			if (!remote.isDir) {
 				if (mode.revertLocalChanges) {

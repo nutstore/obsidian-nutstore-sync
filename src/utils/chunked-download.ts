@@ -30,6 +30,23 @@ export function bufferLikeToArrayBuffer(buffer: BufferLike): ArrayBuffer {
 	return toArrayBuffer(buffer)
 }
 
+function concatenateChunks(chunks: ArrayBuffer[], totalSize: number) {
+	const result = new ArrayBuffer(totalSize)
+	const resultView = new Uint8Array(result)
+	let offset = 0
+
+	for (const chunk of chunks) {
+		resultView.set(new Uint8Array(chunk), offset)
+		offset += chunk.byteLength
+	}
+
+	if (offset !== totalSize) {
+		throw new Error('Remote Size Not Match!')
+	}
+
+	return result
+}
+
 async function downloadRemoteFileWhole({
 	vault,
 	webdav,
@@ -65,12 +82,12 @@ async function downloadRemoteFileInChunks({
 		return
 	}
 
-	const appendBinary = vault.adapter.appendBinary?.bind(vault.adapter)
-	if (!appendBinary) {
-		throw new Error(
-			'Obsidian adapter.appendBinary is required for chunked download',
-		)
-	}
+	const appendBinary = (
+		vault.adapter as unknown as {
+			appendBinary?: (path: string, data: ArrayBuffer) => Promise<void>
+		}
+	).appendBinary?.bind(vault.adapter)
+	const chunks: ArrayBuffer[] = []
 
 	const chunkSize = parseMobileAppDownloadFileChunkSize(
 		mobileAppDownloadFileChunkSize,
@@ -104,10 +121,12 @@ async function downloadRemoteFileInChunks({
 			if (chunk.byteLength !== expectedLength) {
 				throw new Error('Remote chunk size not match!')
 			}
-			if (offset === 0) {
+			if (appendBinary && offset === 0) {
 				await vault.adapter.writeBinary(tempPath, chunk)
-			} else {
+			} else if (appendBinary) {
 				await appendBinary(tempPath, chunk)
+			} else {
+				chunks.push(chunk)
 			}
 			offset += chunk.byteLength
 			chunkIndex++
@@ -121,13 +140,26 @@ async function downloadRemoteFileInChunks({
 		if (offset !== remoteSize) {
 			throw new Error('Remote Size Not Match!')
 		}
-		if (await vault.adapter.exists(normalizedLocalPath)) {
-			await vault.adapter.remove(normalizedLocalPath)
+		if (appendBinary) {
+			if (await vault.adapter.exists(normalizedLocalPath)) {
+				await vault.adapter.remove(normalizedLocalPath)
+			}
+			await vault.adapter.rename(tempPath, normalizedLocalPath)
+		} else {
+			logger.warn(
+				'[ChunkedDownload] adapter.appendBinary is unavailable; assembling chunks in memory',
+			)
+			await writeLocalBinary(
+				vault,
+				normalizedLocalPath,
+				concatenateChunks(chunks, remoteSize),
+			)
 		}
-		await vault.adapter.rename(tempPath, normalizedLocalPath)
 		logger.info(`[ChunkedDownload] done ${remotePath} (${chunkIndex} chunks)`)
 	} catch (error) {
-		await removeTempDownload(vault, tempPath)
+		if (appendBinary) {
+			await removeTempDownload(vault, tempPath)
+		}
 		throw error
 	}
 }

@@ -1,7 +1,16 @@
 import { normalizePath, TFile, Vault } from 'obsidian'
 import type { ChatDisplayBlock, ChatMessageRecord } from '~/ai/chat/types'
 import { v7 as uuidv7 } from 'uuid'
-import type { AIMessageContentPart, AISession } from '~/ai/core/types'
+import type { AISession } from '~/ai/core/types'
+import {
+	formatUserContext,
+	type UserContextItem,
+} from '~/ai/chat/context/user-context'
+import {
+	imageFilePartSrc,
+	isImageFilePart,
+} from '~/ai/chat/messages/message-utils'
+import type { FilePart } from 'ai'
 import { projectFragmentMessageGroups } from '~/ai/chat/ui/display-blocks'
 import i18n from '~/i18n'
 import { writeLocalBinary, writeLocalText } from '~/utils/local-vault-io'
@@ -90,10 +99,11 @@ function detectImageExtensionFromUrl(url: string) {
 	return 'png'
 }
 
-async function resolveImageArrayBuffer(
-	imagePart: Extract<AIMessageContentPart, { type: 'image' }>,
-) {
-	const url = imagePart.image as string
+async function resolveImageArrayBuffer(imagePart: FilePart) {
+	const url = imageFilePartSrc(imagePart)
+	if (!url) {
+		throw new Error('Unable to read non-URL image content')
+	}
 	const response = await fetch(url)
 	if (!response.ok) {
 		throw new Error(`Unable to read image content: ${response.status}`)
@@ -125,11 +135,12 @@ function resolveUniqueExportPath(
 
 async function saveExportImage(
 	vault: Vault,
-	part: Extract<AIMessageContentPart, { type: 'image' }>,
+	part: FilePart,
 	assetsDirPath: string,
 	assetsMarkdownPrefix: string,
 ) {
-	const url = part.image as string
+	const url = imageFilePartSrc(part)
+	if (!url) return undefined
 	try {
 		const { arrayBuffer, mimeType } = await resolveImageArrayBuffer(part)
 		await mkdirsVault(vault, assetsDirPath)
@@ -146,10 +157,29 @@ async function saveExportImage(
 	}
 }
 
+async function saveExportUserContextImage(
+	vault: Vault,
+	item: Extract<UserContextItem, { type: 'image' }>,
+	assetsDirPath: string,
+	assetsMarkdownPrefix: string,
+) {
+	try {
+		await mkdirsVault(vault, assetsDirPath)
+		const fileName = `${uuidv7()}.${imageExtFromMimeType(item.mimeType)}`
+		const filePath = normalizePath(`${assetsDirPath}/${fileName}`)
+		await writeLocalBinary(vault, filePath, await item.blob.arrayBuffer())
+		return `${assetsMarkdownPrefix}/${fileName}`
+	} catch (error) {
+		logger.warn('Failed to persist export image from user context', error)
+		return undefined
+	}
+}
+
 type ExportContentPart = {
 	type: string
 	text?: string
-	image?: unknown
+	data?: unknown
+	mediaType?: string
 	output?: { type: string; value?: string }
 }
 
@@ -177,14 +207,73 @@ async function buildMessageContentMarkdown(
 			if (value.trim()) lines.push(value.trim())
 			continue
 		}
-		if (part.type !== 'image') continue
+		if (!isImageFilePart(part)) continue
 		const imageRef = await saveExportImage(
 			vault,
-			part as Extract<AIMessageContentPart, { type: 'image' }>,
+			part,
 			assetsDirPath,
 			assetsMarkdownPrefix,
 		)
+		if (!imageRef) continue
 		lines.push(`![](${imageRef})`)
+	}
+	return lines
+}
+
+async function buildUserContextMarkdown(
+	vault: Vault,
+	record: ChatMessageRecord,
+	assetsDirPath: string,
+	assetsMarkdownPrefix: string,
+) {
+	if (!record.userContext?.length) {
+		return []
+	}
+	const lines: string[] = []
+	const textContext = record.userContext.filter(
+		(item) => item.type === 'vault-path' || item.type === 'selection',
+	)
+	if (textContext.length) {
+		lines.push(formatUserContext(textContext), '')
+	}
+	for (const item of record.userContext) {
+		if (item.type === 'image') {
+			const imageRef = await saveExportUserContextImage(
+				vault,
+				item,
+				assetsDirPath,
+				assetsMarkdownPrefix,
+			)
+			if (imageRef) {
+				lines.push(`![](${imageRef})`, '')
+			}
+			continue
+		}
+		if (item.type !== 'file') {
+			continue
+		}
+		const truncated = item.size > 64 * 1024
+		const blob = truncated ? item.blob.slice(0, 64 * 1024) : item.blob
+		const content = await blob.text()
+		lines.push(
+			[
+				'<UserProvidedFile>',
+				JSON.stringify(
+					{
+						type: 'file',
+						filename: item.filename,
+						mimeType: item.mimeType,
+						size: item.size,
+						truncated,
+						content,
+					},
+					null,
+					2,
+				),
+				'</UserProvidedFile>',
+			].join('\n'),
+			'',
+		)
 	}
 	return lines
 }
@@ -334,6 +423,27 @@ async function buildSessionMarkdown(
 		for (const { record, blocks } of projectFragmentMessageGroups(
 			fragment.messages,
 		)) {
+			if (blocks.length === 0) {
+				lines.push(
+					`### ${record.message.role === 'user' ? `👤 ${i18n.t('chatbox.exportRole.user')}` : getModelLabel(session, record)}`,
+					'',
+					`${i18n.t('chatbox.exportMeta.messageTime')}: ${new Date(record.createdAt).toLocaleString()}`,
+					'',
+				)
+				const contextLines = await buildUserContextMarkdown(
+					vault,
+					record,
+					assetsDirPath,
+					assetsMarkdownPrefix,
+				)
+				if (contextLines.length > 0) {
+					lines.push(...contextLines)
+				} else {
+					lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
+				}
+				continue
+			}
+			let appendedUserContext = false
 			for (const block of blocks) {
 				if (
 					!includeToolMessages &&
@@ -354,8 +464,39 @@ async function buildSessionMarkdown(
 				)
 				if (blockLines.length > 0) {
 					lines.push(...blockLines, '')
-				} else if (record.message.role !== 'assistant') {
-					lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
+				}
+				if (
+					!appendedUserContext &&
+					record.message.role === 'user' &&
+					record.userContext?.length
+				) {
+					const contextLines = await buildUserContextMarkdown(
+						vault,
+						record,
+						assetsDirPath,
+						assetsMarkdownPrefix,
+					)
+					if (contextLines.length > 0) {
+						lines.push(...contextLines)
+						appendedUserContext = true
+					}
+				}
+				if (blockLines.length === 0 && record.message.role !== 'assistant') {
+					if (!appendedUserContext) {
+						const contextLines = await buildUserContextMarkdown(
+							vault,
+							record,
+							assetsDirPath,
+							assetsMarkdownPrefix,
+						)
+						if (contextLines.length > 0) {
+							lines.push(...contextLines)
+							appendedUserContext = true
+						}
+					}
+					if (!appendedUserContext) {
+						lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
+					}
 				}
 			}
 		}

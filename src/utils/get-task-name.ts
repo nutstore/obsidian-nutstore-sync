@@ -63,6 +63,14 @@ export default function getTaskName(task: BaseTask) {
 				return i18n.t('sync.skipReason.conflict-in-send-only-mode')
 			} else if (task.options.reason === SkipReason.ConflictInReceiveOnlyMode) {
 				return i18n.t('sync.skipReason.conflict-in-receive-only-mode')
+			} else if (
+				task.options.reason === SkipReason.DeletedLocallyButChangedRemotely
+			) {
+				return i18n.t('sync.skipReason.deleted-locally-but-changed-remotely')
+			} else if (
+				task.options.reason === SkipReason.DeletedRemotelyButChangedLocally
+			) {
+				return i18n.t('sync.skipReason.deleted-remotely-but-changed-locally')
 			}
 		})()
 		return `${i18n.t('sync.fileOp.skip')}: ${reasonText}`

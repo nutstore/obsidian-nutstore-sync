@@ -1,8 +1,8 @@
 import type {
 	ChatDisplayBlock,
 	ChatMessageRecord,
-	ChatPendingMessage,
 	ChatRunState,
+	ChatSubmission,
 	ChatTaskRecord,
 } from '~/ai/chat/types'
 import type { LanguageModelUsage } from 'ai'
@@ -47,7 +47,7 @@ export type ChatTimelineItem =
 
 export interface ChatboxViewModel {
 	title: string
-	activeFilePath?: string
+	activeContextItems: UserContextItem[]
 	sessionHistory: ChatSessionHistoryItem[]
 	activeSessionId?: string
 	timeline: ChatTimelineItem[]
@@ -58,9 +58,8 @@ export interface ChatboxViewModel {
 	selectedProviderId?: string
 	selectedModelId?: string
 	runState: ChatRunState
-	pendingMessages: ChatPendingMessage[]
-	pendingUserContext: UserContextItem[]
-	pendingInputDraft: string
+	draft: ChatSubmission
+	pending: ChatSubmission[]
 	canSend: boolean
 	canCreateFragment: boolean
 	canCompress: boolean
@@ -88,7 +87,10 @@ export interface ChatboxProps extends ChatboxViewModel {
 	onDeleteSession: (sessionId: string) => Promise<void>
 	onSelectProvider: (providerId: string) => void
 	onSelectModel: (modelId: string) => void
-	onSendMessage: (text: string) => Promise<boolean>
+	onSendMessage: (
+		text: string,
+		activeContextItems?: UserContextItem[],
+	) => Promise<boolean>
 	onUpdateInputDraft: (text: string) => void
 	onStopActiveRun?: () => void
 	onAddUserContext: (item: UserContextItem) => void
@@ -98,6 +100,7 @@ export interface ChatboxProps extends ChatboxViewModel {
 		replacement: UserContextItem | null,
 	) => void
 	onDropContextItem: (path: string) => Promise<void> | void
+	onCaptureActiveContext?: () => void
 	onCancelTask?: (taskId: string) => void
 	onDeleteMessage?: (messageId: string) => void
 	onRegenerateMessage?: (messageId: string) => void

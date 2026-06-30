@@ -9,6 +9,7 @@
  */
 
 import 'obsidian'
+import type { EditorView } from '@codemirror/view'
 
 /**
  * Obsidian's internal Setting object
@@ -50,5 +51,13 @@ declare module 'obsidian' {
 		 * Submenu instance created by setSubmenu().
 		 */
 		submenu?: Menu
+	}
+
+	interface Editor {
+		/**
+		 * Obsidian's CM6 EditorView instance.
+		 * Internal/undocumented, but present at runtime in markdown editors.
+		 */
+		cm?: EditorView
 	}
 }

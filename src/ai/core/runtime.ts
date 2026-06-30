@@ -1,18 +1,17 @@
 import type {
 	AssistantModelMessage,
 	FilePart,
-	ImagePart,
 	TextPart,
 	UserModelMessage,
 } from 'ai'
 import { tool as aiTool, stepCountIs, streamText } from 'ai'
 import { getProviderResolver } from '../providers/registry'
 import {
-	AIModelConfig,
 	AIMessage,
 	AIMessageMeta,
-	AIProviderConfig,
+	AIModelConfig,
 	AIModelProviderOverride,
+	AIProviderConfig,
 	AIToolDefinition,
 } from './types'
 
@@ -20,6 +19,7 @@ export interface GenerateAssistantTurnRequest {
 	provider: AIProviderConfig
 	model: string
 	messages: AIMessage[]
+	systemPrompt?: string
 	tools: AIToolDefinition[]
 	temperature?: number
 	maxTokens?: number
@@ -53,15 +53,16 @@ function inferFilePartModality(
 	part: FilePart,
 ): AIModelConfig['modalities']['input'][number] | undefined {
 	const mediaType = part.mediaType.toLowerCase()
-	if (mediaType.startsWith('image/')) return 'image'
-	if (mediaType.startsWith('audio/')) return 'audio'
-	if (mediaType.startsWith('video/')) return 'video'
+	const topLevel = mediaType.split('/')[0]
+	if (mediaType === 'image' || topLevel === 'image') return 'image'
+	if (mediaType === 'audio' || topLevel === 'audio') return 'audio'
+	if (mediaType === 'video' || topLevel === 'video') return 'video'
 	if (mediaType === 'application/pdf') return 'pdf'
 	return undefined
 }
 
 function getPartModality(
-	part: TextPart | ImagePart | FilePart,
+	part: TextPart | FilePart | { type: 'image' },
 ): AIModelConfig['modalities']['input'][number] | undefined {
 	switch (part.type) {
 		case 'text':
@@ -76,7 +77,7 @@ function getPartModality(
 }
 
 function createUnsupportedPartPlaceholder(
-	part: TextPart | ImagePart | FilePart,
+	part: TextPart | FilePart | { type: 'image' },
 	modality: AIModelConfig['modalities']['input'][number] | undefined,
 ): TextPart {
 	if (part.type === 'file') {
@@ -181,12 +182,11 @@ export async function generateAssistantTurn(
 		modelConfig?.provider,
 	)
 	const resolver = getProviderResolver(provider)
-	const modelName =
-		modelConfig?.name?.trim() || request.model
+	const modelName = modelConfig?.name?.trim() || request.model
 	const inputModalities = modelConfig?.modalities.input || ['text']
 	const messages = mergeAdjacentUserMessages(
 		adaptMessagesByInputModalities(request.messages, inputModalities),
-	)
+	).filter((message) => message.role !== 'system')
 	const { model, providerName } = resolver.createLanguageModel(
 		provider,
 		request.model,
@@ -195,6 +195,7 @@ export async function generateAssistantTurn(
 	const result = streamText({
 		model,
 		messages: messages,
+		instructions: request.systemPrompt,
 		tools: toAISDKTools(request.tools),
 		stopWhen: stepCountIs(1),
 		abortSignal: request.abortSignal,
@@ -215,14 +216,19 @@ export async function generateAssistantTurn(
 	}
 
 	const text = await result.text
-	const reasoning = await result.reasoning
+	const finalStep = await result.finalStep
+	const reasoning = finalStep.reasoning
 	const toolCalls = await result.toolCalls
-	const usage = await result.totalUsage
+	const usage = await result.usage
 	const finishReason = await result.finishReason
-	const response = await result.response
+	const response = finalStep.response
 
 	const content: AssistantModelMessage['content'] = [
-		...reasoning.map((r) => ({ type: 'reasoning' as const, text: r.text })),
+		...reasoning
+			.filter(
+				(r): r is { type: 'reasoning'; text: string } => r.type === 'reasoning',
+			)
+			.map((r) => ({ type: 'reasoning' as const, text: r.text })),
 		...(text ? [{ type: 'text' as const, text }] : []),
 		...toolCalls,
 	]

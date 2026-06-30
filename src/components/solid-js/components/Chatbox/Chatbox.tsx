@@ -34,18 +34,23 @@ import { SessionHistorySheet } from './components/SessionHistorySheet'
 import { TasksPanel } from './components/TasksPanel'
 import { decideDropRoute, hasDragItems } from './drop-utils'
 
-const DESKTOP_RESIZE_MEDIA_QUERY = '(pointer: fine) and (min-width: 1024px)'
-const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.desktop-input-height'
-const DEFAULT_DESKTOP_INPUT_HEIGHT = 184
-const DESKTOP_INPUT_MIN_HEIGHT = 128
-const DESKTOP_INPUT_ABSOLUTE_MIN_HEIGHT = 72
-const DESKTOP_MESSAGES_MIN_HEIGHT = 200
+const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.input-height'
+const LEGACY_INPUT_HEIGHT_STORAGE_KEY =
+	'nutstore-sync.chatbox.desktop-input-height'
+const DEFAULT_INPUT_HEIGHT = 184
+const DEFAULT_COMPACT_INPUT_HEIGHT = 144
+const INPUT_MIN_HEIGHT = 128
+const COMPACT_INPUT_MIN_HEIGHT = 104
+const INPUT_ABSOLUTE_MIN_HEIGHT = 72
+const COMPACT_INPUT_ABSOLUTE_MIN_HEIGHT = 64
+const MESSAGES_MIN_HEIGHT = 200
+const COMPACT_MESSAGES_MIN_HEIGHT = 120
 const RESIZER_HITBOX_HEIGHT = 10
-const DESKTOP_INPUT_MAX_VIEWPORT_RATIO = 0.6
-const ACTIVE_FILE_HINT_MIN_HEIGHT = 148
+const INPUT_MAX_VIEWPORT_RATIO = 0.6
+const COMPACT_INPUT_MAX_VIEWPORT_RATIO = 0.45
+const COMPACT_LAYOUT_MAX_WIDTH = 768
 const PICKER_ACCEPT = 'image/*,.txt,.md,.markdown'
 const TEXT_FILE_EXTENSIONS = new Set(['txt', 'md', 'markdown'])
-const ACTIVE_FILE_HINT_PREFIX = '⧉'
 
 function getFileExtension(filename: string): string {
 	const extension = filename.split('.').pop()?.trim().toLowerCase()
@@ -65,12 +70,8 @@ function isSupportedPickedFile(file: File): boolean {
 	return file.type.startsWith('image/') || isSupportedTextFile(file)
 }
 
-function basename(path: string): string {
-	return path.split('/').pop() ?? path
-}
-
 function Chatbox(props: ChatboxProps) {
-	type RecallConfirmMode = 'only' | 'restore'
+	type RecallArmedMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
 	const [isComposing, setIsComposing] = createSignal(false)
 	const [historyOpen, setHistoryOpen] = createSignal(false)
@@ -88,9 +89,7 @@ function Chatbox(props: ChatboxProps) {
 		createSignal(false)
 	const [pendingCompressContextConfirm, setPendingCompressContextConfirm] =
 		createSignal(false)
-	const [recallConfirmMode, setRecallConfirmMode] =
-		createSignal<RecallConfirmMode>()
-	const [desktopResizeEnabled, setDesktopResizeEnabled] = createSignal(false)
+	const [recallArmedMode, setRecallArmedMode] = createSignal<RecallArmedMode>()
 	const [chatboxContainerWidth, setChatboxContainerWidth] = createSignal(0)
 	const [inputPaneHeight, setInputPaneHeight] = createSignal<number>()
 	const [stickToBottom, setStickToBottom] = createSignal(true)
@@ -103,7 +102,7 @@ function Chatbox(props: ChatboxProps) {
 	let fileInputEl: HTMLInputElement | undefined
 	let inputTextareaEl: HTMLTextAreaElement | undefined
 	let previousActiveSessionId: string | undefined
-	let defaultDesktopInputHeight = DEFAULT_DESKTOP_INPUT_HEIGHT
+	let defaultInputHeight = DEFAULT_INPUT_HEIGHT
 	let dragStartHeight = 0
 
 	function getViewDocument() {
@@ -117,6 +116,40 @@ function Chatbox(props: ChatboxProps) {
 
 	function getViewWindow() {
 		return getViewDocument().defaultView ?? window
+	}
+
+	function isCompactLayout() {
+		const width = chatboxContainerWidth() || chatboxRootEl?.clientWidth || 0
+		if (width > 0) {
+			return width <= COMPACT_LAYOUT_MAX_WIDTH
+		}
+		return getViewWindow().innerWidth <= COMPACT_LAYOUT_MAX_WIDTH
+	}
+
+	function getDefaultInputPaneHeight() {
+		return isCompactLayout()
+			? DEFAULT_COMPACT_INPUT_HEIGHT
+			: DEFAULT_INPUT_HEIGHT
+	}
+
+	function getInputMinHeight() {
+		return isCompactLayout() ? COMPACT_INPUT_MIN_HEIGHT : INPUT_MIN_HEIGHT
+	}
+
+	function getInputAbsoluteMinHeight() {
+		return isCompactLayout()
+			? COMPACT_INPUT_ABSOLUTE_MIN_HEIGHT
+			: INPUT_ABSOLUTE_MIN_HEIGHT
+	}
+
+	function getMessagesMinHeight() {
+		return isCompactLayout() ? COMPACT_MESSAGES_MIN_HEIGHT : MESSAGES_MIN_HEIGHT
+	}
+
+	function getInputMaxViewportRatio() {
+		return isCompactLayout()
+			? COMPACT_INPUT_MAX_VIEWPORT_RATIO
+			: INPUT_MAX_VIEWPORT_RATIO
 	}
 
 	function dismissInputFocus() {
@@ -229,25 +262,20 @@ function Chatbox(props: ChatboxProps) {
 			t('chatbox.ui.states.noModel')
 		)
 	}
-	const activeFileLabel = () => {
-		const activeFilePath = props.activeFilePath?.trim()
-		if (!activeFilePath) return undefined
-		return basename(activeFilePath)
-	}
-	const shouldShowActiveFileLabel = () => {
-		if (!activeFileLabel()) return false
-		if (!desktopResizeEnabled()) return true
-		const height = inputPaneHeight()
-		return typeof height !== 'number' || height > ACTIVE_FILE_HINT_MIN_HEIGHT
-	}
-
 	function readStoredInputPaneHeight() {
 		try {
 			const raw = getViewWindow().localStorage.getItem(INPUT_HEIGHT_STORAGE_KEY)
-			if (!raw) {
+			if (raw) {
+				const value = Number(raw)
+				return Number.isFinite(value) ? value : undefined
+			}
+			const legacyRaw = getViewWindow().localStorage.getItem(
+				LEGACY_INPUT_HEIGHT_STORAGE_KEY,
+			)
+			if (!legacyRaw) {
 				return undefined
 			}
-			const value = Number(raw)
+			const value = Number(legacyRaw)
 			return Number.isFinite(value) ? value : undefined
 		} catch {
 			return undefined
@@ -265,24 +293,33 @@ function Chatbox(props: ChatboxProps) {
 		}
 	}
 
+	function getInputPaneChromeHeight() {
+		if (!inputPaneEl || !inputTextareaEl) {
+			return 0
+		}
+		const paneHeight = inputPaneEl.getBoundingClientRect().height
+		const textareaHeight = inputTextareaEl.getBoundingClientRect().height
+		return Math.max(0, Math.round(paneHeight - textareaHeight))
+	}
+
 	function getMaxInputPaneHeight() {
 		const viewportMax = Math.floor(
-			getViewWindow().innerHeight * DESKTOP_INPUT_MAX_VIEWPORT_RATIO,
+			getViewWindow().innerHeight * getInputMaxViewportRatio(),
 		)
 		const splitHeight = splitLayoutEl?.getBoundingClientRect().height ?? 0
 		if (splitHeight <= 0) {
-			return Math.max(DESKTOP_INPUT_MIN_HEIGHT, viewportMax)
+			return Math.max(getInputMinHeight(), viewportMax)
 		}
 		const messagesBound = Math.floor(
-			splitHeight - DESKTOP_MESSAGES_MIN_HEIGHT - RESIZER_HITBOX_HEIGHT,
+			splitHeight - getMessagesMinHeight() - RESIZER_HITBOX_HEIGHT,
 		)
 		const maxHeight = Math.min(messagesBound, viewportMax)
-		return Math.max(DESKTOP_INPUT_ABSOLUTE_MIN_HEIGHT, maxHeight)
+		return Math.max(getInputAbsoluteMinHeight(), maxHeight)
 	}
 
 	function clampInputPaneHeight(height: number) {
 		const maxHeight = getMaxInputPaneHeight()
-		const minHeight = Math.min(DESKTOP_INPUT_MIN_HEIGHT, maxHeight)
+		const minHeight = Math.min(getInputMinHeight(), maxHeight)
 		return Math.round(Math.min(Math.max(height, minHeight), maxHeight))
 	}
 
@@ -295,25 +332,25 @@ function Chatbox(props: ChatboxProps) {
 		return next
 	}
 
-	function resetInputPaneHeight() {
-		if (!desktopResizeEnabled()) {
-			return
+	function getTextareaHeightStyle() {
+		const paneHeight = inputPaneHeight()
+		if (typeof paneHeight !== 'number') {
+			return undefined
 		}
-		applyInputPaneHeight(defaultDesktopInputHeight, true)
+		const chromeHeight = getInputPaneChromeHeight()
+		return `${Math.max(getInputAbsoluteMinHeight(), paneHeight - chromeHeight)}px`
+	}
+
+	function resetInputPaneHeight() {
+		applyInputPaneHeight(defaultInputHeight, true)
 	}
 
 	function onInputPaneResizeStart() {
-		if (!desktopResizeEnabled()) {
-			return
-		}
 		dragStartHeight =
-			inputPaneHeight() ?? clampInputPaneHeight(defaultDesktopInputHeight)
+			inputPaneHeight() ?? clampInputPaneHeight(defaultInputHeight)
 	}
 
 	function onInputPaneResize(deltaY: number) {
-		if (!desktopResizeEnabled()) {
-			return
-		}
 		applyInputPaneHeight(dragStartHeight + deltaY)
 	}
 
@@ -386,7 +423,6 @@ function Chatbox(props: ChatboxProps) {
 			return
 		}
 		event.preventDefault()
-		event.stopPropagation()
 		setIsFileDragActive(true)
 	}
 
@@ -395,7 +431,6 @@ function Chatbox(props: ChatboxProps) {
 			return
 		}
 		event.preventDefault()
-		event.stopPropagation()
 		if (event.dataTransfer) {
 			event.dataTransfer.dropEffect = 'copy'
 		}
@@ -416,7 +451,6 @@ function Chatbox(props: ChatboxProps) {
 			return
 		}
 		event.preventDefault()
-		event.stopPropagation()
 		setIsFileDragActive(false)
 	}
 
@@ -446,7 +480,7 @@ function Chatbox(props: ChatboxProps) {
 				props.timeline.length,
 				props.currentSessionTasks.length,
 				props.otherSessionTasks.length,
-				props.pendingMessages.length,
+				props.pending.length,
 				props.runState,
 			],
 			([activeSessionId]) => {
@@ -497,7 +531,7 @@ function Chatbox(props: ChatboxProps) {
 		on(
 			() => props.activeSessionId,
 			() => {
-				setInput(props.pendingInputDraft)
+				setInput(props.draft.text)
 			},
 		),
 	)
@@ -525,35 +559,14 @@ function Chatbox(props: ChatboxProps) {
 	})
 
 	createEffect(() => {
-		const viewWindow = getViewWindow()
-		const mediaQuery = viewWindow.matchMedia(DESKTOP_RESIZE_MEDIA_QUERY)
-		const update = () => setDesktopResizeEnabled(mediaQuery.matches)
-		update()
-		if (typeof mediaQuery.addEventListener === 'function') {
-			mediaQuery.addEventListener('change', update)
-			onCleanup(() => mediaQuery.removeEventListener('change', update))
+		if (!inputTextareaEl) {
 			return
 		}
-		mediaQuery.addListener(update)
-		onCleanup(() => mediaQuery.removeListener(update))
-	})
-
-	createEffect(() => {
-		if (!desktopResizeEnabled() || !inputPaneEl) {
-			return
-		}
-		defaultDesktopInputHeight =
-			Math.round(inputPaneEl.getBoundingClientRect().height) ||
-			DEFAULT_DESKTOP_INPUT_HEIGHT
+		defaultInputHeight =
+			Math.round(inputPaneEl?.getBoundingClientRect().height ?? 0) ||
+			getDefaultInputPaneHeight()
 		const storedHeight = readStoredInputPaneHeight()
-		applyInputPaneHeight(storedHeight ?? defaultDesktopInputHeight)
-	})
-
-	createEffect(() => {
-		if (desktopResizeEnabled()) {
-			return
-		}
-		setInputPaneHeight(undefined)
+		applyInputPaneHeight(storedHeight ?? defaultInputHeight)
 	})
 
 	createEffect(() => {
@@ -594,9 +607,18 @@ function Chatbox(props: ChatboxProps) {
 	})
 
 	createEffect(() => {
-		if (!desktopResizeEnabled()) {
+		if (!chatboxRootEl || !props.onCaptureActiveContext) {
 			return
 		}
+		const root = chatboxRootEl
+		const onPointerDownCapture = () => props.onCaptureActiveContext?.()
+		root.addEventListener('pointerdown', onPointerDownCapture, true)
+		onCleanup(() => {
+			root.removeEventListener('pointerdown', onPointerDownCapture, true)
+		})
+	})
+
+	createEffect(() => {
 		const viewWindow = getViewWindow()
 		const onResize = () => {
 			const height = inputPaneHeight()
@@ -612,9 +634,29 @@ function Chatbox(props: ChatboxProps) {
 		onCleanup(() => viewWindow.removeEventListener('resize', onResize))
 	})
 
+	createEffect(() => {
+		if (!inputPaneEl || !inputTextareaEl) {
+			return
+		}
+		const observer = new ResizeObserver(() => {
+			const height = inputPaneHeight()
+			if (typeof height !== 'number') {
+				return
+			}
+			const clampedHeight = clampInputPaneHeight(height)
+			if (clampedHeight !== height) {
+				applyInputPaneHeight(clampedHeight, true)
+			}
+		})
+		observer.observe(inputPaneEl)
+		observer.observe(inputTextareaEl)
+		onCleanup(() => observer.disconnect())
+	})
+
 	async function submit() {
 		const text = input().trim()
-		const hasPendingContext = props.pendingUserContext.length > 0
+		const hasPendingContext =
+			props.draft.userContext.length > 0 || props.activeContextItems.length > 0
 		if ((!text && !hasPendingContext) || !props.canSend) {
 			return
 		}
@@ -623,7 +665,7 @@ function Chatbox(props: ChatboxProps) {
 		props.onUpdateInputDraft('')
 		scrollMessagesToBottom('auto')
 		try {
-			const accepted = await props.onSendMessage(text)
+			const accepted = await props.onSendMessage(text, props.activeContextItems)
 			if (!accepted) {
 				setInput(previousInput)
 				props.onUpdateInputDraft(previousInput)
@@ -671,6 +713,7 @@ function Chatbox(props: ChatboxProps) {
 				i.kind === 'message' && i.message.id === messageId,
 		)
 		if (!item) return
+		setRecallArmedMode(undefined)
 		setPendingRecallMessage(item)
 	}
 
@@ -700,7 +743,7 @@ function Chatbox(props: ChatboxProps) {
 	async function confirmRecallMessage() {
 		const item = pendingRecallMessage()
 		if (!item) return
-		setRecallConfirmMode(undefined)
+		setRecallArmedMode(undefined)
 		setPendingRecallMessage(undefined)
 		await doRecallMessage(item)
 	}
@@ -757,43 +800,36 @@ function Chatbox(props: ChatboxProps) {
 	async function confirmRecallAndRestoreMessage() {
 		const item = pendingRecallMessage()
 		if (!item) return
-		setRecallConfirmMode(undefined)
+		setRecallArmedMode(undefined)
 		setPendingRecallMessage(undefined)
 		await doRecallMessage(item, { restoreFiles: true })
 	}
 
-	const recallSecondConfirmTitle = () => {
-		switch (recallConfirmMode()) {
-			case 'restore':
-				return t('chatbox.ui.dialogs.recall.restoreSecondTitle')
-			case 'only':
-				return t('chatbox.ui.dialogs.recall.onlySecondTitle')
-			default:
-				return undefined
+	const confirmRecallOnlyButton = () => {
+		if (recallArmedMode() === 'only') {
+			void confirmRecallMessage()
+			return
 		}
+		setRecallArmedMode('only')
 	}
 
-	const recallSecondConfirmMessage = () => {
-		switch (recallConfirmMode()) {
-			case 'restore':
-				return t('chatbox.ui.dialogs.recall.restoreSecondMessage')
-			case 'only':
-				return t('chatbox.ui.dialogs.recall.onlySecondMessage')
-			default:
-				return undefined
+	const confirmRecallRestoreButton = () => {
+		if (recallArmedMode() === 'restore') {
+			void confirmRecallAndRestoreMessage()
+			return
 		}
+		setRecallArmedMode('restore')
 	}
 
-	const recallSecondConfirmLabel = () => {
-		switch (recallConfirmMode()) {
-			case 'restore':
-				return t('chatbox.ui.dialogs.recall.restoreConfirm')
-			case 'only':
-				return t('chatbox.ui.dialogs.recall.onlyConfirm')
-			default:
-				return undefined
-		}
-	}
+	const recallOnlyConfirmLabel = () =>
+		recallArmedMode() === 'only'
+			? t('chatbox.ui.dialogs.recall.onlySecondTitle')
+			: t('chatbox.ui.dialogs.recall.onlyConfirm')
+
+	const recallRestoreConfirmLabel = () =>
+		recallArmedMode() === 'restore'
+			? t('chatbox.ui.dialogs.recall.restoreSecondTitle')
+			: t('chatbox.ui.dialogs.recall.restoreConfirm')
 
 	return (
 		<div
@@ -907,7 +943,7 @@ function Chatbox(props: ChatboxProps) {
 						<Show
 							when={
 								props.timeline.length > 0 ||
-								props.pendingMessages.length > 0 ||
+								props.pending.length > 0 ||
 								isBusy()
 							}
 							fallback={
@@ -941,89 +977,76 @@ function Chatbox(props: ChatboxProps) {
 									runState={props.runState}
 									onStop={props.onStopActiveRun}
 								/>
-								<PendingList pendingMessages={props.pendingMessages} />
+								<PendingList pending={props.pending} />
 							</div>
 						</Show>
 					</div>
 
-					<Show when={desktopResizeEnabled()}>
-						<PaneResizer
-							onResizeStart={onInputPaneResizeStart}
-							onResize={onInputPaneResize}
-							onResizeEnd={onInputPaneResizeEnd}
-							onDblClick={resetInputPaneHeight}
-						/>
-					</Show>
+					<PaneResizer
+						onResizeStart={onInputPaneResizeStart}
+						onResize={onInputPaneResize}
+						onResizeEnd={onInputPaneResizeEnd}
+						onDblClick={resetInputPaneHeight}
+					/>
 
 					{/* Input */}
 					<div
 						ref={inputPaneEl}
-						class={`chatbox-input-pane shrink-0 px-3 pb-3 pt-1.5 ${
-							desktopResizeEnabled()
-								? 'chatbox-input-pane--resizable'
-								: 'border-t border-[var(--background-modifier-border)]'
-						}`}
-						style={
-							desktopResizeEnabled() && typeof inputPaneHeight() === 'number'
-								? { height: `${inputPaneHeight()}px` }
-								: undefined
-						}
+						class={`chatbox-input-pane shrink-0 px-2 pb-1 ${'chatbox-input-pane--resizable'}`}
 					>
-						<Show when={props.pendingUserContext.length > 0}>
-							<ContextArea
-								items={props.pendingUserContext}
-								onRemove={props.onRemoveUserContext}
-							/>
-						</Show>
-						<div class="relative min-h-0 flex-1">
-							<textarea
-								ref={inputTextareaEl}
-								class="chatbox-input h-full w-full resize-none rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] pb-7 pr-24 text-sm outline-none"
-								placeholder={t('chatbox.ui.placeholders.input')}
-								value={input()}
-								onInput={(event) => {
-									const nextInput = event.currentTarget.value
-									setInput(nextInput)
-									props.onUpdateInputDraft(nextInput)
-								}}
-								onPaste={(event) => {
-									const imageFiles = Array.from(
-										event.clipboardData?.items ?? [],
-									)
-										.filter(
-											(item) =>
-												item.kind === 'file' && item.type.startsWith('image/'),
-										)
-										.map((item) => item.getAsFile())
-										.filter((file): file is File => !!file)
-									if (!imageFiles.length) return
-									event.preventDefault()
-									void addPickedFiles(imageFiles)
-								}}
-								onCompositionStart={() => setIsComposing(true)}
-								onCompositionEnd={() => setIsComposing(false)}
-								onKeyDown={(event) => {
-									if (
-										event.key === 'Enter' &&
-										!event.shiftKey &&
-										!isComposing() &&
-										!event.isComposing &&
-										event.keyCode !== 229
-									) {
-										event.preventDefault()
-										void submit()
-									}
-								}}
-							/>
-							<Show when={shouldShowActiveFileLabel()}>
-								<span class="pointer-events-none absolute bottom-2.5 right-3 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-1 text-xs text-[var(--text-muted)]">
-									<span>{ACTIVE_FILE_HINT_PREFIX}</span>
-									<span class="inline-block max-w-[15ch] truncate align-bottom">
-										{activeFileLabel()}
-									</span>
-								</span>
+						<div class="chatbox-context-header">
+							<Show when={props.activeContextItems.length > 0}>
+								<ContextArea items={props.activeContextItems} />
+							</Show>
+							<Show when={props.draft.userContext.length > 0}>
+								<ContextArea
+									items={props.draft.userContext}
+									onRemove={props.onRemoveUserContext}
+								/>
 							</Show>
 						</div>
+						<textarea
+							ref={inputTextareaEl}
+							class="chatbox-input flex-1 w-full rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"
+							style={(() => {
+								const height = getTextareaHeightStyle()
+								return height ? { height } : undefined
+							})()}
+							placeholder={t('chatbox.ui.placeholders.input')}
+							value={input()}
+							onInput={(event) => {
+								const nextInput = event.currentTarget.value
+								setInput(nextInput)
+								props.onUpdateInputDraft(nextInput)
+							}}
+							onPaste={(event) => {
+								const imageFiles = Array.from(event.clipboardData?.items ?? [])
+									.filter(
+										(item) =>
+											item.kind === 'file' && item.type.startsWith('image/'),
+									)
+									.map((item) => item.getAsFile())
+									.filter((file): file is File => !!file)
+								if (!imageFiles.length) return
+								event.preventDefault()
+								void addPickedFiles(imageFiles)
+							}}
+							onCompositionStart={() => setIsComposing(true)}
+							onCompositionEnd={() => setIsComposing(false)}
+							onKeyDown={(event) => {
+								if (
+									event.key === 'Enter' &&
+									!event.shiftKey &&
+									!isComposing() &&
+									!event.isComposing &&
+									event.keyCode !== 229
+								) {
+									event.preventDefault()
+									void submit()
+								}
+							}}
+						/>
+
 						<div class="mt-3 flex items-center justify-between gap-3">
 							<div class="flex flex-wrap items-center gap-2">
 								<button
@@ -1060,7 +1083,9 @@ function Chatbox(props: ChatboxProps) {
 								class="mod-cta inline-flex items-center gap-1.5"
 								type="button"
 								disabled={
-									(!input().trim() && !props.pendingUserContext.length) ||
+									(!input().trim() &&
+										!props.draft.userContext.length &&
+										!props.activeContextItems.length) ||
 									!props.canSend
 								}
 								onClick={() => void submit()}
@@ -1182,40 +1207,30 @@ function Chatbox(props: ChatboxProps) {
 			</Show>
 
 			{/* Recall message dialog */}
-			<Show when={pendingRecallMessage() && !recallConfirmMode()}>
+			<Show when={pendingRecallMessage()}>
 				<ConfirmDialog
 					title={t('chatbox.ui.dialogs.recall.title')}
 					message={t('chatbox.ui.dialogs.recall.message')}
-					confirmLabel={t('chatbox.ui.dialogs.recall.onlyConfirm')}
-					secondaryConfirmLabel={
-						recallHasReversibleOps()
-							? t('chatbox.ui.dialogs.recall.restoreConfirm')
-							: undefined
+					confirmLabel={recallOnlyConfirmLabel()}
+					confirmClass={
+						recallArmedMode() === 'only' ? 'mod-warning' : undefined
 					}
+					secondaryConfirmLabel={
+						recallHasReversibleOps() ? recallRestoreConfirmLabel() : undefined
+					}
+					secondaryConfirmClass={
+						recallArmedMode() === 'restore' ? 'mod-warning' : undefined
+					}
+					actionsLayout="vertical"
+					cancelPlacement="end"
 					mountEl={dialogMountTarget().mountEl}
 					contained={dialogMountTarget().contained}
 					onCancel={() => {
-						setRecallConfirmMode(undefined)
+						setRecallArmedMode(undefined)
 						setPendingRecallMessage(undefined)
 					}}
-					onConfirm={() => setRecallConfirmMode('only')}
-					onSecondaryConfirm={() => setRecallConfirmMode('restore')}
-				/>
-			</Show>
-
-			<Show when={pendingRecallMessage() && recallConfirmMode()}>
-				<ConfirmDialog
-					title={recallSecondConfirmTitle()}
-					message={recallSecondConfirmMessage()}
-					confirmLabel={recallSecondConfirmLabel()}
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => setRecallConfirmMode(undefined)}
-					onConfirm={() =>
-						recallConfirmMode() === 'restore'
-							? void confirmRecallAndRestoreMessage()
-							: void confirmRecallMessage()
-					}
+					onConfirm={confirmRecallOnlyButton}
+					onSecondaryConfirm={confirmRecallRestoreButton}
 				/>
 			</Show>
 		</div>

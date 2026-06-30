@@ -146,11 +146,8 @@ export class TaskManager {
 			task.maxDepth,
 			task.id,
 		)
+		const systemPrompt = createSubagentSystemPrompt(task.depth < task.maxDepth)
 		const messages: AIMessage[] = [
-			{
-				role: 'system',
-				content: createSubagentSystemPrompt(task.depth < task.maxDepth),
-			},
 			{
 				role: 'user',
 				content: toTextParts(task.prompt),
@@ -175,6 +172,7 @@ export class TaskManager {
 				provider,
 				model: model.id,
 				messages,
+				systemPrompt,
 				tools,
 				...session.inferenceParams,
 			})

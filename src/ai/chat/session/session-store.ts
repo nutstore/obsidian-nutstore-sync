@@ -8,7 +8,9 @@ import {
 } from '~/ai/chat/domain'
 import {
 	deriveTitle,
+	migrateDeprecatedImageParts,
 	migrateMessageFromV0,
+	needsDeprecatedImagePartMigration,
 	needsV0Migration,
 } from '~/ai/chat/messages/message-utils'
 import {
@@ -76,7 +78,7 @@ export class SessionStore {
 		const { session, changed } = this.rehydrateSession(stored)
 		this.state.loadedSessions.set(sessionId, session)
 		const runtime = this.runtimeStates.get(sessionId)
-		runtime.pendingMessages = []
+		runtime.pending = []
 		this.upsertSessionIndexItem(session, deriveTitle(session))
 		if (changed) {
 			await this.persistSession(session)
@@ -179,7 +181,9 @@ export class SessionStore {
 										message: cloneMessage(
 											needsV0Migration(message.message)
 												? migrateMessageFromV0(message.message)
-												: message.message,
+												: needsDeprecatedImagePartMigration(message.message)
+													? migrateDeprecatedImageParts(message.message)
+													: message.message,
 										),
 										meta: message.meta
 											? {

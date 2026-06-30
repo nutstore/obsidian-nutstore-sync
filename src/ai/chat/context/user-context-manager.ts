@@ -1,18 +1,17 @@
-import type { AIMessageContentPart } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import {
-	blobToDataUrl,
 	cloneUserContextItem,
+	formatUserContext,
 	getUserContextItemHash,
 	type UserContextItem,
 } from '~/ai/chat/context/user-context'
+import { toImageFilePart } from '~/ai/chat/messages/message-utils'
 import { MAX_INLINE_FILE_BYTES } from '~/ai/chat/prompts'
-import type { TextPart } from 'ai'
+import type { FilePart, TextPart } from 'ai'
 
 export interface PreparedUserContext {
 	dedupedItems: UserContextItem[]
-	imageParts: Extract<AIMessageContentPart, { type: 'image' }>[]
 }
 
 export class UserContextManager {
@@ -29,7 +28,7 @@ export class UserContextManager {
 		const normalized = cloneUserContextItem(item)
 		if (normalized.type === 'pending-context') {
 			if (
-				runtime.pendingUserContext.some(
+				runtime.draft.userContext.some(
 					(contextItem) =>
 						contextItem.type === 'pending-context' &&
 						contextItem.id === normalized.id,
@@ -37,20 +36,20 @@ export class UserContextManager {
 			) {
 				return
 			}
-			runtime.pendingUserContext.push(normalized)
+			runtime.draft.userContext.push(normalized)
 			this.notify()
 			return
 		}
 		const hash = getUserContextItemHash(normalized)
 		if (
-			runtime.pendingUserContext.some(
+			runtime.draft.userContext.some(
 				(contextItem) =>
 					contextItem.type !== 'pending-context' && contextItem.hash === hash,
 			)
 		) {
 			return
 		}
-		runtime.pendingUserContext.push(normalized)
+		runtime.draft.userContext.push(normalized)
 		this.notify()
 	}
 
@@ -58,7 +57,7 @@ export class UserContextManager {
 		const session = this.getLoadedActiveSession()
 		if (!session) return
 		const runtime = this.runtimeStates.get(session.id)
-		runtime.pendingUserContext.splice(index, 1)
+		runtime.draft.userContext.splice(index, 1)
 		this.notify()
 	}
 
@@ -66,27 +65,27 @@ export class UserContextManager {
 		const session = this.getLoadedActiveSession()
 		if (!session) return
 		const runtime = this.runtimeStates.get(session.id)
-		const index = runtime.pendingUserContext.findIndex(
+		const index = runtime.draft.userContext.findIndex(
 			(item) => item.type === 'pending-context' && item.id === id,
 		)
 		if (index === -1) return
 		if (replacement === null) {
-			runtime.pendingUserContext.splice(index, 1)
+			runtime.draft.userContext.splice(index, 1)
 			this.notify()
 			return
 		}
 		const normalized = cloneUserContextItem(replacement)
 		const hash = getUserContextItemHash(normalized)
-		const duplicateIndex = runtime.pendingUserContext.findIndex(
+		const duplicateIndex = runtime.draft.userContext.findIndex(
 			(item, idx) =>
 				idx !== index &&
 				item.type !== 'pending-context' &&
 				getUserContextItemHash(item) === hash,
 		)
 		if (duplicateIndex !== -1) {
-			runtime.pendingUserContext.splice(index, 1)
+			runtime.draft.userContext.splice(index, 1)
 		} else {
-			runtime.pendingUserContext.splice(index, 1, normalized)
+			runtime.draft.userContext.splice(index, 1, normalized)
 		}
 		this.notify()
 	}
@@ -95,7 +94,7 @@ export class UserContextManager {
 		const session = this.getLoadedActiveSession()
 		if (!session) return
 		const runtime = this.runtimeStates.get(session.id)
-		runtime.pendingInputDraft = text
+		runtime.draft.text = text
 	}
 
 	dedupeUserContextItems(items: UserContextItem[]): UserContextItem[] {
@@ -135,11 +134,53 @@ export class UserContextManager {
 		}
 	}
 
+	async createImageFilePart(
+		item: Extract<UserContextItem, { type: 'image' }>,
+	): Promise<FilePart> {
+		const imageBlob =
+			item.blob.type === item.mimeType
+				? item.blob
+				: new Blob([item.blob], {
+						type: item.mimeType,
+					})
+		const arrayBuffer = await imageBlob.arrayBuffer()
+		return toImageFilePart(new Uint8Array(arrayBuffer), {
+			mediaType: item.mimeType,
+			filename: item.name,
+		})
+	}
+
+	async buildMessagePartsFromUserContext(
+		items: UserContextItem[],
+	): Promise<Array<TextPart | FilePart>> {
+		const parts: Array<TextPart | FilePart> = []
+		const dedupedItems = this.dedupeUserContextItems(items)
+		const pathAndSelectionContext = dedupedItems.filter(
+			(contextItem) =>
+				contextItem.type === 'vault-path' || contextItem.type === 'selection',
+		)
+		if (pathAndSelectionContext.length) {
+			parts.push({
+				type: 'text',
+				text: formatUserContext(pathAndSelectionContext),
+			})
+		}
+		for (const item of dedupedItems) {
+			if (item.type === 'image') {
+				parts.push(await this.createImageFilePart(item))
+				continue
+			}
+			if (item.type === 'file') {
+				parts.push(await this.createTextFileContextPart(item))
+			}
+		}
+		return parts
+	}
+
 	async prepareUserContextForMessage(
 		items: UserContextItem[],
 	): Promise<PreparedUserContext> {
 		const dedupedItems: UserContextItem[] = []
-		const imageParts: Extract<AIMessageContentPart, { type: 'image' }>[] = []
 		const seen = new Set<string>()
 		for (const item of items) {
 			if (item.type === 'pending-context') continue
@@ -149,18 +190,7 @@ export class UserContextManager {
 			}
 			seen.add(hash)
 			if (item.type === 'image') {
-				const imageBlob =
-					item.blob.type === item.mimeType
-						? item.blob
-						: new Blob([item.blob], {
-								type: item.mimeType,
-							})
-				const imageUrl = await blobToDataUrl(imageBlob)
 				dedupedItems.push(cloneUserContextItem(item))
-				imageParts.push({
-					type: 'image',
-					image: imageUrl,
-				})
 				continue
 			}
 			if (item.type === 'file') {
@@ -171,7 +201,6 @@ export class UserContextManager {
 		}
 		return {
 			dedupedItems,
-			imageParts,
 		}
 	}
 

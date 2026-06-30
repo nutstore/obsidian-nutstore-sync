@@ -1,16 +1,5 @@
-import type {
-	AIMessage,
-	AIMessageContentPart,
-	AIMessageRecord,
-	AISession,
-} from '~/ai/core/types'
-import type {
-	AssistantModelMessage,
-	ImagePart,
-	TextPart,
-	ToolCallPart,
-} from 'ai'
-import type { ChatPendingMessage } from '~/ai/chat/types'
+import type { AIMessage, AIMessageRecord, AISession } from '~/ai/core/types'
+import type { AssistantModelMessage, TextPart, ToolCallPart } from 'ai'
 import type { ChatFragment } from '~/ai/chat/domain'
 import {
 	cloneUserContextItems,
@@ -33,14 +22,6 @@ export class MessageFactory {
 		private runtimeStates: RuntimeStates,
 		private notify: () => void,
 	) {}
-
-	createPendingMessage(text: string): ChatPendingMessage {
-		return {
-			id: createId('pending'),
-			createdAt: Date.now(),
-			text,
-		}
-	}
 
 	createFragment(session: AISession): ChatFragment {
 		const now = Date.now()
@@ -92,7 +73,6 @@ export class MessageFactory {
 		text: string,
 		session?: AISession,
 		userContext?: UserContextItem[],
-		imageParts?: Extract<AIMessageContentPart, { type: 'image' }>[],
 	) {
 		const now = Date.now()
 		fragment.updatedAt = now
@@ -101,10 +81,7 @@ export class MessageFactory {
 		}
 		const current = captureWorkspaceContexts(this.plugin.app)
 		const changed = computeChangedContexts(fragment.messages, current)
-		const content: (TextPart | ImagePart)[] = []
-		if (imageParts?.length) {
-			content.push(...imageParts)
-		}
+		const content: TextPart[] = []
 		if (text) {
 			content.push(...toTextParts(text))
 		}

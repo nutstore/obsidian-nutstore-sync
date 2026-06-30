@@ -12,9 +12,11 @@ export class RuntimeStates {
 		if (!runtime) {
 			runtime = {
 				runState: 'idle',
-				pendingMessages: [],
-				pendingUserContext: [],
-				pendingInputDraft: '',
+				draft: {
+					text: '',
+					userContext: [],
+				},
+				pending: [],
 			}
 			this.state.runtimeBySessionId.set(sessionId, runtime)
 		}

@@ -1,5 +1,6 @@
 import type { AISession } from '~/ai/core/types'
 import { cloneMessageRecord } from '~/ai/chat/domain'
+import { hasQueuedSubmission } from '~/ai/chat/runtime/pending-submission'
 import { projectFragmentMessageGroups } from '~/ai/chat/ui/display-blocks'
 import type { SessionRuntimeState } from '~/ai/chat/runtime/chat-state'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
@@ -95,7 +96,7 @@ export function collectOtherBusySessionIds(
 			return (
 				runtime.runState !== 'idle' ||
 				!!runtime.processing ||
-				runtime.pendingMessages.length > 0
+				hasQueuedSubmission(runtime)
 			)
 		})
 		.map((session) => session.id)

@@ -19,6 +19,10 @@ import {
 	runContextCompression,
 	resolveContextWindow,
 } from '~/ai/chat/runtime/context-compression'
+import {
+	enqueuePendingSubmission,
+	hasQueuedSubmission,
+} from '~/ai/chat/runtime/pending-submission'
 import { Notifier } from '~/ai/chat/notifier'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import { Selection } from '~/ai/chat/runtime/selection'
@@ -76,7 +80,7 @@ type ChatboxActionHandlers = Pick<
 
 type ChatboxViewRuntime = Pick<
 	SessionRuntimeState,
-	'runState' | 'pendingMessages' | 'pendingUserContext' | 'pendingInputDraft'
+	'runState' | 'draft' | 'pending'
 >
 
 type ViewSelectionState = {
@@ -234,6 +238,7 @@ export default class ChatService {
 
 		return {
 			title: this.getActiveSessionTitle(),
+			activeContextItems: [],
 			sessionHistory: this.state.sessionIndex.map((item) => ({ ...item })),
 			activeSessionId: this.state.activeSessionId,
 			timeline: activeSession ? buildTimeline(activeSession) : [],
@@ -251,12 +256,15 @@ export default class ChatService {
 			selectedProviderId: selection.selectedProviderId,
 			selectedModelId: selection.selectedModelId,
 			runState: activeRuntime.runState,
-			pendingMessages: activeRuntime.pendingMessages.map((item) => ({
-				...item,
+			draft: {
+				text: activeRuntime.draft.text,
+				userContext: activeRuntime.draft.userContext.slice(),
+			},
+			pending: activeRuntime.pending.map((item) => ({
+				text: item.text,
+				userContext: item.userContext.slice(),
 			})),
-			pendingUserContext: activeRuntime.pendingUserContext.slice(),
-			pendingInputDraft: activeRuntime.pendingInputDraft,
-			canSend: !activeRuntime.pendingUserContext.some(
+			canSend: !activeRuntime.draft.userContext.some(
 				(item) => item.type === 'pending-context',
 			),
 			canCreateFragment: !!activeSession && activeRuntime.runState === 'idle',
@@ -301,9 +309,11 @@ export default class ChatService {
 		}
 		return {
 			runState: 'idle',
-			pendingMessages: [],
-			pendingUserContext: [] as UserContextItem[],
-			pendingInputDraft: '',
+			draft: {
+				text: '',
+				userContext: [] as UserContextItem[],
+			},
+			pending: [],
 		}
 	}
 
@@ -524,7 +534,10 @@ export default class ChatService {
 		this.userContextManager.updateInputDraft(text)
 	}
 
-	async sendMessage(text: string): Promise<boolean> {
+	async sendMessage(
+		text: string,
+		activeContextItems: UserContextItem[] = [],
+	): Promise<boolean> {
 		await this.initialize()
 		const normalizedText = text.trim()
 		const session =
@@ -533,7 +546,11 @@ export default class ChatService {
 			return false
 		}
 		const runtime = this.runtimeStates.get(session.id)
-		if (!normalizedText && runtime.pendingUserContext.length === 0) {
+		if (
+			!normalizedText &&
+			runtime.draft.userContext.length === 0 &&
+			activeContextItems.length === 0
+		) {
 			return false
 		}
 
@@ -542,16 +559,25 @@ export default class ChatService {
 		}
 
 		if (runtime.runState !== 'idle' || runtime.processing) {
-			if (normalizedText) {
-				runtime.pendingMessages.push(
-					this.messageFactory.createPendingMessage(normalizedText),
-				)
+			runtime.pending = enqueuePendingSubmission(
+				runtime.pending,
+				{
+					text: normalizedText,
+					userContext: runtime.draft.userContext,
+				},
+				activeContextItems,
+				(items) => this.userContextManager.dedupeUserContextItems(items),
+			)
+			runtime.draft = {
+				text: '',
+				userContext: [],
 			}
 			this.notify()
 			return true
 		}
 
-		const pendingUserContext = runtime.pendingUserContext.splice(0)
+		const pendingUserContext =
+			runtime.draft.userContext.concat(activeContextItems)
 		const preparedContext =
 			await this.userContextManager.prepareUserContextForMessage(
 				pendingUserContext,
@@ -563,10 +589,11 @@ export default class ChatService {
 			preparedContext.dedupedItems.length > 0
 				? preparedContext.dedupedItems
 				: undefined,
-			preparedContext.imageParts.length > 0
-				? preparedContext.imageParts
-				: undefined,
 		)
+		runtime.draft = {
+			text: '',
+			userContext: [],
+		}
 		this.store.upsertSessionIndexItem(session, deriveTitle(session))
 		runtime.runState = 'thinking'
 		this.notify()
@@ -677,7 +704,7 @@ export default class ChatService {
 				await this.store.persistSession(session)
 			} finally {
 				runtime.processing = undefined
-				if (runtime.pendingMessages.length > 0) {
+				if (hasQueuedSubmission(runtime)) {
 					runtime.runState = 'idle'
 					this.notify()
 					void this.sessionProcessor.start(session.id)
