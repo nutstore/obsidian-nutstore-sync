@@ -305,7 +305,7 @@ export default class ChatboxView extends ItemView {
 		const viewProps = this.plugin.chatService.getViewProps()
 		const activeContextItems = this.getActiveContextItems().filter((item) => {
 			const hash = getUserContextItemHash(item)
-			return !viewProps.pendingUserContext.some(
+			return !viewProps.draft.userContext.some(
 				(contextItem) => getUserContextItemHash(contextItem) === hash,
 			)
 		})

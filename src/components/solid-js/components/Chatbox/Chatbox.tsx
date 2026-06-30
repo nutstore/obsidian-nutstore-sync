@@ -71,7 +71,7 @@ function isSupportedPickedFile(file: File): boolean {
 }
 
 function Chatbox(props: ChatboxProps) {
-	type RecallConfirmMode = 'only' | 'restore'
+	type RecallArmedMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
 	const [isComposing, setIsComposing] = createSignal(false)
 	const [historyOpen, setHistoryOpen] = createSignal(false)
@@ -89,8 +89,7 @@ function Chatbox(props: ChatboxProps) {
 		createSignal(false)
 	const [pendingCompressContextConfirm, setPendingCompressContextConfirm] =
 		createSignal(false)
-	const [recallConfirmMode, setRecallConfirmMode] =
-		createSignal<RecallConfirmMode>()
+	const [recallArmedMode, setRecallArmedMode] = createSignal<RecallArmedMode>()
 	const [chatboxContainerWidth, setChatboxContainerWidth] = createSignal(0)
 	const [inputPaneHeight, setInputPaneHeight] = createSignal<number>()
 	const [stickToBottom, setStickToBottom] = createSignal(true)
@@ -481,7 +480,7 @@ function Chatbox(props: ChatboxProps) {
 				props.timeline.length,
 				props.currentSessionTasks.length,
 				props.otherSessionTasks.length,
-				props.pendingMessages.length,
+				props.pending.length,
 				props.runState,
 			],
 			([activeSessionId]) => {
@@ -532,7 +531,7 @@ function Chatbox(props: ChatboxProps) {
 		on(
 			() => props.activeSessionId,
 			() => {
-				setInput(props.pendingInputDraft)
+				setInput(props.draft.text)
 			},
 		),
 	)
@@ -657,7 +656,7 @@ function Chatbox(props: ChatboxProps) {
 	async function submit() {
 		const text = input().trim()
 		const hasPendingContext =
-			props.pendingUserContext.length > 0 || props.activeContextItems.length > 0
+			props.draft.userContext.length > 0 || props.activeContextItems.length > 0
 		if ((!text && !hasPendingContext) || !props.canSend) {
 			return
 		}
@@ -714,6 +713,7 @@ function Chatbox(props: ChatboxProps) {
 				i.kind === 'message' && i.message.id === messageId,
 		)
 		if (!item) return
+		setRecallArmedMode(undefined)
 		setPendingRecallMessage(item)
 	}
 
@@ -743,7 +743,7 @@ function Chatbox(props: ChatboxProps) {
 	async function confirmRecallMessage() {
 		const item = pendingRecallMessage()
 		if (!item) return
-		setRecallConfirmMode(undefined)
+		setRecallArmedMode(undefined)
 		setPendingRecallMessage(undefined)
 		await doRecallMessage(item)
 	}
@@ -800,43 +800,36 @@ function Chatbox(props: ChatboxProps) {
 	async function confirmRecallAndRestoreMessage() {
 		const item = pendingRecallMessage()
 		if (!item) return
-		setRecallConfirmMode(undefined)
+		setRecallArmedMode(undefined)
 		setPendingRecallMessage(undefined)
 		await doRecallMessage(item, { restoreFiles: true })
 	}
 
-	const recallSecondConfirmTitle = () => {
-		switch (recallConfirmMode()) {
-			case 'restore':
-				return t('chatbox.ui.dialogs.recall.restoreSecondTitle')
-			case 'only':
-				return t('chatbox.ui.dialogs.recall.onlySecondTitle')
-			default:
-				return undefined
+	const confirmRecallOnlyButton = () => {
+		if (recallArmedMode() === 'only') {
+			void confirmRecallMessage()
+			return
 		}
+		setRecallArmedMode('only')
 	}
 
-	const recallSecondConfirmMessage = () => {
-		switch (recallConfirmMode()) {
-			case 'restore':
-				return t('chatbox.ui.dialogs.recall.restoreSecondMessage')
-			case 'only':
-				return t('chatbox.ui.dialogs.recall.onlySecondMessage')
-			default:
-				return undefined
+	const confirmRecallRestoreButton = () => {
+		if (recallArmedMode() === 'restore') {
+			void confirmRecallAndRestoreMessage()
+			return
 		}
+		setRecallArmedMode('restore')
 	}
 
-	const recallSecondConfirmLabel = () => {
-		switch (recallConfirmMode()) {
-			case 'restore':
-				return t('chatbox.ui.dialogs.recall.restoreConfirm')
-			case 'only':
-				return t('chatbox.ui.dialogs.recall.onlyConfirm')
-			default:
-				return undefined
-		}
-	}
+	const recallOnlyConfirmLabel = () =>
+		recallArmedMode() === 'only'
+			? t('chatbox.ui.dialogs.recall.onlySecondTitle')
+			: t('chatbox.ui.dialogs.recall.onlyConfirm')
+
+	const recallRestoreConfirmLabel = () =>
+		recallArmedMode() === 'restore'
+			? t('chatbox.ui.dialogs.recall.restoreSecondTitle')
+			: t('chatbox.ui.dialogs.recall.restoreConfirm')
 
 	return (
 		<div
@@ -950,7 +943,7 @@ function Chatbox(props: ChatboxProps) {
 						<Show
 							when={
 								props.timeline.length > 0 ||
-								props.pendingMessages.length > 0 ||
+								props.pending.length > 0 ||
 								isBusy()
 							}
 							fallback={
@@ -984,7 +977,7 @@ function Chatbox(props: ChatboxProps) {
 									runState={props.runState}
 									onStop={props.onStopActiveRun}
 								/>
-								<PendingList pendingMessages={props.pendingMessages} />
+								<PendingList pending={props.pending} />
 							</div>
 						</Show>
 					</div>
@@ -1004,9 +997,9 @@ function Chatbox(props: ChatboxProps) {
 						<Show when={props.activeContextItems.length > 0}>
 							<ContextArea items={props.activeContextItems} />
 						</Show>
-						<Show when={props.pendingUserContext.length > 0}>
+						<Show when={props.draft.userContext.length > 0}>
 							<ContextArea
-								items={props.pendingUserContext}
+								items={props.draft.userContext}
 								onRemove={props.onRemoveUserContext}
 							/>
 						</Show>
@@ -1089,7 +1082,7 @@ function Chatbox(props: ChatboxProps) {
 								type="button"
 								disabled={
 									(!input().trim() &&
-										!props.pendingUserContext.length &&
+										!props.draft.userContext.length &&
 										!props.activeContextItems.length) ||
 									!props.canSend
 								}
@@ -1212,40 +1205,30 @@ function Chatbox(props: ChatboxProps) {
 			</Show>
 
 			{/* Recall message dialog */}
-			<Show when={pendingRecallMessage() && !recallConfirmMode()}>
+			<Show when={pendingRecallMessage()}>
 				<ConfirmDialog
 					title={t('chatbox.ui.dialogs.recall.title')}
 					message={t('chatbox.ui.dialogs.recall.message')}
-					confirmLabel={t('chatbox.ui.dialogs.recall.onlyConfirm')}
-					secondaryConfirmLabel={
-						recallHasReversibleOps()
-							? t('chatbox.ui.dialogs.recall.restoreConfirm')
-							: undefined
+					confirmLabel={recallOnlyConfirmLabel()}
+					confirmClass={
+						recallArmedMode() === 'only' ? 'mod-warning' : undefined
 					}
+					secondaryConfirmLabel={
+						recallHasReversibleOps() ? recallRestoreConfirmLabel() : undefined
+					}
+					secondaryConfirmClass={
+						recallArmedMode() === 'restore' ? 'mod-warning' : undefined
+					}
+					actionsLayout="vertical"
+					cancelPlacement="end"
 					mountEl={dialogMountTarget().mountEl}
 					contained={dialogMountTarget().contained}
 					onCancel={() => {
-						setRecallConfirmMode(undefined)
+						setRecallArmedMode(undefined)
 						setPendingRecallMessage(undefined)
 					}}
-					onConfirm={() => setRecallConfirmMode('only')}
-					onSecondaryConfirm={() => setRecallConfirmMode('restore')}
-				/>
-			</Show>
-
-			<Show when={pendingRecallMessage() && recallConfirmMode()}>
-				<ConfirmDialog
-					title={recallSecondConfirmTitle()}
-					message={recallSecondConfirmMessage()}
-					confirmLabel={recallSecondConfirmLabel()}
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => setRecallConfirmMode(undefined)}
-					onConfirm={() =>
-						recallConfirmMode() === 'restore'
-							? void confirmRecallAndRestoreMessage()
-							: void confirmRecallMessage()
-					}
+					onConfirm={confirmRecallOnlyButton}
+					onSecondaryConfirm={confirmRecallRestoreButton}
 				/>
 			</Show>
 		</div>

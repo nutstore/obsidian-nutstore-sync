@@ -4,22 +4,21 @@ import type {
 	ChatMessageRecord,
 	ToolCallPart,
 } from '~/ai/chat/types'
+import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
 
 function isContentPart(
 	part: ChatMessageContentPart,
 ): part is Exclude<ChatMessageContentPart, ToolCallPart> {
 	return (
-		part.type === 'text' || part.type === 'reasoning' || part.type === 'image'
+		part.type === 'text' || part.type === 'reasoning' || part.type === 'file'
 	)
 }
 
 function hasRenderableContent(
 	part: Exclude<ChatMessageContentPart, ToolCallPart>,
 ) {
-	if (part.type === 'image') {
-		return typeof part.image === 'string'
-			? part.image.trim().length > 0
-			: Boolean(part.image)
+	if (part.type === 'file') {
+		return Boolean(imageFilePartSrc(part))
 	}
 	return (part.text ?? '').trim().length > 0
 }
@@ -70,6 +69,9 @@ function buildMessageDisplayBlocks(
 
 	const blocks: ChatDisplayBlock[] = []
 	let pendingContent: Array<Exclude<ChatMessageContentPart, ToolCallPart>> = []
+	const hasImageUserContext = record.userContext?.some(
+		(item) => item.type === 'image',
+	)
 
 	const flushContent = () => {
 		if (!pendingContent.length) return
@@ -79,6 +81,14 @@ function buildMessageDisplayBlocks(
 
 	for (const part of parts) {
 		if (isContentPart(part)) {
+			if (
+				hasImageUserContext &&
+				record.message.role === 'user' &&
+				part.type === 'file' &&
+				imageFilePartSrc(part)
+			) {
+				continue
+			}
 			if (!hasRenderableContent(part)) {
 				continue
 			}
@@ -126,7 +136,7 @@ export function projectFragmentMessageGroups(messages: ChatMessageRecord[]) {
 			index,
 			consumedToolMessageIds,
 		)
-		if (!blocks.length) continue
+		if (!blocks.length && !record.userContext?.length) continue
 		groups.push({ record, blocks })
 	}
 

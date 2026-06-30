@@ -14,6 +14,7 @@ import { extractErrorMessage } from '~/ai/chat/error-utils'
 import {
 	deriveTitle,
 	getAssistantToolCalls,
+	isImageFilePart,
 	messageToText,
 } from '~/ai/chat/messages/message-utils'
 import { createMainSystemPrompt, MAX_TASK_DEPTH } from '~/ai/chat/prompts'
@@ -23,12 +24,12 @@ import type { Selection } from '~/ai/chat/runtime/selection'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { UserContextManager } from '~/ai/chat/context/user-context-manager'
-import { formatUserContext } from '~/ai/chat/context/user-context'
 import { formatAdditionalContext } from '~/ai/chat/context/workspace-context'
 import {
 	runContextCompression,
 	shouldAutoCompressFragment,
 } from '~/ai/chat/runtime/context-compression'
+import { hasQueuedSubmission } from '~/ai/chat/runtime/pending-submission'
 import { isAbortError } from '~/ai/transport/abort'
 import i18n from '~/i18n'
 import type NutstorePlugin from '../../..'
@@ -57,8 +58,7 @@ export class SessionProcessor {
 			latestRuntime.processing = undefined
 			if (
 				latestRuntime.runState === 'idle' &&
-				(latestRuntime.pendingMessages.length ||
-					latestRuntime.pendingUserContext.length)
+				hasQueuedSubmission(latestRuntime)
 			) {
 				void this.start(sessionId)
 				return
@@ -383,40 +383,36 @@ export class SessionProcessor {
 
 	private async flushPendingMessages(session: AISession) {
 		const runtime = this.runtimeStates.get(session.id)
-		if (
-			runtime.pendingMessages.length === 0 &&
-			runtime.pendingUserContext.length === 0
-		) {
-			return false
-		}
-
-		const mergedText = runtime.pendingMessages
-			.map((item) => item.text.trim())
-			.filter(Boolean)
-			.join('\n\n')
-		runtime.pendingMessages = []
-		const pendingUserContext = runtime.pendingUserContext.splice(0)
-		const preparedContext =
-			await this.userContextManager.prepareUserContextForMessage(
-				pendingUserContext,
-			)
-		if (!mergedText && preparedContext.dedupedItems.length === 0) {
-			this.notify()
+		if (!hasQueuedSubmission(runtime)) {
 			return false
 		}
 
 		const fragment = this.messageFactory.getActiveFragment(session)
-		this.messageFactory.appendUserMessage(
-			fragment,
-			mergedText,
-			session,
-			preparedContext.dedupedItems.length > 0
-				? preparedContext.dedupedItems
-				: undefined,
-			preparedContext.fileParts.length > 0
-				? preparedContext.fileParts
-				: undefined,
-		)
+		const pendingSubmissions = runtime.pending.splice(0)
+		let appended = false
+		for (const submission of pendingSubmissions) {
+			const preparedContext =
+				await this.userContextManager.prepareUserContextForMessage(
+					submission.userContext,
+				)
+			const normalizedText = submission.text.trim()
+			if (!normalizedText && preparedContext.dedupedItems.length === 0) {
+				continue
+			}
+			this.messageFactory.appendUserMessage(
+				fragment,
+				normalizedText,
+				session,
+				preparedContext.dedupedItems.length > 0
+					? preparedContext.dedupedItems
+					: undefined,
+			)
+			appended = true
+		}
+		if (!appended) {
+			this.notify()
+			return false
+		}
 		this.store.upsertSessionIndexItem(session, deriveTitle(session))
 		void this.store.persistSession(session)
 		void this.store.persistMetaAndIndex()
@@ -442,34 +438,35 @@ export class SessionProcessor {
 				const dedupedContext = item.userContext?.length
 					? this.userContextManager.dedupeUserContextItems(item.userContext)
 					: []
-				const pathAndSelectionContext = dedupedContext.filter(
-					(contextItem) =>
-						contextItem.type === 'vault-path' ||
-						contextItem.type === 'selection',
-				)
-				if (pathAndSelectionContext.length) {
-					prefixParts.push({
-						type: 'text',
-						text: formatUserContext(pathAndSelectionContext),
-					})
-				}
-				for (const contextItem of dedupedContext) {
-					if (contextItem.type !== 'file') {
-						continue
-					}
-					prefixParts.push(
-						await this.userContextManager.createTextFileContextPart(
-							contextItem,
-						),
+				const contextParts =
+					await this.userContextManager.buildMessagePartsFromUserContext(
+						dedupedContext,
 					)
-				}
-				if (!prefixParts.length) return item.message
 				const userContent = Array.isArray(item.message.content)
-					? (item.message as ChatUserMessage).content
+					? (
+							(item.message as ChatUserMessage).content as Array<{
+								type: string
+							}>
+						).filter((part) => {
+							if (part.type === 'text' || part.type === 'reasoning') {
+								return true
+							}
+							if (part.type !== 'file') {
+								return false
+							}
+							return (
+								!dedupedContext.some(
+									(contextItem) => contextItem.type === 'image',
+								) && isImageFilePart(part)
+							)
+						})
 					: []
+				if (!prefixParts.length && !contextParts.length) {
+					return item.message
+				}
 				return {
 					...item.message,
-					content: [...prefixParts, ...userContent],
+					content: [...prefixParts, ...contextParts, ...userContent],
 				} as AIMessage
 			}),
 		)

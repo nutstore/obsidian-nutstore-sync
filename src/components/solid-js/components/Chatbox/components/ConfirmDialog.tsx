@@ -11,10 +11,28 @@ export function ConfirmDialog(props: {
 	secondaryConfirmClass?: string
 	mountEl?: HTMLElement
 	contained?: boolean
+	actionsLayout?: 'horizontal' | 'vertical'
+	cancelPlacement?: 'start' | 'end'
 	onCancel: () => void
 	onConfirm: () => void
 	onSecondaryConfirm?: () => void
 }) {
+	const actionsClass = () =>
+		props.actionsLayout === 'vertical'
+			? 'mt-4 flex flex-col gap-2'
+			: 'mt-4 flex justify-end gap-2'
+	const cancelButton = () => (
+		<button
+			class={props.actionsLayout === 'vertical' ? 'w-full' : undefined}
+			type="button"
+			onClick={() => props.onCancel()}
+		>
+			{t('chatbox.ui.actions.cancel')}
+		</button>
+	)
+	const actionButtonClass = (buttonClass?: string) =>
+		`${props.actionsLayout === 'vertical' ? 'w-full' : ''} ${buttonClass ?? ''}`.trim()
+
 	return (
 		<Portal mount={props.mountEl ?? document.body}>
 			<div
@@ -27,13 +45,11 @@ export function ConfirmDialog(props: {
 					<div class="mt-3 text-sm leading-6 text-[var(--text-muted)]">
 						{props.message}
 					</div>
-					<div class="mt-4 flex justify-end gap-2">
-						<button type="button" onClick={() => props.onCancel()}>
-							{t('chatbox.ui.actions.cancel')}
-						</button>
+					<div class={actionsClass()}>
+						<Show when={props.cancelPlacement !== 'end'}>{cancelButton()}</Show>
 						<Show when={props.secondaryConfirmLabel}>
 							<button
-								class={props.secondaryConfirmClass}
+								class={actionButtonClass(props.secondaryConfirmClass)}
 								type="button"
 								onClick={() => props.onSecondaryConfirm?.()}
 							>
@@ -41,12 +57,13 @@ export function ConfirmDialog(props: {
 							</button>
 						</Show>
 						<button
-							class={props.confirmClass}
+							class={actionButtonClass(props.confirmClass)}
 							type="button"
 							onClick={() => props.onConfirm()}
 						>
 							{props.confirmLabel}
 						</button>
+						<Show when={props.cancelPlacement === 'end'}>{cancelButton()}</Show>
 					</div>
 				</div>
 			</div>

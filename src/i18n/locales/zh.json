@@ -581,7 +581,7 @@
 				"tasks": "任务",
 				"currentSession": "当前会话",
 				"otherSessions": "其他会话",
-				"pendingMessages": "挂起消息",
+				"queuedSubmissions": "排队内容",
 				"depth": "深度",
 				"sources": "来源",
 				"contextArea": "上下文",
@@ -653,6 +653,7 @@
 		"errors": {
 			"noProvider": "发送前请先选择模型提供商",
 			"apiKeyRequired": "当前模型提供商缺少 API Key",
+			"providerBaseUrlRequired": "当前 OpenAI-compatible 模型提供商缺少 Base URL",
 			"noModel": "发送前请先选择模型",
 			"unsupportedAttachmentType": "暂不支持该文件类型：{{name}}",
 			"unknownTool": "未知工具：{{name}}",

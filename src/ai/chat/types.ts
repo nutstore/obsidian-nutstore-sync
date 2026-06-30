@@ -1,7 +1,7 @@
 import type {
 	AssistantModelMessage,
+	FilePart,
 	FinishReason,
-	ImagePart,
 	LanguageModelUsage,
 	ModelMessage,
 	TextPart,
@@ -14,7 +14,7 @@ import type { UserContextItem } from '~/ai/chat/context/user-context'
 
 export type {
 	AssistantModelMessage,
-	ImagePart,
+	FilePart,
 	TextPart,
 	ToolCallPart,
 	ToolModelMessage,
@@ -38,7 +38,7 @@ export type ReasoningPart = Extract<
 
 export type ChatMessageContentPart =
 	| TextPart
-	| ImagePart
+	| FilePart
 	| ReasoningPart
 	| ToolCallPart
 
@@ -197,8 +197,7 @@ export type ChatTodoStatus = z.infer<typeof chatTodoStatusSchema>
 export type ChatTodoPriority = z.infer<typeof chatTodoPrioritySchema>
 export type ChatTodoItem = z.infer<typeof chatTodoItemSchema>
 
-export interface ChatPendingMessage {
-	id: string
-	createdAt: number
+export interface ChatSubmission {
 	text: string
+	userContext: UserContextItem[]
 }

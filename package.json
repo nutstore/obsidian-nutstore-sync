@@ -16,6 +16,7 @@
 		"@ai-sdk/anthropic": "^4.0.1",
 		"@ai-sdk/google": "^4.0.2",
 		"@ai-sdk/openai": "^4.0.2",
+		"@ai-sdk/openai-compatible": "^3.0.1",
 		"@ai-sdk/xai": "^4.0.2",
 		"@codemirror/state": "6.5.2",
 		"@codemirror/view": "6.36.4",

@@ -1,16 +1,14 @@
 import type { AISession, AITaskRecord } from '~/ai/core/types'
-import type { ChatPendingMessage, ChatRunState } from '~/ai/chat/types'
+import type { ChatRunState, ChatSubmission } from '~/ai/chat/types'
 import type { ChatSessionIndexItem } from '~/ai/chat/domain'
-import type { UserContextItem } from '~/ai/chat/context/user-context'
 
 export interface SessionRuntimeState {
 	runState: ChatRunState
 	processing?: Promise<void>
 	stopRequested?: boolean
 	abortController?: AbortController
-	pendingMessages: ChatPendingMessage[]
-	pendingUserContext: UserContextItem[]
-	pendingInputDraft: string
+	draft: ChatSubmission
+	pending: ChatSubmission[]
 }
 
 export interface DeferredTaskCompletion {

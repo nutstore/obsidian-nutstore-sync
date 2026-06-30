@@ -1,8 +1,8 @@
 import type {
 	ChatDisplayBlock,
 	ChatMessageRecord,
-	ChatPendingMessage,
 	ChatRunState,
+	ChatSubmission,
 	ChatTaskRecord,
 } from '~/ai/chat/types'
 import type { LanguageModelUsage } from 'ai'
@@ -58,9 +58,8 @@ export interface ChatboxViewModel {
 	selectedProviderId?: string
 	selectedModelId?: string
 	runState: ChatRunState
-	pendingMessages: ChatPendingMessage[]
-	pendingUserContext: UserContextItem[]
-	pendingInputDraft: string
+	draft: ChatSubmission
+	pending: ChatSubmission[]
 	canSend: boolean
 	canCreateFragment: boolean
 	canCompress: boolean

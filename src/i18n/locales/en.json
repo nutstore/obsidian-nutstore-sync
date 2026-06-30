@@ -581,7 +581,7 @@
 				"tasks": "Tasks",
 				"currentSession": "Current session",
 				"otherSessions": "Other sessions",
-				"pendingMessages": "Pending Messages",
+				"queuedSubmissions": "Queued Submissions",
 				"depth": "Depth",
 				"sources": "Sources",
 				"contextArea": "Context",
@@ -653,6 +653,7 @@
 		"errors": {
 			"noProvider": "Select a provider before sending",
 			"apiKeyRequired": "The selected provider is missing an API key",
+			"providerBaseUrlRequired": "The selected OpenAI-compatible provider is missing a base URL",
 			"noModel": "Select a model before sending",
 			"unsupportedAttachmentType": "Unsupported file type: {{name}}",
 			"unknownTool": "Unknown tool: {{name}}",
