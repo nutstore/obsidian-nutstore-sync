@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.3.0] - 2026-06-30
 
 - 增加对 Anthropic AI 提供商的原生支持 | Added native support for Anthropic AI provider.
 - 增加坚果云企业版自定义基础 URL 支持及坚果云 LLM 网关集成 | Added support for Nutstore Enterprise custom base URL and integrated Nutstore LLM Gateway.
