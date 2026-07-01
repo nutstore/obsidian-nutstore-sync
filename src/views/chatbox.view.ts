@@ -27,6 +27,10 @@ import {
 	hideChatboxSelectionHighlight,
 	showChatboxSelectionHighlight,
 } from './chatbox-selection-highlight'
+import {
+	resolveMarkdownLinkAction,
+	resolveMarkdownSourcePath,
+} from './markdown-link-handler'
 import { mountChatbox } from '../components/solid-js'
 
 export const CHATBOX_VIEW_TYPE = 'nutstore-sync-chatbox'
@@ -71,13 +75,14 @@ export default class ChatboxView extends ItemView {
 
 			const fallbackText = markdown
 			const renderedEl = el.ownerDocument.createElement('div')
+			const sourcePath = this.getMarkdownSourcePath(true)
 
 			try {
 				await MarkdownRenderer.render(
 					this.app,
 					markdown,
 					renderedEl,
-					'',
+					sourcePath,
 					component,
 				)
 			} catch (error) {
@@ -93,7 +98,44 @@ export default class ChatboxView extends ItemView {
 				el.textContent = fallbackText
 			}
 
+			const onLinkClick = (event: MouseEvent) => {
+				const target = event.target
+				if (!(target instanceof Element)) {
+					return
+				}
+				const anchor = target.closest('a')
+				if (!(anchor instanceof HTMLAnchorElement)) {
+					return
+				}
+
+				const action = resolveMarkdownLinkAction({
+					href: anchor.getAttribute('href'),
+					datasetHref: anchor.getAttribute('data-href'),
+					classNames: Array.from(anchor.classList),
+				})
+				if (action.type === 'none') {
+					return
+				}
+
+				event.preventDefault()
+				event.stopPropagation()
+
+				if (action.type === 'internal') {
+					void this.app.workspace.openLinkText(
+						action.linktext,
+						this.getMarkdownSourcePath(true),
+						false,
+					)
+					return
+				}
+
+				window.open(action.href, '_blank', 'noopener,noreferrer')
+			}
+
+			el.addEventListener('click', onLinkClick)
+
 			return () => {
+				el.removeEventListener('click', onLinkClick)
 				component.unload()
 				el.replaceChildren()
 			}
@@ -214,6 +256,13 @@ export default class ChatboxView extends ItemView {
 
 	private getEditorView(markdownView?: MarkdownView | null): EditorView | null {
 		return markdownView?.editor?.cm ?? null
+	}
+
+	private getMarkdownSourcePath(allowFallback = false) {
+		const markdownView = this.resolveMarkdownView(allowFallback)
+		return resolveMarkdownSourcePath(
+			markdownView?.file?.path ?? this.activeFilePathSnapshot,
+		)
 	}
 
 	private persistSelectionHighlight(allowFallback = false) {
