@@ -1,6 +1,7 @@
 import { FsWalkResult } from '~/fs/fs.interface'
 import { StatModel } from '~/model/stat.model'
 import { SyncMode } from '~/settings'
+import type { SyncLogger } from '~/sync/log'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
 import { SkippedTaskReasonOptions } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
@@ -58,6 +59,7 @@ export interface TaskFactory {
 }
 
 export interface SyncDecisionInput {
+	logger: SyncLogger
 	settings: SyncDecisionSettings
 	localStats: FsWalkResult[]
 	remoteStats: FsWalkResult[]

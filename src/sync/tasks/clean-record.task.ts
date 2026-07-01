@@ -1,4 +1,3 @@
-import logger from '~/utils/logger'
 import { BaseTask, toTaskError } from './task.interface'
 
 export default class CleanRecordTask extends BaseTask {
@@ -9,7 +8,7 @@ export default class CleanRecordTask extends BaseTask {
 
 			return { success: true, skipRecord: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			this.logger.error(this, e)
 			return {
 				success: false,
 				error: toTaskError(e, this),

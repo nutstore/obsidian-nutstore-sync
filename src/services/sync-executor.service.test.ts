@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import logger from '~/utils/logger'
 
-const { emitStopGcMock, startMock, nutstoreSyncCtor } = vi.hoisted(() => ({
-	emitStopGcMock: vi.fn(),
-	startMock: vi.fn(),
-	nutstoreSyncCtor: vi.fn(),
-}))
+const { emitStopGcMock, emitSyncErrorMock, startMock, nutstoreSyncCtor } =
+	vi.hoisted(() => ({
+		emitStopGcMock: vi.fn(),
+		emitSyncErrorMock: vi.fn(),
+		startMock: vi.fn(),
+		nutstoreSyncCtor: vi.fn(),
+	}))
 
 vi.mock('~/events', () => ({
 	emitStopGc: emitStopGcMock,
+	emitSyncError: emitSyncErrorMock,
 }))
 
 vi.mock('~/sync', () => ({
@@ -42,6 +46,19 @@ function createPlugin(): any {
 			waitUntilIdle: vi.fn(async () => undefined),
 			runBlobGc: vi.fn(async () => undefined),
 		},
+		settings: {
+			loginMode: 'sso',
+			syncMode: 'loose',
+			realtimeSync: true,
+			autoSyncIntervalSeconds: 300,
+			startupSyncDelaySeconds: 10,
+			confirmBeforeSync: false,
+			confirmBeforeDeleteInAutoSync: true,
+			configDirSyncMode: 'bookmarks',
+		},
+		localSettings: {
+			syncPolicy: 'two-way',
+		},
 		settingsService: {
 			scheduleReloadSettingsFromDisk: vi.fn(),
 		},
@@ -51,6 +68,7 @@ function createPlugin(): any {
 describe('SyncExecutorService', () => {
 	beforeEach(() => {
 		emitStopGcMock.mockReset()
+		emitSyncErrorMock.mockReset()
 		startMock.mockReset()
 		nutstoreSyncCtor.mockClear()
 	})
@@ -140,5 +158,32 @@ describe('SyncExecutorService', () => {
 		await expect(
 			service.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
 		).resolves.toBe(true)
+	})
+
+	it('logs sync trigger mode and policy before starting', async () => {
+		startMock.mockResolvedValue({
+			ended: true,
+			ranTasks: true,
+			shouldReloadSettings: false,
+		})
+		const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger)
+		const plugin = createPlugin()
+		const service = new SyncExecutorService(plugin)
+
+		await service.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+
+		expect(infoSpy).toHaveBeenCalledWith('Sync starting with settings:', {
+			triggerMode: 'Manual',
+			syncPolicy: 'TwoWay',
+			loginMode: 'sso',
+			remoteBaseDir: '/remote',
+			syncMode: 'loose',
+			realtimeSync: true,
+			autoSyncIntervalSeconds: 300,
+			startupSyncDelaySeconds: 10,
+			confirmBeforeSync: false,
+			confirmBeforeDeleteInAutoSync: true,
+			configDirSyncMode: 'bookmarks',
+		})
 	})
 })

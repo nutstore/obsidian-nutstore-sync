@@ -7,11 +7,11 @@ import DeleteConfirmModal from '~/components/DeleteConfirmModal'
 import FailedTasksModal, { FailedTaskInfo } from '~/components/FailedTasksModal'
 import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
+	CompletedTask,
 	emitEndSync,
 	emitPreparingSync,
 	emitStartSync,
 	emitSyncError,
-	CompletedTask,
 	emitSyncProgress,
 	onCancelSync,
 } from '~/events'
@@ -20,14 +20,19 @@ import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
 import CacheService from '~/services/cache.service.v1'
+import { SyncPolicy } from '~/settings'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
+import {
+	createSyncLogger,
+	formatSyncLogPrefix,
+	type SyncLogger,
+} from '~/sync/log'
 import breakableSleep from '~/utils/breakable-sleep'
 import { computeEffectiveFilterRules } from '~/utils/config-dir-rules'
 import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
-import logger from '~/utils/logger'
 import {
 	getNutstoreDavEndpoint,
 	getNutstoreNsdavEndpoint,
@@ -35,14 +40,13 @@ import {
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import NutstorePlugin from '..'
-import { SyncPolicy } from '~/settings'
-import TwoWaySyncDecider from './decision/two-way.decider'
 import ReceiveOnlySyncDecider, {
 	ReceiveOnlyRevertLocalChangesSyncDecider,
 } from './decision/receive-only.decider'
 import SendOnlySyncDecider, {
 	SendOnlyOverrideChangesSyncDecider,
 } from './decision/send-only.decider'
+import TwoWaySyncDecider from './decision/two-way.decider'
 import CleanRecordTask from './tasks/clean-record.task'
 import ConflictResolveTask, {
 	ConflictStrategy,
@@ -50,8 +54,8 @@ import ConflictResolveTask, {
 import MkdirLocalTask from './tasks/mkdir-local.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import NoopTask from './tasks/noop.task'
-import PushTask from './tasks/push.task'
 import PullTask from './tasks/pull.task'
+import PushTask from './tasks/push.task'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
 import SkippedTask from './tasks/skipped.task'
@@ -77,6 +81,8 @@ export class NutstoreSync {
 	isCancelled: boolean = false
 
 	private subscriptions: Subscription[] = []
+	private currentLogPrefix = '[[Sync]]'
+	private currentLogger: SyncLogger = createSyncLogger(this.currentLogPrefix)
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -111,6 +117,11 @@ export class NutstoreSync {
 	}
 
 	async start({ mode }: { mode: SyncStartMode }): Promise<SyncStartResult> {
+		this.currentLogPrefix = formatSyncLogPrefix({
+			mode,
+			policy: this.localSettings.syncPolicy,
+		})
+		this.currentLogger = createSyncLogger(this.currentLogPrefix)
 		try {
 			const showNotice = mode === SyncStartMode.MANUAL_SYNC
 			let preparingEmitted = false
@@ -128,7 +139,7 @@ export class NutstoreSync {
 			const settings = this.settings
 			const webdav = this.webdav
 			const remoteBaseDir = stdRemotePath(this.options.remoteBaseDir)
-			logger.info('[Sync] Endpoint:', {
+			this.logger.info('[Sync] Endpoint:', {
 				loginMode: settings.loginMode,
 				dav: getNutstoreDavEndpoint(settings),
 				nsdav: getNutstoreNsdavEndpoint(settings),
@@ -178,7 +189,7 @@ export class NutstoreSync {
 				}
 			}
 
-			await cacheService.restoreRemoteTraversalCacheIfMissing()
+			await cacheService.restoreRemoteTraversalCacheIfMissing(this.logger)
 			const decider = (() => {
 				switch (this.localSettings.syncPolicy) {
 					case SyncPolicy.SendOnly:
@@ -198,25 +209,20 @@ export class NutstoreSync {
 				}
 			})()
 			const tasks = await decider.decide()
-			await cacheService.saveRemoteTraversalCache()
+			await cacheService.saveRemoteTraversalCache(this.logger)
 
-			logger.info(
-				`[Sync] Decision (policy=${this.localSettings.syncPolicy}):`,
-				{
-					push: tasks.filter((t) => t instanceof PushTask).length,
-					pull: tasks.filter((t) => t instanceof PullTask).length,
-					conflict: tasks.filter((t) => t instanceof ConflictResolveTask)
-						.length,
-					mkdirRemote: tasks.filter((t) => t instanceof MkdirRemoteTask).length,
-					mkdirLocal: tasks.filter((t) => t instanceof MkdirLocalTask).length,
-					removeLocal: tasks.filter((t) => t instanceof RemoveLocalTask).length,
-					removeRemote: tasks.filter((t) => t instanceof RemoveRemoteTask)
-						.length,
-					noop: tasks.filter((t) => t instanceof NoopTask).length,
-					skipped: tasks.filter((t) => t instanceof SkippedTask).length,
-					total: tasks.length,
-				},
-			)
+			this.logger.info('[Sync] Decision:', {
+				push: tasks.filter((t) => t instanceof PushTask).length,
+				pull: tasks.filter((t) => t instanceof PullTask).length,
+				conflict: tasks.filter((t) => t instanceof ConflictResolveTask).length,
+				mkdirRemote: tasks.filter((t) => t instanceof MkdirRemoteTask).length,
+				mkdirLocal: tasks.filter((t) => t instanceof MkdirLocalTask).length,
+				removeLocal: tasks.filter((t) => t instanceof RemoveLocalTask).length,
+				removeRemote: tasks.filter((t) => t instanceof RemoveRemoteTask).length,
+				noop: tasks.filter((t) => t instanceof NoopTask).length,
+				skipped: tasks.filter((t) => t instanceof SkippedTask).length,
+				total: tasks.length,
+			})
 
 			if (tasks.length === 0) {
 				if (preparingEmitted) {
@@ -373,7 +379,7 @@ export class NutstoreSync {
 							// Directory exists, mark it and all parents as existing
 							markPathAndParentsAsExisting(parentRemotePath)
 						} catch (e) {
-							logger.error(e)
+							this.logger.error(e)
 							// Directory doesn't exist, create mkdir task
 							// No need to check parent's parent since createDirectory uses recursive: true
 							const mkdirTask = new MkdirRemoteTask({
@@ -383,6 +389,7 @@ export class NutstoreSync {
 								remotePath: parentRemotePath,
 								localPath: parentLocalPath,
 								syncRecord: syncRecord,
+								logger: this.logger,
 							})
 							mkdirTasksMap.set(parentRemotePath, mkdirTask)
 						}
@@ -556,10 +563,10 @@ export class NutstoreSync {
 			}
 
 			const failedCount = allTasksResult.filter((r) => !r.success).length
-			logger.info(
+			this.logger.info(
 				`[Sync] Completed: ${allTasksResult.length - failedCount} success, ${failedCount} failed`,
 			)
-			logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
+			this.logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
 
 			if (mode === SyncStartMode.MANUAL_SYNC && failedCount > 0) {
 				const failedTasksInfo: FailedTaskInfo[] = []
@@ -581,13 +588,15 @@ export class NutstoreSync {
 			return { ended: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
 			emitSyncError(error as Error)
-			logger.error('Sync error:', error)
+			this.logger.error('Sync error:', error)
 			return {
 				ended: false,
 				ranTasks: false,
 				shouldReloadSettings: false,
 			}
 		} finally {
+			this.currentLogPrefix = '[[Sync]]'
+			this.currentLogger = createSyncLogger(this.currentLogPrefix)
 			this.subscriptions.forEach((sub) => sub.unsubscribe())
 		}
 	}
@@ -634,7 +643,7 @@ export class NutstoreSync {
 			(t) => !(t instanceof NoopTask || t instanceof CleanRecordTask),
 		)
 
-		logger.debug(`Starting to execute sync tasks`, {
+		this.logger.debug(`Starting to execute sync tasks`, {
 			totalTasks: tasks.length,
 			displayedTasks: tasksToDisplay.length,
 			totalDisplayableTasks: totalDisplayableTasks.length,
@@ -652,7 +661,7 @@ export class NutstoreSync {
 				task instanceof NoopTask || task instanceof CleanRecordTask
 			)
 
-			logger.debug(
+			this.logger.debug(
 				`Executing task [${i + 1}/${tasks.length}] ${task.localPath}`,
 				{
 					taskName: getTaskName(task),
@@ -666,7 +675,7 @@ export class NutstoreSync {
 
 			const taskResult = await this.executeWithRetry(task)
 
-			logger.debug(
+			this.logger.debug(
 				`Task completed [${i + 1}/${tasks.length}] ${task.localPath}`,
 				{
 					taskName: getTaskName(task),
@@ -684,7 +693,7 @@ export class NutstoreSync {
 		}
 
 		const successCount = res.filter((r) => r.success).length
-		logger.debug(`All tasks execution completed`, {
+		this.logger.debug(`All tasks execution completed`, {
 			totalTasks: tasks.length,
 			successCount: successCount,
 			failedCount: tasks.length - successCount,
@@ -708,7 +717,7 @@ export class NutstoreSync {
 			const taskResult = await task.exec()
 			if (!taskResult.success && is503Error(taskResult.error)) {
 				retryCount++
-				logger.warn(
+				this.logger.warn(
 					`[Sync] 503 on ${task.localPath}, retry #${retryCount} in 60s`,
 				)
 				await this.handle503Error(60000)
@@ -732,6 +741,7 @@ export class NutstoreSync {
 			tasks,
 			results,
 			10,
+			this.logger,
 		)
 	}
 
@@ -768,5 +778,9 @@ export class NutstoreSync {
 
 	get localSettings() {
 		return this.plugin.localSettings
+	}
+
+	get logger() {
+		return this.currentLogger
 	}
 }

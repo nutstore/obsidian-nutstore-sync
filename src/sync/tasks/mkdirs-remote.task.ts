@@ -1,5 +1,4 @@
 import i18n from '~/i18n'
-import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
@@ -25,8 +24,8 @@ export default class MkdirsRemoteTask extends BaseTask {
 		try {
 			const localStat = await statVaultItem(this.vault, this.localPath)
 			if (!localStat) {
-				logger.debug('MkdirsRemoteTask: local path:', this.localPath)
-				logger.debug('MkdirsRemoteTask: local stat is null')
+				this.logger.debug('MkdirsRemoteTask: local path:', this.localPath)
+				this.logger.debug('MkdirsRemoteTask: local stat is null')
 				throw new Error(
 					i18n.t('sync.error.localPathNotFound', { path: this.localPath }),
 				)
@@ -38,7 +37,7 @@ export default class MkdirsRemoteTask extends BaseTask {
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(this, e)
+			this.logger.error(this, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

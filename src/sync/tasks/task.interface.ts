@@ -2,7 +2,7 @@ import { normalizePath, Vault } from 'obsidian'
 import { isAbsolute, join } from 'path-browserify'
 import { WebDAVClient } from 'webdav'
 import { SyncRecord } from '~/storage/sync-record'
-import getTaskName from '~/utils/get-task-name'
+import type { SyncLogger } from '~/sync/log'
 import { MaybePromise } from '~/utils/types'
 
 export interface BaseTaskOptions {
@@ -12,6 +12,7 @@ export interface BaseTaskOptions {
 	remotePath: string
 	localPath: string
 	syncRecord: SyncRecord
+	logger: SyncLogger
 }
 
 interface TaskSuccessResult {
@@ -56,13 +57,16 @@ export abstract class BaseTask {
 		return normalizePath(this.options.localPath)
 	}
 
+	get logger() {
+		return this.options.logger
+	}
+
 	abstract exec(): MaybePromise<TaskResult>
 
 	toJSON() {
 		const { localPath, remoteBaseDir, remotePath } = this
-		const taskName = getTaskName(this)
 		return {
-			taskName,
+			taskName: this.constructor.name,
 			localPath,
 			remoteBaseDir,
 			remotePath,

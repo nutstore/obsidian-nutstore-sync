@@ -1,10 +1,11 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSameTime } from '~/utils/is-same-time'
-import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
+import { areLooseEqualFiles } from '../core/loose-equality'
+import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
@@ -13,8 +14,6 @@ import {
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
 import BaseSyncDecider from './base.decider'
-import { areLooseEqualFiles } from '../core/loose-equality'
-import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export default class TwoWaySyncDecider extends BaseSyncDecider {
@@ -39,6 +38,7 @@ export async function twoWayDecider(
 	input: SyncDecisionInput,
 ): Promise<BaseTask[]> {
 	const {
+		logger,
 		settings,
 		localStats,
 		remoteStats,

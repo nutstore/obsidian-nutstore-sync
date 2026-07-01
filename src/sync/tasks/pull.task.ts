@@ -1,5 +1,4 @@
 import { downloadRemoteFile } from '~/utils/chunked-download'
-import logger from '~/utils/logger'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export default class PullTask extends BaseTask {
@@ -18,7 +17,7 @@ export default class PullTask extends BaseTask {
 
 	async exec() {
 		try {
-			logger.info(
+			this.logger.info(
 				`[PullTask] ${this.remotePath} → ${this.localPath} (${this.remoteSize} bytes)`,
 			)
 			await downloadRemoteFile({
@@ -32,7 +31,7 @@ export default class PullTask extends BaseTask {
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(`[PullTask] failed: ${this.localPath}`, e)
+			this.logger.error(`[PullTask] failed: ${this.localPath}`, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}
