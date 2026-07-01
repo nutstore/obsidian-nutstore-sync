@@ -89,7 +89,11 @@ export class NutstoreSync {
 	) {
 		this.options = Object.freeze(this.options)
 		const filterRules = computeEffectiveFilterRules(plugin)
-		this.remoteFs = new NutstoreFileSystem({ ...this.options, filterRules })
+		this.remoteFs = new NutstoreFileSystem({
+			...this.options,
+			settings: plugin.settings,
+			filterRules,
+		})
 		this.localFS = new LocalVaultFileSystem({
 			vault: this.options.vault,
 			syncRecord: new SyncRecord(
@@ -97,6 +101,7 @@ export class NutstoreSync {
 				syncRecordKV,
 			),
 			filterRules,
+			settings: plugin.settings,
 		})
 		this.subscriptions.push(
 			onCancelSync().subscribe(() => {

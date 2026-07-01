@@ -1,11 +1,11 @@
 import { debounce } from 'lodash-es'
-import { useSettings } from '~/settings'
 import { SyncStartMode } from '~/sync'
 import waitUntil from '~/utils/wait-until'
+import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 import type SyncExecutorService from './sync-executor.service'
 
-export default class RealtimeSyncService {
+export default class RealtimeSyncService extends BaseService {
 	private waiting = false
 
 	private submitDirectly = async () => {
@@ -24,10 +24,13 @@ export default class RealtimeSyncService {
 		private plugin: NutstorePlugin,
 		private syncExecutor: SyncExecutorService,
 	) {
+		super()
+	}
+
+	override onload() {
 		this.plugin.registerEvent(
 			this.vault.on('create', async () => {
-				const settings = await useSettings()
-				if (!settings.realtimeSync) {
+				if (!this.plugin.settings.realtimeSync) {
 					return
 				}
 				await this.submitSyncRequest()
@@ -35,8 +38,7 @@ export default class RealtimeSyncService {
 		)
 		this.plugin.registerEvent(
 			this.vault.on('delete', async () => {
-				const settings = await useSettings()
-				if (!settings.realtimeSync) {
+				if (!this.plugin.settings.realtimeSync) {
 					return
 				}
 				await this.submitSyncRequest()
@@ -44,8 +46,7 @@ export default class RealtimeSyncService {
 		)
 		this.plugin.registerEvent(
 			this.vault.on('modify', async () => {
-				const settings = await useSettings()
-				if (!settings.realtimeSync) {
+				if (!this.plugin.settings.realtimeSync) {
 					return
 				}
 				await this.submitSyncRequest()
@@ -53,8 +54,7 @@ export default class RealtimeSyncService {
 		)
 		this.plugin.registerEvent(
 			this.vault.on('rename', async () => {
-				const settings = await useSettings()
-				if (!settings.realtimeSync) {
+				if (!this.plugin.settings.realtimeSync) {
 					return
 				}
 				await this.submitSyncRequest()
@@ -66,7 +66,7 @@ export default class RealtimeSyncService {
 		return this.plugin.app.vault
 	}
 
-	unload() {
+	override onunload() {
 		this.submitSyncRequest.cancel()
 	}
 }

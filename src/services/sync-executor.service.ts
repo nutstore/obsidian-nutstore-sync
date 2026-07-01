@@ -6,16 +6,19 @@ import i18n from '~/i18n'
 import type { SyncStartResult } from '~/sync'
 import logger from '~/utils/logger'
 import waitUntil from '~/utils/wait-until'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
 export interface SyncOptions {
 	mode: SyncStartMode
 }
 
-export default class SyncExecutorService {
+export default class SyncExecutorService extends BaseService {
 	private inFlight = false
 
-	constructor(private plugin: NutstorePlugin) {}
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
 	isRunning() {
 		return this.inFlight || this.plugin.isSyncing

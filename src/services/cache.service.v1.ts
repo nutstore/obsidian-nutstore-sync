@@ -18,6 +18,7 @@ import {
 	getSyncCacheLocalPath,
 } from '~/utils/sync-cache-file'
 import { uint8ArrayToArrayBuffer } from '~/utils/uint8array-to-arraybuffer'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
 export interface ExportedStorage {
@@ -26,8 +27,10 @@ export interface ExportedStorage {
 	traverseWebDAVCache?: TraverseWebDAVCache
 }
 
-export default class CacheServiceV1 {
-	constructor(private plugin: NutstorePlugin) {}
+export default class CacheServiceV1 extends BaseService {
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
 	async restoreRemoteTraversalCacheIfMissing(): Promise<boolean> {
 		try {

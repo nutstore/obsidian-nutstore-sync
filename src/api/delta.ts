@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser'
 import { decode as decodeHtmlEntities } from 'html-entities'
 import { isNil } from 'lodash-es'
+import type { NutstoreSettings } from '~/settings'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
 import requestUrl from '~/utils/request-url'
@@ -26,18 +27,19 @@ export interface DeltaResponse {
 interface GetDeltaInput {
 	folderName: string
 	cursor?: string
+	settings: NutstoreSettings
 	token: string
 }
 
 export const getDelta = apiLimiter.wrap(
-	async ({ folderName, cursor, token }: GetDeltaInput) => {
+	async ({ folderName, cursor, settings, token }: GetDeltaInput) => {
 		const body = `<?xml version="1.0" encoding="utf-8"?>
               <s:delta xmlns:s="http://ns.jianguoyun.com">
                   <s:folderName>${folderName}</s:folderName>
                   <s:cursor>${cursor ?? ''}</s:cursor>
               </s:delta>`
 		const response = await requestUrl({
-			url: await NSAPI('delta'),
+			url: NSAPI(settings, 'delta'),
 			method: 'POST',
 			headers: {
 				Authorization: `Basic ${token}`,

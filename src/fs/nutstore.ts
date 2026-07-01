@@ -1,7 +1,7 @@
 import { Vault } from 'obsidian'
 import { isAbsolute } from 'path-browserify'
 import { isNotNil } from 'ramda'
-import { useSettings } from '~/settings'
+import type { NutstoreSettings } from '~/settings'
 import {
 	ConfigDirSyncMode,
 	computeEffectiveFilterRulesFromParts,
@@ -23,6 +23,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 	constructor(
 		private options: {
 			vault: Vault
+			settings: NutstoreSettings
 			token: string
 			remoteBaseDir: string
 			filterRules?: {
@@ -36,6 +37,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 
 	async walk() {
 		const traversal = new ResumableWebDAVTraversal({
+			settings: this.options.settings,
 			token: this.options.token,
 			remoteBaseDir: this.options.remoteBaseDir,
 			kvKey: await getTraversalWebDAVDBKey(
@@ -75,7 +77,9 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			}
 		}
 
-		const settings = this.options.filterRules ? undefined : await useSettings()
+		const settings = this.options.filterRules
+			? undefined
+			: this.options.settings
 		const filterRules =
 			this.options.filterRules ??
 			(settings

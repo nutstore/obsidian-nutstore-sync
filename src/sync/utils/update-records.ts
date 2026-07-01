@@ -42,6 +42,7 @@ export async function updateMtimeInRecord(
 
 	const token = await plugin.getToken()
 	const remoteFs = new NutstoreFileSystem({
+		settings: plugin.settings,
 		vault,
 		token,
 		remoteBaseDir: stdRemotePath(remoteBaseDir),

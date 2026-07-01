@@ -10,8 +10,9 @@ import {
 } from '../events'
 import i18n from '../i18n'
 import NutstorePlugin from '../index'
+import { BaseService } from './service.interface'
 
-export class ProgressService {
+export class ProgressService extends BaseService {
 	private progressModal: SyncProgressModal | null = null
 
 	public syncProgress: UpdateSyncProgress = {
@@ -22,26 +23,33 @@ export class ProgressService {
 
 	syncEnd = false
 
-	private subscriptions = [
-		onPreparingSync().subscribe(() => {
-			this.syncEnd = false
-			this.resetProgress()
-		}),
-		onStartSync().subscribe(() => {
-			this.syncEnd = false
-			this.resetProgress()
-		}),
-		onEndSync().subscribe(() => {
-			this.syncEnd = true
-			this.updateModal()
-		}),
-		onSyncProgress().subscribe((p) => {
-			this.syncProgress = p
-			this.updateModal()
-		}),
-	]
+	private subscriptions: { unsubscribe: () => void }[] = []
 
-	constructor(private plugin: NutstorePlugin) {}
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
+
+	override onload() {
+		this.onunload()
+		this.subscriptions = [
+			onPreparingSync().subscribe(() => {
+				this.syncEnd = false
+				this.resetProgress()
+			}),
+			onStartSync().subscribe(() => {
+				this.syncEnd = false
+				this.resetProgress()
+			}),
+			onEndSync().subscribe(() => {
+				this.syncEnd = true
+				this.updateModal()
+			}),
+			onSyncProgress().subscribe((p) => {
+				this.syncProgress = p
+				this.updateModal()
+			}),
+		]
+	}
 
 	updateModal = throttle(() => {
 		if (this.progressModal) {
@@ -80,8 +88,9 @@ export class ProgressService {
 		}
 	}
 
-	public unload() {
+	override onunload() {
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
+		this.subscriptions = []
 		this.closeProgressModal()
 	}
 }

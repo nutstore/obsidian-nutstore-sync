@@ -9,23 +9,29 @@ import {
 } from '~/events'
 import i18n from '~/i18n'
 import { is503Error } from '~/utils/is-503-error'
+import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 
-export default class EventsService {
-	subscriptions: Subscription[]
+export default class EventsService extends BaseService {
+	subscriptions: Subscription[] = []
 
-	constructor(plugin: NutstorePlugin) {
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
+
+	override onload() {
+		this.onunload()
 		this.subscriptions = [
 			onPreparingSync().subscribe(({ showNotice }) => {
-				plugin.toggleSyncUI(true)
-				plugin.statusService.updateSyncStatus({
+				this.plugin.toggleSyncUI(true)
+				this.plugin.statusService.updateSyncStatus({
 					text: i18n.t('sync.preparing'),
 					showNotice,
 				})
 			}),
 
 			onStartSync().subscribe(({ showNotice }) => {
-				plugin.statusService.updateSyncStatus({
+				this.plugin.statusService.updateSyncStatus({
 					text: i18n.t('sync.start'),
 					showNotice,
 				})
@@ -34,15 +40,15 @@ export default class EventsService {
 			onSyncProgress().subscribe((progress) => {
 				const percent =
 					Math.round((progress.completed.length / progress.total) * 10000) / 100
-				plugin.statusService.updateSyncStatus({
+				this.plugin.statusService.updateSyncStatus({
 					text: i18n.t('sync.progress', { percent }),
 				})
 			}),
 
 			onEndSync().subscribe(({ failedCount, showNotice }) => {
-				plugin.toggleSyncUI(false)
+				this.plugin.toggleSyncUI(false)
 				const now = Date.now()
-				plugin.statusService.setLastSyncTime(now, failedCount)
+				this.plugin.statusService.setLastSyncTime(now, failedCount)
 				if (showNotice) {
 					const text =
 						failedCount > 0
@@ -53,8 +59,8 @@ export default class EventsService {
 			}),
 
 			onSyncError().subscribe((error) => {
-				plugin.toggleSyncUI(false)
-				plugin.statusService.updateSyncStatus({
+				this.plugin.toggleSyncUI(false)
+				this.plugin.statusService.updateSyncStatus({
 					text: i18n.t('sync.failedStatus'),
 					isError: true,
 					showNotice: false,
@@ -70,7 +76,8 @@ export default class EventsService {
 		]
 	}
 
-	unload() {
+	override onunload() {
 		this.subscriptions.forEach((subscription) => subscription.unsubscribe())
+		this.subscriptions = []
 	}
 }

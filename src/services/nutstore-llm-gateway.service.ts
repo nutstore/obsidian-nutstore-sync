@@ -18,6 +18,7 @@ import {
 import { emitNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
 const TOKEN_REFRESH_SKEW_MS = 60 * 1000
@@ -132,14 +133,16 @@ function toModelConfig(model: NutstoreLlmGatewayModel): AIModelInput {
 	}
 }
 
-export default class NutstoreLlmGatewayService {
+export default class NutstoreLlmGatewayService extends BaseService {
 	private readonly client = new LlmGatewayClient({
 		fetcher: obsidianFetch,
 	})
 	private refreshSubscription: Subscription | null = null
 	private authorizationPollingSubscription: Subscription | null = null
 
-	constructor(private plugin: NutstorePlugin) {}
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
 	isProviderId(providerId?: string) {
 		return providerId === NUTSTORE_LLM_GATEWAY_PROVIDER_ID
@@ -329,7 +332,7 @@ export default class NutstoreLlmGatewayService {
 		new Notice(i18n.t('settings.ai.nutstoreLlmGateway.disconnected'))
 	}
 
-	unload() {
+	override onunload() {
 		this.stopAuthorizationPolling()
 		this.stopTokenRefreshTimer()
 	}

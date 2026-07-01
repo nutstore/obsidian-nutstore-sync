@@ -5,6 +5,7 @@ import { emitGcProgress } from '~/events/gc-progress'
 import { onStopGc } from '~/events/gc-stop'
 import i18n from '~/i18n'
 import { blobKV, syncRecordKV } from '~/storage/kv'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
 export type GcRunResult =
@@ -17,11 +18,13 @@ export type GcRunResult =
 			reason: 'sync' | 'gc' | 'cancelled'
 	  }
 
-export default class GcService {
+export default class GcService extends BaseService {
 	private lock = new Mutex()
 	private stopRequested = false
 
-	constructor(private plugin: NutstorePlugin) {}
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
 	isRunningNow() {
 		return this.lock.isLocked()

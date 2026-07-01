@@ -6,6 +6,7 @@ import {
 } from '~/ai/catalog/config'
 import { obsidianFetch } from '~/ai/transport/obsidian-fetch'
 import logger from '~/utils/logger'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
 const MODELS_API_URL = 'https://models.dev/api.json'
@@ -28,8 +29,10 @@ function countProvidersAndModels(
 	return { modelsCount, providersCount }
 }
 
-export default class ModelsPresetService {
-	constructor(private plugin: NutstorePlugin) {}
+export default class ModelsPresetService extends BaseService {
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
 	initializeFromLocalSettings() {
 		const providers = sanitizePresetProviders(

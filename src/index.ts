@@ -25,6 +25,7 @@ import { ProgressService } from './services/progress.service'
 import ProtocolService from './services/protocol.service'
 import RealtimeSyncService from './services/realtime-sync.service'
 import ScheduledSyncService from './services/scheduled-sync.service'
+import { BaseService } from './services/service.interface'
 import SettingsService from './services/settings.service'
 import { StatusService } from './services/status.service'
 import SyncExecutorService from './services/sync-executor.service'
@@ -33,7 +34,6 @@ import {
 	NutstoreLocalSettings,
 	NutstoreSettings,
 	NutstoreSettingTab,
-	setPluginInstance,
 } from './settings'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { stdRemotePath } from './utils/std-remote-path'
@@ -53,7 +53,7 @@ export default class NutstorePlugin extends Plugin {
 	public nutstoreLlmGatewayService = new NutstoreLlmGatewayService(this)
 	public protocolService = new ProtocolService(this)
 	public progressService = new ProgressService(this)
-	public ribbonManager = new SyncRibbonManager(this)
+	public ribbonService = new SyncRibbonManager(this)
 	public statusService = new StatusService(this)
 	public webDAVService = new WebDAVService(this)
 	public settingsService = new SettingsService(this)
@@ -69,9 +69,32 @@ export default class NutstorePlugin extends Plugin {
 		this.syncExecutorService,
 	)
 
+	private get services(): BaseService[] {
+		return [
+			this.loggerService,
+			this.modelsPresetService,
+			this.nutstoreLlmGatewayService,
+			this.webDAVService,
+			this.syncExecutorService,
+			this.gcService,
+			this.settingsService,
+			this.i18nService,
+			this.statusService,
+			this.progressService,
+			this.eventsService,
+			this.commandService,
+			this.ribbonService,
+			this.protocolService,
+			this.realtimeSyncService,
+			this.chatService,
+			this.scheduledSyncService,
+		]
+	}
+
 	async onload() {
-		await this.settingsService.initialize()
-		await this.chatService.initialize()
+		for (const service of this.services) {
+			await service.onload()
+		}
 		this.settingTab = new NutstoreSettingTab(this.app, this)
 		this.addSettingTab(this.settingTab)
 		this.registerView(CHATBOX_VIEW_TYPE, (leaf) => new ChatboxView(leaf, this))
@@ -127,29 +150,21 @@ export default class NutstorePlugin extends Plugin {
 			}),
 		)
 
-		setPluginInstance(this)
 		await this.chatService.handleSettingsChanged()
-
-		await this.scheduledSyncService.start()
 	}
 
 	async onunload() {
 		this.settingTab?.unload()
-		this.settingsService.unload()
 		this.app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
-		setPluginInstance(null)
 		emitCancelSync()
-		this.scheduledSyncService.unload()
-		this.nutstoreLlmGatewayService.unload()
-		this.progressService.unload()
-		this.eventsService.unload()
-		this.realtimeSyncService.unload()
-		this.statusService.unload()
+		for (const service of [...this.services].reverse()) {
+			service.onunload()
+		}
 	}
 
 	toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
-		this.ribbonManager.update()
+		this.ribbonService.update()
 	}
 
 	async getDecryptedOAuthInfo() {

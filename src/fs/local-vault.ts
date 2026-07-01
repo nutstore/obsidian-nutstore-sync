@@ -1,5 +1,5 @@
 import { Vault } from 'obsidian'
-import { useSettings } from '~/settings'
+import type { NutstoreSettings } from '~/settings'
 import { SyncRecord } from '~/storage/sync-record'
 import {
 	ConfigDirSyncMode,
@@ -26,11 +26,14 @@ export class LocalVaultFileSystem implements AbstractFileSystem {
 				configDir?: string
 				configDirSyncMode?: ConfigDirSyncMode
 			}
+			settings?: NutstoreSettings
 		},
 	) {}
 
 	async walk() {
-		const settings = this.options.filterRules ? undefined : await useSettings()
+		const settings = this.options.filterRules
+			? undefined
+			: this.options.settings
 		const filterRules =
 			this.options.filterRules ??
 			(settings

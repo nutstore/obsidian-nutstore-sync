@@ -2,7 +2,7 @@ import { XMLParser } from 'fast-xml-parser'
 import { isNil, partial } from 'lodash-es'
 import { basename, join } from 'path-browserify'
 import { FileStat } from 'webdav'
-import { useSettings } from '~/settings'
+import type { NutstoreSettings } from '~/settings'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
 import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
@@ -54,11 +54,11 @@ function convertToFileStat(
 }
 
 export async function getDirectoryContents(
+	settings: NutstoreSettings,
 	token: string,
 	path: string,
 ): Promise<FileStat[]> {
 	const contents: FileStat[] = []
-	const settings = await useSettings()
 	const davEndpoint = getNutstoreDavEndpoint(settings)
 	const serverBase = new URL(davEndpoint).pathname
 	path = path.split('/').map(encodeURIComponent).join('/')

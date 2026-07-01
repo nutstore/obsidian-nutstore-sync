@@ -1,15 +1,17 @@
 import { XMLParser } from 'fast-xml-parser'
+import type { NutstoreSettings } from '~/settings'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
 import requestUrl from '~/utils/request-url'
 
 interface GetLatestDeltaCursorInput {
 	folderName: string
+	settings: NutstoreSettings
 	token: string
 }
 
 export const getLatestDeltaCursor = apiLimiter.wrap(
-	async ({ folderName, token }: GetLatestDeltaCursorInput) => {
+	async ({ folderName, settings, token }: GetLatestDeltaCursorInput) => {
 		const body = `<?xml version="1.0" encoding="utf-8"?>
               <s:delta xmlns:s="http://ns.jianguoyun.com">
                   <s:folderName>${folderName}</s:folderName>
@@ -19,7 +21,7 @@ export const getLatestDeltaCursor = apiLimiter.wrap(
 			'Content-Type': 'application/xml',
 		}
 		const response = await requestUrl({
-			url: await NSAPI('latestDeltaCursor'),
+			url: NSAPI(settings, 'latestDeltaCursor'),
 			method: 'POST',
 			headers,
 			body,
