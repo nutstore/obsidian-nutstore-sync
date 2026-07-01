@@ -11,8 +11,9 @@ import {
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
+import { areLooseEqualFiles } from '../core/loose-equality'
+import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
 import BaseSyncDecider from './base.decider'
-import { areLooseEqualFiles } from './loose-equality'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export default class SendOnlySyncDecider extends BaseSyncDecider {
@@ -237,9 +238,7 @@ export async function sendOnlyDecider(
 
 	// * clean orphaned records (both local and remote deleted)
 	for (const [recordPath] of syncRecords) {
-		const local = localStatsMap.get(recordPath)
-		const remote = remoteStatsMap.get(recordPath)
-		if (!local && !remote) {
+		if (shouldCreateCleanRecordTask(recordPath, localStats, remoteStats)) {
 			tasks.push(
 				taskFactory.createCleanRecordTask({
 					remotePath: recordPath,

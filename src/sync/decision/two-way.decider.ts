@@ -13,7 +13,8 @@ import {
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
 import BaseSyncDecider from './base.decider'
-import { areLooseEqualFiles } from './loose-equality'
+import { areLooseEqualFiles } from '../core/loose-equality'
+import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export default class TwoWaySyncDecider extends BaseSyncDecider {
@@ -435,17 +436,14 @@ export async function twoWayDecider(
 
 	// * clean orphaned records (both local and remote deleted)
 	for (const [recordPath, record] of syncRecords) {
-		const local = localStatsMap.get(recordPath)
-		const remote = remoteStatsMap.get(recordPath)
-
-		if (!local && !remote) {
+		if (shouldCreateCleanRecordTask(recordPath, localStats, remoteStats)) {
 			logger.debug({
 				reason: 'cleaning orphaned sync record (both local and remote deleted)',
 				remotePath: remotePathToAbsolute(remoteBaseDir, recordPath),
 				localPath: recordPath,
 				conditions: {
-					localExists: !!local,
-					remoteExists: !!remote,
+					localExists: false,
+					remoteExists: false,
 					recordExists: !!record,
 				},
 			})
