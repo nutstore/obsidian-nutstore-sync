@@ -53,7 +53,7 @@ export function MarkdownContent(props: {
 	return (
 		<div
 			ref={el}
-			class="markdown-rendered select-text text-sm leading-6 text-[var(--text-normal)]"
+			class="ns-chatbox-markdown markdown-rendered select-text text-sm leading-6 text-[var(--text-normal)]"
 		/>
 	)
 }
