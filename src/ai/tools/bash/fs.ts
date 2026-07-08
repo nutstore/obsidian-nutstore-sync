@@ -257,6 +257,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		initialPaths: string[] = [],
 		private readonly permissionGuard?: PermissionGuard,
 		private readonly recorder?: ReversibleOpRecorder,
+		private readonly onRead?: (vaultPath: string) => void,
 	) {
 		for (const path of initialPaths) {
 			this.snapshot.add(ensureNotEscapingRoot(path))
@@ -478,6 +479,12 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async readFileBuffer(path: string): Promise<Uint8Array> {
+		const result = await this.readInternal(path)
+		this.onRead?.(this.toVaultPath(path))
+		return result
+	}
+
+	private async readInternal(path: string): Promise<Uint8Array> {
 		const stat = await this.stat(path)
 		if (!stat.isFile) {
 			throw new Error(
@@ -534,7 +541,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		await this.withBatch(async () => {
 			const encoded = encodeContent(content, options)
 			const existing = (await this.exists(path))
-				? await this.readFileBuffer(path)
+				? await this.readInternal(path)
 				: (new Uint8Array(0) as Uint8Array)
 			const merged = new Uint8Array(existing.length + encoded.length)
 			merged.set(existing)
@@ -739,7 +746,7 @@ export class ObsidianVaultFs implements IFileSystem {
 			if (stat.isDirectory) {
 				return
 			}
-			const content = await this.readFileBuffer(path)
+			const content = await this.readInternal(path)
 			await this.writeFile(path, content)
 		})
 	}

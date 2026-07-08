@@ -14,12 +14,14 @@ export interface VaultBashExecOptions {
 	stdin?: string
 	rawScript?: boolean
 	permissionGuard?: PermissionGuard
+	onRead?: (vaultPath: string) => void
 }
 
 export async function createVaultBash(
 	app: App,
 	permissionGuard?: PermissionGuard,
 	recorder?: ReversibleOpRecorder,
+	onRead?: (vaultPath: string) => void,
 ) {
 	const initialPaths = await listVaultPaths(app)
 	const vaultFs = new ObsidianVaultFs(
@@ -27,6 +29,7 @@ export async function createVaultBash(
 		initialPaths,
 		permissionGuard,
 		recorder,
+		onRead,
 	)
 	const fs = new MountedVaultFs(vaultFs)
 
@@ -42,7 +45,12 @@ export async function execVaultBash(
 	options: VaultBashExecOptions = {},
 ) {
 	const recorder = new ReversibleOpRecorder()
-	const bash = await createVaultBash(app, options.permissionGuard, recorder)
+	const bash = await createVaultBash(
+		app,
+		options.permissionGuard,
+		recorder,
+		options.onRead,
+	)
 	const result = await bash.exec(script, {
 		cwd: options.cwd ?? VAULT_MOUNT_POINT,
 		stdin: options.stdin,

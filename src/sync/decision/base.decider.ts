@@ -50,7 +50,7 @@ export default abstract class BaseSyncDecider {
 			vault: this.vault,
 			remoteBaseDir: this.remoteBaseDir,
 			syncRecord: syncRecordStorage,
-			log: this.sync.logger,
+			logger: this.sync.logger,
 		}
 
 		const taskFactory: TaskFactory = {

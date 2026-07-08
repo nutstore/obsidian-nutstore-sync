@@ -18,6 +18,35 @@ interface ReplaceResult {
 	matchCount: number
 }
 
+/**
+ * Decode a just-bash "bytes" stdout (latin1 byte buffer) to proper UTF-8 text.
+ * just-bash commands like cat emit raw bytes as latin1 where each char = one byte.
+ * Multi-byte UTF-8 sequences (e.g. Chinese characters) are split across multiple
+ * chars and will appear garbled unless decoded back to UTF-8.
+ */
+function decodeBytesOutput(stdout: string): string {
+	if (!stdout) return stdout
+	// If any char is > 255, it's already decoded Unicode — return as-is
+	let hasHighByte = false
+	for (let i = 0; i < stdout.length; i++) {
+		const code = stdout.charCodeAt(i)
+		if (code > 255) return stdout
+		if (code > 127) hasHighByte = true
+	}
+	if (!hasHighByte) return stdout // pure ASCII, no decoding needed
+
+	// Convert latin1 bytes to Uint8Array and decode as UTF-8
+	const bytes = new Uint8Array(stdout.length)
+	for (let i = 0; i < stdout.length; i++) {
+		bytes[i] = stdout.charCodeAt(i)
+	}
+	try {
+		return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+	} catch {
+		return stdout // not valid UTF-8, fall back to raw latin1 view
+	}
+}
+
 const textValue = (field: string) =>
 	z.string({
 		error: () => i18n.t('chatbox.errors.toolFieldRequired', { field }),
@@ -205,7 +234,7 @@ export function createAITools(
 				oldText: z.string(),
 				newText: textValue('newText'),
 			}),
-			execute: async (params): Promise<ToolExecutionResult> => {
+			execute: async (params, context): Promise<ToolExecutionResult> => {
 				const path = params.path
 				const oldText = params.oldText
 				const newText = params.newText
@@ -214,10 +243,19 @@ export function createAITools(
 						`edit_file can only access files inside the vault. Use a vault-relative path (e.g. notes/file.md) or an absolute virtual path under ${VAULT_MOUNT_POINT}/ (e.g. ${VAULT_MOUNT_POINT}/notes/file.md).`,
 					)
 				}
-				const strippedPath = path.startsWith(`${VAULT_MOUNT_POINT}/`)
-					? path.slice(VAULT_MOUNT_POINT.length)
-					: path
+				// Normalize the path to handle both "/vault/..." and "vault/..." formats.
+				// Bash tools mount the vault at /vault, so AI models may pass vault paths
+				// with or without the leading slash. We ensure the path always has a leading
+				// slash so the VAULT_MOUNT_POINT prefix is stripped consistently.
+				const normalizedInput = path.startsWith('/') ? path : `/${path}`
+				const strippedPath = normalizedInput.startsWith(`${VAULT_MOUNT_POINT}/`)
+					? normalizedInput.slice(VAULT_MOUNT_POINT.length)
+					: normalizedInput
 				const normalizedPath = normalizePath(strippedPath)
+
+				if (!context.readTracker?.hasRead(normalizedPath)) {
+					throw new Error(i18n.t('chatbox.errors.fileNotRead', { path }))
+				}
 
 				await permissionGuard?.({
 					type: 'fs',
@@ -267,7 +305,7 @@ export function createAITools(
 				stdin: z.string().optional(),
 				rawScript: booleanValue('rawScript').default(false),
 			}),
-			execute: async (params): Promise<ToolExecutionResult> => {
+			execute: async (params, context): Promise<ToolExecutionResult> => {
 				const cwd = params.cwd || VAULT_MOUNT_POINT
 				if (!isAllowedBashCwd(cwd)) {
 					throw new Error(
@@ -280,18 +318,24 @@ export function createAITools(
 					stdin: params.stdin,
 					rawScript: params.rawScript,
 					permissionGuard,
+					onRead: context.readTracker?.markRead.bind(context.readTracker),
 				})
-
-				const truncateLine = (line: string) =>
-					line.length > 2000
-						? `${line.slice(0, 2000)}...[line truncated: ${line.length} chars total]`
-						: line
-
-				const processOutput = (text: string) =>
-					text.split('\n').map(truncateLine).join('\n')
+				// just-bash sets stdoutKind to "bytes" for commands like cat that
+				// emit raw byte output. In that case stdout is a latin1 byte buffer
+				// (each char = one byte) — decode it as UTF-8 to get proper text.
+				const outputKind: 'text' | 'bytes' =
+					result.stdoutKind === 'bytes'
+						? 'bytes'
+						: (result.stdoutEncoding as 'binary' | undefined) === 'binary'
+							? 'bytes'
+							: 'text'
+				const stdout =
+					outputKind === 'bytes'
+						? decodeBytesOutput(result.stdout)
+						: result.stdout
 
 				return {
-					result: `${processOutput(result.stdout)}${processOutput(result.stderr)}`,
+					result: `${stdout}\n\n${result.stderr}`,
 					reversibleOps: result.reversibleOps,
 				}
 			},

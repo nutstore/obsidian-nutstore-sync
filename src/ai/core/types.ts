@@ -8,6 +8,7 @@ import type {
 	ChatTodoItem as DomainChatTodoItem,
 } from '~/ai/chat/types'
 import type { ChatSession as DomainChatSession } from '~/ai/chat/domain'
+import type { ReadTracker } from '~/ai/tools/file-operation'
 import type { ToolCallPart } from 'ai'
 
 export const aiModelModalitySchema = z.enum([
@@ -137,6 +138,7 @@ export interface AIToolExecutionContext {
 	depth: number
 	maxDepth: number
 	parentTaskId?: string
+	readTracker?: ReadTracker
 }
 
 export interface ToolExecutionResult {

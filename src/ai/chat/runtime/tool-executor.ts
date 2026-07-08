@@ -10,6 +10,8 @@ import type {
 	ToolExecutionResult,
 } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
+import { getActiveFragment } from '~/ai/chat/domain'
+import { createFragmentReadTracker } from '~/ai/tools/file-operation'
 import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
@@ -98,9 +100,18 @@ export class ToolExecutor {
 		context: AIToolExecutionContext,
 	) {
 		const toolsByName = new Map(tools.map((t) => [t.name, t]))
+		const fragment = getActiveFragment(context.session)
+		const readSnapshot = new Set(fragment?.readVaultPaths ?? [])
+		const readTracker = fragment
+			? createFragmentReadTracker(fragment, readSnapshot)
+			: undefined
+		const enrichedContext: AIToolExecutionContext = {
+			...context,
+			readTracker: readTracker ?? context.readTracker,
+		}
 		const results = await Promise.all(
 			toolCalls.map((toolCall) =>
-				this.resolveSingleToolCall(toolCall, toolsByName, context),
+				this.resolveSingleToolCall(toolCall, toolsByName, enrichedContext),
 			),
 		)
 

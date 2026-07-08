@@ -266,6 +266,42 @@ function createMockVault(
 		async rename(file: MockFile | MockFolder, newPath: string) {
 			store.rename(file.path, newPath)
 		},
+		adapter: {
+			async exists(path: string) {
+				return store.exists(path)
+			},
+			async stat(path: string) {
+				const s = store.stat(path)
+				if (!s) return null
+				return {
+					type: s.type === 'folder' ? ('folder' as const) : ('file' as const),
+					mtime: s.mtime,
+					size: s.size,
+				}
+			},
+			async readBinary(path: string) {
+				return store.readBinary(path)
+			},
+			async writeBinary(path: string, data: ArrayBuffer) {
+				store.writeBinary(path, data)
+			},
+			async write(path: string, data: string) {
+				store.writeBinary(path, new TextEncoder().encode(data).buffer)
+			},
+			async create(path: string, data: string) {
+				store.writeBinary(path, new TextEncoder().encode(data).buffer)
+			},
+			async createBinary(path: string, data: ArrayBuffer) {
+				store.writeBinary(path, data)
+			},
+			async remove(path: string) {
+				store.remove(path)
+			},
+			async rmdir(path: string, _recursive: boolean) {
+				store.removeRecursive(path)
+			},
+		},
+		configDir: '.obsidian',
 	} as unknown as Vault
 
 	return {
@@ -381,15 +417,13 @@ describe('vault bash runtime', () => {
 			{
 				vaultPath: 'docs/existing.md',
 				operation: 'update',
-				before: {
+				before: expect.objectContaining({
 					kind: 'file',
-					contentBase64: Buffer.from('before').toString('base64'),
-				},
-			},
-			{
-				vaultPath: 'docs/deep',
-				operation: 'create',
-				before: { kind: 'dir' },
+					contentCompressed: {
+						compress: 'deflate',
+						blob: expect.any(Blob),
+					},
+				}),
 			},
 			{
 				vaultPath: 'docs/deep/child',
@@ -399,10 +433,13 @@ describe('vault bash runtime', () => {
 			{
 				vaultPath: 'docs/nested/a.txt',
 				operation: 'delete',
-				before: {
+				before: expect.objectContaining({
 					kind: 'file',
-					contentBase64: Buffer.from('A').toString('base64'),
-				},
+					contentCompressed: {
+						compress: 'deflate',
+						blob: expect.any(Blob),
+					},
+				}),
 			},
 			{
 				vaultPath: 'docs/nested',
@@ -442,10 +479,13 @@ describe('vault bash runtime', () => {
 			{
 				vaultPath: 'docs/new.md',
 				operation: 'delete',
-				before: {
+				before: expect.objectContaining({
 					kind: 'file',
-					contentBase64: Buffer.from('new').toString('base64'),
-				},
+					contentCompressed: {
+						compress: 'deflate',
+						blob: expect.any(Blob),
+					},
+				}),
 			},
 			{
 				vaultPath: 'moved/new.md',
@@ -526,27 +566,216 @@ describe('vault bash runtime', () => {
 			{
 				vaultPath: 'docs/dest-copy.md',
 				operation: 'update',
-				before: {
+				before: expect.objectContaining({
 					kind: 'file',
-					contentBase64: Buffer.from('copy-dest-before').toString('base64'),
-				},
+					contentCompressed: {
+						compress: 'deflate',
+						blob: expect.any(Blob),
+					},
+				}),
 			},
 			{
 				vaultPath: 'docs/src-move.md',
 				operation: 'delete',
-				before: {
+				before: expect.objectContaining({
 					kind: 'file',
-					contentBase64: Buffer.from('move-source').toString('base64'),
-				},
+					contentCompressed: {
+						compress: 'deflate',
+						blob: expect.any(Blob),
+					},
+				}),
 			},
 			{
 				vaultPath: 'docs/dest-move.md',
 				operation: 'update',
-				before: {
+				before: expect.objectContaining({
 					kind: 'file',
-					contentBase64: Buffer.from('move-dest-before').toString('base64'),
-				},
+					contentCompressed: {
+						compress: 'deflate',
+						blob: expect.any(Blob),
+					},
+				}),
 			},
 		])
+	})
+
+	describe('onRead callback', () => {
+		it('fires onRead with vault-relative path when readFile succeeds', async () => {
+			const { vault } = createMockVault({ 'notes/file.md': 'hello' }, ['notes'])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/notes', '/notes/file.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			const content = await fs.readFile('/notes/file.md')
+
+			expect(content).toBe('hello')
+			expect(reads).toEqual(['notes/file.md'])
+		})
+
+		it('fires onRead with vault-relative path when readFileBuffer succeeds', async () => {
+			const { vault } = createMockVault({ 'notes/file.md': 'hello' }, ['notes'])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/notes', '/notes/file.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			const buf = await fs.readFileBuffer('/notes/file.md')
+
+			expect(new TextDecoder().decode(buf)).toBe('hello')
+			expect(reads).toEqual(['notes/file.md'])
+		})
+
+		it('does not fire onRead for stat', async () => {
+			const { vault } = createMockVault({ 'notes/file.md': 'hello' }, ['notes'])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/notes', '/notes/file.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			await fs.stat('/notes/file.md')
+
+			expect(reads).toEqual([])
+		})
+
+		it('does not fire onRead for readdir', async () => {
+			const { vault } = createMockVault(
+				{ 'notes/a.md': 'A', 'notes/b.md': 'B' },
+				['notes'],
+			)
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/notes', '/notes/a.md', '/notes/b.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			await fs.readdir('/notes')
+
+			expect(reads).toEqual([])
+		})
+
+		it('does not fire onRead when reading a non-existent file (ENOENT)', async () => {
+			const { vault } = createMockVault({}, [])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			await expect(fs.readFile('/missing.md')).rejects.toThrow()
+			expect(reads).toEqual([])
+		})
+
+		it('does not fire onRead when reading a directory (EISDIR)', async () => {
+			const { vault } = createMockVault({ 'notes/file.md': 'hello' }, ['notes'])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/notes', '/notes/file.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			await expect(fs.readFile('/notes')).rejects.toThrow()
+			expect(reads).toEqual([])
+		})
+
+		it('fires onRead exactly once for readFile (not double via readFileBuffer)', async () => {
+			const { vault } = createMockVault({ 'notes/file.md': 'hello' }, ['notes'])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/notes', '/notes/file.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			await fs.readFile('/notes/file.md')
+
+			expect(reads).toEqual(['notes/file.md'])
+		})
+
+		it('threads onRead through execVaultBash when bash reads a vault file', async () => {
+			const { vault } = createMockVault({ 'docs/readme.md': 'hello world\n' }, [
+				'docs',
+			])
+			const app = createApp(vault)
+			const reads: string[] = []
+
+			const result = await execVaultBash(app, 'cat /vault/docs/readme.md', {
+				onRead: (path) => reads.push(path),
+			})
+
+			expect(result.exitCode).toBe(0)
+			expect(result.stdout).toContain('hello world')
+			expect(reads).toEqual(['docs/readme.md'])
+		})
+
+		it('does not fire onRead for bash ls on a vault directory', async () => {
+			const { vault } = createMockVault(
+				{ 'docs/a.md': 'A', 'docs/b.md': 'B' },
+				['docs'],
+			)
+			const app = createApp(vault)
+			const reads: string[] = []
+
+			await execVaultBash(app, 'ls /vault/docs', {
+				onRead: (path) => reads.push(path),
+			})
+
+			expect(reads).toEqual([])
+		})
+
+		it('does not fire onRead for appendFile (internal read is not an agent read)', async () => {
+			const { vault } = createMockVault({ 'docs/file.md': 'hello' }, ['docs'])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/docs', '/docs/file.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			await fs.appendFile('/docs/file.md', ' world')
+
+			expect(reads).toEqual([])
+		})
+
+		it('does not fire onRead for utimes (internal read is not an agent read)', async () => {
+			const { vault } = createMockVault({ 'docs/file.md': 'hello' }, ['docs'])
+			const reads: string[] = []
+			const fs = new ObsidianVaultFs(
+				vault,
+				['/', '/docs', '/docs/file.md'],
+				undefined,
+				undefined,
+				(path) => reads.push(path),
+			)
+
+			await fs.utimes('/docs/file.md', new Date(), new Date())
+
+			expect(reads).toEqual([])
+		})
 	})
 })

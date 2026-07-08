@@ -91,6 +91,10 @@ export function requireApiVersion(_version: string) {
 	return true
 }
 
-export function normalizePath(path: string) {
+export function normalizePath(path?: string) {
+	if (!path) return ''
 	return path
+		.replace(/[\\/]+/g, '/')
+		.replace(/^\/+/, '')
+		.replace(/\/+$/, '')
 }

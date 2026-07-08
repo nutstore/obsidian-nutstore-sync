@@ -19,6 +19,7 @@ export interface ChatFragment {
 	updatedAt: number
 	summary?: string
 	messages: ChatMessageRecord[]
+	readVaultPaths?: string[]
 }
 
 export interface ChatSessionPermissions {
@@ -166,6 +167,9 @@ export function cloneSession(session: ChatSession): ChatSession {
 		fragments: session.fragments.map((fragment) => ({
 			...fragment,
 			messages: fragment.messages.map(cloneMessageRecord),
+			readVaultPaths: fragment.readVaultPaths
+				? [...fragment.readVaultPaths]
+				: undefined,
 		})),
 		tasks: session.tasks.map(cloneTask),
 	}

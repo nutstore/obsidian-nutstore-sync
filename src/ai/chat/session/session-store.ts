@@ -151,6 +151,11 @@ export class SessionStore {
 							createdAt: fragment.createdAt,
 							updatedAt: fragment.updatedAt || fragment.createdAt,
 							summary: fragment.summary,
+							readVaultPaths: Array.isArray(fragment.readVaultPaths)
+								? fragment.readVaultPaths.filter(
+										(p): p is string => typeof p === 'string' && p.length > 0,
+									)
+								: undefined,
 							messages: Array.isArray(fragment.messages)
 								? fragment.messages.map((message) => ({
 										...message,
