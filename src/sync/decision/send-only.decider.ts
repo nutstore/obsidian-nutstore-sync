@@ -131,7 +131,7 @@ export async function sendOnlyDecider(
 			}
 			if (!record) {
 				logger.debug({
-					reason: 'send-only: both exist without record — push from local',
+					reason: 'both exist without record — push from local',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -145,14 +145,14 @@ export async function sendOnlyDecider(
 				: localChanged && !remoteChanged
 			if (shouldPush) {
 				logger.debug({
-					reason: 'send-only: both exist, source state changed',
+					reason: 'both exist, source state changed',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
 				pushLocalFile(p, local.size, remote.size)
 			} else if (localChanged && remoteChanged && !mode.overrideChanges) {
 				logger.debug({
-					reason: 'send-only: both local and remote changed — skip',
+					reason: 'both local and remote changed — skip',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -164,7 +164,7 @@ export async function sendOnlyDecider(
 				)
 			} else if (remoteChanged && !mode.overrideChanges) {
 				logger.debug({
-					reason: 'send-only: preserve remote-side change until override',
+					reason: 'preserve remote-side change until override',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -175,7 +175,7 @@ export async function sendOnlyDecider(
 		if (local && !remote) {
 			if (record && !mode.overrideChanges) {
 				logger.debug({
-					reason: 'send-only: preserve remote deletion until override',
+					reason: 'preserve remote deletion until override',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -183,7 +183,7 @@ export async function sendOnlyDecider(
 			}
 			// Local exists, remote missing → push to restore/create remote
 			logger.debug({
-				reason: 'send-only: local exists, remote missing — push',
+				reason: 'local exists, remote missing — push',
 				localPath: p,
 				remotePath: remotePathToAbsolute(remoteBaseDir, p),
 			})
@@ -194,8 +194,7 @@ export async function sendOnlyDecider(
 		if (!local && remote) {
 			if (mode.overrideChanges) {
 				logger.debug({
-					reason:
-						'send-only override: remote exists, local missing — remove remote',
+					reason: 'remote exists, local missing — remove remote',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -204,7 +203,7 @@ export async function sendOnlyDecider(
 			}
 			if (!record) {
 				logger.debug({
-					reason: 'send-only: remote-only without record — preserve remote',
+					reason: 'remote-only without record — preserve remote',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -213,7 +212,7 @@ export async function sendOnlyDecider(
 			const remoteChanged = !isSameTime(remote.mtime, record.remote.mtime)
 			if (!remoteChanged) {
 				logger.debug({
-					reason: 'send-only: local deleted, remote unchanged — remove remote',
+					reason: 'local deleted, remote unchanged — remove remote',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -221,7 +220,7 @@ export async function sendOnlyDecider(
 			} else {
 				logger.debug({
 					reason:
-						'send-only: local deleted, remote changed — skip to protect remote change',
+						'local deleted, remote changed — skip to protect remote change',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -267,7 +266,7 @@ export async function sendOnlyDecider(
 						)
 						logger.debug({
 							reason:
-								'send-only override: skip replacing remote folder with local file (contains ignored items)',
+								'skip replacing remote folder with local file (contains ignored items)',
 							remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 							localPath,
 							ignoredPaths,
@@ -284,7 +283,7 @@ export async function sendOnlyDecider(
 						continue
 					}
 					logger.debug({
-						reason: 'send-only override: replace remote folder with local file',
+						reason: 'replace remote folder with local file',
 						remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 						localPath,
 					})
@@ -308,8 +307,7 @@ export async function sendOnlyDecider(
 				if (hasIgnoredInFolder(remote.path, remoteStats)) {
 					const ignoredPaths = getIgnoredPathsInFolder(remote.path, remoteStats)
 					logger.debug({
-						reason:
-							'send-only override: skip removing remote folder (contains ignored items)',
+						reason: 'skip removing remote folder (contains ignored items)',
 						remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 						localPath,
 						ignoredPaths,
@@ -326,8 +324,7 @@ export async function sendOnlyDecider(
 					continue
 				}
 				logger.debug({
-					reason:
-						'send-only override: remote folder missing locally — remove remote',
+					reason: 'remote folder missing locally — remove remote',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 					localPath,
 				})
@@ -344,7 +341,7 @@ export async function sendOnlyDecider(
 			if (!folderRecord) {
 				logger.debug({
 					reason:
-						'send-only: remote folder missing locally without record — preserve remote',
+						'remote folder missing locally without record — preserve remote',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 					localPath,
 				})
@@ -360,8 +357,7 @@ export async function sendOnlyDecider(
 				if (hasIgnoredInFolder(remote.path, remoteStats)) {
 					const ignoredPaths = getIgnoredPathsInFolder(remote.path, remoteStats)
 					logger.debug({
-						reason:
-							'send-only: skip removing remote folder (contains ignored items)',
+						reason: 'skip removing remote folder (contains ignored items)',
 						remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 						localPath,
 						ignoredPaths,
@@ -379,7 +375,7 @@ export async function sendOnlyDecider(
 				}
 				logger.debug({
 					reason:
-						'send-only: local folder deleted, remote folder unchanged — remove remote',
+						'local folder deleted, remote folder unchanged — remove remote',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 					localPath,
 				})
@@ -393,7 +389,7 @@ export async function sendOnlyDecider(
 			} else {
 				logger.debug({
 					reason:
-						'send-only: local folder deleted, remote folder changed — skip to protect remote change',
+						'local folder deleted, remote folder changed — skip to protect remote change',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 					localPath,
 				})
@@ -420,14 +416,14 @@ export async function sendOnlyDecider(
 			const folderRecord = syncRecords.get(local.path)
 			if (folderRecord && !mode.overrideChanges) {
 				logger.debug({
-					reason: 'send-only: preserve remote folder deletion until override',
+					reason: 'preserve remote folder deletion until override',
 					localPath: local.path,
 					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 				})
 				continue
 			}
 			logger.debug({
-				reason: 'send-only: local folder missing remotely — mkdir remote',
+				reason: 'local folder missing remotely — mkdir remote',
 				localPath: local.path,
 				remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 			})
@@ -452,7 +448,7 @@ export async function sendOnlyDecider(
 			if (!remote.isDir) {
 				if (mode.overrideChanges) {
 					logger.debug({
-						reason: 'send-only override: replace remote file with local folder',
+						reason: 'replace remote file with local folder',
 						localPath: local.path,
 						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 					})

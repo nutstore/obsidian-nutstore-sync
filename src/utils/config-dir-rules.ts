@@ -82,6 +82,20 @@ export function computeEffectiveFilterRulesFromParts(
 }
 
 /**
+ * Returns true if `path` points to a file or folder inside this plugin's own
+ * directory `<configDir>/plugins/nutstore-sync/` (or that directory itself).
+ *
+ * The plugin must never delete its own files during sync — when the remote
+ * vault simply does not have the plugin installed, the local plugin files
+ * should be preserved, not removed. Used by mirror deciders to short-circuit
+ * self-deletion.
+ */
+export function isPluginSelfPath(path: string, configDir: string): boolean {
+	const pluginDir = `${configDir}/plugins/nutstore-sync`
+	return path === pluginDir || path.startsWith(`${pluginDir}/`)
+}
+
+/**
  * Computes the effective exclusion/inclusion filter rules by merging the
  * user's stored rules with the system-managed configDir rules derived from
  * the current configDirSyncMode setting.

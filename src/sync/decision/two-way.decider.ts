@@ -1,5 +1,6 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
+import { isPluginSelfPath } from '~/utils/config-dir-rules'
 import { isSameTime } from '~/utils/is-same-time'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
@@ -269,6 +270,14 @@ export async function twoWayDecider(
 					}
 				}
 			} else if (local) {
+				if (isPluginSelfPath(p, settings.configDir)) {
+					logger.debug({
+						reason: 'plugin self-path missing remotely — preserve local',
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+						localPath: p,
+					})
+					continue
+				}
 				const localChanged = !isSameTime(local.mtime, record.local.mtime)
 				if (localChanged) {
 					logger.debug({
@@ -598,6 +607,14 @@ export async function twoWayDecider(
 			}
 		} else {
 			if (record) {
+				if (isPluginSelfPath(local.path, settings.configDir)) {
+					logger.debug({
+						reason: 'plugin self-folder missing remotely — preserve local',
+						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+						localPath: local.path,
+					})
+					continue
+				}
 				const localChanged = hasFolderContentChanged(
 					local.path,
 					localStatsFiltered,
