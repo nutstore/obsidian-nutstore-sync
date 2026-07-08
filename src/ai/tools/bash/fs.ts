@@ -69,6 +69,21 @@ function decodeContent(
 	if (encoding === 'base64') {
 		return fromUint8Array(content, false)
 	}
+	if (encoding === 'hex') {
+		return Array.from(content)
+			.map((byte) => byte.toString(16).padStart(2, '0'))
+			.join('')
+	}
+	if (encoding === 'binary' || encoding === 'latin1') {
+		const chunkSize = 0x8000
+		let result = ''
+		for (let i = 0; i < content.length; i += chunkSize) {
+			result += String.fromCharCode(
+				...content.subarray(i, Math.min(i + chunkSize, content.length)),
+			)
+		}
+		return result
+	}
 	return new TextDecoder('utf-8').decode(content)
 }
 
@@ -87,6 +102,20 @@ function encodeContent(
 		}
 		const decoded = atob(content)
 		return Uint8Array.from(decoded, (char) => char.charCodeAt(0))
+	}
+	if (encoding === 'hex') {
+		const bytes = new Uint8Array(content.length / 2)
+		for (let i = 0; i < content.length; i += 2) {
+			bytes[i / 2] = Number.parseInt(content.slice(i, i + 2), 16)
+		}
+		return bytes
+	}
+	if (encoding === 'binary' || encoding === 'latin1') {
+		const bytes = new Uint8Array(content.length)
+		for (let i = 0; i < content.length; i++) {
+			bytes[i] = content.charCodeAt(i) & 0xff
+		}
+		return bytes
 	}
 
 	return new TextEncoder().encode(content)

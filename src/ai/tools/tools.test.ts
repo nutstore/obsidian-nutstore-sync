@@ -110,6 +110,7 @@ function createMockVaultForExecutor(files: MockFile[]) {
 		async createBinary(path: string, data: ArrayBuffer) {
 			store.set(path, new TextDecoder().decode(data))
 		},
+		async createFolder(_path: string) {},
 		adapter: {
 			async exists(path: string) {
 				return store.has(path)
@@ -131,6 +132,7 @@ function createMockVaultForExecutor(files: MockFile[]) {
 			async write(path: string, data: string) {
 				store.set(path, data)
 			},
+			async mkdir(_path: string) {},
 			async remove(path: string) {
 				store.delete(path)
 			},
@@ -434,6 +436,29 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 
 		const normalized = store.normalizeSession(session)
 		expect(normalized.fragments[0].readVaultPaths).toBeUndefined()
+	})
+})
+
+describe('bash tool UTF-8 handling', () => {
+	it('returns decoded UTF-8 text without project-level re-decoding', async () => {
+		const { vault, store } = createMockVaultForExecutor([
+			{ path: 'notes/source.md', content: '中文测试\n' },
+		])
+		const app = { vault } as unknown as App
+		const tools = createAITools(app, { permissionGuard: undefined })
+		const tool = findTool(tools, 'bash')
+		const session = makeSession()
+
+		const result = await tool.execute(
+			tool.inputSchema.parse({
+				script:
+					'cat /vault/notes/source.md > /vault/notes/copy.md && cat /vault/notes/copy.md',
+			}),
+			makeContext(session),
+		)
+
+		expect(result.result).toBe('中文测试\n\n\n')
+		expect(store.get('notes/copy.md')).toBe('中文测试\n')
 	})
 })
 

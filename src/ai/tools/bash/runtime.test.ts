@@ -731,6 +731,24 @@ describe('vault bash runtime', () => {
 			expect(reads).toEqual(['docs/readme.md'])
 		})
 
+		it('preserves UTF-8 bytes when cat redirects a vault file into another vault file', async () => {
+			const { vault, store } = createMockVault(
+				{ 'docs/source.md': '中文测试\n' },
+				['docs'],
+			)
+			const app = createApp(vault)
+
+			const result = await execVaultBash(
+				app,
+				'cat /vault/docs/source.md > /vault/docs/copy.md',
+			)
+
+			expect(result.exitCode).toBe(0)
+			expect(new TextDecoder().decode(store.readBinary('docs/copy.md'))).toBe(
+				'中文测试\n',
+			)
+		})
+
 		it('does not fire onRead for bash ls on a vault directory', async () => {
 			const { vault } = createMockVault(
 				{ 'docs/a.md': 'A', 'docs/b.md': 'B' },

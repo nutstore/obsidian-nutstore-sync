@@ -18,35 +18,6 @@ interface ReplaceResult {
 	matchCount: number
 }
 
-/**
- * Decode a just-bash "bytes" stdout (latin1 byte buffer) to proper UTF-8 text.
- * just-bash commands like cat emit raw bytes as latin1 where each char = one byte.
- * Multi-byte UTF-8 sequences (e.g. Chinese characters) are split across multiple
- * chars and will appear garbled unless decoded back to UTF-8.
- */
-function decodeBytesOutput(stdout: string): string {
-	if (!stdout) return stdout
-	// If any char is > 255, it's already decoded Unicode — return as-is
-	let hasHighByte = false
-	for (let i = 0; i < stdout.length; i++) {
-		const code = stdout.charCodeAt(i)
-		if (code > 255) return stdout
-		if (code > 127) hasHighByte = true
-	}
-	if (!hasHighByte) return stdout // pure ASCII, no decoding needed
-
-	// Convert latin1 bytes to Uint8Array and decode as UTF-8
-	const bytes = new Uint8Array(stdout.length)
-	for (let i = 0; i < stdout.length; i++) {
-		bytes[i] = stdout.charCodeAt(i)
-	}
-	try {
-		return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-	} catch {
-		return stdout // not valid UTF-8, fall back to raw latin1 view
-	}
-}
-
 const textValue = (field: string) =>
 	z.string({
 		error: () => i18n.t('chatbox.errors.toolFieldRequired', { field }),
@@ -320,22 +291,9 @@ export function createAITools(
 					permissionGuard,
 					onRead: context.readTracker?.markRead.bind(context.readTracker),
 				})
-				// just-bash sets stdoutKind to "bytes" for commands like cat that
-				// emit raw byte output. In that case stdout is a latin1 byte buffer
-				// (each char = one byte) — decode it as UTF-8 to get proper text.
-				const outputKind: 'text' | 'bytes' =
-					result.stdoutKind === 'bytes'
-						? 'bytes'
-						: (result.stdoutEncoding as 'binary' | undefined) === 'binary'
-							? 'bytes'
-							: 'text'
-				const stdout =
-					outputKind === 'bytes'
-						? decodeBytesOutput(result.stdout)
-						: result.stdout
 
 				return {
-					result: `${stdout}\n\n${result.stderr}`,
+					result: `${result.stdout}\n\n${result.stderr}`,
 					reversibleOps: result.reversibleOps,
 				}
 			},
