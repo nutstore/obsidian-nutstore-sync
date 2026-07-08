@@ -78,6 +78,48 @@ export async function twoWayDecider(
 	const mkdirRemoteTasks: BaseTask[] = []
 	const noopFolderTasks: BaseTask[] = []
 
+	const removeRemoteFile = (p: string, remoteSize: number): boolean => {
+		const taskOptions = {
+			remotePath: p,
+			localPath: p,
+			remoteBaseDir,
+		}
+		if (remoteSize > maxFileSize) {
+			tasks.push(
+				taskFactory.createSkippedTask({
+					...taskOptions,
+					reason: SkipReason.FileTooLarge,
+					maxSize: maxFileSize,
+					remoteSize,
+				}),
+			)
+			return false
+		}
+		tasks.push(taskFactory.createRemoveRemoteTask(taskOptions))
+		return true
+	}
+
+	const removeLocalFile = (p: string, localSize: number): boolean => {
+		const taskOptions = {
+			remotePath: p,
+			localPath: p,
+			remoteBaseDir,
+		}
+		if (localSize > maxFileSize) {
+			tasks.push(
+				taskFactory.createSkippedTask({
+					...taskOptions,
+					reason: SkipReason.FileTooLarge,
+					maxSize: maxFileSize,
+					localSize,
+				}),
+			)
+			return false
+		}
+		tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+		return true
+	}
+
 	// * sync files
 	for (const p of mixedPath) {
 		const remote = remoteStatsMap.get(p)
@@ -265,7 +307,7 @@ export async function twoWayDecider(
 								localExists: !!local,
 							},
 						})
-						tasks.push(taskFactory.createRemoveRemoteTask(options))
+						removeRemoteFile(p, remote.size)
 						continue
 					}
 				}
@@ -319,7 +361,7 @@ export async function twoWayDecider(
 							localExists: !!local,
 						},
 					})
-					tasks.push(taskFactory.createRemoveLocalTask(options))
+					removeLocalFile(p, local.size)
 					continue
 				}
 			}

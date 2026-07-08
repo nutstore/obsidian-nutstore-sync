@@ -111,6 +111,27 @@ export async function receiveOnlyDecider(
 		return true
 	}
 
+	const removeLocalFile = (p: string, localSize: number): boolean => {
+		const taskOptions = {
+			remotePath: p,
+			localPath: p,
+			remoteBaseDir,
+		}
+		if (localSize > maxFileSize) {
+			tasks.push(
+				taskFactory.createSkippedTask({
+					...taskOptions,
+					reason: SkipReason.FileTooLarge,
+					maxSize: maxFileSize,
+					localSize,
+				}),
+			)
+			return false
+		}
+		tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+		return true
+	}
+
 	// * sync files
 	for (const p of mixedPath) {
 		const remote = remoteStatsMap.get(p)
@@ -210,7 +231,7 @@ export async function receiveOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+				removeLocalFile(p, local.size)
 				continue
 			}
 			if (!record) {
@@ -228,7 +249,7 @@ export async function receiveOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+				removeLocalFile(p, local.size)
 			} else {
 				logger.debug({
 					reason:
