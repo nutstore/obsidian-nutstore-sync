@@ -2,6 +2,22 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 将超大 Bash 输出重定向至临时文件，并共享临时文件系统 | Redirect oversized bash output to temp file and share scratch FS
+- 在决策逻辑中添加文件大小检查，以加强删除操作的保护 | Add file-size guard to remove operations in deciders
+- 增强 Bash 工具的 UTF-8 处理能力，并新增十六进制/二进制编码支持 | Enhance UTF-8 handling in bash tools and add hex/binary encoding support
+- 新增插件文件自保护检查，防止在同步过程中误删插件文件 | Add self-path check to prevent deletion of plugin files during sync
+- 修复全局 CSS 样式泄露至 Obsidian 内置类的问题 | Fix global CSS leakage to Obsidian built-in classes
+- 为 AI 聊天工具引入“编辑前阅读”检查机制 | Add read-before-edit gate to AI chat tools
+- 为同步子系统添加上下文感知的日志记录 | Add context-aware logging to sync subsystem
+- 优化本地路径存在性检查，移除冗余的元数据缓存校验 | Remove redundant metadata-cache checks in existsLocalPath
+- 重构决策逻辑，提取并优化记录清理逻辑 | Extract record cleanup logic from deciders
+- 修正服务加载顺序，确保国际化（i18n）正确初始化 | Correct service loading order for proper i18n initialization
+- 支持在聊天框视图中处理 Markdown 链接点击事件 | Handle markdown link clicks in chatbox view
+- 实现“笔记邻域”检索工具 | Implement note neighborhood tool
+
+
 ## [1.3.0] - 2026-06-30
 
 - 增加对 Anthropic AI 提供商的原生支持 | Added native support for Anthropic AI provider.
