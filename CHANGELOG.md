@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.3.1] - 2026-07-10
 
 - 将超大 Bash 输出重定向至临时文件，并共享临时文件系统 | Redirect oversized bash output to temp file and share scratch FS
 - 在决策逻辑中添加文件大小检查，以加强删除操作的保护 | Add file-size guard to remove operations in deciders
