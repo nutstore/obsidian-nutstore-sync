@@ -11,7 +11,6 @@ import {
 	readLocalBinary,
 	writeLocalText,
 } from '~/utils/local-vault-io'
-import logger from '~/utils/logger'
 import { mergeDigIn } from '~/utils/merge-dig-in'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
@@ -43,7 +42,7 @@ export default class ConflictResolveTask extends BaseTask {
 
 	async exec() {
 		try {
-			logger.info(
+			this.logger.info(
 				`[ConflictResolve] ${this.localPath} strategy=${this.options.strategy}`,
 			)
 
@@ -88,7 +87,7 @@ export default class ConflictResolveTask extends BaseTask {
 					return await this.execServerPriority(remote)
 			}
 		} catch (e) {
-			logger.error(`[ConflictResolve] failed: ${this.localPath}`, e)
+			this.logger.error(`[ConflictResolve] failed: ${this.localPath}`, e)
 			return {
 				success: false,
 				error: toTaskError(e, this),
@@ -111,7 +110,7 @@ export default class ConflictResolveTask extends BaseTask {
 				return { success: true } as const
 			}
 
-			logger.info(
+			this.logger.info(
 				`[ConflictResolve/LatestTimestamp] ${this.localPath}: ${remoteMtime > localMtime ? 'remote newer → pull' : 'local newer → push'}`,
 			)
 
@@ -144,7 +143,7 @@ export default class ConflictResolveTask extends BaseTask {
 
 			return { success: true } as const
 		} catch (e) {
-			logger.error(
+			this.logger.error(
 				`[ConflictResolve/LatestTimestamp] failed: ${this.localPath}`,
 				e,
 			)
@@ -170,7 +169,7 @@ export default class ConflictResolveTask extends BaseTask {
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(
+			this.logger.error(
 				`[ConflictResolve/LocalPriority] failed: ${this.localPath}`,
 				e,
 			)
@@ -194,7 +193,7 @@ export default class ConflictResolveTask extends BaseTask {
 			})
 			return { success: true } as const
 		} catch (e) {
-			logger.error(
+			this.logger.error(
 				`[ConflictResolve/ServerPriority] failed: ${this.localPath}`,
 				e,
 			)
@@ -242,7 +241,7 @@ export default class ConflictResolveTask extends BaseTask {
 				baseContentText: baseText,
 			})
 
-			logger.info(
+			this.logger.info(
 				`[ConflictResolve/DiffMatchPatchOrSkip] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → skip'}`,
 			)
 
@@ -279,7 +278,7 @@ export default class ConflictResolveTask extends BaseTask {
 
 			return { success: true } as const
 		} catch (e) {
-			logger.error(
+			this.logger.error(
 				`[ConflictResolve/DiffMatchPatchOrSkip] failed: ${this.localPath}`,
 				e,
 			)
@@ -327,7 +326,7 @@ export default class ConflictResolveTask extends BaseTask {
 				baseContentText: baseText,
 			})
 
-			logger.info(
+			this.logger.info(
 				`[ConflictResolve/DiffMatchPatch] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → fallback to mergeDigIn'}`,
 			)
 
@@ -388,7 +387,7 @@ export default class ConflictResolveTask extends BaseTask {
 
 			return { success: true } as const
 		} catch (e) {
-			logger.error(
+			this.logger.error(
 				`[ConflictResolve/DiffMatchPatch] failed: ${this.localPath}`,
 				e,
 			)

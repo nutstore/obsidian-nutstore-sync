@@ -3,15 +3,20 @@ import logger from '~/utils/logger'
 import { emitCancelSync } from '../events'
 import i18n from '../i18n'
 import type NutstorePlugin from '../index'
+import { BaseService } from '../services/service.interface'
 import { SyncStartMode } from '../sync'
 import { CHATBOX_VIEW_TYPE } from '../views/chatbox.view'
 import SyncConfirmModal from './SyncConfirmModal'
 
-export class SyncRibbonManager {
-	private startRibbonEl: HTMLElement
-	private stopRibbonEl: HTMLElement
+export class SyncRibbonManager extends BaseService {
+	private startRibbonEl: HTMLElement | null = null
+	private stopRibbonEl: HTMLElement | null = null
 
 	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
+
+	override onload() {
 		this.startRibbonEl = this.plugin.addRibbonIcon(
 			'refresh-ccw',
 			i18n.t('sync.startButton'),
@@ -41,8 +46,13 @@ export class SyncRibbonManager {
 						mode: SyncStartMode.MANUAL_SYNC,
 					})
 				}
-				if (plugin.settings.confirmBeforeSync) {
-					new SyncConfirmModal(this.plugin.app, startSync).open()
+				if (this.plugin.settings.confirmBeforeSync) {
+					new SyncConfirmModal(
+						this.plugin.app,
+						this.plugin.settings,
+						this.plugin.localSettings,
+						startSync,
+					).open()
 				} else {
 					startSync()
 				}
@@ -74,6 +84,9 @@ export class SyncRibbonManager {
 	}
 
 	public update() {
+		if (!this.startRibbonEl || !this.stopRibbonEl) {
+			return
+		}
 		if (this.plugin.isSyncing) {
 			this.startRibbonEl.setAttr('aria-disabled', 'true')
 			this.startRibbonEl.addClass('nutstore-sync-spinning')

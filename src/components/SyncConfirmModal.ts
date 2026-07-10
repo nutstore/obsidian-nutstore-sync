@@ -3,34 +3,39 @@ import i18n from '../i18n'
 import {
 	getSyncPolicyDescI18nKey,
 	getSyncPolicyNameI18nKey,
-	useLocalSettings,
-	useSettings,
+	type NutstoreLocalSettings,
+	type NutstoreSettings,
 } from '../settings'
 
 export default class SyncConfirmModal extends Modal {
 	private onConfirm: () => void
 
-	constructor(app: App, onConfirm: () => void) {
+	constructor(
+		app: App,
+		private settings: NutstoreSettings,
+		private localSettings: NutstoreLocalSettings,
+		onConfirm: () => void,
+	) {
 		super(app)
 		this.onConfirm = onConfirm
 	}
 
 	async onOpen() {
 		const { contentEl } = this
-		const settings = await useSettings()
-		const localSettings = await useLocalSettings()
 
-		const policy = localSettings.syncPolicy
+		const policy = this.localSettings.syncPolicy
 
 		contentEl.createEl('h2', { text: i18n.t('sync.confirmModal.title') })
 		const infoDiv = contentEl.createDiv({ cls: 'sync-info' })
 		infoDiv.createEl('p', {
-			text: i18n.t('sync.confirmModal.remoteDir', { dir: settings.remoteDir }),
+			text: i18n.t('sync.confirmModal.remoteDir', {
+				dir: this.settings.remoteDir,
+			}),
 		})
 		infoDiv.createEl('p', {
 			text: i18n.t('sync.confirmModal.strategy', {
 				strategy: i18n.t(
-					`settings.conflictStrategy.${settings.conflictStrategy === 'diff-match-patch' ? 'diffMatchPatch' : 'latestTimestamp'}`,
+					`settings.conflictStrategy.${this.settings.conflictStrategy === 'diff-match-patch' ? 'diffMatchPatch' : 'latestTimestamp'}`,
 				),
 			}),
 		})

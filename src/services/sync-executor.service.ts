@@ -4,18 +4,22 @@ import { IN_DEV } from '~/consts'
 import { emitStopGc, emitSyncError } from '~/events'
 import i18n from '~/i18n'
 import type { SyncStartResult } from '~/sync'
+import { getSyncPolicyLabel, getSyncTriggerLabel } from '~/sync/log'
 import logger from '~/utils/logger'
 import waitUntil from '~/utils/wait-until'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
 export interface SyncOptions {
 	mode: SyncStartMode
 }
 
-export default class SyncExecutorService {
+export default class SyncExecutorService extends BaseService {
 	private inFlight = false
 
-	constructor(private plugin: NutstorePlugin) {}
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
 	isRunning() {
 		return this.inFlight || this.plugin.isSyncing
@@ -43,6 +47,21 @@ export default class SyncExecutorService {
 				new Notice(i18n.t('sync.error.accountNotConfigured'))
 				return false
 			}
+
+			logger.info('Sync starting with settings:', {
+				triggerMode: getSyncTriggerLabel(options.mode),
+				syncPolicy: getSyncPolicyLabel(this.plugin.localSettings.syncPolicy),
+				loginMode: this.plugin.settings.loginMode,
+				remoteBaseDir: this.plugin.remoteBaseDir,
+				syncMode: this.plugin.settings.syncMode,
+				realtimeSync: this.plugin.settings.realtimeSync,
+				autoSyncIntervalSeconds: this.plugin.settings.autoSyncIntervalSeconds,
+				startupSyncDelaySeconds: this.plugin.settings.startupSyncDelaySeconds,
+				confirmBeforeSync: this.plugin.settings.confirmBeforeSync,
+				confirmBeforeDeleteInAutoSync:
+					this.plugin.settings.confirmBeforeDeleteInAutoSync,
+				configDirSyncMode: this.plugin.settings.configDirSyncMode ?? 'none',
+			})
 
 			await waitUntil(() => this.plugin.isSyncing === false, 500)
 

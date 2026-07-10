@@ -1,10 +1,10 @@
 import { clamp } from 'lodash-es'
-import { useSettings } from '~/settings'
 import { SyncStartMode } from '~/sync'
 import type NutstorePlugin from '..'
+import { BaseService } from './service.interface'
 import type SyncExecutorService from './sync-executor.service'
 
-export default class ScheduledSyncService {
+export default class ScheduledSyncService extends BaseService {
 	private autoSyncTimer: number | null = null
 	private startupSyncTimer: number | null = null
 	private startupSyncCompleted = false
@@ -12,7 +12,13 @@ export default class ScheduledSyncService {
 	constructor(
 		private plugin: NutstorePlugin,
 		private syncExecutor: SyncExecutorService,
-	) {}
+	) {
+		super()
+	}
+
+	override async onload() {
+		await this.start()
+	}
 
 	async start() {
 		this.stopTimer()
@@ -44,7 +50,7 @@ export default class ScheduledSyncService {
 	}
 
 	private async scheduleStartupOrInterval() {
-		const settings = await useSettings()
+		const settings = this.plugin.settings
 
 		if (!this.startupSyncCompleted && settings.startupSyncDelaySeconds > 0) {
 			this.startupSyncTimer = window.setTimeout(async () => {
@@ -83,7 +89,7 @@ export default class ScheduledSyncService {
 		this.startTimer(this.plugin.settings.autoSyncIntervalSeconds)
 	}
 
-	unload() {
+	override onunload() {
 		this.stopTimer()
 		this.clearStartupTimer()
 	}

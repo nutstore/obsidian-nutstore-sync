@@ -25,12 +25,6 @@ export function isAdapterPath(vault: Vault, path: string) {
 
 export async function existsLocalPath(vault: Vault, path: string) {
 	const normalizedPath = normalizePath(path)
-	if (isAdapterPathNormalized(vault, normalizedPath)) {
-		return await vault.adapter.exists(normalizedPath)
-	}
-	if (vault.getAbstractFileByPath(normalizedPath) !== null) {
-		return true
-	}
 	return await vault.adapter.exists(normalizedPath)
 }
 

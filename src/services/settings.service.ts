@@ -13,24 +13,27 @@ import {
 } from '~/settings'
 import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from '~/utils/download-chunk-size'
 import logger from '~/utils/logger'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
-export default class SettingsService {
+export default class SettingsService extends BaseService {
 	private reloadSettingsPromise: Promise<void> | null = null
 	private readonly debouncedReloadSettingsFromDisk = debounce(() => {
 		void this.reloadSettingsFromDisk()
 	}, 500)
 
-	constructor(private plugin: NutstorePlugin) {}
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
-	async initialize() {
+	override async onload() {
 		await this.loadSettings()
 		await this.loadLocalSettings()
 		this.plugin.modelsPresetService.initializeFromLocalSettings()
 		await this.plugin.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
 	}
 
-	unload() {
+	override onunload() {
 		this.debouncedReloadSettingsFromDisk.cancel()
 	}
 

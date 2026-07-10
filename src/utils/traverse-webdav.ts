@@ -4,6 +4,7 @@ import { DeltaEntry, getDelta } from '~/api/delta'
 import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
 import { getDirectoryContents } from '~/api/webdav'
 import { StatModel } from '~/model/stat.model'
+import type { NutstoreSettings } from '~/settings'
 import { traverseWebDAVKV } from '~/storage'
 import { apiLimiter } from './api-limiter'
 import { fileStatToStatModel } from './file-stat-to-stat-model'
@@ -50,6 +51,7 @@ export class ResumableWebDAVTraversal {
 	private remoteBaseDir: string
 	private kvKey: string
 	private saveInterval: number
+	private settings: NutstoreSettings
 
 	private rootCursor: string = ''
 	private queue: string[] = []
@@ -76,11 +78,13 @@ export class ResumableWebDAVTraversal {
 	}
 
 	constructor(options: {
+		settings: NutstoreSettings
 		token: string
 		remoteBaseDir: string
 		kvKey: string
 		saveInterval?: number
 	}) {
+		this.settings = options.settings
 		this.token = options.token
 		this.remoteBaseDir = options.remoteBaseDir
 		this.kvKey = options.kvKey
@@ -111,6 +115,7 @@ export class ResumableWebDAVTraversal {
 					const { response } = await executeWithRetry(() =>
 						getLatestDeltaCursor({
 							token: this.token,
+							settings: this.settings,
 							folderName: getRootFolderName(this.remoteBaseDir),
 						}),
 					)
@@ -148,7 +153,7 @@ export class ResumableWebDAVTraversal {
 						resultItems.push(...cachedItems)
 					} else {
 						const contents = await executeWithRetry(() =>
-							getContents(this.token, currentPath),
+							getContents(this.settings, this.token, currentPath),
 						)
 
 						for (const item of contents) {
@@ -183,6 +188,7 @@ export class ResumableWebDAVTraversal {
 			const { response: endResponse } = await executeWithRetry(() =>
 				getLatestDeltaCursor({
 					token: this.token,
+					settings: this.settings,
 					folderName: getRootFolderName(this.remoteBaseDir),
 				}),
 			)
@@ -227,6 +233,7 @@ export class ResumableWebDAVTraversal {
 			const { response } = await executeWithRetry(() =>
 				getDelta({
 					token: this.token,
+					settings: this.settings,
 					folderName: getRootFolderName(this.remoteBaseDir),
 					cursor: currentCursor,
 				}),
@@ -280,6 +287,7 @@ export class ResumableWebDAVTraversal {
 				const { response: cursorResponse } = await executeWithRetry(() =>
 					getLatestDeltaCursor({
 						token: this.token,
+						settings: this.settings,
 						folderName: getRootFolderName(this.remoteBaseDir),
 					}),
 				)

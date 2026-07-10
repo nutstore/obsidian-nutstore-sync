@@ -1,4 +1,3 @@
-import logger from '~/utils/logger'
 import { BaseTask, toTaskError } from './task.interface'
 
 export default class RemoveRemoteRecursivelyTask extends BaseTask {
@@ -7,7 +6,7 @@ export default class RemoveRemoteRecursivelyTask extends BaseTask {
 			await this.webdav.deleteFile(this.remotePath)
 			return { success: true } as const
 		} catch (e) {
-			logger.error(e)
+			this.logger.error(e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

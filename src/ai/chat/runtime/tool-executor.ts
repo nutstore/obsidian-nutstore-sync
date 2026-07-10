@@ -10,12 +10,15 @@ import type {
 	ToolExecutionResult,
 } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
+import { getActiveFragment } from '~/ai/chat/domain'
+import { createFragmentReadTracker } from '~/ai/tools/file-operation'
 import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
+import { InMemoryFs } from 'just-bash/browser'
 import type NutstorePlugin from '../../..'
 
 export interface ResolvedToolResult {
@@ -58,6 +61,9 @@ export class ToolExecutor {
 		parentTaskId?: string,
 	) {
 		const allowSpawn = depth < maxDepth
+		const runtime = this.runtimeStates.get(session.id)
+		const bashScratch = runtime.bashScratch ?? new InMemoryFs()
+		runtime.bashScratch = bashScratch
 		const permissionGuard = createPermissionGuard(
 			this.plugin.app,
 			() => this.plugin.settings,
@@ -77,6 +83,7 @@ export class ToolExecutor {
 		)
 		return createAITools(this.plugin.app, {
 			allowSpawn,
+			bashScratch,
 			permissionGuard,
 			enableTodoWrite: depth === 0,
 			spawnTask: async (params) => ({
@@ -98,9 +105,18 @@ export class ToolExecutor {
 		context: AIToolExecutionContext,
 	) {
 		const toolsByName = new Map(tools.map((t) => [t.name, t]))
+		const fragment = getActiveFragment(context.session)
+		const readSnapshot = new Set(fragment?.readVaultPaths ?? [])
+		const readTracker = fragment
+			? createFragmentReadTracker(fragment, readSnapshot)
+			: undefined
+		const enrichedContext: AIToolExecutionContext = {
+			...context,
+			readTracker: readTracker ?? context.readTracker,
+		}
 		const results = await Promise.all(
 			toolCalls.map((toolCall) =>
-				this.resolveSingleToolCall(toolCall, toolsByName, context),
+				this.resolveSingleToolCall(toolCall, toolsByName, enrichedContext),
 			),
 		)
 

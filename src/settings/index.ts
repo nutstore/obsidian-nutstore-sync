@@ -9,7 +9,6 @@ import type { NutstoreLlmGatewayAuthSettings } from '~/services/nutstore-llm-gat
 import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from '~/utils/download-chunk-size'
 import { GlobMatchOptions } from '~/utils/glob-match'
-import waitUntil from '~/utils/wait-until'
 import AccountSettings from './account'
 import AISettings from './ai'
 import CommonSettings from './common'
@@ -205,26 +204,6 @@ export interface NutstoreLocalSettings {
 export const DEFAULT_LOCAL_SETTINGS: NutstoreLocalSettings = {
 	syncPolicy: SyncPolicy.TwoWay,
 	ai: {},
-}
-
-let pluginInstance: NutstorePlugin | null = null
-
-export function setPluginInstance(plugin: NutstorePlugin | null) {
-	pluginInstance = plugin
-}
-
-export function waitUntilPluginInstance() {
-	return waitUntil(() => !!pluginInstance, 100)
-}
-
-export async function useSettings() {
-	await waitUntilPluginInstance()
-	return pluginInstance!.settings
-}
-
-export async function useLocalSettings() {
-	await waitUntilPluginInstance()
-	return pluginInstance!.localSettings
 }
 
 export class NutstoreSettingTab extends PluginSettingTab {

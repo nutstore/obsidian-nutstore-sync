@@ -1,12 +1,14 @@
 import type { AISession, AITaskRecord } from '~/ai/core/types'
 import type { ChatRunState, ChatSubmission } from '~/ai/chat/types'
 import type { ChatSessionIndexItem } from '~/ai/chat/domain'
+import type { IFileSystem } from 'just-bash/browser'
 
 export interface SessionRuntimeState {
 	runState: ChatRunState
 	processing?: Promise<void>
 	stopRequested?: boolean
 	abortController?: AbortController
+	bashScratch?: IFileSystem
 	draft: ChatSubmission
 	pending: ChatSubmission[]
 }

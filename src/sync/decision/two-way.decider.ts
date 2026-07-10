@@ -1,10 +1,12 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
+import { isPluginSelfPath } from '~/utils/config-dir-rules'
 import { isSameTime } from '~/utils/is-same-time'
-import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
+import { areLooseEqualFiles } from '../core/loose-equality'
+import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
@@ -13,7 +15,6 @@ import {
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
 import BaseSyncDecider from './base.decider'
-import { areLooseEqualFiles } from './loose-equality'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export default class TwoWaySyncDecider extends BaseSyncDecider {
@@ -38,6 +39,7 @@ export async function twoWayDecider(
 	input: SyncDecisionInput,
 ): Promise<BaseTask[]> {
 	const {
+		logger,
 		settings,
 		localStats,
 		remoteStats,
@@ -75,6 +77,48 @@ export async function twoWayDecider(
 	const mkdirLocalTasks: BaseTask[] = []
 	const mkdirRemoteTasks: BaseTask[] = []
 	const noopFolderTasks: BaseTask[] = []
+
+	const removeRemoteFile = (p: string, remoteSize: number): boolean => {
+		const taskOptions = {
+			remotePath: p,
+			localPath: p,
+			remoteBaseDir,
+		}
+		if (remoteSize > maxFileSize) {
+			tasks.push(
+				taskFactory.createSkippedTask({
+					...taskOptions,
+					reason: SkipReason.FileTooLarge,
+					maxSize: maxFileSize,
+					remoteSize,
+				}),
+			)
+			return false
+		}
+		tasks.push(taskFactory.createRemoveRemoteTask(taskOptions))
+		return true
+	}
+
+	const removeLocalFile = (p: string, localSize: number): boolean => {
+		const taskOptions = {
+			remotePath: p,
+			localPath: p,
+			remoteBaseDir,
+		}
+		if (localSize > maxFileSize) {
+			tasks.push(
+				taskFactory.createSkippedTask({
+					...taskOptions,
+					reason: SkipReason.FileTooLarge,
+					maxSize: maxFileSize,
+					localSize,
+				}),
+			)
+			return false
+		}
+		tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+		return true
+	}
 
 	// * sync files
 	for (const p of mixedPath) {
@@ -263,11 +307,19 @@ export async function twoWayDecider(
 								localExists: !!local,
 							},
 						})
-						tasks.push(taskFactory.createRemoveRemoteTask(options))
+						removeRemoteFile(p, remote.size)
 						continue
 					}
 				}
 			} else if (local) {
+				if (isPluginSelfPath(p, settings.configDir)) {
+					logger.debug({
+						reason: 'plugin self-path missing remotely — preserve local',
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+						localPath: p,
+					})
+					continue
+				}
 				const localChanged = !isSameTime(local.mtime, record.local.mtime)
 				if (localChanged) {
 					logger.debug({
@@ -309,7 +361,7 @@ export async function twoWayDecider(
 							localExists: !!local,
 						},
 					})
-					tasks.push(taskFactory.createRemoveLocalTask(options))
+					removeLocalFile(p, local.size)
 					continue
 				}
 			}
@@ -435,17 +487,14 @@ export async function twoWayDecider(
 
 	// * clean orphaned records (both local and remote deleted)
 	for (const [recordPath, record] of syncRecords) {
-		const local = localStatsMap.get(recordPath)
-		const remote = remoteStatsMap.get(recordPath)
-
-		if (!local && !remote) {
+		if (shouldCreateCleanRecordTask(recordPath, localStats, remoteStats)) {
 			logger.debug({
 				reason: 'cleaning orphaned sync record (both local and remote deleted)',
 				remotePath: remotePathToAbsolute(remoteBaseDir, recordPath),
 				localPath: recordPath,
 				conditions: {
-					localExists: !!local,
-					remoteExists: !!remote,
+					localExists: false,
+					remoteExists: false,
 					recordExists: !!record,
 				},
 			})
@@ -600,6 +649,14 @@ export async function twoWayDecider(
 			}
 		} else {
 			if (record) {
+				if (isPluginSelfPath(local.path, settings.configDir)) {
+					logger.debug({
+						reason: 'plugin self-folder missing remotely — preserve local',
+						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+						localPath: local.path,
+					})
+					continue
+				}
 				const localChanged = hasFolderContentChanged(
 					local.path,
 					localStatsFiltered,

@@ -5,13 +5,13 @@ import { NutstoreFileSystem } from '~/fs/nutstore'
 import { syncRecordKV } from '~/storage'
 import { blobStore } from '~/storage/blob'
 import { SyncRecord } from '~/storage/sync-record'
+import type { SyncLogger } from '~/sync/log'
 import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
 import type { BaseTask, TaskResult } from '~/sync/tasks/task.interface'
 import { isMergeablePath } from '~/sync/utils/is-mergeable-path'
 import { getDBKey } from '~/utils/get-db-key'
 import { isSub } from '~/utils/is-sub'
 import { readLocalBinary } from '~/utils/local-vault-io'
-import logger from '~/utils/logger'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import type NutstorePlugin from '../..'
@@ -27,6 +27,7 @@ export async function updateMtimeInRecord(
 	tasks: BaseTask[],
 	results: TaskResult[],
 	batch_size: number,
+	logger: SyncLogger,
 ): Promise<void> {
 	if (tasks.length === 0) {
 		return
@@ -42,6 +43,7 @@ export async function updateMtimeInRecord(
 
 	const token = await plugin.getToken()
 	const remoteFs = new NutstoreFileSystem({
+		settings: plugin.settings,
 		vault,
 		token,
 		remoteBaseDir: stdRemotePath(remoteBaseDir),

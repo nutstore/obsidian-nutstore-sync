@@ -8,17 +8,19 @@ import {
 	traverseWebDAVKV,
 	type TraverseWebDAVCache,
 } from '~/storage'
+import type { SyncLogger } from '~/sync/log'
 import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
-import logger from '~/utils/logger'
+import globalLogger from '~/utils/logger'
 import { stdRemotePath } from '~/utils/std-remote-path'
-import { isTraversalCacheCompatible } from '~/utils/traversal-cache-compat'
 import {
 	getRemoteSyncCacheDirPath,
 	getRemoteSyncCacheFilePath,
 	getSyncCacheLocalPath,
 } from '~/utils/sync-cache-file'
+import { isTraversalCacheCompatible } from '~/utils/traversal-cache-compat'
 import { uint8ArrayToArrayBuffer } from '~/utils/uint8array-to-arraybuffer'
 import type NutstorePlugin from '..'
+import { BaseService } from './service.interface'
 
 export interface ExportedStorage {
 	exportedAt: string
@@ -26,10 +28,14 @@ export interface ExportedStorage {
 	traverseWebDAVCache?: TraverseWebDAVCache
 }
 
-export default class CacheServiceV1 {
-	constructor(private plugin: NutstorePlugin) {}
+export default class CacheServiceV1 extends BaseService {
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
 
-	async restoreRemoteTraversalCacheIfMissing(): Promise<boolean> {
+	async restoreRemoteTraversalCacheIfMissing(
+		logger: SyncLogger = globalLogger,
+	): Promise<boolean> {
 		try {
 			const kvKey = await this.getKVKey()
 			const localCache = await traverseWebDAVKV.get(kvKey)
@@ -75,7 +81,9 @@ export default class CacheServiceV1 {
 		}
 	}
 
-	async saveRemoteTraversalCache(): Promise<boolean> {
+	async saveRemoteTraversalCache(
+		logger: SyncLogger = globalLogger,
+	): Promise<boolean> {
 		try {
 			const traverseWebDAVCache = await traverseWebDAVKV.get(
 				await this.getKVKey(),

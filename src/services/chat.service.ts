@@ -52,6 +52,7 @@ import i18n from '~/i18n'
 import { chatSessionKV } from '~/storage'
 import createId from '~/utils/create-id'
 import logger from '~/utils/logger'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
 type ChatboxActionHandlers = Pick<
@@ -88,7 +89,7 @@ type ViewSelectionState = {
 	selectedModelId?: string
 }
 
-export default class ChatService {
+export default class ChatService extends BaseService {
 	private readonly state = new ChatState()
 	private readonly notifier = new Notifier()
 	private readonly runtimeStates = new RuntimeStates(this.state)
@@ -102,6 +103,7 @@ export default class ChatService {
 	private readonly sessionProcessor: SessionProcessor
 
 	constructor(private plugin: NutstorePlugin) {
+		super()
 		this.selection = new Selection(
 			plugin,
 			this.state,
@@ -158,6 +160,10 @@ export default class ChatService {
 
 	private notify() {
 		this.notifier.notify()
+	}
+
+	override onload() {
+		return this.initialize()
 	}
 
 	async initialize() {

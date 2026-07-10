@@ -69,6 +69,21 @@ function decodeContent(
 	if (encoding === 'base64') {
 		return fromUint8Array(content, false)
 	}
+	if (encoding === 'hex') {
+		return Array.from(content)
+			.map((byte) => byte.toString(16).padStart(2, '0'))
+			.join('')
+	}
+	if (encoding === 'binary' || encoding === 'latin1') {
+		const chunkSize = 0x8000
+		let result = ''
+		for (let i = 0; i < content.length; i += chunkSize) {
+			result += String.fromCharCode(
+				...content.subarray(i, Math.min(i + chunkSize, content.length)),
+			)
+		}
+		return result
+	}
 	return new TextDecoder('utf-8').decode(content)
 }
 
@@ -87,6 +102,20 @@ function encodeContent(
 		}
 		const decoded = atob(content)
 		return Uint8Array.from(decoded, (char) => char.charCodeAt(0))
+	}
+	if (encoding === 'hex') {
+		const bytes = new Uint8Array(content.length / 2)
+		for (let i = 0; i < content.length; i += 2) {
+			bytes[i / 2] = Number.parseInt(content.slice(i, i + 2), 16)
+		}
+		return bytes
+	}
+	if (encoding === 'binary' || encoding === 'latin1') {
+		const bytes = new Uint8Array(content.length)
+		for (let i = 0; i < content.length; i++) {
+			bytes[i] = content.charCodeAt(i) & 0xff
+		}
+		return bytes
 	}
 
 	return new TextEncoder().encode(content)
@@ -257,6 +286,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		initialPaths: string[] = [],
 		private readonly permissionGuard?: PermissionGuard,
 		private readonly recorder?: ReversibleOpRecorder,
+		private readonly onRead?: (vaultPath: string) => void,
 	) {
 		for (const path of initialPaths) {
 			this.snapshot.add(ensureNotEscapingRoot(path))
@@ -478,6 +508,12 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async readFileBuffer(path: string): Promise<Uint8Array> {
+		const result = await this.readInternal(path)
+		this.onRead?.(this.toVaultPath(path))
+		return result
+	}
+
+	private async readInternal(path: string): Promise<Uint8Array> {
 		const stat = await this.stat(path)
 		if (!stat.isFile) {
 			throw new Error(
@@ -534,7 +570,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		await this.withBatch(async () => {
 			const encoded = encodeContent(content, options)
 			const existing = (await this.exists(path))
-				? await this.readFileBuffer(path)
+				? await this.readInternal(path)
 				: (new Uint8Array(0) as Uint8Array)
 			const merged = new Uint8Array(existing.length + encoded.length)
 			merged.set(existing)
@@ -739,16 +775,17 @@ export class ObsidianVaultFs implements IFileSystem {
 			if (stat.isDirectory) {
 				return
 			}
-			const content = await this.readFileBuffer(path)
+			const content = await this.readInternal(path)
 			await this.writeFile(path, content)
 		})
 	}
 }
 
 export class MountedVaultFs implements IFileSystem {
-	private readonly scratch = new InMemoryFs()
-
-	constructor(private readonly vaultFs: ObsidianVaultFs) {}
+	constructor(
+		private readonly vaultFs: ObsidianVaultFs,
+		private readonly scratch: IFileSystem = new InMemoryFs(),
+	) {}
 
 	private isRoot(path: string) {
 		return ensureNotEscapingRoot(path) === '/'

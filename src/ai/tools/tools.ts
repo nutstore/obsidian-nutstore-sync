@@ -1,9 +1,17 @@
+import { idAgent } from 'id-agent'
+import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import { App, normalizePath, TFile } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod'
+import { getActiveFragment } from '~/ai/chat/domain'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
-import type { AIToolDefinition, ToolExecutionResult } from '~/ai/core/types'
+import type {
+	AIToolDefinition,
+	AIToolExecutionContext,
+	ToolExecutionResult,
+} from '~/ai/core/types'
 import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/tools/bash/runtime'
+import { buildNoteNeighborhood } from '~/ai/tools/note-neighborhood'
 import {
 	executeTodoWrite,
 	todoWriteInputSchema,
@@ -42,6 +50,23 @@ const booleanValue = (field: string) =>
 		z.boolean(i18n.t('chatbox.errors.toolFieldRequired', { field })),
 	)
 
+const integerValue = (field: string) =>
+	z.preprocess(
+		(value) => {
+			if (typeof value === 'number') {
+				return value
+			}
+			if (typeof value === 'string') {
+				const normalized = value.trim()
+				if (normalized !== '') {
+					return Number(normalized)
+				}
+			}
+			return value
+		},
+		z.number().int(i18n.t('chatbox.errors.toolFieldRequired', { field })),
+	)
+
 function isAllowedBashCwd(pathValue: string) {
 	const normalized = pathPosix.normalize(
 		pathPosix.resolve('/', pathValue || '/'),
@@ -69,7 +94,10 @@ interface CreateAIToolsOptions {
 	allowSpawn?: boolean
 	permissionGuard?: PermissionGuard
 	enableTodoWrite?: boolean
+	bashScratch?: IFileSystem
 }
+
+const MAX_INLINE_BASH_OUTPUT_CHARS = 20 * 1024
 
 function replaceUniqueOccurrence(
 	content: string,
@@ -110,11 +138,45 @@ function replaceUniqueOccurrence(
 	} satisfies ReplaceResult
 }
 
+function resolveCurrentNotePath(context: AIToolExecutionContext) {
+	const fragment = getActiveFragment(context.session)
+	if (!fragment) {
+		return ''
+	}
+
+	for (let index = fragment.messages.length - 1; index >= 0; index -= 1) {
+		const activeFile = fragment.messages[index].workspaceContextDelta?.find(
+			(entry) => entry.key === 'activeFile',
+		)
+		if (activeFile) {
+			return typeof activeFile.content === 'string' ? activeFile.content : ''
+		}
+	}
+
+	return ''
+}
+
+function resolveNotePath(app: App, note: string, sourcePath: string) {
+	const normalizedPath = normalizePath(note)
+	const direct = app.vault.getAbstractFileByPath(normalizedPath)
+	if (direct instanceof TFile) {
+		return direct.path
+	}
+
+	const resolved = app.metadataCache.getFirstLinkpathDest(note, sourcePath)
+	if (resolved instanceof TFile) {
+		return resolved.path
+	}
+
+	throw new Error(i18n.t('chatbox.errors.fileNotFound', { path: note }))
+}
+
 export function createAITools(
 	app: App,
 	options: CreateAIToolsOptions = {},
 ): AIToolDefinition[] {
 	const { permissionGuard } = options
+	const bashScratch = options.bashScratch ?? new InMemoryFs()
 	const tools: AIToolDefinition[] = [
 		...(options.enableTodoWrite
 			? [
@@ -133,6 +195,35 @@ export function createAITools(
 				]
 			: []),
 		{
+			name: 'note_neighborhood',
+			description:
+				'Return an Obsidian-style local knowledge graph neighborhood for a note as a simple adjacency map. Input a note path or link path plus a depth. Output includes the resolved root path, normalized depth, and adj where each key is a note path and each value is the sorted list of related note paths within the returned neighborhood.',
+			inputSchema: z.object({
+				note: z
+					.string()
+					.trim()
+					.min(
+						1,
+						i18n.t('chatbox.errors.toolFieldRequired', { field: 'note' }),
+					),
+				depth: integerValue('depth').default(1),
+			}),
+			execute: async (params, context): Promise<ToolExecutionResult> => {
+				const root = resolveNotePath(
+					app,
+					params.note,
+					resolveCurrentNotePath(context),
+				)
+				return {
+					result: buildNoteNeighborhood(
+						app.metadataCache.resolvedLinks ?? {},
+						root,
+						params.depth,
+					),
+				}
+			},
+		},
+		{
 			name: 'edit_file',
 			description:
 				'Edit a vault text file by replacing one exact, uniquely matched text block with new text. The path can be a vault-relative path (e.g. notes/file.md) or an absolute virtual path (e.g. /vault/notes/file.md).',
@@ -147,7 +238,7 @@ export function createAITools(
 				oldText: z.string(),
 				newText: textValue('newText'),
 			}),
-			execute: async (params): Promise<ToolExecutionResult> => {
+			execute: async (params, context): Promise<ToolExecutionResult> => {
 				const path = params.path
 				const oldText = params.oldText
 				const newText = params.newText
@@ -160,6 +251,10 @@ export function createAITools(
 					? path.slice(VAULT_MOUNT_POINT.length)
 					: path
 				const normalizedPath = normalizePath(strippedPath)
+
+				if (!context.readTracker?.hasRead(normalizedPath)) {
+					throw new Error(i18n.t('chatbox.errors.fileNotRead', { path }))
+				}
 
 				await permissionGuard?.({
 					type: 'fs',
@@ -209,7 +304,7 @@ export function createAITools(
 				stdin: z.string().optional(),
 				rawScript: booleanValue('rawScript').default(false),
 			}),
-			execute: async (params): Promise<ToolExecutionResult> => {
+			execute: async (params, context): Promise<ToolExecutionResult> => {
 				const cwd = params.cwd || VAULT_MOUNT_POINT
 				if (!isAllowedBashCwd(cwd)) {
 					throw new Error(
@@ -222,18 +317,22 @@ export function createAITools(
 					stdin: params.stdin,
 					rawScript: params.rawScript,
 					permissionGuard,
+					onRead: context.readTracker?.markRead.bind(context.readTracker),
+					scratch: bashScratch,
 				})
-
-				const truncateLine = (line: string) =>
-					line.length > 2000
-						? `${line.slice(0, 2000)}...[line truncated: ${line.length} chars total]`
-						: line
-
-				const processOutput = (text: string) =>
-					text.split('\n').map(truncateLine).join('\n')
+				const output = `${result.stdout}\n\n${result.stderr}`
+				if (output.length > MAX_INLINE_BASH_OUTPUT_CHARS) {
+					const outputPath = `/tmp/${idAgent({ prefix: 'bash', words: 3 })}.txt`
+					await bashScratch.mkdir('/tmp', { recursive: true })
+					await bashScratch.writeFile(outputPath, output)
+					return {
+						result: `Bash output was too long to return inline (${output.length} characters). The complete output was written to ${outputPath}. Use bash commands such as rg, sed, head, or tail to inspect it in smaller chunks.`,
+						reversibleOps: result.reversibleOps,
+					}
+				}
 
 				return {
-					result: `${processOutput(result.stdout)}${processOutput(result.stderr)}`,
+					result: output,
 					reversibleOps: result.reversibleOps,
 				}
 			},

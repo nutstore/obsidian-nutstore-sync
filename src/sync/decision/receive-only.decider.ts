@@ -1,17 +1,18 @@
 import { parse as bytesParse } from 'bytes-iec'
+import { isPluginSelfPath } from '~/utils/config-dir-rules'
 import { isSameTime } from '~/utils/is-same-time'
-import logger from '~/utils/logger'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import { hasFolderContentChanged } from '../core/has-folder-content-changed'
+import { areLooseEqualFiles } from '../core/loose-equality'
+import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 import {
 	getIgnoredPathsInFolder,
 	hasIgnoredInFolder,
 } from '../utils/has-ignored-in-folder'
-import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import BaseSyncDecider from './base.decider'
-import { areLooseEqualFiles } from './loose-equality'
 import { SyncDecisionInput } from './sync-decision.interface'
 
 export default class ReceiveOnlySyncDecider extends BaseSyncDecider {
@@ -41,6 +42,7 @@ export async function receiveOnlyDecider(
 	mode: { revertLocalChanges: boolean },
 ): Promise<BaseTask[]> {
 	const {
+		logger,
 		settings,
 		localStats,
 		remoteStats,
@@ -109,6 +111,27 @@ export async function receiveOnlyDecider(
 		return true
 	}
 
+	const removeLocalFile = (p: string, localSize: number): boolean => {
+		const taskOptions = {
+			remotePath: p,
+			localPath: p,
+			remoteBaseDir,
+		}
+		if (localSize > maxFileSize) {
+			tasks.push(
+				taskFactory.createSkippedTask({
+					...taskOptions,
+					reason: SkipReason.FileTooLarge,
+					maxSize: maxFileSize,
+					localSize,
+				}),
+			)
+			return false
+		}
+		tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+		return true
+	}
+
 	// * sync files
 	for (const p of mixedPath) {
 		const remote = remoteStatsMap.get(p)
@@ -131,7 +154,7 @@ export async function receiveOnlyDecider(
 			}
 			if (!record) {
 				logger.debug({
-					reason: 'receive-only: both exist without record — pull from remote',
+					reason: 'both exist without record — pull from remote',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -145,14 +168,14 @@ export async function receiveOnlyDecider(
 				: remoteChanged && !localChanged
 			if (shouldPull) {
 				logger.debug({
-					reason: 'receive-only: both exist, source state changed',
+					reason: 'both exist, source state changed',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
 				pullRemoteFile(p, remote.size, local.size)
 			} else if (localChanged && remoteChanged && !mode.revertLocalChanges) {
 				logger.debug({
-					reason: 'receive-only: both local and remote changed — skip',
+					reason: 'both local and remote changed — skip',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -164,7 +187,7 @@ export async function receiveOnlyDecider(
 				)
 			} else if (localChanged && !mode.revertLocalChanges) {
 				logger.debug({
-					reason: 'receive-only: preserve local change until revert',
+					reason: 'preserve local change until revert',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -175,7 +198,7 @@ export async function receiveOnlyDecider(
 		if (!local && remote) {
 			if (record && !mode.revertLocalChanges) {
 				logger.debug({
-					reason: 'receive-only: preserve local deletion until revert',
+					reason: 'preserve local deletion until revert',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -183,7 +206,7 @@ export async function receiveOnlyDecider(
 			}
 			// Remote exists, local missing → pull to restore/create local
 			logger.debug({
-				reason: 'receive-only: remote exists, local missing — pull',
+				reason: 'remote exists, local missing — pull',
 				localPath: p,
 				remotePath: remotePathToAbsolute(remoteBaseDir, p),
 			})
@@ -192,19 +215,28 @@ export async function receiveOnlyDecider(
 		}
 
 		if (local && !remote) {
-			if (mode.revertLocalChanges) {
+			// Prevent the plugin from deleting its own files when the remote
+			// vault does not have the plugin installed.
+			if (isPluginSelfPath(p, settings.configDir)) {
 				logger.debug({
-					reason:
-						'receive-only revert local changes: local exists, remote missing — remove local',
+					reason: 'plugin self-path missing remotely — preserve local',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+				continue
+			}
+			if (mode.revertLocalChanges) {
+				logger.debug({
+					reason: 'local exists, remote missing — remove local',
+					localPath: p,
+					remotePath: remotePathToAbsolute(remoteBaseDir, p),
+				})
+				removeLocalFile(p, local.size)
 				continue
 			}
 			if (!record) {
 				logger.debug({
-					reason: 'receive-only: local-only without record — preserve local',
+					reason: 'local-only without record — preserve local',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -213,16 +245,15 @@ export async function receiveOnlyDecider(
 			const localChanged = !isSameTime(local.mtime, record.local.mtime)
 			if (!localChanged) {
 				logger.debug({
-					reason:
-						'receive-only: remote deleted, local unchanged — remove local',
+					reason: 'remote deleted, local unchanged — remove local',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				tasks.push(taskFactory.createRemoveLocalTask(taskOptions))
+				removeLocalFile(p, local.size)
 			} else {
 				logger.debug({
 					reason:
-						'receive-only: remote deleted, local changed — skip to protect local change',
+						'remote deleted, local changed — skip to protect local change',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -239,9 +270,7 @@ export async function receiveOnlyDecider(
 
 	// * clean orphaned records (both local and remote deleted)
 	for (const [recordPath] of syncRecords) {
-		const local = localStatsMap.get(recordPath)
-		const remote = remoteStatsMap.get(recordPath)
-		if (!local && !remote) {
+		if (shouldCreateCleanRecordTask(recordPath, localStats, remoteStats)) {
 			tasks.push(
 				taskFactory.createCleanRecordTask({
 					remotePath: recordPath,
@@ -264,8 +293,7 @@ export async function receiveOnlyDecider(
 			if (!local.isDir) {
 				if (mode.revertLocalChanges) {
 					logger.debug({
-						reason:
-							'receive-only revert local changes: replace local file with remote folder',
+						reason: 'replace local file with remote folder',
 						remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 						localPath,
 					})
@@ -293,14 +321,14 @@ export async function receiveOnlyDecider(
 			const folderRecord = syncRecords.get(localPath)
 			if (folderRecord && !mode.revertLocalChanges) {
 				logger.debug({
-					reason: 'receive-only: preserve local folder deletion until revert',
+					reason: 'preserve local folder deletion until revert',
 					remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 					localPath,
 				})
 				continue
 			}
 			logger.debug({
-				reason: 'receive-only: remote folder missing locally — mkdir local',
+				reason: 'remote folder missing locally — mkdir local',
 				remotePath: remotePathToAbsolute(remoteBaseDir, remote.path),
 				localPath,
 			})
@@ -322,12 +350,21 @@ export async function receiveOnlyDecider(
 		const remote = remoteStatsMap.get(local.path)
 
 		if (!remote) {
+			// Prevent the plugin from deleting its own folder when the remote
+			// vault does not have the plugin installed.
+			if (isPluginSelfPath(local.path, settings.configDir)) {
+				logger.debug({
+					reason: 'plugin self-folder missing remotely — preserve local',
+					localPath: local.path,
+					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
+				})
+				continue
+			}
 			if (mode.revertLocalChanges) {
 				if (hasIgnoredInFolder(local.path, localStats)) {
 					const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
 					logger.debug({
-						reason:
-							'receive-only revert local changes: skip removing local folder (contains ignored items)',
+						reason: 'skip removing local folder (contains ignored items)',
 						localPath: local.path,
 						ignoredPaths,
 					})
@@ -343,8 +380,7 @@ export async function receiveOnlyDecider(
 					continue
 				}
 				logger.debug({
-					reason:
-						'receive-only revert local changes: local folder missing remotely — remove local',
+					reason: 'local folder missing remotely — remove local',
 					localPath: local.path,
 					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 				})
@@ -362,7 +398,7 @@ export async function receiveOnlyDecider(
 			if (!folderRecord) {
 				logger.debug({
 					reason:
-						'receive-only: local folder missing remotely without record — preserve local',
+						'local folder missing remotely without record — preserve local',
 					localPath: local.path,
 					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 				})
@@ -378,8 +414,7 @@ export async function receiveOnlyDecider(
 				if (hasIgnoredInFolder(local.path, localStats)) {
 					const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
 					logger.debug({
-						reason:
-							'receive-only: skip removing local folder (contains ignored items)',
+						reason: 'skip removing local folder (contains ignored items)',
 						localPath: local.path,
 						ignoredPaths,
 					})
@@ -396,7 +431,7 @@ export async function receiveOnlyDecider(
 				}
 				logger.debug({
 					reason:
-						'receive-only: remote folder deleted, local folder unchanged — remove local',
+						'remote folder deleted, local folder unchanged — remove local',
 					localPath: local.path,
 					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 				})
@@ -411,7 +446,7 @@ export async function receiveOnlyDecider(
 			} else {
 				logger.debug({
 					reason:
-						'receive-only: remote folder deleted, local folder changed — skip to protect local change',
+						'remote folder deleted, local folder changed — skip to protect local change',
 					localPath: local.path,
 					remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 				})
@@ -431,7 +466,7 @@ export async function receiveOnlyDecider(
 						const ignoredPaths = getIgnoredPathsInFolder(local.path, localStats)
 						logger.debug({
 							reason:
-								'receive-only revert local changes: skip replacing local folder with remote file (contains ignored items)',
+								'skip replacing local folder with remote file (contains ignored items)',
 							localPath: local.path,
 							ignoredPaths,
 						})
@@ -447,8 +482,7 @@ export async function receiveOnlyDecider(
 						continue
 					}
 					logger.debug({
-						reason:
-							'receive-only revert local changes: replace local folder with remote file',
+						reason: 'replace local folder with remote file',
 						localPath: local.path,
 						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 					})

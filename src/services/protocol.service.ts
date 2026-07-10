@@ -4,10 +4,15 @@ import ProviderEditorModal from '~/components/ProviderEditorModal'
 import { emitSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
+import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
-export default class ProtocolService {
+export default class ProtocolService extends BaseService {
 	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
+
+	override onload() {
 		this.plugin.registerObsidianProtocolHandler(
 			'nutstore-sync/sso',
 			async (data) => {

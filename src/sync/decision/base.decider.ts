@@ -50,6 +50,7 @@ export default abstract class BaseSyncDecider {
 			vault: this.vault,
 			remoteBaseDir: this.remoteBaseDir,
 			syncRecord: syncRecordStorage,
+			logger: this.sync.logger,
 		}
 
 		const taskFactory: TaskFactory = {
@@ -94,6 +95,7 @@ export default abstract class BaseSyncDecider {
 		}
 
 		return {
+			logger: this.sync.logger,
 			settings: {
 				skipLargeFiles: this.settings.skipLargeFiles,
 				mobileAppDownloadFileChunkSize:

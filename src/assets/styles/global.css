@@ -1,10 +1,5 @@
 @unocss;
 
-.view-action[aria-disabled='true'] {
-	opacity: 0.5;
-	cursor: not-allowed;
-}
-
 @keyframes nutstore-sync-spin {
 	from {
 		transform: rotate(0deg);
@@ -152,21 +147,21 @@ input.success {
 	font-weight: normal;
 }
 
-.markdown-rendered {
+.ns-chatbox-markdown.markdown-rendered {
 	min-width: 0;
 	overflow-wrap: anywhere;
 	word-break: break-word;
 }
 
-.markdown-rendered > *:first-child {
+.ns-chatbox-markdown.markdown-rendered > *:first-child {
 	margin-top: 0;
 }
 
-.markdown-rendered > *:last-child {
+.ns-chatbox-markdown.markdown-rendered > *:last-child {
 	margin-bottom: 0;
 }
 
-.markdown-rendered table {
+.ns-chatbox-markdown.markdown-rendered table {
 	display: block;
 	max-width: 100%;
 	overflow-x: auto;
@@ -174,26 +169,26 @@ input.success {
 	white-space: nowrap;
 }
 
-.markdown-rendered thead,
-.markdown-rendered tbody,
-.markdown-rendered tr {
+.ns-chatbox-markdown.markdown-rendered thead,
+.ns-chatbox-markdown.markdown-rendered tbody,
+.ns-chatbox-markdown.markdown-rendered tr {
 	width: max-content;
 	min-width: 100%;
 }
 
-.markdown-rendered th,
-.markdown-rendered td {
+.ns-chatbox-markdown.markdown-rendered th,
+.ns-chatbox-markdown.markdown-rendered td {
 	white-space: nowrap;
 }
 
-.markdown-rendered pre,
-.markdown-rendered code,
-.markdown-rendered .internal-embed,
-.markdown-rendered img {
+.ns-chatbox-markdown.markdown-rendered pre,
+.ns-chatbox-markdown.markdown-rendered code,
+.ns-chatbox-markdown.markdown-rendered .internal-embed,
+.ns-chatbox-markdown.markdown-rendered img {
 	max-width: 100%;
 }
 
-.markdown-rendered pre {
+.ns-chatbox-markdown.markdown-rendered pre {
 	overflow-x: auto;
 	white-space: pre;
 }

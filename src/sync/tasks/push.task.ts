@@ -1,4 +1,3 @@
-import logger from '~/utils/logger'
 import { existsLocalPath, readLocalBinary } from '~/utils/local-vault-io'
 import { BaseTask, toTaskError } from './task.interface'
 
@@ -11,7 +10,7 @@ export default class PushTask extends BaseTask {
 			}
 
 			const content = await readLocalBinary(this.vault, this.localPath)
-			logger.info(
+			this.logger.info(
 				`[PushTask] ${this.localPath} → ${this.remotePath} (${content.byteLength} bytes)`,
 			)
 			const res = await this.webdav.putFileContents(this.remotePath, content, {
@@ -22,7 +21,7 @@ export default class PushTask extends BaseTask {
 			}
 			return { success: res }
 		} catch (e) {
-			logger.error(`[PushTask] failed: ${this.localPath}`, e)
+			this.logger.error(`[PushTask] failed: ${this.localPath}`, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
 	}

@@ -5,16 +5,21 @@ import i18n from '~/i18n'
 import { SyncStartMode } from '~/sync'
 import logger from '~/utils/logger'
 import { CHATBOX_VIEW_TYPE } from '~/views/chatbox.view'
+import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 
-export default class CommandService {
-	constructor(plugin: NutstorePlugin) {
-		plugin.addCommand({
+export default class CommandService extends BaseService {
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
+
+	override onload() {
+		this.plugin.addCommand({
 			id: 'start-sync',
 			name: i18n.t('sync.startButton'),
 			icon: 'refresh-cw',
 			checkCallback: (checking) => {
-				if (plugin.isSyncing) {
+				if (this.plugin.isSyncing) {
 					return false
 				}
 				if (checking) {
@@ -22,14 +27,14 @@ export default class CommandService {
 				}
 
 				// 检查账号配置
-				if (!plugin.isAccountConfigured()) {
+				if (!this.plugin.isAccountConfigured()) {
 					new Notice(i18n.t('sync.error.accountNotConfigured'))
 					// 打开设置页面，引导用户配置账号
 					try {
-						const setting = plugin.app.setting
+						const setting = this.plugin.app.setting
 						if (setting) {
 							setting.open()
-							setting.openTabById(plugin.manifest.id)
+							setting.openTabById(this.plugin.manifest.id)
 						}
 					} catch (error) {
 						logger.error('Failed to open settings:', error)
@@ -38,26 +43,32 @@ export default class CommandService {
 				}
 
 				const startSync = async () => {
-					await plugin.syncExecutorService.executeSync({
+					await this.plugin.syncExecutorService.executeSync({
 						mode: SyncStartMode.MANUAL_SYNC,
 					})
 				}
-				if (plugin.settings.confirmBeforeSync) {
-					new SyncConfirmModal(plugin.app, startSync).open()
+				if (this.plugin.settings.confirmBeforeSync) {
+					new SyncConfirmModal(
+						this.plugin.app,
+						this.plugin.settings,
+						this.plugin.localSettings,
+						startSync,
+					).open()
 				} else {
 					startSync()
 				}
 			},
 		})
 
-		plugin.addCommand({
+		this.plugin.addCommand({
 			id: 'open-chatbox',
 			name: i18n.t('chatbox.openCommand'),
 			icon: 'bot',
 			callback: async () => {
 				const existingLeaf =
-					plugin.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
-				const leaf = existingLeaf || plugin.app.workspace.getRightLeaf(false)
+					this.plugin.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
+				const leaf =
+					existingLeaf || this.plugin.app.workspace.getRightLeaf(false)
 				if (!leaf) {
 					return
 				}
@@ -65,16 +76,16 @@ export default class CommandService {
 					type: CHATBOX_VIEW_TYPE,
 					active: true,
 				})
-				plugin.app.workspace.revealLeaf(leaf)
+				this.plugin.app.workspace.revealLeaf(leaf)
 			},
 		})
 
-		plugin.addCommand({
+		this.plugin.addCommand({
 			id: 'stop-sync',
 			name: i18n.t('sync.stopButton'),
 			icon: 'x-circle',
 			checkCallback: (checking) => {
-				if (plugin.isSyncing) {
+				if (this.plugin.isSyncing) {
 					if (!checking) {
 						emitCancelSync()
 					}
@@ -84,12 +95,12 @@ export default class CommandService {
 			},
 		})
 
-		plugin.addCommand({
+		this.plugin.addCommand({
 			id: 'show-sync-progress',
 			name: i18n.t('sync.showProgressButton'),
 			icon: 'activity',
 			callback: () => {
-				plugin.progressService.showProgressModal()
+				this.plugin.progressService.showProgressModal()
 			},
 		})
 	}

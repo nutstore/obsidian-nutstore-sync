@@ -660,6 +660,7 @@
 			"toolFieldRequired": "{{field}} is required",
 			"fileNotFound": "File not found: {{path}}",
 			"notFile": "Path is not a file: {{path}}",
+			"fileNotRead": "Editing failed — read {{path}} at least once before editing it.",
 			"editMatchNotFound": "Exact text to replace was not found in the file.",
 			"editMatchNotUnique": "Exact text to replace must match exactly once in the file.",
 			"sessionNotFound": "The target session no longer exists",

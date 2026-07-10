@@ -2,15 +2,22 @@ import { Notice } from 'obsidian'
 import i18n from '../i18n'
 import NutstorePlugin from '../index'
 import { formatRelativeTime } from '../utils/format-relative-time'
+import { BaseService } from './service.interface'
 
-export class StatusService {
-	public syncStatusBar: HTMLElement
+export class StatusService extends BaseService {
+	public syncStatusBar: HTMLElement | null = null
 	private lastSyncTime: number | null = null
 	private updateInterval: number | null = null
 	private baseStatusText: string = ''
 
-	constructor(plugin: NutstorePlugin) {
-		this.syncStatusBar = plugin.addStatusBarItem()
+	constructor(private plugin: NutstorePlugin) {
+		super()
+	}
+
+	override onload(): void {
+		if (!this.syncStatusBar) {
+			this.syncStatusBar = this.plugin.addStatusBarItem()
+		}
 	}
 
 	/**
@@ -21,7 +28,7 @@ export class StatusService {
 		isError?: boolean
 		showNotice?: boolean
 	}): void {
-		this.syncStatusBar.setText(status.text)
+		this.syncStatusBar?.setText(status.text)
 
 		if (status.showNotice) {
 			new Notice(status.text)
@@ -63,11 +70,11 @@ export class StatusService {
 
 		// Don't show relative time if less than 60 seconds (just now)
 		if (diffSeconds < 60) {
-			this.syncStatusBar.setText(this.baseStatusText)
+			this.syncStatusBar?.setText(this.baseStatusText)
 		} else {
 			const relativeTime = formatRelativeTime(this.lastSyncTime)
 			const statusText = `${this.baseStatusText} (${relativeTime})`
-			this.syncStatusBar.setText(statusText)
+			this.syncStatusBar?.setText(statusText)
 		}
 	}
 
@@ -81,7 +88,7 @@ export class StatusService {
 		}
 	}
 
-	public unload(): void {
+	override onunload(): void {
 		this.stopTimeUpdates()
 	}
 }

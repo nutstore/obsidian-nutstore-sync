@@ -1,6 +1,7 @@
 import { moment } from 'obsidian'
 import { IN_DEV } from '~/consts'
 import logger from '~/utils/logger'
+import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 
 export interface LogEntry {
@@ -9,11 +10,15 @@ export interface LogEntry {
 	args: any[]
 }
 
-export default class LoggerService {
+export default class LoggerService extends BaseService {
 	logs: LogEntry[] = []
 
 	constructor(plugin: NutstorePlugin) {
+		super()
 		void plugin
+	}
+
+	override onload() {
 		const reporter = {
 			log: (logObj: any) => {
 				this.logs.push({
