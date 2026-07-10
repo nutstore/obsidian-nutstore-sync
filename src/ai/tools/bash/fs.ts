@@ -782,9 +782,10 @@ export class ObsidianVaultFs implements IFileSystem {
 }
 
 export class MountedVaultFs implements IFileSystem {
-	private readonly scratch = new InMemoryFs()
-
-	constructor(private readonly vaultFs: ObsidianVaultFs) {}
+	constructor(
+		private readonly vaultFs: ObsidianVaultFs,
+		private readonly scratch: IFileSystem = new InMemoryFs(),
+	) {}
 
 	private isRoot(path: string) {
 		return ensureNotEscapingRoot(path) === '/'

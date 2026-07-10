@@ -1,4 +1,5 @@
 import { Bash } from 'just-bash/browser'
+import type { IFileSystem } from 'just-bash/browser'
 import type { App } from 'obsidian'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import {
@@ -15,6 +16,7 @@ export interface VaultBashExecOptions {
 	rawScript?: boolean
 	permissionGuard?: PermissionGuard
 	onRead?: (vaultPath: string) => void
+	scratch?: IFileSystem
 }
 
 export async function createVaultBash(
@@ -22,6 +24,7 @@ export async function createVaultBash(
 	permissionGuard?: PermissionGuard,
 	recorder?: ReversibleOpRecorder,
 	onRead?: (vaultPath: string) => void,
+	scratch?: IFileSystem,
 ) {
 	const initialPaths = await listVaultPaths(app)
 	const vaultFs = new ObsidianVaultFs(
@@ -31,7 +34,7 @@ export async function createVaultBash(
 		recorder,
 		onRead,
 	)
-	const fs = new MountedVaultFs(vaultFs)
+	const fs = new MountedVaultFs(vaultFs, scratch)
 
 	return new Bash({
 		fs,
@@ -50,6 +53,7 @@ export async function execVaultBash(
 		options.permissionGuard,
 		recorder,
 		options.onRead,
+		options.scratch,
 	)
 	const result = await bash.exec(script, {
 		cwd: options.cwd ?? VAULT_MOUNT_POINT,

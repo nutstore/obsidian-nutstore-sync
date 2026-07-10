@@ -1,8 +1,15 @@
+import { idAgent } from 'id-agent'
+import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import { App, normalizePath, TFile } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod'
+import { getActiveFragment } from '~/ai/chat/domain'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
-import type { AIToolDefinition, ToolExecutionResult } from '~/ai/core/types'
+import type {
+	AIToolDefinition,
+	AIToolExecutionContext,
+	ToolExecutionResult,
+} from '~/ai/core/types'
 import { execVaultBash, VAULT_MOUNT_POINT } from '~/ai/tools/bash/runtime'
 import { buildNoteNeighborhood } from '~/ai/tools/note-neighborhood'
 import {
@@ -87,7 +94,10 @@ interface CreateAIToolsOptions {
 	allowSpawn?: boolean
 	permissionGuard?: PermissionGuard
 	enableTodoWrite?: boolean
+	bashScratch?: IFileSystem
 }
+
+const MAX_INLINE_BASH_OUTPUT_CHARS = 20 * 1024
 
 function replaceUniqueOccurrence(
 	content: string,
@@ -128,14 +138,32 @@ function replaceUniqueOccurrence(
 	} satisfies ReplaceResult
 }
 
-function resolveNotePath(app: App, note: string) {
+function resolveCurrentNotePath(context: AIToolExecutionContext) {
+	const fragment = getActiveFragment(context.session)
+	if (!fragment) {
+		return ''
+	}
+
+	for (let index = fragment.messages.length - 1; index >= 0; index -= 1) {
+		const activeFile = fragment.messages[index].workspaceContextDelta?.find(
+			(entry) => entry.key === 'activeFile',
+		)
+		if (activeFile) {
+			return typeof activeFile.content === 'string' ? activeFile.content : ''
+		}
+	}
+
+	return ''
+}
+
+function resolveNotePath(app: App, note: string, sourcePath: string) {
 	const normalizedPath = normalizePath(note)
 	const direct = app.vault.getAbstractFileByPath(normalizedPath)
 	if (direct instanceof TFile) {
 		return direct.path
 	}
 
-	const resolved = app.metadataCache.getFirstLinkpathDest(note, '')
+	const resolved = app.metadataCache.getFirstLinkpathDest(note, sourcePath)
 	if (resolved instanceof TFile) {
 		return resolved.path
 	}
@@ -148,6 +176,7 @@ export function createAITools(
 	options: CreateAIToolsOptions = {},
 ): AIToolDefinition[] {
 	const { permissionGuard } = options
+	const bashScratch = options.bashScratch ?? new InMemoryFs()
 	const tools: AIToolDefinition[] = [
 		...(options.enableTodoWrite
 			? [
@@ -179,8 +208,12 @@ export function createAITools(
 					),
 				depth: integerValue('depth').default(1),
 			}),
-			execute: async (params): Promise<ToolExecutionResult> => {
-				const root = resolveNotePath(app, params.note)
+			execute: async (params, context): Promise<ToolExecutionResult> => {
+				const root = resolveNotePath(
+					app,
+					params.note,
+					resolveCurrentNotePath(context),
+				)
 				return {
 					result: buildNoteNeighborhood(
 						app.metadataCache.resolvedLinks ?? {},
@@ -214,14 +247,9 @@ export function createAITools(
 						`edit_file can only access files inside the vault. Use a vault-relative path (e.g. notes/file.md) or an absolute virtual path under ${VAULT_MOUNT_POINT}/ (e.g. ${VAULT_MOUNT_POINT}/notes/file.md).`,
 					)
 				}
-				// Normalize the path to handle both "/vault/..." and "vault/..." formats.
-				// Bash tools mount the vault at /vault, so AI models may pass vault paths
-				// with or without the leading slash. We ensure the path always has a leading
-				// slash so the VAULT_MOUNT_POINT prefix is stripped consistently.
-				const normalizedInput = path.startsWith('/') ? path : `/${path}`
-				const strippedPath = normalizedInput.startsWith(`${VAULT_MOUNT_POINT}/`)
-					? normalizedInput.slice(VAULT_MOUNT_POINT.length)
-					: normalizedInput
+				const strippedPath = path.startsWith(`${VAULT_MOUNT_POINT}/`)
+					? path.slice(VAULT_MOUNT_POINT.length)
+					: path
 				const normalizedPath = normalizePath(strippedPath)
 
 				if (!context.readTracker?.hasRead(normalizedPath)) {
@@ -290,10 +318,21 @@ export function createAITools(
 					rawScript: params.rawScript,
 					permissionGuard,
 					onRead: context.readTracker?.markRead.bind(context.readTracker),
+					scratch: bashScratch,
 				})
+				const output = `${result.stdout}\n\n${result.stderr}`
+				if (output.length > MAX_INLINE_BASH_OUTPUT_CHARS) {
+					const outputPath = `/tmp/${idAgent({ prefix: 'bash', words: 3 })}.txt`
+					await bashScratch.mkdir('/tmp', { recursive: true })
+					await bashScratch.writeFile(outputPath, output)
+					return {
+						result: `Bash output was too long to return inline (${output.length} characters). The complete output was written to ${outputPath}. Use bash commands such as rg, sed, head, or tail to inspect it in smaller chunks.`,
+						reversibleOps: result.reversibleOps,
+					}
+				}
 
 				return {
-					result: `${result.stdout}\n\n${result.stderr}`,
+					result: output,
 					reversibleOps: result.reversibleOps,
 				}
 			},

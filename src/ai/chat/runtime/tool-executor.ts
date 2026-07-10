@@ -18,6 +18,7 @@ import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
+import { InMemoryFs } from 'just-bash/browser'
 import type NutstorePlugin from '../../..'
 
 export interface ResolvedToolResult {
@@ -60,6 +61,9 @@ export class ToolExecutor {
 		parentTaskId?: string,
 	) {
 		const allowSpawn = depth < maxDepth
+		const runtime = this.runtimeStates.get(session.id)
+		const bashScratch = runtime.bashScratch ?? new InMemoryFs()
+		runtime.bashScratch = bashScratch
 		const permissionGuard = createPermissionGuard(
 			this.plugin.app,
 			() => this.plugin.settings,
@@ -79,6 +83,7 @@ export class ToolExecutor {
 		)
 		return createAITools(this.plugin.app, {
 			allowSpawn,
+			bashScratch,
 			permissionGuard,
 			enableTodoWrite: depth === 0,
 			spawnTask: async (params) => ({

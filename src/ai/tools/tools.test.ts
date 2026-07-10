@@ -194,6 +194,36 @@ async function callEditFile(
 }
 
 describe('edit_file read-gate', () => {
+	it('treats a vault/ prefix without a leading slash as a vault-relative folder', async () => {
+		const { app, store } = createMockApp([
+			{ path: 'vault/notes/x.md', content: 'nested target' },
+			{ path: 'notes/x.md', content: 'root target' },
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const session = makeSession(fragment)
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('vault/notes/x.md')
+
+		const result = await callEditFile(
+			app,
+			{
+				path: 'vault/notes/x.md',
+				oldText: 'nested',
+				newText: 'updated',
+			},
+			makeContext(session, createFragmentReadTracker(fragment)),
+		)
+
+		expect(result.result).toEqual({ replaced: true })
+		expect(store.get('vault/notes/x.md')).toBe('updated target')
+		expect(store.get('notes/x.md')).toBe('root target')
+	})
+
 	it('blocks edit when the file has not been read in a previous batch', async () => {
 		const { app } = createMockApp([
 			{ path: 'notes/x.md', content: 'hello world' },
@@ -363,6 +393,57 @@ describe('edit_file read-gate', () => {
 	})
 })
 
+describe('note_neighborhood path resolution', () => {
+	it('resolves an ambiguous link path relative to the current note', async () => {
+		const { app } = createMockApp([
+			{ path: 'projects/a/Shared.md', content: 'A' },
+			{ path: 'projects/b/Current.md', content: 'current' },
+			{ path: 'projects/b/Shared.md', content: 'B' },
+		])
+		app.metadataCache = {
+			resolvedLinks: {},
+			getFirstLinkpathDest(linkpath: string, sourcePath: string) {
+				if (linkpath !== 'Shared') return null
+				return app.vault.getAbstractFileByPath(
+					sourcePath.startsWith('projects/b/')
+						? 'projects/b/Shared.md'
+						: 'projects/a/Shared.md',
+				) as TFile | null
+			},
+		} as App['metadataCache']
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [
+				{
+					id: 'm1',
+					createdAt: 0,
+					message: {
+						role: 'user',
+						content: [{ type: 'text', text: 'Show the neighborhood.' }],
+					},
+					workspaceContextDelta: [
+						{
+							key: 'activeFile',
+							content: 'projects/b/Current.md',
+							hash: 'active-file-hash',
+						},
+					],
+				},
+			],
+		}
+		const tool = findTool(createAITools(app), 'note_neighborhood')
+
+		const result = await tool.execute(
+			tool.inputSchema.parse({ note: 'Shared', depth: 1 }),
+			makeContext(makeSession(fragment)),
+		)
+
+		expect(result.result).toMatchObject({ root: 'projects/b/Shared.md' })
+	})
+})
+
 describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 	it('preserves readVaultPaths through normalizeSession', () => {
 		const state = {
@@ -459,6 +540,35 @@ describe('bash tool UTF-8 handling', () => {
 
 		expect(result.result).toBe('中文测试\n\n\n')
 		expect(store.get('notes/copy.md')).toBe('中文测试\n')
+	})
+
+	it('writes oversized output to a readable temporary file', async () => {
+		const content = 'x'.repeat(25 * 1024)
+		const { vault } = createMockVaultForExecutor([
+			{ path: 'notes/large.md', content },
+		])
+		const app = { vault } as unknown as App
+		const tool = findTool(createAITools(app), 'bash')
+		const session = makeSession()
+
+		const result = await tool.execute(
+			tool.inputSchema.parse({ script: 'cat /vault/notes/large.md' }),
+			makeContext(session),
+		)
+
+		expect(result.result).toEqual(expect.stringContaining('too long'))
+		const outputPath = String(result.result).match(
+			/\/tmp\/bash-output-[^\s]+\.txt/,
+		)?.[0]
+		expect(outputPath).toBeDefined()
+
+		const readBack = await tool.execute(
+			tool.inputSchema.parse({ script: `wc -c ${outputPath}` }),
+			makeContext(session),
+		)
+		expect(readBack.result).toEqual(
+			expect.stringContaining(String(content.length + 2)),
+		)
 	})
 })
 

@@ -70,6 +70,7 @@
 		"html-entities": "^2.6.0",
 		"http-status-codes": "^2.3.0",
 		"i18next": "^24.2.2",
+		"id-agent": "^1.1.5",
 		"jiti": "^2.7.0",
 		"js-base64": "^3.7.7",
 		"just-bash": "^3.0.2",
