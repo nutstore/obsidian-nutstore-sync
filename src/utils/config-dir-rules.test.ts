@@ -48,6 +48,10 @@ describe('computeEffectiveFilterRules', () => {
 				options: { caseSensitive: true },
 			},
 			{
+				expr: '.obsidian/plugins/nutstore-sync/data.local.json',
+				options: { caseSensitive: true },
+			},
+			{
 				expr: '.obsidian/plugins/nutstore-sync/cache/ObsidianNutstoreSync.SyncCache.v1',
 				options: { caseSensitive: true },
 			},

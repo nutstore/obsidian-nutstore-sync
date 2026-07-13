@@ -77,6 +77,7 @@ describe('ai config', () => {
 				npm: '@ai-sdk/openai-compatible',
 				api: 'https://example.com/v1',
 				doc: 'https://example.com/docs',
+				allowBrowserCors: false,
 				models: {
 					'model-1': {
 						id: 'model-1',
