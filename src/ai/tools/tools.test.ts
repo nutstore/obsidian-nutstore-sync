@@ -16,6 +16,7 @@ import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import { SessionStore } from '~/ai/chat/session/session-store'
+import { z } from 'zod/mini'
 
 interface MockFile {
 	path: string
@@ -189,7 +190,7 @@ async function callEditFile(
 ) {
 	const tools = createAITools(app, { permissionGuard: undefined })
 	const tool = findTool(tools, 'edit_file')
-	const parsed = tool.inputSchema.parse(params)
+	const parsed = z.parse(tool.inputSchema, params)
 	return tool.execute(parsed, context)
 }
 
@@ -436,7 +437,7 @@ describe('note_neighborhood path resolution', () => {
 		const tool = findTool(createAITools(app), 'note_neighborhood')
 
 		const result = await tool.execute(
-			tool.inputSchema.parse({ note: 'Shared', depth: 1 }),
+			z.parse(tool.inputSchema, { note: 'Shared', depth: 1 }),
 			makeContext(makeSession(fragment)),
 		)
 
@@ -531,7 +532,7 @@ describe('bash tool UTF-8 handling', () => {
 		const session = makeSession()
 
 		const result = await tool.execute(
-			tool.inputSchema.parse({
+			z.parse(tool.inputSchema, {
 				script:
 					'cat /vault/notes/source.md > /vault/notes/copy.md && cat /vault/notes/copy.md',
 			}),
@@ -552,18 +553,18 @@ describe('bash tool UTF-8 handling', () => {
 		const session = makeSession()
 
 		const result = await tool.execute(
-			tool.inputSchema.parse({ script: 'cat /vault/notes/large.md' }),
+			z.parse(tool.inputSchema, { script: 'cat /vault/notes/large.md' }),
 			makeContext(session),
 		)
 
 		expect(result.result).toEqual(expect.stringContaining('too long'))
 		const outputPath = String(result.result).match(
-			/\/tmp\/bash-output-[^\s]+\.txt/,
+			/\/tmp\/bash_[^\s]+\.txt/,
 		)?.[0]
 		expect(outputPath).toBeDefined()
 
 		const readBack = await tool.execute(
-			tool.inputSchema.parse({ script: `wc -c ${outputPath}` }),
+			z.parse(tool.inputSchema, { script: `wc -c ${outputPath}` }),
 			makeContext(session),
 		)
 		expect(readBack.result).toEqual(

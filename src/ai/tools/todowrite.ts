@@ -1,10 +1,10 @@
-import { z } from 'zod'
+import { z } from 'zod/mini'
 import { findLatestTodos } from '~/ai/chat/domain'
 import { chatTodoItemSchema, type ChatTodoItem } from '~/ai/chat/types'
 import type { AISession } from '~/ai/core/types'
 
 export const todoWriteInputSchema = z.object({
-	todos: z.array(chatTodoItemSchema).optional(),
+	todos: z.optional(z.array(chatTodoItemSchema)),
 })
 
 export type TodoWriteInput = z.infer<typeof todoWriteInputSchema>

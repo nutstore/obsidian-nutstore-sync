@@ -9,7 +9,7 @@ import type {
 	ToolModelMessage,
 	UserModelMessage,
 } from 'ai'
-import { z } from 'zod'
+import { z } from 'zod/mini'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
 
 export type {
@@ -188,9 +188,9 @@ export const chatTodoStatusSchema = z.enum([
 export const chatTodoPrioritySchema = z.enum(['high', 'medium', 'low'])
 
 export const chatTodoItemSchema = z.object({
-	content: z.string().trim().min(1),
+	content: z.string().check(z.trim(), z.minLength(1)),
 	status: chatTodoStatusSchema,
-	priority: chatTodoPrioritySchema.default('medium'),
+	priority: z._default(chatTodoPrioritySchema, 'medium'),
 })
 
 export type ChatTodoStatus = z.infer<typeof chatTodoStatusSchema>

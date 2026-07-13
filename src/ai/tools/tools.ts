@@ -2,7 +2,7 @@ import { idAgent } from 'id-agent'
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import { App, normalizePath, TFile } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
-import { z } from 'zod'
+import { z } from 'zod/mini'
 import { getActiveFragment } from '~/ai/chat/domain'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
 import type {
@@ -31,8 +31,8 @@ const textValue = (field: string) =>
 	})
 
 const booleanValue = (field: string) =>
-	z.preprocess(
-		(value) => {
+	z.pipe(
+		z.transform((value: unknown) => {
 			if (typeof value === 'boolean') {
 				return value
 			}
@@ -46,13 +46,13 @@ const booleanValue = (field: string) =>
 				}
 			}
 			return value
-		},
+		}),
 		z.boolean(i18n.t('chatbox.errors.toolFieldRequired', { field })),
 	)
 
 const integerValue = (field: string) =>
-	z.preprocess(
-		(value) => {
+	z.pipe(
+		z.transform((value: unknown) => {
 			if (typeof value === 'number') {
 				return value
 			}
@@ -63,8 +63,8 @@ const integerValue = (field: string) =>
 				}
 			}
 			return value
-		},
-		z.number().int(i18n.t('chatbox.errors.toolFieldRequired', { field })),
+		}),
+		z.int(i18n.t('chatbox.errors.toolFieldRequired', { field })),
 	)
 
 function isAllowedBashCwd(pathValue: string) {
@@ -201,12 +201,14 @@ export function createAITools(
 			inputSchema: z.object({
 				note: z
 					.string()
-					.trim()
-					.min(
-						1,
-						i18n.t('chatbox.errors.toolFieldRequired', { field: 'note' }),
+					.check(
+						z.trim(),
+						z.minLength(
+							1,
+							i18n.t('chatbox.errors.toolFieldRequired', { field: 'note' }),
+						),
 					),
-				depth: integerValue('depth').default(1),
+				depth: z._default(integerValue('depth'), 1),
 			}),
 			execute: async (params, context): Promise<ToolExecutionResult> => {
 				const root = resolveNotePath(
@@ -230,10 +232,12 @@ export function createAITools(
 			inputSchema: z.object({
 				path: z
 					.string()
-					.trim()
-					.min(
-						1,
-						i18n.t('chatbox.errors.toolFieldRequired', { field: 'path' }),
+					.check(
+						z.trim(),
+						z.minLength(
+							1,
+							i18n.t('chatbox.errors.toolFieldRequired', { field: 'path' }),
+						),
 					),
 				oldText: z.string(),
 				newText: textValue('newText'),
@@ -300,9 +304,9 @@ export function createAITools(
 				"Execute bash against a virtual filesystem where the Obsidian vault is mounted at /vault. Use standard shell commands like ls, cat, rg, mkdir, mv, cp, and rm. Treat /vault as the user's personal knowledge base — only write there for content the user intends to keep; use /tmp for intermediate or scratch work.",
 			inputSchema: z.object({
 				script: textValue('script'),
-				cwd: z.string().default(VAULT_MOUNT_POINT),
-				stdin: z.string().optional(),
-				rawScript: booleanValue('rawScript').default(false),
+				cwd: z._default(z.string(), VAULT_MOUNT_POINT),
+				stdin: z.optional(z.string()),
+				rawScript: z._default(booleanValue('rawScript'), false),
 			}),
 			execute: async (params, context): Promise<ToolExecutionResult> => {
 				const cwd = params.cwd || VAULT_MOUNT_POINT
@@ -347,12 +351,14 @@ export function createAITools(
 			inputSchema: z.object({
 				task: z
 					.string()
-					.trim()
-					.min(
-						1,
-						i18n.t('chatbox.errors.toolFieldRequired', { field: 'task' }),
+					.check(
+						z.trim(),
+						z.minLength(
+							1,
+							i18n.t('chatbox.errors.toolFieldRequired', { field: 'task' }),
+						),
 					),
-				label: z.string().trim().optional(),
+				label: z.optional(z.string().check(z.trim())),
 			}),
 			execute: async (params, context): Promise<ToolExecutionResult> => {
 				return {

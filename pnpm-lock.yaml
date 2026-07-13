@@ -14,15 +14,9 @@ importers:
       '@ai-sdk/google':
         specifier: ^4.0.2
         version: 4.0.2(zod@4.3.6)
-      '@ai-sdk/openai':
-        specifier: ^4.0.2
-        version: 4.0.2(zod@4.3.6)
       '@ai-sdk/openai-compatible':
         specifier: ^3.0.1
         version: 3.0.1(zod@4.3.6)
-      '@ai-sdk/xai':
-        specifier: ^4.0.2
-        version: 4.0.2(zod@4.3.6)
       '@codemirror/state':
         specifier: 6.5.2
         version: 6.5.2
@@ -293,12 +287,6 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai@4.0.2':
-    resolution: {integrity: sha512-/oxY+VpWgTrmqCOho1AD/jF5ZaHizkAEsrEVBhIHEzxSHpbJI0Ws8VSpfJPPBeTF7Ebz6eaNGOvKm2RzN5EcdQ==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/provider-utils@5.0.1':
     resolution: {integrity: sha512-p9Ra+dN4jjHrssXvklNf4nFvWbj1KePMfUOs7nue0NuoIMbYFBULhX4Vu0+6DWLnw3+UsLL9+RCKLtzzU43Qpg==}
     engines: {node: '>=22'}
@@ -308,12 +296,6 @@ packages:
   '@ai-sdk/provider@4.0.0':
     resolution: {integrity: sha512-fr9Gs89prDWiuox/T+kCA+i2cJkHpxU5S+tr4megjTzRC27ZsvFhwjU/+XrqqMbvBUlfmXxTOYWy8ng45dsjIg==}
     engines: {node: '>=22'}
-
-  '@ai-sdk/xai@4.0.2':
-    resolution: {integrity: sha512-TuQfxzuRs434IOASKvsEtlXpphjeBy5+2H8SOwS4wT3RgMoXjXJMy0oIfUwTDb0m0xhLRwqbKHNcBHkpPVXBGg==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
 
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
@@ -4838,12 +4820,6 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
       zod: 4.3.6
 
-  '@ai-sdk/openai@4.0.2(zod@4.3.6)':
-    dependencies:
-      '@ai-sdk/provider': 4.0.0
-      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
-      zod: 4.3.6
-
   '@ai-sdk/provider-utils@5.0.1(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 4.0.0
@@ -4855,13 +4831,6 @@ snapshots:
   '@ai-sdk/provider@4.0.0':
     dependencies:
       json-schema: 0.4.0
-
-  '@ai-sdk/xai@4.0.2(zod@4.3.6)':
-    dependencies:
-      '@ai-sdk/openai-compatible': 3.0.1(zod@4.3.6)
-      '@ai-sdk/provider': 4.0.0
-      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
-      zod: 4.3.6
 
   '@ampproject/remapping@2.3.0':
     dependencies:

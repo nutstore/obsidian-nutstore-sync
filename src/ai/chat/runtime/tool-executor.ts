@@ -19,6 +19,7 @@ import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import { InMemoryFs } from 'just-bash/browser'
+import { z } from 'zod/mini'
 import type NutstorePlugin from '../../..'
 
 export interface ResolvedToolResult {
@@ -190,7 +191,7 @@ export class ToolExecutor {
 				)
 			}
 			const parsedArgs = JSON.parse(args) as Record<string, unknown>
-			const params = tool.inputSchema.parse(parsedArgs)
+			const params = z.parse(tool.inputSchema, parsedArgs)
 			result = await tool.execute(params, context)
 		} catch (error) {
 			logger.error(error)
