@@ -29,4 +29,35 @@ describe('projectTimelineMessageGroups', () => {
 		expect(groups[0]?.message.id).toBe('m1')
 		expect(groups[0]?.blocks).toEqual([])
 	})
+
+	it('projects system notification data parts as visible timeline blocks', () => {
+		const groups = projectTimelineMessageGroups([
+			{
+				id: 'notification',
+				role: 'user',
+				parts: [
+					{
+						type: 'data-system-notification',
+						data: {
+							kind: 'task-result-ready',
+							taskId: 'explorer-one',
+							resultPath: '/tmp/session/tasks/explorer-one.txt',
+						},
+					},
+				],
+			},
+		])
+
+		expect(groups).toHaveLength(1)
+		expect(groups[0]?.blocks).toEqual([
+			{
+				kind: 'system-notification',
+				notification: {
+					kind: 'task-result-ready',
+					taskId: 'explorer-one',
+					resultPath: '/tmp/session/tasks/explorer-one.txt',
+				},
+			},
+		])
+	})
 })

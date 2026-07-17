@@ -6,6 +6,7 @@ import { formatTime, formatToolResult, formatUsage } from '../utils'
 import { ContentBlock } from './ContentBlock'
 import { ContextArea } from './ContextArea'
 import { CopyButton } from './CopyButton'
+import { SystemNotificationBlock } from './SystemNotificationBlock'
 import { ToolCallBlock } from './ToolCallBlock'
 import { TodoListBlock } from './TodoListBlock'
 
@@ -76,6 +77,12 @@ function copyTextForToolCallBlock(
 	return lines.join('\n')
 }
 
+function copyTextForSystemNotificationBlock(
+	block: Extract<ChatDisplayBlock, { kind: 'system-notification' }>,
+) {
+	return `${t('chatbox.ui.labels.systemNotification')}:\n\n${fencedCode('json', JSON.stringify(block.notification, null, 2))}`
+}
+
 function MessageDisplayBlock(props: {
 	block: ChatDisplayBlock
 	renderMarkdown?: ChatboxProps['renderMarkdown']
@@ -85,13 +92,23 @@ function MessageDisplayBlock(props: {
 		props.block.kind === 'content' ? props.block : undefined
 	const toolBlock = () =>
 		props.block.kind === 'tool-call' ? props.block : undefined
+	const systemNotificationBlock = () =>
+		props.block.kind === 'system-notification' ? props.block : undefined
 
 	return (
 		<Show
 			when={contentBlock()}
 			keyed
 			fallback={
-				<Show when={toolBlock()} keyed>
+				<Show
+					when={toolBlock()}
+					keyed
+					fallback={
+						<Show when={systemNotificationBlock()} keyed>
+							{(block) => <SystemNotificationBlock block={block} />}
+						</Show>
+					}
+				>
 					{(block) => (
 						<Show
 							when={block.toolCall.toolName === 'todowrite' && block.todos}
@@ -129,6 +146,11 @@ export function MessageCard(props: {
 			props.item.message.metadata?.llm?.usage?.outputTokens,
 			props.item.message.metadata?.llm?.usage?.totalTokens,
 		)
+	const isSystemNotification = () =>
+		props.item.displayBlocks.length > 0 &&
+		props.item.displayBlocks.every(
+			(block) => block.kind === 'system-notification',
+		)
 
 	const roleLabel = () => {
 		if (props.item.message.role === 'assistant') {
@@ -151,11 +173,13 @@ export function MessageCard(props: {
 
 	const getText = () => {
 		return props.item.displayBlocks
-			.map((block) =>
-				block.kind === 'content'
-					? copyTextForContentBlock(block)
-					: copyTextForToolCallBlock(block),
-			)
+			.map((block) => {
+				if (block.kind === 'content') return copyTextForContentBlock(block)
+				if (block.kind === 'tool-call') return copyTextForToolCallBlock(block)
+				if (block.kind === 'system-notification')
+					return copyTextForSystemNotificationBlock(block)
+				return ''
+			})
 			.filter(Boolean)
 			.join('\n\n')
 	}
@@ -164,7 +188,7 @@ export function MessageCard(props: {
 		<div
 			class={`${props.item.message.metadata?.status === 'error' ? 'text-[var(--text-error)]' : ''}`}
 		>
-			<Show when={props.item.showHeader}>
+			<Show when={props.item.showHeader && !isSystemNotification()}>
 				<div class="mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
 					<div class="flex items-center gap-1 font-medium text-[var(--text-normal)]">
 						<span
@@ -205,8 +229,9 @@ export function MessageCard(props: {
 			</Show>
 			<Show
 				when={
-					props.item.message.role === 'assistant' ||
-					props.item.message.role === 'user'
+					!isSystemNotification() &&
+					(props.item.message.role === 'assistant' ||
+						props.item.message.role === 'user')
 				}
 			>
 				<div class="mt-3 flex items-center justify-between gap-2 px-1">

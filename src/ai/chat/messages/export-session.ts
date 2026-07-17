@@ -290,6 +290,9 @@ function getBlockHeadingLabel(
 	record: AppUIMessage,
 	block: ChatDisplayBlock,
 ) {
+	if (block.kind === 'system-notification') {
+		return `🔔 ${i18n.t('chatbox.exportRole.systemNotification')}`
+	}
 	if (record.role === 'user') {
 		return `👤 ${i18n.t('chatbox.exportRole.user')}`
 	}
@@ -314,6 +317,9 @@ async function buildDisplayBlockMarkdown(
 			assetsDirPath,
 			assetsMarkdownPrefix,
 		)
+	}
+	if (block.kind === 'system-notification') {
+		return ['```json', JSON.stringify(block.notification, null, 2), '```']
 	}
 	const lines = [
 		`- ${i18n.t('chatbox.exportMeta.toolName')}: \`${block.toolCall.toolName}\``,

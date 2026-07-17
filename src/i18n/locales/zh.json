@@ -523,7 +523,8 @@
 		},
 		"exportRole": {
 			"user": "用户",
-			"tool": "工具"
+			"tool": "工具",
+			"systemNotification": "系统通知"
 		},
 		"exportFrontmatter": {
 			"title": "标题",
@@ -579,7 +580,8 @@
 				"result": "结果",
 				"queuedSubmissions": "排队内容",
 				"contextArea": "上下文",
-				"todoList": "待办列表"
+				"todoList": "待办列表",
+				"systemNotification": "系统通知"
 			},
 			"states": {
 				"empty": "开始发送一条消息",

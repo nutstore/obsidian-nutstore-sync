@@ -37,7 +37,7 @@ interface ContextCheckpointData {
 	preservedTurnCount?: number
 }
 
-interface SystemNotificationData {
+export interface SystemNotificationData {
 	kind: 'task-result-ready'
 	taskId: string
 	resultPath: string
@@ -79,9 +79,15 @@ export interface ChatDisplayToolCallBlock {
 	todos?: ChatTodoItem[]
 }
 
+export interface ChatDisplaySystemNotificationBlock {
+	kind: 'system-notification'
+	notification: SystemNotificationData
+}
+
 export type ChatDisplayBlock =
 	| ChatDisplayContentBlock
 	| ChatDisplayToolCallBlock
+	| ChatDisplaySystemNotificationBlock
 
 export interface ReversibleCompressedContent {
 	compress: 'deflate'

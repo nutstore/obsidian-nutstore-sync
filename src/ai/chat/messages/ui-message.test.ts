@@ -48,4 +48,35 @@ describe('UIMessage model round-trip', () => {
 			},
 		])
 	})
+
+	it('preserves structured system notifications in model text', async () => {
+		expect(
+			await uiMessagesToModelMessages([
+				{
+					id: 'notification',
+					role: 'user',
+					parts: [
+						{
+							type: 'data-system-notification',
+							data: {
+								kind: 'task-result-ready',
+								taskId: 'explorer-one',
+								resultPath: '/tmp/session/tasks/explorer-one.txt',
+							},
+						},
+					],
+				},
+			]),
+		).toEqual([
+			{
+				role: 'user',
+				content: [
+					{
+						type: 'text',
+						text: '<SystemNotification>{"kind":"task-result-ready","taskId":"explorer-one","resultPath":"/tmp/session/tasks/explorer-one.txt"}</SystemNotification>',
+					},
+				],
+			},
+		])
+	})
 })

@@ -523,7 +523,8 @@
 		},
 		"exportRole": {
 			"user": "User",
-			"tool": "Tool"
+			"tool": "Tool",
+			"systemNotification": "System notification"
 		},
 		"exportFrontmatter": {
 			"title": "title",
@@ -579,7 +580,8 @@
 				"result": "Result",
 				"queuedSubmissions": "Queued Submissions",
 				"contextArea": "Context",
-				"todoList": "Todo List"
+				"todoList": "Todo List",
+				"systemNotification": "System Notification"
 			},
 			"states": {
 				"empty": "Start by sending a message",

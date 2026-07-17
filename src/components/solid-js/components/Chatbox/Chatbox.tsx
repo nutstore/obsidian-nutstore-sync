@@ -197,11 +197,13 @@ function Chatbox(props: ChatboxProps) {
 			.filter((part) => part.type === 'text')
 			.reduce((total, part) => total + part.text.length, 0)
 		const blockFingerprint = item.displayBlocks
-			.map((block) =>
-				block.kind === 'content'
-					? `c:${block.parts.length}`
-					: `tc:${block.toolCall.toolCallId}:${block.toolCall.state}`,
-			)
+			.map((block) => {
+				if (block.kind === 'content') return `c:${block.parts.length}`
+				if (block.kind === 'tool-call') {
+					return `tc:${block.toolCall.toolCallId}:${block.toolCall.state}`
+				}
+				return `sn:${JSON.stringify(block.notification)}`
+			})
 			.join('|')
 		return `${item.message.id}:${textLength}:${blockFingerprint}:${item.message.role}`
 	}

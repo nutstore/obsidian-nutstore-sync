@@ -32,6 +32,14 @@ function buildMessageDisplayBlocks(message: AppUIMessage) {
 			content.push(part.data.file)
 			continue
 		}
+		if (part.type === 'data-system-notification') {
+			flush()
+			blocks.push({
+				kind: 'system-notification',
+				notification: part.data,
+			})
+			continue
+		}
 		if (part.type === 'dynamic-tool') {
 			flush()
 			const block: Extract<ChatDisplayBlock, { kind: 'tool-call' }> = {
