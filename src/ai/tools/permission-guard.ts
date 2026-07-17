@@ -2,7 +2,6 @@ import type { App } from 'obsidian'
 import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import AIPermissionModal from '~/components/AIPermissionModal'
 import i18n from '~/i18n'
-import type { NutstoreSettings } from '~/settings'
 import type {
 	AIDualPathFileOperation,
 	AISinglePathFileOperation,
@@ -27,11 +26,9 @@ export interface FSDualPathPermissionRequest {
 	sessionTitle?: string
 }
 
-export type FSPermissionRequest =
+export type PermissionRequest =
 	| FSSinglePathPermissionRequest
 	| FSDualPathPermissionRequest
-
-export type PermissionRequest = FSPermissionRequest
 export type PermissionGuard = (request: PermissionRequest) => Promise<void>
 
 interface RuntimeAutoApproveOperationStore {
@@ -40,18 +37,18 @@ interface RuntimeAutoApproveOperationStore {
 }
 
 function isDualPathRequest(
-	request: FSPermissionRequest,
+	request: PermissionRequest,
 ): request is FSDualPathPermissionRequest {
 	return request.fs.kind === 'copy' || request.fs.kind === 'move'
 }
 
 export function getPermissionRequestOperationSignature(
-	request: FSPermissionRequest,
+	request: PermissionRequest,
 ) {
 	return request.fs.kind
 }
 
-function formatDeniedSummary(request: FSPermissionRequest) {
+function formatDeniedSummary(request: PermissionRequest) {
 	const { kind } = request.fs
 	if (isDualPathRequest(request)) {
 		return `${kind} from ${request.fs.src} to ${request.fs.dest}`
@@ -61,17 +58,10 @@ function formatDeniedSummary(request: FSPermissionRequest) {
 
 export function createPermissionGuard(
 	app: App,
-	getSettings: () => NutstoreSettings,
 	runtimeAutoApproveOperationStore?: RuntimeAutoApproveOperationStore,
 	context?: { sessionTitle?: string; modalMountTarget?: ChatModalMountTarget },
 ): PermissionGuard {
 	return async (request: PermissionRequest) => {
-		const settings = getSettings()
-
-		if (settings.ai.yolo) {
-			return
-		}
-
 		const signature = getPermissionRequestOperationSignature(request)
 		if (runtimeAutoApproveOperationStore?.has(signature)) {
 			return
@@ -98,4 +88,18 @@ export function createPermissionGuard(
 			runtimeAutoApproveOperationStore?.add(signature)
 		}
 	}
+}
+
+export function createReadonlyPermissionGuard(): PermissionGuard {
+	return async (request: PermissionRequest) => {
+		throw new Error(
+			i18n.t('aiPermission.readonly', {
+				summary: formatDeniedSummary(request),
+			}),
+		)
+	}
+}
+
+export function createFullAccessPermissionGuard(): PermissionGuard {
+	return async () => {}
 }

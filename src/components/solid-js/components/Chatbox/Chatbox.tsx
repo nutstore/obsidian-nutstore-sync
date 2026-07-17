@@ -1,13 +1,12 @@
 import { Notice } from 'obsidian'
 import {
 	For,
-	Match,
 	Show,
-	Switch,
 	createEffect,
 	createSignal,
 	on,
 	onCleanup,
+	onMount,
 } from 'solid-js'
 import {
 	createFileContextItem,
@@ -16,22 +15,17 @@ import {
 } from '~/ai/chat/context/user-context'
 import { resolveUsedContextTokens } from '~/ai/chat/domain'
 import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/ai/chat/ui/modal-mount'
-import type {
-	ChatTimelineFragmentItem,
-	ChatTimelineMessageItem,
-	ChatboxProps,
-} from '~/ai/chat/ui/types'
+import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
 import { t } from '../../i18n'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { ContextRing } from './components/ContextRing'
-import { FragmentDivider } from './components/FragmentDivider'
 import { MessageCard } from './components/MessageCard'
 import { PaneResizer } from './components/PaneResizer'
 import { PendingList } from './components/PendingList'
 import { RunStateCard } from './components/RunStateCard'
 import { SessionHistorySheet } from './components/SessionHistorySheet'
-import { TasksPanel } from './components/TasksPanel'
+import { SubagentTimelineDialog } from './components/SubagentTimelineDialog'
 import { decideDropRoute, hasDragItems } from './drop-utils'
 
 const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.input-height'
@@ -75,7 +69,7 @@ function Chatbox(props: ChatboxProps) {
 	const [input, setInput] = createSignal('')
 	const [isComposing, setIsComposing] = createSignal(false)
 	const [historyOpen, setHistoryOpen] = createSignal(false)
-	const [tasksOpen, setTasksOpen] = createSignal(false)
+	const [selectedAgentId, setSelectedAgentId] = createSignal<string>()
 	const [modelPickerOpen, setModelPickerOpen] = createSignal(false)
 	const [sessionPendingDeleteId, setSessionPendingDeleteId] =
 		createSignal<string>()
@@ -85,8 +79,6 @@ function Chatbox(props: ChatboxProps) {
 		createSignal<ChatTimelineMessageItem>()
 	const [pendingRecallMessage, setPendingRecallMessage] =
 		createSignal<ChatTimelineMessageItem>()
-	const [pendingNewFragmentConfirm, setPendingNewFragmentConfirm] =
-		createSignal(false)
 	const [pendingCompressContextConfirm, setPendingCompressContextConfirm] =
 		createSignal(false)
 	const [recallArmedMode, setRecallArmedMode] = createSignal<RecallArmedMode>()
@@ -160,13 +152,6 @@ function Chatbox(props: ChatboxProps) {
 		inputTextareaEl?.blur()
 	}
 
-	function openNewFragmentConfirm() {
-		dismissInputFocus()
-		getViewWindow().requestAnimationFrame(() => {
-			setPendingNewFragmentConfirm(true)
-		})
-	}
-
 	function openCompressContextConfirm() {
 		dismissInputFocus()
 		getViewWindow().requestAnimationFrame(() => {
@@ -174,12 +159,6 @@ function Chatbox(props: ChatboxProps) {
 		})
 	}
 
-	const hasTasks = () =>
-		props.currentSessionTasks.length + props.otherSessionTasks.length > 0
-	const runningTaskCount = () =>
-		props.currentSessionTasks.filter((task) => task.status === 'running')
-			.length +
-		props.otherSessionTasks.filter((task) => task.status === 'running').length
 	const isBusy = () => props.runState !== 'idle'
 
 	const contextUsedTokens = () => resolveUsedContextTokens(props.usage)
@@ -212,32 +191,19 @@ function Chatbox(props: ChatboxProps) {
 	}
 
 	const lastMessageFingerprint = () => {
-		for (let index = props.timeline.length - 1; index >= 0; index -= 1) {
-			const item = props.timeline[index]
-			if (item?.kind !== 'message') {
-				continue
-			}
-			const rawContent = item.message.message.content
-			const contentArray = Array.isArray(rawContent)
-				? (rawContent as Array<{ type: string; text?: string }>)
-				: []
-			const textLength = contentArray
-				.filter((part) => part.type === 'text')
-				.reduce((total, part) => total + (part.text?.length ?? 0), 0)
-			const blockFingerprint = item.displayBlocks
-				.map((block) => {
-					if (block.kind === 'content') {
-						return `c:${block.parts.length}`
-					}
-					if (block.kind === 'tool-call') {
-						return `tc:${block.toolCall.toolCallId}:${block.toolMessage?.id ?? 'pending'}`
-					}
-					return `tr:${block.toolMessage.id}`
-				})
-				.join('|')
-			return `${item.message.id}:${textLength}:${blockFingerprint}:${item.message.message.role}`
-		}
-		return 'empty'
+		const item = props.timeline.at(-1)
+		if (!item) return 'empty'
+		const textLength = item.message.parts
+			.filter((part) => part.type === 'text')
+			.reduce((total, part) => total + part.text.length, 0)
+		const blockFingerprint = item.displayBlocks
+			.map((block) =>
+				block.kind === 'content'
+					? `c:${block.parts.length}`
+					: `tc:${block.toolCall.toolCallId}:${block.toolCall.state}`,
+			)
+			.join('|')
+		return `${item.message.id}:${textLength}:${blockFingerprint}:${item.message.role}`
 	}
 
 	const selectedProvider = () =>
@@ -251,7 +217,12 @@ function Chatbox(props: ChatboxProps) {
 		contained:
 			chatboxContainerWidth() >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH &&
 			!!chatboxRootEl,
+		hostEl: chatboxRootEl,
 	})
+	const selectedAgent = () => {
+		const agentId = selectedAgentId()
+		return agentId ? props.agentsById[agentId] : undefined
+	}
 	const modelPickerLabel = () => {
 		const provider = selectedProvider()
 		const selectedModel = provider?.models.find(
@@ -473,13 +444,16 @@ function Chatbox(props: ChatboxProps) {
 		}
 	}
 
+	onMount(() => {
+		props.onModalHostChange?.(chatboxRootEl)
+		onCleanup(() => props.onModalHostChange?.(undefined))
+	})
+
 	createEffect(
 		on(
 			() => [
 				props.activeSessionId,
 				props.timeline.length,
-				props.currentSessionTasks.length,
-				props.otherSessionTasks.length,
 				props.pending.length,
 				props.runState,
 			],
@@ -522,9 +496,8 @@ function Chatbox(props: ChatboxProps) {
 	})
 
 	createEffect(() => {
-		if (!hasTasks() && tasksOpen()) {
-			setTasksOpen(false)
-		}
+		const id = selectedAgentId()
+		if (id && !props.agentsById[id]) setSelectedAgentId(undefined)
 	})
 
 	createEffect(
@@ -688,30 +661,21 @@ function Chatbox(props: ChatboxProps) {
 
 	function requestDeleteMessage(messageId: string) {
 		if (!props.onDeleteMessage) return
-		const item = props.timeline.find(
-			(i): i is ChatTimelineMessageItem =>
-				i.kind === 'message' && i.message.id === messageId,
-		)
+		const item = props.timeline.find((item) => item.message.id === messageId)
 		if (!item) return
 		setPendingDeleteMessage(item)
 	}
 
 	function requestRegenerateMessage(messageId: string) {
 		if (!props.onRegenerateMessage) return
-		const item = props.timeline.find(
-			(i): i is ChatTimelineMessageItem =>
-				i.kind === 'message' && i.message.id === messageId,
-		)
+		const item = props.timeline.find((item) => item.message.id === messageId)
 		if (!item) return
 		setPendingRegenerateMessage(item)
 	}
 
 	function requestRecallMessage(messageId: string) {
 		if (!props.onRecallMessage) return
-		const item = props.timeline.find(
-			(i): i is ChatTimelineMessageItem =>
-				i.kind === 'message' && i.message.id === messageId,
-		)
+		const item = props.timeline.find((item) => item.message.id === messageId)
 		if (!item) return
 		setRecallArmedMode(undefined)
 		setPendingRecallMessage(item)
@@ -727,14 +691,9 @@ function Chatbox(props: ChatboxProps) {
 			props.onUpdateInputDraft(recalled.text)
 			return
 		}
-		const rawContent = item.message.message.content
-		const fallbackText = (
-			Array.isArray(rawContent)
-				? (rawContent as Array<{ type: string; text?: string }>)
-				: []
-		)
+		const fallbackText = item.message.parts
 			.filter((p) => p.type === 'text')
-			.map((p) => p.text ?? '')
+			.map((p) => p.text)
 			.join('\n')
 		setInput(fallbackText)
 		props.onUpdateInputDraft(fallbackText)
@@ -762,11 +721,6 @@ function Chatbox(props: ChatboxProps) {
 		props.onDeleteMessage?.(item.message.id)
 	}
 
-	function confirmNewFragment() {
-		setPendingNewFragmentConfirm(false)
-		props.onNewFragment()
-	}
-
 	async function confirmCompressContext() {
 		setPendingCompressContextConfirm(false)
 		await props.onCompressContext()
@@ -775,18 +729,19 @@ function Chatbox(props: ChatboxProps) {
 	const deleteMessageConfirmText = () => {
 		const item = pendingDeleteMessage()
 		if (!item) return ''
-		switch (item.message.message.role) {
+		switch (item.message.role) {
 			case 'user':
 				return t('chatbox.ui.dialogs.deleteMessage.userConfirm')
-			case 'tool':
-				return t('chatbox.ui.dialogs.deleteMessage.toolConfirm')
 			default:
 				return t('chatbox.ui.dialogs.deleteMessage.assistantConfirm')
 		}
 	}
 
 	const deleteMessageHasReversibleOps = () =>
-		Boolean(pendingDeleteMessage()?.message.reversibleOps?.length)
+		Boolean(
+			pendingDeleteMessage() &&
+			props.onRecallHasReversibleOps?.(pendingDeleteMessage()!.message.id),
+		)
 
 	const recallHasReversibleOps = () => {
 		const item = pendingRecallMessage()
@@ -794,7 +749,7 @@ function Chatbox(props: ChatboxProps) {
 		if (props.onRecallHasReversibleOps) {
 			return props.onRecallHasReversibleOps(item.message.id)
 		}
-		return Boolean(item.message.reversibleOps?.length)
+		return false
 	}
 
 	async function confirmRecallAndRestoreMessage() {
@@ -870,15 +825,6 @@ function Chatbox(props: ChatboxProps) {
 					<div class="min-w-0 flex-1 truncate text-sm font-semibold">
 						{props.title || t('chatbox.newChat')}
 					</div>
-					<Show when={hasTasks()}>
-						<button
-							class="mod-cta"
-							type="button"
-							onClick={() => setTasksOpen((value) => !value)}
-						>
-							{t('chatbox.ui.labels.tasks')} ({runningTaskCount()})
-						</button>
-					</Show>
 					<div class="relative" ref={modelPickerEl}>
 						<button
 							class="max-w-56 min-w-34 text-sm"
@@ -955,22 +901,14 @@ function Chatbox(props: ChatboxProps) {
 							<div class="flex flex-col gap-3">
 								<For each={props.timeline}>
 									{(item) => (
-										<Switch>
-											<Match when={item.kind === 'fragment'}>
-												<FragmentDivider
-													item={item as ChatTimelineFragmentItem}
-												/>
-											</Match>
-											<Match when={item.kind === 'message'}>
-												<MessageCard
-													item={item as ChatTimelineMessageItem}
-													renderMarkdown={props.renderMarkdown}
-													onDeleteMessage={requestDeleteMessage}
-													onRegenerateMessage={requestRegenerateMessage}
-													onRecallMessage={requestRecallMessage}
-												/>
-											</Match>
-										</Switch>
+										<MessageCard
+											item={item}
+											renderMarkdown={props.renderMarkdown}
+											onDeleteMessage={requestDeleteMessage}
+											onRegenerateMessage={requestRegenerateMessage}
+											onRecallMessage={requestRecallMessage}
+											onOpenSubagent={setSelectedAgentId}
+										/>
 									)}
 								</For>
 								<RunStateCard
@@ -1061,16 +999,6 @@ function Chatbox(props: ChatboxProps) {
 								<button
 									class="inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
 									type="button"
-									title={t('chatbox.ui.actions.newFragment')}
-									aria-label={t('chatbox.ui.actions.newFragment')}
-									disabled={!props.canCreateFragment}
-									onClick={openNewFragmentConfirm}
-								>
-									<span class="i-lucide-between-horizontal-start size-4 shrink-0" />
-								</button>
-								<button
-									class="inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
-									type="button"
 									title={t('chatbox.ui.actions.compressContext')}
 									aria-label={t('chatbox.ui.actions.compressContext')}
 									disabled={!props.canCompress}
@@ -1107,16 +1035,6 @@ function Chatbox(props: ChatboxProps) {
 				</div>
 			</div>
 
-			{/* Tasks sidebar */}
-			<Show when={tasksOpen()}>
-				<TasksPanel
-					currentSessionTasks={props.currentSessionTasks}
-					otherSessionTasks={props.otherSessionTasks}
-					onCancelTask={props.onCancelTask}
-					onClose={() => setTasksOpen(false)}
-				/>
-			</Show>
-
 			{/* History bottom sheet */}
 			<SessionHistorySheet
 				open={historyOpen()}
@@ -1124,19 +1042,29 @@ function Chatbox(props: ChatboxProps) {
 				activeSessionId={props.activeSessionId}
 				activeSessionIsRunning={
 					props.runState !== 'idle' ||
-					props.currentSessionTasks.some(
-						(task) => task.status === 'running' || task.status === 'queued',
+					Object.values(props.agentsById).some(
+						(agent) => agent.status === 'running' || agent.status === 'queued',
 					)
 				}
-				otherSessionTasks={props.otherSessionTasks}
 				otherBusySessionIds={props.otherBusySessionIds}
 				mountEl={dialogMountTarget().mountEl}
 				contained={dialogMountTarget().contained}
 				onClose={() => setHistoryOpen(false)}
 				onNewSession={props.onNewSession}
 				onSwitchSession={props.onSwitchSession}
-				onExportSession={(sessionId) => void props.onExportSession(sessionId)}
+				onExportSession={(sessionId) =>
+					void props.onExportSession(sessionId, dialogMountTarget())
+				}
 				onDelete={(sessionId) => setSessionPendingDeleteId(sessionId)}
+			/>
+
+			<SubagentTimelineDialog
+				agent={selectedAgent()}
+				mountEl={dialogMountTarget().mountEl}
+				contained={dialogMountTarget().contained}
+				renderMarkdown={props.renderMarkdown}
+				onSelectAgent={setSelectedAgentId}
+				onClose={() => setSelectedAgentId(undefined)}
 			/>
 
 			{/* Delete session dialog */}
@@ -1166,18 +1094,6 @@ function Chatbox(props: ChatboxProps) {
 					contained={dialogMountTarget().contained}
 					onCancel={() => setPendingDeleteMessage(undefined)}
 					onConfirm={confirmDeleteMessage}
-				/>
-			</Show>
-
-			<Show when={pendingNewFragmentConfirm()}>
-				<ConfirmDialog
-					title={t('chatbox.ui.dialogs.newFragment.title')}
-					message={t('chatbox.ui.dialogs.newFragment.message')}
-					confirmLabel={t('chatbox.ui.dialogs.newFragment.confirm')}
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => setPendingNewFragmentConfirm(false)}
-					onConfirm={confirmNewFragment}
 				/>
 			</Show>
 

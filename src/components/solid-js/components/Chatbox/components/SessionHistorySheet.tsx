@@ -9,7 +9,6 @@ export function SessionHistorySheet(props: {
 	sessions: ChatboxProps['sessionHistory']
 	activeSessionId: string | undefined
 	activeSessionIsRunning: boolean
-	otherSessionTasks: ChatboxProps['otherSessionTasks']
 	otherBusySessionIds: ChatboxProps['otherBusySessionIds']
 	mountEl: HTMLElement | undefined
 	contained?: boolean
@@ -25,16 +24,13 @@ export function SessionHistorySheet(props: {
 				? [props.activeSessionId]
 				: []),
 			...props.otherBusySessionIds,
-			...props.otherSessionTasks
-				.filter((t) => t.status === 'running' || t.status === 'queued')
-				.map((t) => t.sessionId),
 		])
 
 	return (
 		<Portal mount={props.mountEl ?? document.body}>
 			<div
 				class={`${props.contained ? 'absolute' : 'fixed'} inset-0 z-[200] bg-black/40 transition-opacity duration-300 ${props.open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-				onPointerDown={props.onClose}
+				onPointerDown={() => props.onClose()}
 			/>
 			<div
 				class={`${props.contained ? 'absolute' : 'fixed'} inset-x-0 bottom-0 z-[201] mx-auto max-w-xl rounded-t-4 border-t border-[var(--background-modifier-border)] bg-[var(--background-primary)] shadow-xl transition-transform duration-300 ease-out ${props.open ? 'translate-y-0' : 'translate-y-full'}`}

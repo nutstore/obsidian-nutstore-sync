@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
+import { InMemoryFs, MountableFs } from 'just-bash/browser'
+import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import type { PermissionRequest } from '~/ai/tools/permission-guard'
 import { createVaultBash, execVaultBash, VAULT_MOUNT_POINT } from './runtime'
-import {
-	listVaultPaths,
-	MountedVaultFs,
-	ObsidianVaultFs,
-	ReversibleOpRecorder,
-} from './fs'
+import { listVaultPaths, ObsidianVaultFs, ReversibleOpRecorder } from './fs'
 
 interface MockEntryFile {
 	type: 'file'
@@ -201,7 +198,18 @@ function createMockVault(
 		return folder
 	}
 
-	const root = () => buildFolder('', null)
+	const isHiddenPath = (path: string) =>
+		store
+			.normalize(path)
+			.split('/')
+			.some((segment) => segment.startsWith('.'))
+	const root = () => {
+		const folder = buildFolder('', null)
+		folder.children = folder.children.filter(
+			(child) => !isHiddenPath(child.path),
+		)
+		return folder
+	}
 
 	const vault = {
 		getRoot() {
@@ -209,6 +217,9 @@ function createMockVault(
 		},
 		getAbstractFileByPath(path: string) {
 			const normalized = store.normalize(path)
+			if (isHiddenPath(normalized)) {
+				return null
+			}
 			if (!normalized) {
 				return root()
 			}
@@ -282,11 +293,35 @@ function createMockVault(
 			async readBinary(path: string) {
 				return store.readBinary(path)
 			},
+			async read(path: string) {
+				return new TextDecoder().decode(store.readBinary(path))
+			},
+			async list(path: string) {
+				const children = store.listChildren(path)
+				return {
+					files: children.filter((child) => store.stat(child)?.type === 'file'),
+					folders: children.filter(
+						(child) => store.stat(child)?.type === 'folder',
+					),
+				}
+			},
 			async writeBinary(path: string, data: ArrayBuffer) {
 				store.writeBinary(path, data)
 			},
 			async write(path: string, data: string) {
 				store.writeBinary(path, new TextEncoder().encode(data).buffer)
+			},
+			async appendBinary(path: string, data: ArrayBuffer) {
+				const existing = store.exists(path)
+					? new Uint8Array(store.readBinary(path))
+					: new Uint8Array()
+				const appended = new Uint8Array(existing.length + data.byteLength)
+				appended.set(existing)
+				appended.set(new Uint8Array(data), existing.length)
+				store.writeBinary(path, appended.buffer)
+			},
+			async mkdir(path: string) {
+				store.ensureFolder(path)
 			},
 			async create(path: string, data: string) {
 				store.writeBinary(path, new TextEncoder().encode(data).buffer)
@@ -299,6 +334,12 @@ function createMockVault(
 			},
 			async rmdir(path: string, _recursive: boolean) {
 				store.removeRecursive(path)
+			},
+			async rename(fromPath: string, toPath: string) {
+				store.rename(fromPath, toPath)
+			},
+			async copy(fromPath: string, toPath: string) {
+				store.writeBinary(toPath, store.readBinary(fromPath))
 			},
 		},
 		configDir: '.obsidian',
@@ -317,6 +358,101 @@ function createApp(vault: Vault) {
 }
 
 describe('vault bash runtime', () => {
+	it('reads and writes hidden Vault Skills through the adapter mount', async () => {
+		const { vault, store } = createMockVault({
+			'.agents/skills/custom/SKILL.md': '# Custom',
+		})
+		const app = createApp(vault)
+
+		expect(vault.getAbstractFileByPath('.agents/skills/custom/SKILL.md')).toBe(
+			null,
+		)
+		const reads: string[] = []
+		const requests: PermissionRequest[] = []
+		const result = await execVaultBash(
+			app,
+			'cat /vault/.agents/skills/custom/SKILL.md && printf "new" > /vault/.agents/skills/new/SKILL.md',
+			{
+				onRead: (path) => reads.push(path),
+				permissionGuard: async (request) => {
+					requests.push(request)
+				},
+			},
+		)
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toBe('# Custom')
+		expect(
+			new TextDecoder().decode(store.readBinary('.agents/skills/new/SKILL.md')),
+		).toBe('new')
+		expect(reads).toEqual(['.agents/skills/custom/SKILL.md'])
+		expect(requests).toEqual([
+			{
+				type: 'fs',
+				fs: {
+					kind: 'write',
+					path: '/vault/.agents/skills/new/SKILL.md',
+				},
+			},
+		])
+		expect(result.reversibleOps).toEqual([
+			{
+				vaultPath: '.agents/skills/new',
+				operation: 'create',
+				before: { kind: 'dir' },
+			},
+			{
+				vaultPath: '.agents/skills/new/SKILL.md',
+				operation: 'create',
+				before: { kind: 'file' },
+			},
+		])
+	})
+
+	it('exposes the built-in skill-creator below /.agents/skills', async () => {
+		const { vault } = createMockVault()
+		const result = await execVaultBash(
+			createApp(vault),
+			'cat /.agents/skills/skill-creator/SKILL.md',
+		)
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toContain('name: skill-creator')
+		expect(result.stdout).toContain('# Skill Creator')
+	})
+
+	it('rejects every mutation route into the built-in Skills mount', async () => {
+		const mounted = new MountableFs({
+			base: new InMemoryFs(),
+			mounts: [
+				{
+					mountPoint: '/.agents/skills',
+					filesystem: await createBuiltinSkillsFs(),
+				},
+			],
+		})
+		await mounted.writeFile('/source', 'source')
+		const file = '/.agents/skills/skill-creator/SKILL.md'
+		const mutations: Array<[() => Promise<unknown>, string]> = [
+			[() => mounted.writeFile(file, 'changed'), 'read-only'],
+			[() => mounted.appendFile(file, 'changed'), 'read-only'],
+			[() => mounted.mkdir('/.agents/skills/new-skill'), 'read-only'],
+			[() => mounted.rm(file), 'read-only'],
+			[() => mounted.cp('/source', file), 'read-only'],
+			[() => mounted.mv(file, '/moved'), 'read-only'],
+			[() => mounted.mv('/source', file), 'read-only'],
+			[() => mounted.chmod(file, 0o777), 'read-only'],
+			[() => mounted.symlink('/target', file), 'read-only'],
+			[() => mounted.link(file, '/linked'), 'cross-device'],
+			[() => mounted.utimes(file, new Date(), new Date()), 'read-only'],
+		]
+
+		for (const [mutate, error] of mutations) {
+			await expect(mutate()).rejects.toThrow(error)
+		}
+		expect(await mounted.readFile(file)).toContain('name: skill-creator')
+	})
+
 	it('builds a vault path snapshot for globbing', async () => {
 		const { vault } = createMockVault(
 			{
@@ -352,6 +488,28 @@ describe('vault bash runtime', () => {
 		)
 	})
 
+	it('mounts the persistent plugin cache at /tmp', async () => {
+		const { vault, store } = createMockVault({
+			'.obsidian/plugins/nutstore-sync/cache/fs/tmp/session/tasks/task.txt':
+				'result',
+		})
+
+		const result = await execVaultBash(
+			createApp(vault),
+			'cat /tmp/session/tasks/task.txt && printf "next" > /tmp/session/tasks/next.txt',
+		)
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toContain('result')
+		expect(
+			new TextDecoder().decode(
+				store.readBinary(
+					'.obsidian/plugins/nutstore-sync/cache/fs/tmp/session/tasks/next.txt',
+				),
+			),
+		).toBe('next')
+	})
+
 	it('supports shell glob expansion from the initial vault snapshot', async () => {
 		const { vault } = createMockVault(
 			{
@@ -375,9 +533,14 @@ describe('vault bash runtime', () => {
 			},
 			[],
 		)
-		const mounted = new MountedVaultFs(
-			new ObsidianVaultFs(vault, ['/', '/note.md']),
-		)
+		const mounted = new MountableFs({
+			mounts: [
+				{
+					mountPoint: '/vault',
+					filesystem: new ObsidianVaultFs(vault, ['/', '/note.md']),
+				},
+			],
+		})
 
 		await mounted.writeFile('/scratch.txt', 'temp')
 		expect(await mounted.readFile('/scratch.txt')).toBe('temp')

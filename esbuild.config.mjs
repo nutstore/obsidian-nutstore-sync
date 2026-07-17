@@ -13,6 +13,21 @@ dotenv.config()
 
 const prod = process.argv[2] === 'production'
 
+const rawTextPlugin = {
+	name: 'raw-text',
+	setup(build) {
+		build.onResolve({ filter: /\.md\?raw$/ }, (args) => ({
+			path: path.resolve(args.resolveDir, args.path.slice(0, -4)),
+			namespace: 'raw-text',
+		}))
+		build.onLoad({ filter: /.*/, namespace: 'raw-text' }, async (args) => ({
+			contents: await fs.promises.readFile(args.path, 'utf8'),
+			loader: 'text',
+			watchFiles: [args.path],
+		}))
+	},
+}
+
 const postcssPlugin = {
 	name: 'postcss',
 	setup(build) {
@@ -48,7 +63,11 @@ const postcssPlugin = {
 const renamePlugin = {
 	name: 'rename-plugin',
 	setup(build) {
-		build.onEnd(async () => {
+		build.onEnd(async (result) => {
+			if (result.errors.length > 0) {
+				return
+			}
+
 			const source = prod ? './dist/main.css' : './main.css'
 			if (fs.existsSync(source)) {
 				fs.renameSync(source, './styles.css')
@@ -57,7 +76,7 @@ const renamePlugin = {
 	},
 }
 
-const context = await esbuild.context({
+const buildOptions = {
 	entryPoints: ['src/index.ts'],
 	bundle: true,
 	external: [
@@ -94,15 +113,15 @@ const context = await esbuild.context({
 	outfile: prod ? 'dist/main.js' : 'main.js',
 	minify: prod,
 	platform: 'browser',
-	plugins: [postcssPlugin, solid(), renamePlugin],
+	plugins: [rawTextPlugin, postcssPlugin, solid(), renamePlugin],
 	alias: {
 		'node:zlib': './src/shims/node-zlib.ts',
 	},
-})
+}
 
 if (prod) {
-	await context.rebuild()
-	process.exit(0)
+	await esbuild.build(buildOptions)
 } else {
+	const context = await esbuild.context(buildOptions)
 	await context.watch()
 }

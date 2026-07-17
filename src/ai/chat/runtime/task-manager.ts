@@ -1,67 +1,43 @@
-import { generateAssistantTurn } from '~/ai/core/runtime'
-import {
-	REPEATED_TOOL_CALL_THRESHOLD,
-	ToolCallRepeatState,
-	updateToolCallRepeatState,
-} from '~/ai/core/tool-call-repeat'
-import type {
-	AIMessage,
-	AIProviderConfig,
-	AISession,
-	AITaskRecord,
-	AIToolExecutionContext,
-} from '~/ai/core/types'
-import type {
-	ChatState,
-	DeferredTaskCompletion,
-} from '~/ai/chat/runtime/chat-state'
-import {
-	createQueuedTask,
-	createRunningTask,
-	isTerminalTask,
-	mutateTaskRecord,
-	toCancelledTask,
-	toCompletedTask,
-	toFailedTask,
-	toRunningTask,
-} from '~/ai/chat/domain'
-import type { QueuedChatTask } from '~/ai/chat/types'
-import { extractErrorMessage } from '~/ai/chat/error-utils'
-import {
-	getAssistantToolCalls,
-	messageToText,
-	toTextParts,
-} from '~/ai/chat/messages/message-utils'
-import {
-	createSubagentSystemPrompt,
-	MAX_CONCURRENT_TASKS_PER_SESSION,
-} from '~/ai/chat/prompts'
-import type { Selection } from '~/ai/chat/runtime/selection'
-import type { SessionStore } from '~/ai/chat/session/session-store'
-import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
-import i18n from '~/i18n'
-import createId from '~/utils/create-id'
-import logger from '~/utils/logger'
 import type NutstorePlugin from '../../..'
 
-export interface AgentRunResult {
-	status: 'completed' | 'failed' | 'cancelled'
-	summary?: string
-	error?: string
-	failureStage?: string
-	sourceCount: number
-}
-
-export interface SpawnTaskParams {
-	prompt: string
-	title?: string
-	parentTaskId?: string
-	depth: number
-	maxDepth: number
-	sessionId: string
-}
+import {
+	findAgent,
+	findParentAgent,
+	getAgentDepth,
+} from '~/ai/chat/agents/agent-tree'
+import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
+import type { ChatSession } from '~/ai/chat/domain'
+import {
+	getMasterAgent,
+	getSessionSubagents,
+	isTerminalAgent,
+} from '~/ai/chat/domain'
+import { extractErrorMessage } from '~/ai/chat/error-utils'
+import {
+	runContextCompression,
+	shouldAutoCompressAgent,
+} from '~/ai/chat/runtime/context-compression'
+import {
+	type AgentRunResult,
+	AgentRunner,
+} from '~/ai/chat/runtime/agent-runner'
+import { MAX_CONCURRENT_TASKS_PER_SESSION } from '~/ai/chat/prompts'
+import type { ChatState } from '~/ai/chat/runtime/chat-state'
+import type { Selection } from '~/ai/chat/runtime/selection'
+import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
+import type { SessionStore } from '~/ai/chat/session/session-store'
+import type { ChatAgentState } from '~/ai/chat/types'
+import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import { writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
+import { consumePendingInputs } from '~/ai/chat/messages/ui-message'
+import i18n from '~/i18n'
+import createId, { createUniqueWordId } from '~/utils/create-id'
+import type { DispatchTaskParams, DispatchTaskResult } from '~/ai/tools/task'
 
 export class TaskManager {
+	private wakeAgent: (sessionId: string, agentId: string) => void = () => {}
+	private agentRunner: AgentRunner
+
 	constructor(
 		private plugin: NutstorePlugin,
 		private state: ChatState,
@@ -69,466 +45,305 @@ export class TaskManager {
 		private store: SessionStore,
 		private notify: () => void,
 		private toolExecutor: ToolExecutor,
-	) {}
+		private messageFactory: import('~/ai/chat/messages/message-factory').MessageFactory,
+	) {
+		this.agentRunner = new AgentRunner(
+			toolExecutor,
+			store,
+			messageFactory,
+			notify,
+		)
+	}
 
-	async runTask(task: AITaskRecord) {
-		const session = this.state.loadedSessions.get(task.sessionId)
-		const selection = this.state.taskModelSelection.get(task.id)
-		if (!session || !selection?.providerId || !selection.modelId) {
-			this.finishTaskAsFailed(
-				task,
+	setWakeAgentHandler(handler: (sessionId: string, agentId: string) => void) {
+		this.wakeAgent = handler
+	}
+
+	async runAgent(session: ChatSession, agent: ChatAgentState) {
+		const selectedModel = this.state.taskModelSelection.get(agent.id)
+		if (!selectedModel?.providerId || !selectedModel.modelId) {
+			await this.finishAgentAsFailed(
+				session,
+				agent,
 				i18n.t('chatbox.errors.taskSessionUnavailable'),
-				'session_invalid',
 			)
 			return
 		}
 
+		agent.status = 'running'
 		try {
 			const provider = this.selection.getProviderByIdOrThrow(
-				selection.providerId,
+				selectedModel.providerId,
 			)
 			await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
 			const model = this.selection.getModelByIdsOrThrow(
 				provider,
-				selection.modelId,
+				selectedModel.modelId,
 			)
 			const result = await this.runBackgroundTaskLoop(
-				task,
+				agent,
 				session,
 				provider,
 				model,
 			)
 
-			if (task.status === 'cancelled') {
-				return
-			}
-
-			if (result.status === 'completed') {
-				this.finishTaskAsCompleted(
-					task,
-					result.summary || '',
-					result.sourceCount,
-				)
-				return
-			}
 			if (result.status === 'cancelled') {
-				this.finishTaskAsCancelled(task, 'user_cancelled')
+				await this.finishAgentAsCancelled(session, agent)
 				return
 			}
-			this.finishTaskAsFailed(
-				task,
-				result.error || i18n.t('chatbox.requestFailed'),
-				result.failureStage,
-				result.sourceCount,
-			)
+			if (result.status === 'failed') {
+				await this.finishAgentAsFailed(session, agent, result.error)
+				return
+			}
+			if (result.status === 'suspended') {
+				throw new Error('Background agent suspended without a resume condition')
+			}
+
+			if (agent.pendingInputs.length > 0) {
+				void this.store.persistSession(session)
+				void this.runAgent(session, agent)
+				return
+			}
+			if (this.hasActiveChildAgents(agent)) {
+				agent.status = 'idle'
+				void this.store.persistSession(session)
+				this.notify()
+				return
+			}
+
+			await this.finishAgentAsCompleted(session, agent, result.text)
 		} catch (error) {
-			if (task.status === 'cancelled') {
-				return
-			}
-			logger.error(error)
-			this.finishTaskAsFailed(
-				task,
+			await this.finishAgentAsFailed(
+				session,
+				agent,
 				extractErrorMessage(error, i18n.t('chatbox.requestFailed')),
-				'runtime_error',
 			)
 		}
 	}
 
-	async runBackgroundTaskLoop(
-		task: AITaskRecord,
-		session: AISession,
+	private async runBackgroundTaskLoop(
+		agent: ChatAgentState,
+		session: ChatSession,
 		provider: AIProviderConfig,
-		model: { id: string },
+		model: AIModelConfig,
 	): Promise<AgentRunResult> {
-		const tools = this.toolExecutor.createToolsForContext(
-			session,
-			task.depth,
-			task.maxDepth,
-			task.id,
-		)
-		const systemPrompt = createSubagentSystemPrompt(task.depth < task.maxDepth)
-		const messages: AIMessage[] = [
-			{
-				role: 'user',
-				content: toTextParts(task.prompt),
-			},
-		]
-		let sourceCount = 0
-		let repeatState: ToolCallRepeatState = {
-			consecutiveCount: 0,
-			isRepeatedTooManyTimes: false,
-		}
+		consumePendingInputs(agent)
 
-		while (true) {
-			if (task.status === 'cancelled') {
-				return {
-					status: 'cancelled',
-					sourceCount,
-				}
-			}
+		const isCancelled = () =>
+			agent.status === 'cancelled' ||
+			this.state.deletedSessionIds.has(session.id)
+		if (isCancelled()) return { status: 'cancelled' }
 
-			await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
-			const response = await generateAssistantTurn({
+		if (shouldAutoCompressAgent(agent, model)) {
+			await runContextCompression({
 				provider,
-				model: model.id,
-				messages,
-				systemPrompt,
-				tools,
-				...session.inferenceParams,
-			})
-			messages.push(response.message)
-
-			const assistantToolCalls = getAssistantToolCalls(response.message)
-			if (!assistantToolCalls?.length) {
-				return {
-					status: 'completed',
-					summary:
-						messageToText(response.message).trim() ||
-						i18n.t('chatbox.task.emptyResult'),
-					sourceCount,
-				}
-			}
-
-			repeatState = updateToolCallRepeatState(repeatState, assistantToolCalls)
-			if (repeatState.isRepeatedTooManyTimes) {
-				return {
-					status: 'failed',
-					error: i18n.t('chatbox.repeatedToolCallsStopped', {
-						count: REPEATED_TOOL_CALL_THRESHOLD,
-					}),
-					failureStage: 'repeated_tool_calls',
-					sourceCount,
-				}
-			}
-
-			const toolMessages = await this.toolExecutor.resolveToolCalls(
-				assistantToolCalls,
-				tools,
-				{
-					session,
-					depth: task.depth,
-					maxDepth: task.maxDepth,
-					parentTaskId: task.id,
-				},
-			)
-
-			for (const item of toolMessages) {
-				messages.push(item.message)
-				sourceCount += 1
-			}
-		}
-	}
-
-	startSpawnedTask(
-		rawArgs: string,
-		context: AIToolExecutionContext,
-	): Promise<Record<string, unknown>> {
-		try {
-			const params = JSON.parse(rawArgs) as Record<string, unknown>
-			const promptText = this.toolExecutor.requireToolString(
-				params.task,
-				'task',
-			)
-			const title =
-				typeof params.label === 'string' && params.label.trim()
-					? params.label.trim()
-					: undefined
-			return this.spawnTask({
-				prompt: promptText,
-				title,
-				parentTaskId: context.parentTaskId,
-				depth: context.depth + 1,
-				maxDepth: context.maxDepth,
-				sessionId: context.session.id,
-			})
-		} catch (error) {
-			return Promise.resolve({
-				task_id: null,
-				parent_task_id: context.parentTaskId ?? null,
-				label: null,
-				task: null,
-				status: 'failed',
-				result_summary: null,
-				error_summary: error instanceof Error ? error.message : String(error),
-				failure_stage: 'invalid_arguments',
-				cancel_reason: null,
-				depth: context.depth + 1,
-				max_depth: context.maxDepth,
-				started_at: null,
-				finished_at: Date.now(),
-				source_count: null,
+				model,
+				session,
+				agent,
+				store: this.store,
+				messageFactory: this.messageFactory,
+				isCancelled: () =>
+					isCancelled() || this.state.deletedSessionIds.has(session.id),
 			})
 		}
+
+		return this.agentRunner.runTurn({
+			session,
+			agent,
+			provider,
+			model,
+			depth: getAgentDepth(getMasterAgent(session), agent.id),
+			assistantMeta: {
+				providerId: provider.id,
+				providerName: provider.name,
+				modelId: model.id,
+				modelName: model.name,
+			},
+			isCancelled,
+			isDeleted: () => this.state.deletedSessionIds.has(session.id),
+			shouldSuspendAfterToolStep: isCancelled,
+		})
 	}
 
-	spawnTask(params: SpawnTaskParams) {
+	dispatchTask(params: DispatchTaskParams): Promise<DispatchTaskResult> {
 		const session = this.state.loadedSessions.get(params.sessionId)
-		if (!session) {
-			return Promise.resolve(
-				this.buildImmediateTaskFailurePayload(
-					params,
-					i18n.t('chatbox.errors.sessionNotFound'),
-					'session_invalid',
-				),
-			)
+		if (!session) throw new Error(i18n.t('chatbox.errors.sessionNotFound'))
+		const parent = findAgent(getMasterAgent(session), params.callerAgentId)
+		if (!parent) {
+			throw new Error(`Caller agent not found: ${params.callerAgentId}`)
 		}
-		if (params.depth > params.maxDepth) {
-			return Promise.resolve(
-				this.buildImmediateTaskFailurePayload(
-					params,
-					i18n.t('chatbox.errors.taskDepthExceeded'),
-					'depth_limit',
-				),
-			)
-		}
+		const definition = this.toolExecutor.getAgentDefinition(params.subagentType)
 
 		const shouldQueue =
-			this.countRunningTasksForSession(session) >=
+			this.countRunningAgentsForSession(session) >=
 			MAX_CONCURRENT_TASKS_PER_SESSION
-
-		const taskId = createId('task')
-		const taskBase = {
-			id: taskId,
-			sessionId: session.id,
-			parentTaskId: params.parentTaskId,
-			depth: params.depth,
-			maxDepth: params.maxDepth,
-			title: params.title || params.prompt.slice(0, 48),
-			prompt: params.prompt,
-			createdAt: Date.now(),
+		const now = Date.now()
+		const agentId = this.createAgentId(session, definition.id)
+		const agent: ChatAgentState = {
+			id: agentId,
+			type: definition.id,
+			status: shouldQueue ? 'queued' : 'running',
+			createdAt: now,
+			timeline: [
+				{
+					id: createId('message'),
+					role: 'user',
+					metadata: {
+						createdAt: now,
+					},
+					parts: [{ type: 'text', text: params.prompt }],
+				},
+			],
+			pendingInputs: [],
+			operations: {},
+			subagents: {},
 		}
-		const task: AITaskRecord = shouldQueue
-			? createQueuedTask(taskBase)
-			: createRunningTask(taskBase, Date.now())
-		const deferred = this.createDeferredTaskCompletion()
-
-		session.tasks = [task, ...session.tasks]
-		this.state.taskModelSelection.set(task.id, session.model)
-		this.state.pendingTaskCompletions.set(task.id, deferred)
+		parent.subagents[agent.id] = agent
+		this.state.taskModelSelection.set(agent.id, session.model)
 		void this.store.persistSession(session)
 		this.notify()
+		if (shouldQueue) this.startQueuedAgentsForSession(session)
+		else void this.runAgent(session, agent)
 
-		if (shouldQueue) {
-			this.startQueuedTasksForSession(session)
-		} else {
-			void this.runTask(task)
-		}
-
-		return deferred.promise
+		return Promise.resolve({
+			taskId: agent.id,
+			subagentType: definition.id,
+			status: 'dispatched',
+		})
 	}
 
-	afterTaskSettled(task: AITaskRecord) {
-		const session = this.state.loadedSessions.get(task.sessionId)
-		if (session) void this.store.persistSession(session)
+	private createAgentId(session: ChatSession, agentType: string) {
+		return createUniqueWordId(agentType, (id) =>
+			Boolean(findAgent(getMasterAgent(session), id)),
+		)
+	}
+
+	private async afterAgentSettled(
+		session: ChatSession,
+		agent: ChatAgentState,
+		resultPath: string,
+	) {
+		const master = getMasterAgent(session)
+		const parent = findParentAgent(master, agent.id) ?? master
+		parent.pendingInputs.push({
+			id: createId('input'),
+			role: 'user',
+			metadata: { createdAt: Date.now() },
+			parts: [
+				{
+					type: 'data-system-notification',
+					data: {
+						kind: 'task-result-ready',
+						taskId: agent.id,
+						resultPath,
+					},
+				},
+			],
+		})
+		await this.store.persistSession(session)
+		if (parent.id === MASTER_AGENT_ID) {
+			this.wakeAgent(session.id, parent.id)
+		} else this.wakeSubagent(session, parent.id)
+		this.cleanupAgentTracking(agent.id)
+		this.startQueuedAgentsForSession(session)
 		this.notify()
-		this.resolveTaskCompletion(task.id, this.buildTaskToolPayload(task))
-		this.cleanupTaskTracking(task.id)
-		if (session) this.startQueuedTasksForSession(session)
 	}
 
-	finishTaskAsCompleted(
-		task: AITaskRecord,
+	private async persistAgentResult(
+		session: ChatSession,
+		agent: ChatAgentState,
+		resultText: string,
+	) {
+		const resultPath = `/tmp/${session.id}/tasks/${agent.id}.txt`
+		await writeBashTmpText(this.plugin.app, resultPath, resultText)
+		return resultPath
+	}
+
+	private wakeSubagent(session: ChatSession, agentId: string) {
+		const agent = findAgent(getMasterAgent(session), agentId)
+		if (!agent || agent.status === 'running' || isTerminalAgent(agent)) return
+		agent.status = 'running'
+		void this.store.persistSession(session)
+		void this.runAgent(session, agent)
+	}
+
+	private hasActiveChildAgents(agent: ChatAgentState) {
+		return Object.values(agent.subagents).some(
+			(child) => !isTerminalAgent(child),
+		)
+	}
+
+	async finishAgentAsCompleted(
+		session: ChatSession,
+		agent: ChatAgentState,
 		summary: string,
-		sourceCount: number,
 	) {
-		if (task.status !== 'running') return
-		mutateTaskRecord(
-			task,
-			toCompletedTask(
-				task,
-				summary || i18n.t('chatbox.task.emptyResult'),
-				sourceCount,
-				Date.now(),
-			),
-		)
-		this.afterTaskSettled(task)
+		if (agent.status !== 'running') return
+		const text = summary || i18n.t('chatbox.task.emptyResult')
+		const resultPath = await this.persistAgentResult(session, agent, text)
+		agent.status = 'completed'
+		await this.afterAgentSettled(session, agent, resultPath)
 	}
 
-	finishTaskAsFailed(
-		task: AITaskRecord,
+	async finishAgentAsFailed(
+		session: ChatSession,
+		agent: ChatAgentState,
 		message: string,
-		failureStage?: string,
-		sourceCount?: number,
 	) {
-		if (task.status !== 'queued' && task.status !== 'running') return
-		mutateTaskRecord(
-			task,
-			toFailedTask(task, message, Date.now(), failureStage, sourceCount),
-		)
-		this.afterTaskSettled(task)
+		if (agent.status !== 'queued' && agent.status !== 'running') return
+		const resultPath = await this.persistAgentResult(session, agent, message)
+		agent.status = 'failed'
+		await this.afterAgentSettled(session, agent, resultPath)
 	}
 
-	finishTaskAsCancelled(task: AITaskRecord, cancelReason: string) {
-		if (task.status === 'queued' || task.status === 'running') {
-			mutateTaskRecord(
-				task,
-				toCancelledTask(
-					task,
-					cancelReason,
-					Date.now(),
-					i18n.t('chatbox.task.cancelledSummary', { task: task.title }),
-				),
-			)
-		}
-		this.afterTaskSettled(task)
+	async finishAgentAsCancelled(session: ChatSession, agent: ChatAgentState) {
+		if (agent.status !== 'queued' && agent.status !== 'running') return
+		const text = i18n.t('chatbox.task.cancelledSummary', { task: agent.id })
+		const resultPath = await this.persistAgentResult(session, agent, text)
+		agent.status = 'cancelled'
+		await this.afterAgentSettled(session, agent, resultPath)
 	}
 
-	countRunningTasksForSession(session: AISession) {
-		return session.tasks.filter((item) => item.status === 'running').length
+	countRunningAgentsForSession(session: ChatSession) {
+		return getSessionSubagents(session).filter(
+			(agent) => agent.status === 'running',
+		).length
 	}
 
-	startQueuedTasksForSession(session: AISession) {
-		if (this.state.deletedSessionIds.has(session.id)) {
-			return
-		}
+	startQueuedAgentsForSession(session: ChatSession) {
+		if (this.state.deletedSessionIds.has(session.id)) return
 		while (
-			this.countRunningTasksForSession(session) <
+			this.countRunningAgentsForSession(session) <
 			MAX_CONCURRENT_TASKS_PER_SESSION
 		) {
-			const nextTask = session.tasks
-				.filter((item) => item.status === 'queued')
+			const nextAgent = getSessionSubagents(session)
+				.filter((agent) => agent.status === 'queued')
 				.sort((left, right) => left.createdAt - right.createdAt)[0]
-
-			if (!nextTask) {
-				return
-			}
-
-			mutateTaskRecord(
-				nextTask,
-				toRunningTask(nextTask as QueuedChatTask, Date.now()),
-			)
+			if (!nextAgent) return
+			nextAgent.status = 'running'
 			void this.store.persistSession(session)
 			this.notify()
-			void this.runTask(nextTask)
+			void this.runAgent(session, nextAgent)
 		}
 	}
 
-	cancelAllNonTerminalTasks(session: AISession, cancelReason: string) {
+	cancelAllNonTerminalAgents(session: ChatSession) {
 		let changed = false
-		for (const task of session.tasks) {
-			if (this.isTaskTerminal(task)) {
-				continue
-			}
-			mutateTaskRecord(
-				task,
-				toCancelledTask(
-					task,
-					cancelReason,
-					Date.now(),
-					i18n.t('chatbox.task.cancelledSummary', { task: task.title }),
-				),
-			)
-			this.resolveTaskCompletion(task.id, this.buildTaskToolPayload(task))
-			this.cleanupTaskTracking(task.id)
+		for (const agent of getSessionSubagents(session)) {
+			if (isTerminalAgent(agent)) continue
+			agent.status = 'cancelled'
+			this.cleanupAgentTracking(agent.id)
 			changed = true
 		}
 		return changed
 	}
 
-	cleanupSessionTaskTracking(session: AISession) {
-		for (const task of session.tasks) {
-			this.cleanupTaskTracking(task.id)
-		}
+	cleanupSessionAgentTracking(session: ChatSession) {
+		for (const agent of getSessionSubagents(session))
+			this.cleanupAgentTracking(agent.id)
 	}
 
-	isTaskTerminal(task: AITaskRecord) {
-		return isTerminalTask(task)
-	}
-
-	isTaskDescendantOf(
-		session: AISession,
-		task: AITaskRecord,
-		ancestorTaskId: string,
-	): boolean {
-		let currentParentId = task.parentTaskId
-		while (currentParentId) {
-			if (currentParentId === ancestorTaskId) {
-				return true
-			}
-			currentParentId = session.tasks.find(
-				(item) => item.id === currentParentId,
-			)?.parentTaskId
-		}
-		return false
-	}
-
-	buildTaskToolPayload(task: AITaskRecord) {
-		return {
-			task_id: task.id,
-			parent_task_id: task.parentTaskId ?? null,
-			label: task.title,
-			task: task.prompt,
-			status: task.status,
-			result_summary:
-				task.status === 'completed' ? (task.summary ?? null) : null,
-			error_summary:
-				task.status === 'failed' ? task.error || task.summary || null : null,
-			failure_stage:
-				task.status === 'failed' ? (task.failureStage ?? null) : null,
-			cancel_reason:
-				task.status === 'cancelled' ? (task.cancelReason ?? null) : null,
-			depth: task.depth,
-			max_depth: task.maxDepth,
-			started_at: 'startedAt' in task ? (task.startedAt ?? null) : null,
-			finished_at: 'finishedAt' in task ? (task.finishedAt ?? null) : null,
-			source_count:
-				task.status === 'completed'
-					? task.sourceCount
-					: task.status === 'failed'
-						? (task.sourceCount ?? null)
-						: null,
-		}
-	}
-
-	buildImmediateTaskFailurePayload(
-		params: SpawnTaskParams,
-		message: string,
-		failureStage: string,
-	) {
-		return {
-			task_id: null,
-			parent_task_id: params.parentTaskId ?? null,
-			label: params.title || params.prompt.slice(0, 48),
-			task: params.prompt,
-			status: 'failed',
-			result_summary: null,
-			error_summary: message,
-			failure_stage: failureStage,
-			cancel_reason: null,
-			depth: params.depth,
-			max_depth: params.maxDepth,
-			started_at: null,
-			finished_at: Date.now(),
-			source_count: null,
-		}
-	}
-
-	createDeferredTaskCompletion(): DeferredTaskCompletion {
-		let resolve!: (payload: Record<string, unknown>) => void
-		const deferred: DeferredTaskCompletion = {
-			promise: new Promise<Record<string, unknown>>((nextResolve) => {
-				resolve = nextResolve
-			}),
-			resolve: (payload) => {
-				deferred.settled = true
-				resolve(payload)
-			},
-			settled: false,
-		}
-		return deferred
-	}
-
-	resolveTaskCompletion(taskId: string, payload: Record<string, unknown>) {
-		const deferred = this.state.pendingTaskCompletions.get(taskId)
-		if (!deferred || deferred.settled) {
-			return
-		}
-		deferred.resolve(payload)
-		this.state.pendingTaskCompletions.delete(taskId)
-	}
-
-	cleanupTaskTracking(taskId: string) {
-		this.state.pendingTaskCompletions.delete(taskId)
-		this.state.taskModelSelection.delete(taskId)
+	private cleanupAgentTracking(agentId: string) {
+		this.state.taskModelSelection.delete(agentId)
 	}
 }

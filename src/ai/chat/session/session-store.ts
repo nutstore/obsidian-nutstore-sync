@@ -1,11 +1,7 @@
-import type { AIMessageRecord, AISession, AITaskRecord } from '~/ai/core/types'
-import {
-	ChatSessionIndexItem,
-	cloneMessage,
-	cloneSession,
-	mutateTaskRecord,
-	toCancelledTask,
-} from '~/ai/chat/domain'
+import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
+
+import type { LegacyChatMessageRecord } from '~/ai/chat/types'
+import { ChatSessionIndexItem } from '~/ai/chat/domain'
 import {
 	deriveTitle,
 	migrateDeprecatedImageParts,
@@ -13,11 +9,7 @@ import {
 	needsDeprecatedImagePartMigration,
 	needsV0Migration,
 } from '~/ai/chat/messages/message-utils'
-import {
-	CHAT_INDEX_KEY,
-	CHAT_META_KEY,
-	INTERRUPTED_TASK_CANCEL_REASON,
-} from '~/ai/chat/prompts'
+import { CHAT_INDEX_KEY, CHAT_META_KEY } from '~/ai/chat/prompts'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
@@ -25,8 +17,19 @@ import type { Selection } from '~/ai/chat/runtime/selection'
 import i18n from '~/i18n'
 import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
 import createId from '~/utils/create-id'
+import {
+	decodeChatSessionFromStorage,
+	encodeChatSessionForStorage,
+} from '~/ai/chat/session/session-persistence'
+import { copyModelMessage } from '~/ai/chat/messages/message-copy'
+import { migrateChatSession } from '~/ai/chat/session/session-migration'
+import type { ChatAgentState } from '~/ai/chat/types'
+import { getSessionSubagents } from '~/ai/chat/domain'
+import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
 
 export class SessionStore {
+	private persistQueues = new Map<string, Promise<void>>()
+
 	constructor(
 		private state: ChatState,
 		private runtimeStates: RuntimeStates,
@@ -75,7 +78,9 @@ export class SessionStore {
 			throw new Error(i18n.t('chatbox.errors.sessionNotFound'))
 		}
 
-		const { session, changed } = this.rehydrateSession(stored)
+		const { session, changed } = this.rehydrateSession(
+			decodeChatSessionFromStorage(stored),
+		)
 		this.state.loadedSessions.set(sessionId, session)
 		const runtime = this.runtimeStates.get(sessionId)
 		runtime.pending = []
@@ -87,11 +92,28 @@ export class SessionStore {
 		return session
 	}
 
-	async persistSession(session: AISession) {
+	async persistSession(session: ChatSession) {
 		if (this.state.deletedSessionIds.has(session.id)) {
 			return
 		}
-		await chatSessionKV.set(session.id, cloneSession(session))
+		const sessionId = session.id
+		const previous = this.persistQueues.get(sessionId) ?? Promise.resolve()
+		const write = Promise.all([
+			previous.catch(() => undefined),
+			encodeChatSessionForStorage(session),
+		]).then(async ([, snapshot]) => {
+			if (this.state.deletedSessionIds.has(sessionId)) return
+			await chatSessionKV.set(sessionId, snapshot)
+		})
+		this.persistQueues.set(sessionId, write)
+		void write
+			.finally(() => {
+				if (this.persistQueues.get(sessionId) === write) {
+					this.persistQueues.delete(sessionId)
+				}
+			})
+			.catch(() => undefined)
+		await write
 	}
 
 	async persistMetaAndIndex() {
@@ -108,23 +130,21 @@ export class SessionStore {
 		])
 	}
 
-	rehydrateSession(session: AISession) {
-		const rehydrated = this.normalizeSession(session)
-		let changed = this.selection.sanitizeSessionSelection(rehydrated)
+	rehydrateSession(session: ChatSession | LegacyChatSession) {
+		const migrated = migrateChatSession(
+			'schemaVersion' in session
+				? session
+				: this.normalizeLegacySession(session),
+		)
+		const rehydrated = this.normalizeSession(migrated.session)
+		let changed =
+			migrated.changed || this.selection.sanitizeSessionSelection(rehydrated)
 
-		for (const task of rehydrated.tasks) {
-			if (task.status !== 'queued' && task.status !== 'running') {
+		for (const agent of getSessionSubagents(rehydrated)) {
+			if (agent.status !== 'queued' && agent.status !== 'running') {
 				continue
 			}
-			mutateTaskRecord(
-				task,
-				toCancelledTask(
-					task,
-					INTERRUPTED_TASK_CANCEL_REASON,
-					Date.now(),
-					i18n.t('chatbox.task.cancelledSummary', { task: task.title }),
-				),
-			)
+			agent.status = 'cancelled'
 			changed = true
 		}
 
@@ -134,8 +154,8 @@ export class SessionStore {
 		}
 	}
 
-	normalizeSession(session: AISession): AISession {
-		const normalized: AISession = {
+	normalizeLegacySession(session: LegacyChatSession): LegacyChatSession {
+		return {
 			id: session.id,
 			createdAt: session.createdAt,
 			updatedAt: session.updatedAt || session.createdAt,
@@ -179,11 +199,11 @@ export class SessionStore {
 														(
 															op,
 														): op is NonNullable<
-															AIMessageRecord['reversibleOps']
+															LegacyChatMessageRecord['reversibleOps']
 														>[number] => !!op,
 													)
 											: undefined,
-										message: cloneMessage(
+										message: copyModelMessage(
 											needsV0Migration(message.message)
 												? migrateMessageFromV0(message.message)
 												: needsDeprecatedImagePartMigration(message.message)
@@ -212,20 +232,69 @@ export class SessionStore {
 							},
 						],
 			activeFragmentId: session.activeFragmentId,
-			tasks: Array.isArray(session.tasks)
-				? session.tasks.map((task: AITaskRecord) => ({ ...task }))
-				: [],
 		}
+	}
 
-		if (
-			!normalized.fragments.some(
-				(item) => item.id === normalized.activeFragmentId,
+	normalizeSession(session: ChatSession): ChatSession {
+		const normalizeMessage = (message: ChatAgentState['timeline'][number]) => ({
+			...message,
+			metadata: message.metadata
+				? {
+						...message.metadata,
+						llm: message.metadata.llm ? { ...message.metadata.llm } : undefined,
+					}
+				: { createdAt: session.createdAt },
+			parts: [...message.parts],
+		})
+		const normalizeAgent = (agent: ChatAgentState): ChatAgentState => {
+			const subagents = Object.fromEntries(
+				Object.entries(agent.subagents ?? {}).map(([id, child]) => [
+					id,
+					normalizeAgent(child),
+				]),
 			)
-		) {
-			normalized.activeFragmentId =
-				normalized.fragments[normalized.fragments.length - 1].id
+			return {
+				id: agent.id,
+				type:
+					agent.type ||
+					(agent.id === MASTER_AGENT_ID ? MASTER_AGENT_ID : 'subagent'),
+				status: agent.id === MASTER_AGENT_ID ? 'idle' : agent.status,
+				createdAt: agent.createdAt || session.createdAt,
+				timeline: Array.isArray(agent.timeline)
+					? agent.timeline.map(normalizeMessage)
+					: [],
+				pendingInputs: Array.isArray(agent.pendingInputs)
+					? agent.pendingInputs.map(normalizeMessage)
+					: [],
+				operations: Object.fromEntries(
+					Object.entries(agent.operations ?? {}).map(
+						([messageId, operations]) => [
+							messageId,
+							operations
+								.map(normalizeReversibleToolOpRecord)
+								.filter((op): op is NonNullable<typeof op> => !!op),
+						],
+					),
+				),
+				readVaultPaths: Array.isArray(agent.readVaultPaths)
+					? agent.readVaultPaths.filter((path) => typeof path === 'string')
+					: undefined,
+				subagents,
+			}
 		}
-		return normalized
+		const master = normalizeAgent(session.subagents.master)
+		return {
+			schemaVersion: 2,
+			id: session.id,
+			createdAt: session.createdAt,
+			updatedAt: session.updatedAt || session.createdAt,
+			model: session.model ? { ...session.model } : undefined,
+			systemPrompt: session.systemPrompt,
+			inferenceParams: session.inferenceParams
+				? { ...session.inferenceParams }
+				: undefined,
+			subagents: { master },
+		}
 	}
 
 	isChatMetaRecord(value: unknown): value is ChatMetaRecord {
@@ -236,7 +305,11 @@ export class SessionStore {
 		)
 	}
 
-	upsertSessionIndexItem(session: AISession, title?: string, prepend = false) {
+	upsertSessionIndexItem(
+		session: ChatSession,
+		title?: string,
+		prepend = false,
+	) {
 		if (this.state.deletedSessionIds.has(session.id)) {
 			return
 		}

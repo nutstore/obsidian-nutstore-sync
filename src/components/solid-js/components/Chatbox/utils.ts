@@ -1,4 +1,4 @@
-import type { ChatRunState, ChatTaskRecord } from '~/ai/chat/types'
+import type { ChatDisplayToolCallBlock, ChatRunState } from '~/ai/chat/types'
 import { t } from '../../i18n'
 
 export function formatTime(timestamp: number) {
@@ -8,33 +8,6 @@ export function formatTime(timestamp: number) {
 		hour: '2-digit',
 		minute: '2-digit',
 	}).format(timestamp)
-}
-
-export function formatFragmentTime(timestamp: number) {
-	return new Intl.DateTimeFormat(undefined, {
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit',
-	}).format(timestamp)
-}
-
-export function formatDuration(task: ChatTaskRecord) {
-	if (!('startedAt' in task) || typeof task.startedAt !== 'number') {
-		return ''
-	}
-	const end =
-		'finishedAt' in task && typeof task.finishedAt === 'number'
-			? task.finishedAt
-			: Date.now()
-	const totalSeconds = Math.max(0, Math.floor((end - task.startedAt) / 1000))
-	const minutes = Math.floor(totalSeconds / 60)
-	const seconds = totalSeconds % 60
-	if (minutes > 0) {
-		return `${minutes}m ${seconds}s`
-	}
-	return `${seconds}s`
 }
 
 export function formatUsage(input?: number, output?: number, total?: number) {
@@ -58,34 +31,14 @@ export function formatUsage(input?: number, output?: number, total?: number) {
 	return parts.join(' ')
 }
 
-export function statusLabel(status: ChatTaskRecord['status']) {
-	switch (status) {
-		case 'queued':
-			return t('chatbox.ui.states.taskQueued')
-		case 'running':
-			return t('chatbox.ui.states.taskRunning')
-		case 'completed':
-			return t('chatbox.ui.states.taskCompleted')
-		case 'failed':
-			return t('chatbox.ui.states.taskFailed')
-		case 'cancelled':
-			return t('chatbox.ui.states.taskCancelled')
-	}
-}
-
-export function statusClass(status: ChatTaskRecord['status']) {
-	switch (status) {
-		case 'running':
-			return 'bg-[var(--color-green-rgb)]/12 text-[var(--text-accent)]'
-		case 'completed':
-			return 'bg-[var(--color-cyan-rgb)]/12 text-[var(--text-normal)]'
-		case 'failed':
-			return 'bg-[var(--color-red-rgb)]/12 text-[var(--text-error)]'
-		case 'cancelled':
-			return 'bg-[var(--background-secondary)] text-[var(--text-muted)]'
-		default:
-			return 'bg-[var(--background-secondary)] text-[var(--text-normal)]'
-	}
+export function formatToolResult(
+	toolCall: ChatDisplayToolCallBlock['toolCall'],
+) {
+	if (toolCall.state === 'output-error') return toolCall.errorText
+	if (toolCall.state !== 'output-available') return ''
+	return typeof toolCall.output === 'string'
+		? toolCall.output
+		: (JSON.stringify(toolCall.output, null, 2) ?? String(toolCall.output))
 }
 
 export function runStateLabel(runState: ChatRunState) {

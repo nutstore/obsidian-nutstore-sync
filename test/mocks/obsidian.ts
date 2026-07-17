@@ -98,3 +98,13 @@ export function normalizePath(path?: string) {
 		.replace(/^\/+/, '')
 		.replace(/\/+$/, '')
 }
+
+export function parseYaml(yaml: string) {
+	return Object.fromEntries(
+		yaml
+			.split(/\r?\n/)
+			.map((line) => line.match(/^([^:#]+):\s*(.*)$/))
+			.filter((match): match is RegExpMatchArray => Boolean(match))
+			.map((match) => [match[1].trim(), match[2].trim()]),
+	)
+}

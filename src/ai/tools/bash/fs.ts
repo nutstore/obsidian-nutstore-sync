@@ -1,6 +1,5 @@
 import { fromUint8Array } from 'js-base64'
 import {
-	InMemoryFs,
 	type BufferEncoding,
 	type CpOptions,
 	type FileContent,
@@ -23,7 +22,7 @@ import type {
 	AISinglePathFileOperation,
 } from '~/ai/tools/file-operation'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
-import { cloneReversibleToolOp } from '~/ai/chat/domain'
+import { copyReversibleToolOp } from '~/ai/chat/messages/reversible-op-utils'
 import type { ReversibleToolOp } from '~/ai/chat/types'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
@@ -34,6 +33,7 @@ import { statVaultItem } from '~/utils/stat-vault-item'
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
 const VAULT_MOUNT_POINT = '/vault'
+const BUILTIN_SKILLS_MOUNT_POINT = '/.agents/skills'
 type ReadFileOptions = { encoding?: BufferEncoding | null }
 type WriteFileOptions = { encoding?: BufferEncoding }
 type SnapshotKind = 'file' | 'dir'
@@ -61,7 +61,7 @@ function getEncoding(
 	return typeof options === 'string' ? options : (options.encoding ?? 'utf8')
 }
 
-function decodeContent(
+export function decodeContent(
 	content: Uint8Array,
 	options?: ReadFileOptions | BufferEncoding,
 ) {
@@ -87,7 +87,7 @@ function decodeContent(
 	return new TextDecoder('utf-8').decode(content)
 }
 
-function encodeContent(
+export function encodeContent(
 	content: FileContent,
 	options?: WriteFileOptions | BufferEncoding,
 ) {
@@ -121,7 +121,7 @@ function encodeContent(
 	return new TextEncoder().encode(content)
 }
 
-function toArrayBuffer(content: Uint8Array) {
+export function toArrayBuffer(content: Uint8Array) {
 	return content.buffer.slice(
 		content.byteOffset,
 		content.byteOffset + content.byteLength,
@@ -182,24 +182,6 @@ async function copyRecursive(
 
 	const content = await fs.readFileBuffer(src)
 	await fs.writeFile(dest, content)
-}
-
-async function removeRecursive(
-	fs: IFileSystem,
-	targetPath: string,
-	options?: RmOptions,
-) {
-	const stat = await fs.stat(targetPath)
-	if (stat.isDirectory) {
-		const children = await fs.readdir(targetPath)
-		if (children.length > 0 && !options?.recursive) {
-			throw new Error(`ENOTEMPTY: directory not empty, remove '${targetPath}'`)
-		}
-		for (const child of children) {
-			await removeRecursive(fs, joinVirtualPath(targetPath, child), options)
-		}
-	}
-	await fs.rm(targetPath, options)
 }
 
 export async function listVaultPaths(app: App) {
@@ -273,7 +255,7 @@ export class ReversibleOpRecorder {
 	}
 
 	getOperations(): ReversibleToolOp[] {
-		return this.operations.map(cloneReversibleToolOp)
+		return this.operations.map(copyReversibleToolOp)
 	}
 }
 
@@ -781,280 +763,4 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 }
 
-export class MountedVaultFs implements IFileSystem {
-	constructor(
-		private readonly vaultFs: ObsidianVaultFs,
-		private readonly scratch: IFileSystem = new InMemoryFs(),
-	) {}
-
-	private isRoot(path: string) {
-		return ensureNotEscapingRoot(path) === '/'
-	}
-
-	private isVaultMount(path: string) {
-		return ensureNotEscapingRoot(path) === VAULT_MOUNT_POINT
-	}
-
-	private isVaultPath(path: string) {
-		const normalized = ensureNotEscapingRoot(path)
-		return (
-			normalized === VAULT_MOUNT_POINT ||
-			normalized.startsWith(`${VAULT_MOUNT_POINT}/`)
-		)
-	}
-
-	private toVaultRelative(path: string) {
-		const normalized = ensureNotEscapingRoot(path)
-		if (normalized === VAULT_MOUNT_POINT) {
-			return '/'
-		}
-		return normalized.slice(VAULT_MOUNT_POINT.length) || '/'
-	}
-
-	private route(path: string) {
-		const normalized = ensureNotEscapingRoot(path)
-		if (this.isVaultPath(normalized)) {
-			return {
-				fs: this.vaultFs as IFileSystem,
-				path: this.toVaultRelative(normalized),
-			}
-		}
-		return {
-			fs: this.scratch as IFileSystem,
-			path: normalized,
-		}
-	}
-
-	private async genericCp(src: string, dest: string, options?: CpOptions) {
-		const sourceStat = await this.stat(src)
-		if (sourceStat.isDirectory) {
-			if (!options?.recursive) {
-				throw new Error(
-					`EISDIR: illegal operation on a directory, copy '${src}'`,
-				)
-			}
-			await this.mkdir(dest, { recursive: true })
-			for (const entry of await this.readdir(src)) {
-				await this.genericCp(
-					joinVirtualPath(src, entry),
-					joinVirtualPath(dest, entry),
-					options,
-				)
-			}
-			return
-		}
-		await this.writeFile(dest, await this.readFileBuffer(src))
-	}
-
-	async readFile(
-		path: string,
-		options?: ReadFileOptions | BufferEncoding,
-	): Promise<string> {
-		if (this.isVaultMount(path)) {
-			throw new Error(
-				`EISDIR: illegal operation on a directory, read '${path}'`,
-			)
-		}
-		const routed = this.route(path)
-		return routed.fs.readFile(routed.path, options)
-	}
-
-	async readFileBuffer(path: string): Promise<Uint8Array> {
-		if (this.isVaultMount(path)) {
-			throw new Error(
-				`EISDIR: illegal operation on a directory, read '${path}'`,
-			)
-		}
-		const routed = this.route(path)
-		return routed.fs.readFileBuffer(routed.path)
-	}
-
-	async writeFile(
-		path: string,
-		content: FileContent,
-		options?: WriteFileOptions | BufferEncoding,
-	): Promise<void> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			throw new Error(
-				`EISDIR: illegal operation on a directory, write '${path}'`,
-			)
-		}
-		const routed = this.route(path)
-		await routed.fs.writeFile(routed.path, content, options)
-	}
-
-	async appendFile(
-		path: string,
-		content: FileContent,
-		options?: WriteFileOptions | BufferEncoding,
-	): Promise<void> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			throw new Error(
-				`EISDIR: illegal operation on a directory, append '${path}'`,
-			)
-		}
-		const routed = this.route(path)
-		await routed.fs.appendFile(routed.path, content, options)
-	}
-
-	async exists(path: string): Promise<boolean> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			return true
-		}
-		const routed = this.route(path)
-		return routed.fs.exists(routed.path)
-	}
-
-	async stat(path: string): Promise<FsStat> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			return {
-				isFile: false,
-				isDirectory: true,
-				isSymbolicLink: false,
-				mode: DIR_MODE,
-				size: 0,
-				mtime: new Date(0),
-			}
-		}
-		const routed = this.route(path)
-		return routed.fs.stat(routed.path)
-	}
-
-	async mkdir(path: string, options?: MkdirOptions): Promise<void> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			return
-		}
-		const routed = this.route(path)
-		await routed.fs.mkdir(routed.path, options)
-	}
-
-	async readdir(path: string): Promise<string[]> {
-		if (this.isRoot(path)) {
-			const base = await this.scratch.readdir('/')
-			return [...new Set(['vault', ...base])].sort()
-		}
-		if (this.isVaultMount(path)) {
-			return this.vaultFs.readdir('/')
-		}
-		const routed = this.route(path)
-		return routed.fs.readdir(routed.path)
-	}
-
-	async readdirWithFileTypes(path: string) {
-		if (this.isRoot(path)) {
-			const base = this.scratch.readdirWithFileTypes
-				? await this.scratch.readdirWithFileTypes('/')
-				: (await this.scratch.readdir('/')).map((name) => ({
-						name,
-						isFile: true,
-						isDirectory: false,
-						isSymbolicLink: false,
-					}))
-			return [
-				{
-					name: 'vault',
-					isFile: false,
-					isDirectory: true,
-					isSymbolicLink: false,
-				},
-				...base.filter((entry) => entry.name !== 'vault'),
-			].sort((left, right) => left.name.localeCompare(right.name))
-		}
-		if (this.isVaultMount(path)) {
-			return this.vaultFs.readdirWithFileTypes?.('/') ?? []
-		}
-		const routed = this.route(path)
-		return routed.fs.readdirWithFileTypes?.(routed.path) ?? []
-	}
-
-	async rm(path: string, options?: RmOptions): Promise<void> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			throw new Error(`EPERM: operation not permitted, remove '${path}'`)
-		}
-		const routed = this.route(path)
-		return routed.fs.rm(routed.path, options)
-	}
-
-	async cp(src: string, dest: string, options?: CpOptions): Promise<void> {
-		await this.genericCp(src, dest, options)
-	}
-
-	async mv(src: string, dest: string): Promise<void> {
-		if (this.isRoot(src) || this.isVaultMount(src)) {
-			throw new Error(`EPERM: operation not permitted, move '${src}'`)
-		}
-		const source = this.route(src)
-		const target = this.route(dest)
-		if (source.fs === target.fs) {
-			await source.fs.mv(source.path, target.path)
-			return
-		}
-		await this.genericCp(src, dest, { recursive: true })
-		await removeRecursive(this, src, { recursive: true, force: false })
-	}
-
-	resolvePath(base: string, path: string): string {
-		return ensureNotEscapingRoot(pathPosix.resolve(base || '/', path))
-	}
-
-	getAllPaths(): string[] {
-		const basePaths = this.scratch.getAllPaths().filter((path) => path !== '/')
-		const vaultPaths = this.vaultFs
-			.getAllPaths()
-			.filter((path) => path !== '/')
-			.map((path) => `${VAULT_MOUNT_POINT}${path}`)
-		return ['/', VAULT_MOUNT_POINT, ...basePaths, ...vaultPaths].sort()
-	}
-
-	async chmod(path: string, mode: number): Promise<void> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			return
-		}
-		const routed = this.route(path)
-		await routed.fs.chmod(routed.path, mode)
-	}
-
-	async symlink(target: string, linkPath: string): Promise<void> {
-		if (this.isVaultPath(linkPath) || this.isVaultPath(target)) {
-			throw new Error(
-				`ENOTSUP: symbolic links are not supported in vault fs, link '${linkPath}'`,
-			)
-		}
-		return this.scratch.symlink(target, linkPath)
-	}
-
-	async link(existingPath: string, newPath: string): Promise<void> {
-		if (this.isVaultPath(existingPath) || this.isVaultPath(newPath)) {
-			throw new Error(
-				`ENOTSUP: hard links are not supported in vault fs, link '${newPath}'`,
-			)
-		}
-		return this.scratch.link(existingPath, newPath)
-	}
-
-	async readlink(path: string): Promise<string> {
-		if (this.isVaultPath(path)) {
-			throw new Error(`EINVAL: not a symbolic link, readlink '${path}'`)
-		}
-		return this.scratch.readlink(path)
-	}
-
-	async lstat(path: string): Promise<FsStat> {
-		return this.stat(path)
-	}
-
-	async realpath(path: string): Promise<string> {
-		await this.stat(path)
-		return ensureNotEscapingRoot(path)
-	}
-
-	async utimes(path: string, atime: Date, mtime: Date): Promise<void> {
-		if (this.isRoot(path) || this.isVaultMount(path)) {
-			return
-		}
-		const routed = this.route(path)
-		await routed.fs.utimes(routed.path, atime, mtime)
-	}
-}
-
-export { VAULT_MOUNT_POINT }
+export { BUILTIN_SKILLS_MOUNT_POINT, VAULT_MOUNT_POINT }

@@ -387,6 +387,7 @@
 		"alwaysAllow": "自动同意该操作",
 		"deny": "拒绝",
 		"denied": "操作已拒绝：{{summary}}",
+		"readonly": "该 agent 是只读的，不能修改文件。尝试的操作：{{summary}}",
 		"source": "源路径",
 		"destination": "目标路径",
 		"operations": {
@@ -462,12 +463,12 @@
 		},
 		"confirmModal": {
 			"title": "同步确认",
+			"policyTitle": "本次同步策略",
 			"message": "⚠️ 请注意：\n\n1. 同步操作可能会修改或删除本地文件\n2. 建议在同步前手动备份重要文件\n3. 如果出现文件冲突，可能需要手动解决\n4. 首次同步需要处理所有文件，可能会比较慢，请耐心等待\n\n确定要开始同步吗？",
 			"confirm": "确认同步",
 			"cancel": "取消",
 			"remoteDir": "远程目录：{{dir}}",
-			"strategy": "同步策略：{{strategy}}",
-			"policy": "同步策略：{{policy}}"
+			"strategy": "冲突处理策略：{{strategy}}"
 		}
 	},
 	"taskList": {
@@ -555,13 +556,11 @@
 				"exportAsMarkdown": "导出为 Markdown",
 				"deleteSession": "删除",
 				"cancel": "取消",
+				"close": "关闭",
 				"selectFile": "选择文件",
 				"send": "发送",
 				"stopRun": "终止",
-				"newFragment": "新建段",
 				"compressContext": "压缩上下文",
-				"closeTasks": "关闭",
-				"cancelTask": "取消",
 				"copy": "复制",
 				"deleteMessage": "删除消息",
 				"regenerateMessage": "重新生成",
@@ -578,12 +577,7 @@
 				"toolCall": "工具调用",
 				"params": "参数",
 				"result": "结果",
-				"tasks": "任务",
-				"currentSession": "当前会话",
-				"otherSessions": "其他会话",
 				"queuedSubmissions": "排队内容",
-				"depth": "深度",
-				"sources": "来源",
 				"contextArea": "上下文",
 				"todoList": "待办列表"
 			},
@@ -595,20 +589,19 @@
 				"processingTools": "工具处理中",
 				"noProvider": "未选择 Provider",
 				"noModel": "未选择 Model",
-				"noTasks": "还没有任务",
+				"taskDispatching": "正在派发…",
+				"noSubagentMessages": "该子 Agent 尚未产生消息。",
 				"copied": "已复制",
 				"loadingContextItem": "加载中…",
-				"taskQueued": "排队中",
-				"taskRunning": "运行中",
-				"taskCompleted": "已完成",
-				"taskFailed": "失败",
-				"taskCancelled": "已取消",
 				"todoEmpty": "暂无待办"
 			},
 			"placeholders": {
 				"input": "输入消息，Enter 发送，Shift+Enter 换行"
 			},
 			"dialogs": {
+				"subagentTimeline": {
+					"title": "子 Agent 时间线"
+				},
 				"deleteSession": {
 					"title": "删除会话",
 					"message": "确认删除这个会话吗？删除后不可恢复。",
@@ -621,11 +614,6 @@
 					"toolConfirm": "此操作将删除该工具调用结果，并从对应的 AI 消息中移除该工具调用记录，无法恢复。",
 					"toolRestoreWarning": "删除后将无法通过撤回消息恢复这些文件修改。",
 					"confirm": "确认删除"
-				},
-				"newFragment": {
-					"title": "新建段",
-					"message": "这会清除 AI 的记忆，但界面上仍然保留之前的对话记录。",
-					"confirm": "新建段"
 				},
 				"compressContext": {
 					"title": "压缩上下文",
@@ -664,7 +652,6 @@
 			"editMatchNotFound": "文件中未找到要替换的精确文本。",
 			"editMatchNotUnique": "要替换的精确文本必须且只能匹配一次。",
 			"sessionNotFound": "目标会话已不存在",
-			"taskDepthExceeded": "任务拆分深度已达到上限",
 			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用"
 		}
 	},

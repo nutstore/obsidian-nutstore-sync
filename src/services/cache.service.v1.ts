@@ -59,7 +59,7 @@ export default class CacheServiceV1 extends BaseService {
 			}
 			if (
 				(exportedStorage.remoteBaseDir &&
-					exportedStorage.remoteBaseDir !==
+					stdRemotePath(exportedStorage.remoteBaseDir) !==
 						stdRemotePath(this.plugin.remoteBaseDir)) ||
 				!isTraversalCacheCompatible(
 					exportedStorage.traverseWebDAVCache,
@@ -116,11 +116,14 @@ export default class CacheServiceV1 extends BaseService {
 			})
 
 			await webdav.createDirectory(this.remoteCacheDirPath, { recursive: true })
-			await webdav.putFileContents(
+			const uploaded = await webdav.putFileContents(
 				this.remoteCacheFilePath,
 				uint8ArrayToArrayBuffer(encodedStorage),
 				{ overwrite: true },
 			)
+			if (!uploaded) {
+				throw new Error('Remote traversal cache upload failed')
+			}
 
 			await cacheUploadMetaKV.set(metaKey, { nodesHash })
 			logger.info('Saved remote traversal cache')

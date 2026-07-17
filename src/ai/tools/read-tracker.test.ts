@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createFragmentReadTracker } from '~/ai/tools/file-operation'
-import {
-	cloneSession,
-	type ChatFragment,
-	type ChatSession,
-} from '~/ai/chat/domain'
+import { type ChatFragment } from '~/ai/chat/domain'
 
 describe('createFragmentReadTracker', () => {
 	it('reports a path as read when it was in readVaultPaths at creation', () => {
@@ -158,54 +154,5 @@ describe('createFragmentReadTracker', () => {
 		tracker.markRead('notes/new.md')
 		expect(fragment.readVaultPaths).toEqual(['notes/live.md', 'notes/new.md'])
 		expect(tracker.hasRead('notes/new.md')).toBe(false)
-	})
-})
-
-describe('cloneSession with readVaultPaths', () => {
-	it('clones readVaultPaths as an independent array', () => {
-		const fragment: ChatFragment = {
-			id: 'f1',
-			createdAt: 0,
-			updatedAt: 0,
-			messages: [],
-			readVaultPaths: ['notes/a.md', 'notes/b.md'],
-		}
-		const session: ChatSession = {
-			id: 's1',
-			createdAt: 0,
-			updatedAt: 0,
-			fragments: [fragment],
-			activeFragmentId: 'f1',
-			tasks: [],
-		}
-
-		const cloned = cloneSession(session)
-		const clonedFragment = cloned.fragments[0]
-
-		expect(clonedFragment.readVaultPaths).toEqual(['notes/a.md', 'notes/b.md'])
-		expect(clonedFragment.readVaultPaths).not.toBe(fragment.readVaultPaths)
-
-		clonedFragment.readVaultPaths!.push('notes/c.md')
-		expect(fragment.readVaultPaths).toEqual(['notes/a.md', 'notes/b.md'])
-	})
-
-	it('preserves undefined readVaultPaths through clone', () => {
-		const fragment: ChatFragment = {
-			id: 'f1',
-			createdAt: 0,
-			updatedAt: 0,
-			messages: [],
-		}
-		const session: ChatSession = {
-			id: 's1',
-			createdAt: 0,
-			updatedAt: 0,
-			fragments: [fragment],
-			activeFragmentId: 'f1',
-			tasks: [],
-		}
-
-		const cloned = cloneSession(session)
-		expect(cloned.fragments[0].readVaultPaths).toBeUndefined()
 	})
 })

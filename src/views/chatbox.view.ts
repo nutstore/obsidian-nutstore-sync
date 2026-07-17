@@ -69,6 +69,8 @@ export default class ChatboxView extends ItemView {
 	private preservingSelectionForChatFocus = false
 	private readonly renderMarkdown: NonNullable<ChatboxProps['renderMarkdown']> =
 		async (el: HTMLElement, markdown: string) => {
+			const app = this.app
+			const plugin = this.plugin
 			const component = new Component()
 			this.addChild(component)
 			component.load()
@@ -79,7 +81,7 @@ export default class ChatboxView extends ItemView {
 
 			try {
 				await MarkdownRenderer.render(
-					this.app,
+					app,
 					markdown,
 					renderedEl,
 					sourcePath,
@@ -121,10 +123,14 @@ export default class ChatboxView extends ItemView {
 				event.stopPropagation()
 
 				if (action.type === 'internal') {
-					void this.app.workspace.openLinkText(
-						action.linktext,
-						this.getMarkdownSourcePath(true),
-						false,
+					void app.workspace.openLinkText(action.linktext, sourcePath, false)
+					return
+				}
+
+				if (action.type === 'protocol' && action.providerId) {
+					void plugin.protocolService.openProviderEditor(
+						action.providerId,
+						plugin.chatService.getChatModalMountTarget(),
 					)
 					return
 				}
@@ -365,6 +371,8 @@ export default class ChatboxView extends ItemView {
 			...viewProps,
 			activeContextItems,
 			renderMarkdown: this.renderMarkdown,
+			onModalHostChange: (rootEl) =>
+				this.plugin.chatService.setChatModalHost(rootEl),
 			onSendMessage: (text: string, contextItems?: UserContextItem[]) =>
 				this.plugin.chatService.sendMessage(text, contextItems ?? []),
 			onCaptureActiveContext: () => {

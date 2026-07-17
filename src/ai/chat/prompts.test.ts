@@ -1,0 +1,26 @@
+import { describe, expect, it } from 'vitest'
+import { getAgentDefinition } from '~/ai/chat/agents/registry'
+import { createSystemPromptForAgent } from './prompts'
+
+describe('main system prompt Skills guidance', () => {
+	it('loads matching Skill paths through Bash without use_skill', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(prompt).toContain('skill name, description, and path')
+		expect(prompt).toContain('use bash to read the complete SKILL.md')
+		expect(prompt).toContain('copy it exactly from workspace context')
+		expect(prompt).toContain(
+			'Paths under /vault/.agents/skills are user-defined Vault Skills',
+		)
+		expect(prompt).toContain(
+			'paths under /.agents/skills are bundled built-in Skills',
+		)
+		expect(prompt).toContain('These namespaces are distinct')
+		expect(prompt).toContain('retry the exact catalog path')
+		expect(prompt).not.toContain('call use_skill')
+		expect(prompt).not.toContain('background_output')
+		expect(prompt).not.toContain('subagent_type')
+	})
+})

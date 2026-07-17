@@ -2,6 +2,10 @@ import { cloneDeep } from 'lodash-es'
 import { Modal, Notice, Setting } from 'obsidian'
 import { findPresetModelById } from '~/ai/catalog/config'
 import { AIModelConfig } from '~/ai/core/types'
+import {
+	applyObsidianModalMountTarget,
+	type ChatModalMountTarget,
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
@@ -9,6 +13,7 @@ import type NutstorePlugin from '..'
 interface ModelEditorOptions {
 	findPresetOnSave?: boolean
 	presetProviderApi?: string
+	modalMountTarget?: ChatModalMountTarget
 }
 
 const INPUT_MODALITY_OPTIONS: AIModelConfig['modalities']['input'] = [
@@ -23,6 +28,7 @@ export default class ModelEditorModal extends Modal {
 	private draft: AIModelConfig
 	private lastMatchedModelId?: string
 	private updateInputModalityTags?: () => void
+	private cleanupModalMount?: () => void
 
 	constructor(
 		plugin: NutstorePlugin,
@@ -133,7 +139,17 @@ export default class ModelEditorModal extends Modal {
 			)
 	}
 
+	open() {
+		super.open()
+		this.cleanupModalMount = applyObsidianModalMountTarget(
+			this,
+			this.options.modalMountTarget,
+		)
+	}
+
 	onClose() {
+		this.cleanupModalMount?.()
+		this.cleanupModalMount = undefined
 		this.contentEl.empty()
 		this.updateInputModalityTags = undefined
 	}

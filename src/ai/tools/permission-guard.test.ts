@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createPermissionGuard } from './permission-guard'
+import {
+	createPermissionGuard,
+	createReadonlyPermissionGuard,
+	createFullAccessPermissionGuard,
+} from './permission-guard'
 
 const { modalOpenMock, modalCtorMock } = vi.hoisted(() => ({
 	modalOpenMock: vi.fn(),
@@ -34,37 +38,22 @@ function getRuntimeStore(
 function createGuard(
 	sessionId: string,
 	options?: {
-		yolo?: boolean
 		autoApproveBySession?: Map<string, Set<string>>
 	},
 ) {
-	const settings = {
-		ai: {
-			yolo: options?.yolo ?? false,
-		},
-	} as never
-
 	const autoApproveBySession =
 		options?.autoApproveBySession ?? new Map<string, Set<string>>()
 	const runtimeStore = getRuntimeStore(sessionId, autoApproveBySession)
-	const guard = createPermissionGuard({} as never, () => settings, runtimeStore)
+	const guard = createPermissionGuard({} as never, runtimeStore)
 	return { guard, autoApproveBySession }
 }
 
+beforeEach(() => {
+	modalOpenMock.mockReset()
+	modalCtorMock.mockReset()
+})
+
 describe('createPermissionGuard', () => {
-	beforeEach(() => {
-		modalOpenMock.mockReset()
-		modalCtorMock.mockReset()
-	})
-
-	it('bypasses modal when yolo is enabled', async () => {
-		const { guard } = createGuard('session-1', { yolo: true })
-
-		await guard({ type: 'fs', fs: { kind: 'write', path: 'notes/a.md' } })
-
-		expect(modalOpenMock).not.toHaveBeenCalled()
-	})
-
 	it('approve only affects the current request', async () => {
 		const { guard } = createGuard('session-1')
 		modalOpenMock
@@ -170,5 +159,89 @@ describe('createPermissionGuard', () => {
 				},
 			}),
 		).rejects.toThrow('move from notes/a.md to notes/b.md')
+	})
+})
+
+describe('createReadonlyPermissionGuard', () => {
+	it('rejects write operations without opening any modal', async () => {
+		const guard = createReadonlyPermissionGuard()
+
+		await expect(
+			guard({ type: 'fs', fs: { kind: 'write', path: 'notes/a.md' } }),
+		).rejects.toThrow('write on notes/a.md')
+
+		expect(modalOpenMock).not.toHaveBeenCalled()
+	})
+
+	it('rejects delete operations', async () => {
+		const guard = createReadonlyPermissionGuard()
+
+		await expect(
+			guard({ type: 'fs', fs: { kind: 'delete', path: 'notes/a.md' } }),
+		).rejects.toThrow('delete on notes/a.md')
+	})
+
+	it('rejects mkdir operations', async () => {
+		const guard = createReadonlyPermissionGuard()
+
+		await expect(
+			guard({ type: 'fs', fs: { kind: 'mkdir', path: 'notes/sub' } }),
+		).rejects.toThrow('mkdir on notes/sub')
+	})
+
+	it('rejects move operations', async () => {
+		const guard = createReadonlyPermissionGuard()
+
+		await expect(
+			guard({
+				type: 'fs',
+				fs: {
+					kind: 'move',
+					src: 'notes/a.md',
+					dest: 'notes/b.md',
+				},
+			}),
+		).rejects.toThrow('move from notes/a.md to notes/b.md')
+	})
+
+	it('mentions the read-only constraint in the error message', async () => {
+		const guard = createReadonlyPermissionGuard()
+
+		await expect(
+			guard({ type: 'fs', fs: { kind: 'edit', path: 'notes/a.md' } }),
+		).rejects.toThrow(/read-only/i)
+	})
+})
+
+describe('createFullAccessPermissionGuard', () => {
+	it('allows write operations without opening any modal', async () => {
+		const guard = createFullAccessPermissionGuard()
+
+		await guard({ type: 'fs', fs: { kind: 'write', path: 'notes/a.md' } })
+
+		expect(modalOpenMock).not.toHaveBeenCalled()
+	})
+
+	it('allows delete operations without opening any modal', async () => {
+		const guard = createFullAccessPermissionGuard()
+
+		await guard({ type: 'fs', fs: { kind: 'delete', path: 'notes/a.md' } })
+
+		expect(modalOpenMock).not.toHaveBeenCalled()
+	})
+
+	it('allows move operations without opening any modal', async () => {
+		const guard = createFullAccessPermissionGuard()
+
+		await guard({
+			type: 'fs',
+			fs: {
+				kind: 'move',
+				src: 'notes/a.md',
+				dest: 'notes/b.md',
+			},
+		})
+
+		expect(modalOpenMock).not.toHaveBeenCalled()
 	})
 })

@@ -116,10 +116,16 @@ export class NutstoreSync {
 		)
 	}
 
-	async start({ mode }: { mode: SyncStartMode }): Promise<SyncStartResult> {
+	async start({
+		mode,
+		syncPolicy = this.localSettings.syncPolicy,
+	}: {
+		mode: SyncStartMode
+		syncPolicy?: SyncPolicy
+	}): Promise<SyncStartResult> {
 		this.currentLogPrefix = formatSyncLogPrefix({
 			mode,
-			policy: this.localSettings.syncPolicy,
+			policy: syncPolicy,
 		})
 		this.currentLogger = createSyncLogger(this.currentLogPrefix)
 		try {
@@ -191,7 +197,7 @@ export class NutstoreSync {
 
 			await cacheService.restoreRemoteTraversalCacheIfMissing(this.logger)
 			const decider = (() => {
-				switch (this.localSettings.syncPolicy) {
+				switch (syncPolicy) {
 					case SyncPolicy.SendOnly:
 						return new SendOnlySyncDecider(this, syncRecord)
 					case SyncPolicy.SendOnlyOverrideChanges:

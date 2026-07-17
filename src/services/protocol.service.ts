@@ -1,6 +1,7 @@
 import { Notice } from 'obsidian'
 import { getProviderById } from '~/ai/catalog/config'
 import ProviderEditorModal from '~/components/ProviderEditorModal'
+import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import { emitSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
@@ -40,7 +41,10 @@ export default class ProtocolService extends BaseService {
 		)
 	}
 
-	async openProviderEditor(providerId: string) {
+	async openProviderEditor(
+		providerId: string,
+		mountTarget?: ChatModalMountTarget,
+	) {
 		const provider = getProviderById(
 			this.plugin.settings.ai.providers,
 			providerId,
@@ -67,6 +71,7 @@ export default class ProtocolService extends BaseService {
 				return true
 			},
 			false,
+			mountTarget,
 		).open()
 	}
 }

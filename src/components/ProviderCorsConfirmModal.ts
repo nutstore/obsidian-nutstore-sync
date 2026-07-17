@@ -1,10 +1,18 @@
 import { App, Modal, Setting } from 'obsidian'
+import {
+	applyObsidianModalMountTarget,
+	type ChatModalMountTarget,
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
 
 export default class ProviderCorsConfirmModal extends Modal {
 	private confirmed = false
+	private cleanupModalMount?: () => void
 
-	constructor(app: App) {
+	constructor(
+		app: App,
+		private readonly mountTarget?: ChatModalMountTarget,
+	) {
 		super(app)
 	}
 
@@ -39,6 +47,10 @@ export default class ProviderCorsConfirmModal extends Modal {
 
 	async open(): Promise<boolean> {
 		super.open()
+		this.cleanupModalMount = applyObsidianModalMountTarget(
+			this,
+			this.mountTarget,
+		)
 		return new Promise((resolve) => {
 			const originalOnClose = this.onClose.bind(this)
 			this.onClose = () => {
@@ -49,6 +61,8 @@ export default class ProviderCorsConfirmModal extends Modal {
 	}
 
 	onClose() {
+		this.cleanupModalMount?.()
+		this.cleanupModalMount = undefined
 		this.contentEl.empty()
 	}
 }

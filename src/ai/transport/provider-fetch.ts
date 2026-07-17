@@ -2,8 +2,6 @@ import type { AIProviderConfig } from '~/ai/core/types'
 import i18n from '~/i18n'
 import { obsidianFetch } from './obsidian-fetch'
 
-export type FetchFunction = typeof fetch
-
 function isBrowserCorsFailure(error: unknown) {
 	return error instanceof TypeError
 }
@@ -12,8 +10,8 @@ function buildDisableCorsLink(providerId: string) {
 	return `obsidian://nutstore-sync/modal/provider-edit?providerId=${encodeURIComponent(providerId)}`
 }
 
-export function createProviderFetch(provider: AIProviderConfig): FetchFunction {
-	const baseFetch: FetchFunction = provider.allowBrowserCors
+export function createProviderFetch(provider: AIProviderConfig): typeof fetch {
+	const baseFetch: typeof fetch = provider.allowBrowserCors
 		? fetch
 		: obsidianFetch
 

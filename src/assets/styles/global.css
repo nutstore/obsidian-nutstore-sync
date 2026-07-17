@@ -193,7 +193,7 @@ input.success {
 	white-space: pre;
 }
 
-.ns-chatbox-contained-modal-container {
+.modal-container.ns-chatbox-contained-modal-container {
 	position: absolute;
 	inset: 0;
 	z-index: 220;
@@ -208,7 +208,7 @@ input.success {
 	inset: 0;
 }
 
-.ns-chatbox-contained-modal {
+.modal.ns-chatbox-contained-modal {
 	position: relative;
 	margin: 0;
 	max-width: min(32rem, calc(100% - 2rem));
@@ -223,6 +223,11 @@ input.success {
 .modal.provider-editor-modal {
 	width: min(720px, calc(100vw - 2rem));
 	max-width: 720px;
+}
+
+.modal.provider-editor-modal.ns-chatbox-contained-modal {
+	width: min(720px, calc(100% - 2rem));
+	max-width: calc(100% - 2rem);
 }
 
 .modal-content.provider-editor-modal__content {

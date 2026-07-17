@@ -1,7 +1,8 @@
+import type { ChatSession } from '~/ai/chat/domain'
+
 import { z } from 'zod/mini'
 import { findLatestTodos } from '~/ai/chat/domain'
 import { chatTodoItemSchema, type ChatTodoItem } from '~/ai/chat/types'
-import type { AISession } from '~/ai/core/types'
 
 export const todoWriteInputSchema = z.object({
 	todos: z.optional(z.array(chatTodoItemSchema)),
@@ -21,19 +22,13 @@ function normalizeTodoList(inputTodos: NonNullable<TodoWriteInput['todos']>) {
 
 export async function executeTodoWrite(
 	params: TodoWriteInput,
-	session: AISession,
+	session: ChatSession,
 ) {
 	if (!params.todos) {
 		const todos = findLatestTodos(session)
-		return {
-			result: { todos },
-			todos,
-		}
+		return { todos }
 	}
 
 	const todos = normalizeTodoList(params.todos)
-	return {
-		result: { todos },
-		todos,
-	}
+	return { todos }
 }

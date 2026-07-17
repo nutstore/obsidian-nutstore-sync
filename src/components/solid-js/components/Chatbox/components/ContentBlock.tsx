@@ -3,8 +3,8 @@ import type {
 	ChatDisplayContentBlock,
 	ChatMessageContentPart,
 	ReasoningPart,
-	TextPart,
 } from '~/ai/chat/types'
+import type { TextPart } from 'ai'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
 import { MarkdownContent } from './MarkdownContent'

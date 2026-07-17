@@ -1,12 +1,7 @@
-import type {
-	AssistantModelMessage,
-	FilePart,
-	TextPart,
-	ToolCallPart,
-} from 'ai'
-import type { AIMessage } from '~/ai/core/types'
-import type { ChatMessage } from '~/ai/chat/types'
+import type { FilePart, ModelMessage } from 'ai'
 import i18n from '~/i18n'
+import type { ChatSession } from '~/ai/chat/domain'
+import { getMessageText } from '~/ai/chat/messages/ui-message'
 
 const DEFAULT_IMAGE_MEDIA_TYPE = 'image/png'
 
@@ -49,16 +44,7 @@ export function imageFilePartSrc(part: unknown): string | undefined {
 	return undefined
 }
 
-export function toTextParts(text: string): TextPart[] {
-	return [{ type: 'text', text }]
-}
-
-export function messageToText(
-	message: Pick<ChatMessage, 'content'> | AIMessage,
-) {
-	if (!message.content) {
-		return ''
-	}
+export function messageToText(message: Pick<ModelMessage, 'content'>) {
 	if (typeof message.content === 'string') {
 		return message.content
 	}
@@ -67,22 +53,9 @@ export function messageToText(
 		.map((part) => part.text ?? '')
 		.join('\n')
 }
-
-export function getAssistantToolCalls(
-	message: ChatMessage,
-): ToolCallPart[] | undefined {
-	if (message.role !== 'assistant' || !Array.isArray(message.content)) {
-		return undefined
-	}
-	const calls = (message.content as Array<{ type: string }>).filter(
-		(p): p is ToolCallPart => p.type === 'tool-call',
-	)
-	return calls.length > 0 ? calls : undefined
-}
-
-export function migrateMessageFromV0(msg: unknown): ChatMessage {
+export function migrateMessageFromV0(msg: unknown): ModelMessage {
 	if (!msg || typeof msg !== 'object') {
-		return msg as ChatMessage
+		return msg as ModelMessage
 	}
 	const m = msg as Record<string, unknown>
 	const role = m.role as string
@@ -120,7 +93,7 @@ export function migrateMessageFromV0(msg: unknown): ChatMessage {
 		return {
 			role: 'assistant',
 			content: [...contentParts, ...toolCallParts],
-		} as ChatMessage
+		} as ModelMessage
 	}
 
 	if (role === 'tool') {
@@ -139,7 +112,7 @@ export function migrateMessageFromV0(msg: unknown): ChatMessage {
 					output: { type: 'text', value: textValue },
 				},
 			],
-		} as ChatMessage
+		} as ModelMessage
 	}
 
 	if (role === 'user') {
@@ -155,10 +128,10 @@ export function migrateMessageFromV0(msg: unknown): ChatMessage {
 			}
 			return { type: 'text', text: p.text ?? '' }
 		})
-		return { role: 'user', content: parts } as ChatMessage
+		return { role: 'user', content: parts } as ModelMessage
 	}
 
-	return msg as ChatMessage
+	return msg as ModelMessage
 }
 
 export function needsV0Migration(msg: unknown): boolean {
@@ -187,17 +160,17 @@ function migrateImagePartsToFiles(content: unknown): unknown {
 	return changed ? next : content
 }
 
-export function migrateDeprecatedImageParts(msg: unknown): ChatMessage {
+export function migrateDeprecatedImageParts(msg: unknown): ModelMessage {
 	if (!msg || typeof msg !== 'object') {
-		return msg as ChatMessage
+		return msg as ModelMessage
 	}
 	const m = msg as Record<string, unknown>
 	const content = m.content
 	const migrated = migrateImagePartsToFiles(content)
 	if (migrated === content) {
-		return msg as ChatMessage
+		return msg as ModelMessage
 	}
-	return { ...(msg as object), content: migrated } as ChatMessage
+	return { ...(msg as object), content: migrated } as ModelMessage
 }
 
 export function needsDeprecatedImagePartMigration(msg: unknown): boolean {
@@ -211,19 +184,11 @@ export function needsDeprecatedImagePartMigration(msg: unknown): boolean {
 	})
 }
 
-export function deriveTitle(session: {
-	fragments: Array<{ messages: Array<{ message: ChatMessage }> }>
-}) {
-	for (const fragment of session.fragments) {
-		const firstUser = fragment.messages.find(
-			(item) => item.message.role === 'user',
-		)
-		const content = firstUser ? messageToText(firstUser.message).trim() : ''
-		if (content) {
-			return content
-		}
+export function deriveTitle(session: ChatSession) {
+	for (const message of session.subagents.master.timeline) {
+		if (message.role !== 'user') continue
+		const content = getMessageText(message).trim()
+		if (content) return content
 	}
 	return i18n.t('chatbox.newChat')
 }
-
-export type { AssistantModelMessage, FilePart, TextPart, ToolCallPart }

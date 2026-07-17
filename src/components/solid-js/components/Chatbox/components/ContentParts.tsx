@@ -1,10 +1,6 @@
 import { For, Match, Show, Switch } from 'solid-js'
-import type {
-	ChatMessageContentPart,
-	ReasoningPart,
-	TextPart,
-	ToolCallPart,
-} from '~/ai/chat/types'
+import type { ChatMessageContentPart, ReasoningPart } from '~/ai/chat/types'
+import type { TextPart, ToolCallPart } from 'ai'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
 import { MarkdownContent } from './MarkdownContent'

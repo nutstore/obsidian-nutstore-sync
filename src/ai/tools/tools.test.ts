@@ -1,3 +1,4 @@
+import type { ToolCallPart, ToolSet } from 'ai'
 import { describe, expect, it } from 'vitest'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
 import { createAITools } from '~/ai/tools/tools'
@@ -5,18 +6,21 @@ import {
 	createFragmentReadTracker,
 	type ReadTracker,
 } from '~/ai/tools/file-operation'
-import type {
-	AIToolCall,
-	AIToolExecutionContext,
-	AIToolDefinition,
-} from '~/ai/core/types'
+import type { AppToolContext } from '~/ai/core/types'
 import type { ChatFragment, ChatSession } from '~/ai/chat/domain'
 import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import { SessionStore } from '~/ai/chat/session/session-store'
-import { z } from 'zod/mini'
+import { migrateLegacySession } from '~/ai/chat/session/session-migration'
+import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
+import {
+	EXPLORER_AGENT_ID,
+	filterToolsForAgent,
+	getAgentDefinition,
+	MASTER_AGENT_ID,
+} from '~/ai/chat/agents/registry'
 
 interface MockFile {
 	path: string
@@ -148,8 +152,8 @@ function createMockVaultForExecutor(files: MockFile[]) {
 	}
 }
 
-function findTool(tools: AIToolDefinition[], name: string) {
-	const tool = tools.find((t) => t.name === name)
+function findTool(tools: ToolSet, name: string) {
+	const tool = tools[name]
 	if (!tool) throw new Error(`tool not found: ${name}`)
 	return tool
 }
@@ -157,11 +161,10 @@ function findTool(tools: AIToolDefinition[], name: string) {
 function makeContext(
 	session: ChatSession,
 	readTracker?: ReadTracker,
-): AIToolExecutionContext {
+): AppToolContext {
 	return {
 		session,
-		depth: 0,
-		maxDepth: 2,
+		agentId: 'master',
 		readTracker,
 	}
 }
@@ -173,26 +176,101 @@ function makeSession(fragment?: ChatFragment): ChatSession {
 		updatedAt: 0,
 		messages: [],
 	}
-	return {
+	return migrateLegacySession({
 		id: 's1',
 		createdAt: 0,
 		updatedAt: 0,
 		fragments: [frag],
 		activeFragmentId: frag.id,
-		tasks: [],
-	}
+	})
 }
 
 async function callEditFile(
 	app: App,
 	params: { path: string; oldText: string; newText: string },
-	context: AIToolExecutionContext,
+	context: AppToolContext,
 ) {
 	const tools = createAITools(app, { permissionGuard: undefined })
 	const tool = findTool(tools, 'edit_file')
-	const parsed = z.parse(tool.inputSchema, params)
-	return tool.execute(parsed, context)
+	return executeToolForTest(tool, params, context)
 }
+
+async function executeToolForTest(
+	tool: ToolSet[string],
+	input: unknown,
+	context: AppToolContext,
+): Promise<unknown> {
+	if (!tool.execute) throw new Error('Expected executable tool')
+	return (await tool.execute(input, {
+		toolCallId: 'test-tool-call',
+		messages: [],
+		context,
+	})) as unknown
+}
+
+describe('tool registration', () => {
+	it('does not register a dedicated use_skill tool', () => {
+		expect('use_skill' in createAITools({} as never)).toBe(false)
+	})
+
+	it('registers only the asynchronous task dispatch tool for subagents', async () => {
+		const dispatched: unknown[] = []
+		const tools = createAITools({} as never, {
+			dispatchTask: async (params) => {
+				dispatched.push(params)
+				return {
+					taskId: 'task-example',
+					subagentType: EXPLORER_AGENT_ID,
+					status: 'dispatched',
+				}
+			},
+		})
+		const tool = findTool(tools, 'task')
+		const session = makeSession()
+		const context: AppToolContext = {
+			session,
+			agentId: 'caller-agent',
+		}
+
+		const output = await executeToolForTest(
+			tool,
+			{
+				subagent_type: EXPLORER_AGENT_ID,
+				prompt: 'Inspect the vault',
+			},
+			context,
+		)
+
+		expect('spawn' in tools).toBe(false)
+		expect('background_output' in tools).toBe(false)
+		expect(dispatched).toEqual([
+			{
+				prompt: 'Inspect the vault',
+				subagentType: EXPLORER_AGENT_ID,
+				callerAgentId: 'caller-agent',
+				sessionId: session.id,
+			},
+		])
+		expect(output).toEqual({
+			taskId: 'task-example',
+			subagentType: EXPLORER_AGENT_ID,
+			status: 'dispatched',
+		})
+		expect(
+			await tool.toModelOutput?.({
+				toolCallId: 'task-call',
+				input: {
+					subagent_type: EXPLORER_AGENT_ID,
+					prompt: 'Inspect the vault',
+				},
+				output,
+			}),
+		).toEqual({
+			type: 'text',
+			value: expect.stringContaining('Task dispatched. Task ID: task-example.'),
+		})
+	})
+})
 
 describe('edit_file read-gate', () => {
 	it('treats a vault/ prefix without a leading slash as a vault-relative folder', async () => {
@@ -220,7 +298,7 @@ describe('edit_file read-gate', () => {
 			makeContext(session, createFragmentReadTracker(fragment)),
 		)
 
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({ replaced: true })
 		expect(store.get('vault/notes/x.md')).toBe('updated target')
 		expect(store.get('notes/x.md')).toBe('root target')
 	})
@@ -272,7 +350,7 @@ describe('edit_file read-gate', () => {
 			context,
 		)
 
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({ replaced: true })
 		expect(store.get('notes/x.md')).toBe('hi world')
 	})
 
@@ -300,7 +378,7 @@ describe('edit_file read-gate', () => {
 			context,
 		)
 
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({ replaced: true })
 		expect(store.get('notes/x.md')).toBe('hi world')
 	})
 
@@ -321,14 +399,13 @@ describe('edit_file read-gate', () => {
 			updatedAt: 1,
 			messages: [],
 		}
-		const session: ChatSession = {
+		const session = migrateLegacySession({
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
 			fragments: [oldFragment, newFragment],
 			activeFragmentId: 'f2',
-			tasks: [],
-		}
+		})
 		const tracker = createFragmentReadTracker(newFragment)
 		const context = makeContext(session, tracker)
 
@@ -390,7 +467,7 @@ describe('edit_file read-gate', () => {
 			{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
 			nextContext,
 		)
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({ replaced: true })
 	})
 })
 
@@ -436,12 +513,13 @@ describe('note_neighborhood path resolution', () => {
 		}
 		const tool = findTool(createAITools(app), 'note_neighborhood')
 
-		const result = await tool.execute(
-			z.parse(tool.inputSchema, { note: 'Shared', depth: 1 }),
+		const result = await executeToolForTest(
+			tool,
+			{ note: 'Shared', depth: 1 },
 			makeContext(makeSession(fragment)),
 		)
 
-		expect(result.result).toMatchObject({ root: 'projects/b/Shared.md' })
+		expect(result).toMatchObject({ root: 'projects/b/Shared.md' })
 	})
 })
 
@@ -461,25 +539,18 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 		} as unknown as Selection
 		const store = new SessionStore(state, runtimeStates, selection)
 
+		const master = createEmptyMasterAgent(0)
+		master.readVaultPaths = ['notes/a.md', 'notes/b.md']
 		const session: ChatSession = {
+			schemaVersion: 2,
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
-			fragments: [
-				{
-					id: 'f1',
-					createdAt: 0,
-					updatedAt: 0,
-					messages: [],
-					readVaultPaths: ['notes/a.md', 'notes/b.md'],
-				},
-			],
-			activeFragmentId: 'f1',
-			tasks: [],
+			subagents: { master },
 		}
 
 		const normalized = store.normalizeSession(session)
-		expect(normalized.fragments[0].readVaultPaths).toEqual([
+		expect(normalized.subagents.master.readVaultPaths).toEqual([
 			'notes/a.md',
 			'notes/b.md',
 		])
@@ -501,23 +572,15 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 		const store = new SessionStore(state, runtimeStates, selection)
 
 		const session: ChatSession = {
+			schemaVersion: 2,
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
-			fragments: [
-				{
-					id: 'f1',
-					createdAt: 0,
-					updatedAt: 0,
-					messages: [],
-				},
-			],
-			activeFragmentId: 'f1',
-			tasks: [],
+			subagents: { master: createEmptyMasterAgent(0) },
 		}
 
 		const normalized = store.normalizeSession(session)
-		expect(normalized.fragments[0].readVaultPaths).toBeUndefined()
+		expect(normalized.subagents.master.readVaultPaths).toBeUndefined()
 	})
 })
 
@@ -531,15 +594,16 @@ describe('bash tool UTF-8 handling', () => {
 		const tool = findTool(tools, 'bash')
 		const session = makeSession()
 
-		const result = await tool.execute(
-			z.parse(tool.inputSchema, {
+		const result = await executeToolForTest(
+			tool,
+			{
 				script:
 					'cat /vault/notes/source.md > /vault/notes/copy.md && cat /vault/notes/copy.md',
-			}),
+			},
 			makeContext(session),
 		)
 
-		expect(result.result).toBe('中文测试\n\n\n')
+		expect(result).toBe('中文测试\n\n\n')
 		expect(store.get('notes/copy.md')).toBe('中文测试\n')
 	})
 
@@ -552,28 +616,28 @@ describe('bash tool UTF-8 handling', () => {
 		const tool = findTool(createAITools(app), 'bash')
 		const session = makeSession()
 
-		const result = await tool.execute(
-			z.parse(tool.inputSchema, { script: 'cat /vault/notes/large.md' }),
+		const result = await executeToolForTest(
+			tool,
+			{ script: 'cat /vault/notes/large.md' },
 			makeContext(session),
 		)
 
-		expect(result.result).toEqual(expect.stringContaining('too long'))
-		const outputPath = String(result.result).match(
-			/\/tmp\/bash_[^\s]+\.txt/,
-		)?.[0]
+		expect(result).toEqual(expect.stringContaining('too long'))
+		const outputPath = String(result).match(/\/tmp\/bash_[^\s]+\.txt/)?.[0]
 		expect(outputPath).toBeDefined()
 
-		const readBack = await tool.execute(
-			z.parse(tool.inputSchema, { script: `wc -c ${outputPath}` }),
+		const readBack = await executeToolForTest(
+			tool,
+			{ script: `wc -c ${outputPath}` },
 			makeContext(session),
 		)
-		expect(readBack.result).toEqual(
+		expect(readBack).toEqual(
 			expect.stringContaining(String(content.length + 2)),
 		)
 	})
 })
 
-describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
+describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 	function makeToolExecutor() {
 		const state = {
 			loadedSessions: new Map(),
@@ -590,20 +654,19 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 	}
 
 	function makeSession(fragment: ChatFragment): ChatSession {
-		return {
+		return migrateLegacySession({
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
 			fragments: [fragment],
 			activeFragmentId: fragment.id,
-			tasks: [],
-		}
+		})
 	}
 
 	function toolCall(
 		toolName: string,
 		input: Record<string, unknown>,
-	): AIToolCall {
+	): ToolCallPart {
 		return {
 			type: 'tool-call',
 			toolCallId: `call_${toolName}_${Math.random()}`,
@@ -612,7 +675,26 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 		}
 	}
 
-	it('blocks edit_file in the same resolveToolCalls batch as bash cat (race guard at executor level)', async () => {
+	async function executeRound(
+		executor: ToolExecutor,
+		toolCalls: ToolCallPart[],
+		tools: ReturnType<typeof createAITools>,
+		session: ChatSession,
+	) {
+		const context = executor.prepareExecutionContext({
+			session,
+			agentId: 'master',
+		})
+		return Promise.allSettled(
+			toolCalls.map((call) => {
+				const tool = tools[call.toolName]
+				if (!tool) throw new Error(`Missing tool: ${call.toolName}`)
+				return executeToolForTest(tool, call.input, context)
+			}),
+		)
+	}
+
+	it('blocks edit_file in the same SDK tool round as bash cat', async () => {
 		const { vault, store } = createMockVaultForExecutor([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -629,7 +711,7 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 
 		const tools = createAITools(app, { permissionGuard: undefined })
 
-		const toolCalls: AIToolCall[] = [
+		const toolCalls: ToolCallPart[] = [
 			toolCall('bash', { script: 'cat /vault/notes/x.md' }),
 			toolCall('edit_file', {
 				path: 'notes/x.md',
@@ -638,23 +720,15 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 			}),
 		]
 
-		const results = await executor.resolveToolCalls(toolCalls, tools, {
-			session,
-			depth: 0,
-			maxDepth: 2,
-		})
+		const results = await executeRound(executor, toolCalls, tools, session)
 
-		expect(fragment.readVaultPaths).toEqual(['notes/x.md'])
-		const editResult = results.find(
-			(r) =>
-				r.message.content[0]?.type === 'tool-result' &&
-				r.message.content[0].toolName === 'edit_file',
-		)
-		expect(editResult?.isError).toBe(true)
+		expect(session.subagents.master.readVaultPaths).toEqual(['notes/x.md'])
+		const editResult = results[1]
+		expect(editResult?.status).toBe('rejected')
 		expect(store.get('notes/x.md')).toBe('hello world')
 	})
 
-	it('allows edit_file in a subsequent resolveToolCalls batch after bash cat in a prior batch', async () => {
+	it('allows edit_file in the SDK round after bash cat', async () => {
 		const { vault, store } = createMockVaultForExecutor([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -671,15 +745,17 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 
 		const tools = createAITools(app, { permissionGuard: undefined })
 
-		const batch1Results = await executor.resolveToolCalls(
+		const batch1Results = await executeRound(
+			executor,
 			[toolCall('bash', { script: 'cat /vault/notes/x.md' })],
 			tools,
-			{ session, depth: 0, maxDepth: 2 },
+			session,
 		)
-		expect(batch1Results[0].isError).toBe(false)
-		expect(fragment.readVaultPaths).toEqual(['notes/x.md'])
+		expect(batch1Results[0].status).toBe('fulfilled')
+		expect(session.subagents.master.readVaultPaths).toEqual(['notes/x.md'])
 
-		const batch2Results = await executor.resolveToolCalls(
+		const batch2Results = await executeRound(
+			executor,
 			[
 				toolCall('edit_file', {
 					path: 'notes/x.md',
@@ -688,9 +764,113 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 				}),
 			],
 			tools,
-			{ session, depth: 0, maxDepth: 2 },
+			session,
 		)
-		expect(batch2Results[0].isError).toBe(false)
+		expect(batch2Results[0].status).toBe('fulfilled')
 		expect(store.get('notes/x.md')).toBe('hi world')
+	})
+
+	it('keeps explorer read-only when global full access is enabled', async () => {
+		const { vault, store } = createMockVaultForExecutor([
+			{ path: 'notes/x.md', content: 'before' },
+		])
+		const session = makeSession({
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		})
+		const explorer = {
+			...createEmptyMasterAgent(0),
+			id: 'explorer-test',
+			type: EXPLORER_AGENT_ID,
+			status: 'running' as const,
+		}
+		session.subagents.master.subagents[explorer.id] = explorer
+		const state = {
+			loadedSessions: new Map([[session.id, session]]),
+			sessionIndex: [],
+			runtimeBySessionId: new Map(),
+			autoApproveRequestsBySessionId: new Map(),
+			deletedSessionIds: new Set(),
+			chatModalHostEl: null,
+		} as unknown as ChatState
+		const plugin = {
+			app: { vault },
+			settings: { ai: { yolo: true } },
+		}
+		const executor = new ToolExecutor(
+			plugin as never,
+			state,
+			new RuntimeStates(state),
+		)
+		expect(executor.getAgentDefinition(MASTER_AGENT_ID).permissionMode).toBe(
+			'full',
+		)
+		plugin.settings.ai.yolo = false
+		expect(executor.getAgentDefinition(MASTER_AGENT_ID).permissionMode).toBe(
+			'ask',
+		)
+		plugin.settings.ai.yolo = true
+		const definition = executor.getAgentDefinition(EXPLORER_AGENT_ID)
+		const tools = executor.createToolsForContext(session, 1, definition)
+		const bash = findTool(tools, 'bash')
+
+		await expect(
+			executeToolForTest(
+				bash,
+				{
+					script: "printf 'after' > /vault/notes/x.md",
+				},
+				{
+					session,
+					agentId: explorer.id,
+				},
+			),
+		).rejects.toThrow('read-only')
+		expect(store.get('notes/x.md')).toBe('before')
+	})
+})
+
+describe('filterToolsForAgent', () => {
+	it('excludes edit_file and todowrite for the explorer subagent', () => {
+		const tools = createAITools({} as never, {
+			dispatchTask: async () => ({
+				taskId: 't',
+				subagentType: EXPLORER_AGENT_ID,
+				status: 'dispatched',
+			}),
+		})
+		const definition = getAgentDefinition(EXPLORER_AGENT_ID)
+		if (!definition) throw new Error('Expected explorer agent definition')
+		const filtered = filterToolsForAgent(tools, definition)
+		const names = Object.keys(filtered)
+
+		expect(names).not.toContain('edit_file')
+		expect(names).not.toContain('todowrite')
+		expect(names).toContain('bash')
+		expect(names).toContain('note_neighborhood')
+		expect(names).toContain('task')
+	})
+
+	it('returns all tools for the master agent type', () => {
+		const tools = createAITools({} as never, {
+			enableTodoWrite: true,
+			dispatchTask: async () => ({
+				taskId: 't',
+				subagentType: EXPLORER_AGENT_ID,
+				status: 'dispatched',
+			}),
+		})
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const filtered = filterToolsForAgent(tools, definition)
+		const names = Object.keys(filtered)
+
+		expect(names).toContain('edit_file')
+		expect(names).toContain('bash')
+		expect(names).toContain('note_neighborhood')
+		expect(names).toContain('todowrite')
+		expect(names).toContain('task')
 	})
 })

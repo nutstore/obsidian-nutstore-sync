@@ -1,144 +1,61 @@
 import type {
+	AppUIMessage,
 	ChatDisplayBlock,
-	ChatMessageContentPart,
-	ChatMessageRecord,
-	ToolCallPart,
+	ChatTodoItem,
 } from '~/ai/chat/types'
-import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
 
-function isContentPart(
-	part: ChatMessageContentPart,
-): part is Exclude<ChatMessageContentPart, ToolCallPart> {
-	return (
-		part.type === 'text' || part.type === 'reasoning' || part.type === 'file'
-	)
-}
-
-function hasRenderableContent(
-	part: Exclude<ChatMessageContentPart, ToolCallPart>,
-) {
-	if (part.type === 'file') {
-		return Boolean(imageFilePartSrc(part))
-	}
-	return (part.text ?? '').trim().length > 0
-}
-
-function getToolResultCallId(record: ChatMessageRecord) {
-	if (
-		record.message.role !== 'tool' ||
-		!Array.isArray(record.message.content)
-	) {
-		return undefined
-	}
-	const firstPart = record.message.content[0] as
-		| { type?: string; toolCallId?: string }
-		| undefined
-	return firstPart?.type === 'tool-result' ? firstPart.toolCallId : undefined
-}
-
-function findMatchingToolMessage(
-	messages: ChatMessageRecord[],
-	afterIndex: number,
-	toolCallId: string,
-	consumedToolMessageIds: Set<string>,
-) {
-	for (let index = afterIndex + 1; index < messages.length; index += 1) {
-		const candidate = messages[index]
-		if (consumedToolMessageIds.has(candidate.id)) continue
-		if (getToolResultCallId(candidate) !== toolCallId) continue
-		return candidate
+function todosFromMessage(message: AppUIMessage): ChatTodoItem[] | undefined {
+	for (let index = message.parts.length - 1; index >= 0; index -= 1) {
+		const part = message.parts[index]
+		if (part.type === 'data-todos') {
+			return part.data.items
+		}
 	}
 	return undefined
 }
 
-function buildMessageDisplayBlocks(
-	messages: ChatMessageRecord[],
-	messageIndex: number,
-	consumedToolMessageIds: Set<string>,
-): ChatDisplayBlock[] {
-	const record = messages[messageIndex]
-	if (!Array.isArray(record.message.content)) {
-		return []
-	}
-	const parts = record.message.content as ChatMessageContentPart[]
-	if (record.message.role === 'tool') {
-		return consumedToolMessageIds.has(record.id)
-			? []
-			: [{ kind: 'tool-result', toolMessage: record }]
-	}
-
+function buildMessageDisplayBlocks(message: AppUIMessage) {
 	const blocks: ChatDisplayBlock[] = []
-	let pendingContent: Array<Exclude<ChatMessageContentPart, ToolCallPart>> = []
-	const hasImageUserContext = record.userContext?.some(
-		(item) => item.type === 'image',
-	)
-
-	const flushContent = () => {
-		if (!pendingContent.length) return
-		blocks.push({ kind: 'content', parts: pendingContent })
-		pendingContent = []
+	let content: Extract<ChatDisplayBlock, { kind: 'content' }>['parts'] = []
+	let todos: ChatTodoItem[] | undefined
+	const flush = () => {
+		if (content.length) blocks.push({ kind: 'content', parts: content })
+		content = []
 	}
 
-	for (const part of parts) {
-		if (isContentPart(part)) {
-			if (
-				hasImageUserContext &&
-				record.message.role === 'user' &&
-				part.type === 'file' &&
-				imageFilePartSrc(part)
-			) {
-				continue
-			}
-			if (!hasRenderableContent(part)) {
-				continue
-			}
-			pendingContent.push(part)
+	for (const part of message.parts) {
+		if (part.type === 'text' || part.type === 'reasoning') {
+			if (part.text.trim()) content.push(part)
 			continue
 		}
-		if (part.type !== 'tool-call') {
+		if (part.type === 'data-model-file') {
+			content.push(part.data.file)
 			continue
 		}
-		flushContent()
-		const matchingToolMessage = findMatchingToolMessage(
-			messages,
-			messageIndex,
-			part.toolCallId,
-			consumedToolMessageIds,
-		)
-		if (matchingToolMessage) {
-			consumedToolMessageIds.add(matchingToolMessage.id)
+		if (part.type === 'dynamic-tool') {
+			flush()
+			const block: Extract<ChatDisplayBlock, { kind: 'tool-call' }> = {
+				kind: 'tool-call',
+				toolCall: part,
+			}
+			if (part.toolName === 'todowrite') {
+				todos ??= todosFromMessage(message)
+				if (todos) block.todos = todos
+			}
+			blocks.push(block)
 		}
-		blocks.push({
-			kind: 'tool-call',
-			toolCall: part,
-			toolMessage: matchingToolMessage,
-		})
 	}
-
-	flushContent()
+	flush()
 	return blocks
 }
 
-export interface ProjectedMessageGroup {
-	record: ChatMessageRecord
-	blocks: ChatDisplayBlock[]
-}
-
-export function projectFragmentMessageGroups(messages: ChatMessageRecord[]) {
-	const consumedToolMessageIds = new Set<string>()
-	const groups: ProjectedMessageGroup[] = []
-
-	for (let index = 0; index < messages.length; index += 1) {
-		const record = messages[index]
-		if (record.message.role === 'system') continue
-		const blocks = buildMessageDisplayBlocks(
-			messages,
-			index,
-			consumedToolMessageIds,
+export function projectTimelineMessageGroups(messages: AppUIMessage[]) {
+	return messages.flatMap((message) => {
+		if (message.role === 'system') return []
+		const blocks = buildMessageDisplayBlocks(message)
+		const hasContext = message.parts.some(
+			(part) => part.type === 'data-user-context',
 		)
-		if (!blocks.length && !record.userContext?.length) continue
-		groups.push({ record, blocks })
-	}
-
-	return groups
+		return blocks.length || hasContext ? [{ message, blocks }] : []
+	})
 }

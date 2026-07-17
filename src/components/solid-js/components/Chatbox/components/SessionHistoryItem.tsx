@@ -55,19 +55,22 @@ export function SessionHistoryItem(props: {
 						onClick={(event) => {
 							event.preventDefault()
 							event.stopPropagation()
+							const sessionId = props.session.id
+							const onExport = props.onExport
+							const onDelete = props.onDelete
 							const menu = new Menu()
 							menu.addItem((item) =>
 								item
 									.setTitle(t('chatbox.ui.actions.exportAsMarkdown'))
 									.setIcon('download')
-									.onClick(() => props.onExport(props.session.id)),
+									.onClick(() => onExport(sessionId)),
 							)
 							menu.addItem((item) => {
 								item
 									.setTitle(t('chatbox.ui.actions.deleteSession'))
 									.setIcon('trash')
 									.setWarning(true)
-									.onClick(() => props.onDelete(props.session.id))
+									.onClick(() => onDelete(sessionId))
 							})
 							menu.showAtMouseEvent(event)
 						}}

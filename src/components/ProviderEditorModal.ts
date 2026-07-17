@@ -6,6 +6,10 @@ import {
 	slugifyProviderId,
 } from '~/ai/catalog/config'
 import { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import {
+	applyObsidianModalMountTarget,
+	type ChatModalMountTarget,
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
@@ -14,12 +18,14 @@ import ProviderCorsConfirmModal from './ProviderCorsConfirmModal'
 
 export default class ProviderEditorModal extends Modal {
 	private draft: AIProviderConfig
+	private cleanupModalMount?: () => void
 
 	constructor(
 		private plugin: NutstorePlugin,
 		provider: AIProviderConfig,
 		private onSave: (provider: AIProviderConfig) => Promise<boolean> | boolean,
 		private isNew: boolean,
+		private readonly mountTarget?: ChatModalMountTarget,
 	) {
 		super(plugin.app)
 		this.draft = cloneDeep(provider)
@@ -92,6 +98,7 @@ export default class ProviderEditorModal extends Modal {
 						}
 						const confirmed = await new ProviderCorsConfirmModal(
 							this.app,
+							this.mountTarget,
 						).open()
 						if (!confirmed) {
 							this.render()
@@ -128,6 +135,7 @@ export default class ProviderEditorModal extends Modal {
 						{
 							findPresetOnSave: true,
 							presetProviderApi: this.draft.api,
+							modalMountTarget: this.mountTarget,
 						},
 					).open()
 				}),
@@ -174,6 +182,7 @@ export default class ProviderEditorModal extends Modal {
 									return true
 								},
 								false,
+								{ modalMountTarget: this.mountTarget },
 							).open()
 						}),
 				)
@@ -242,7 +251,17 @@ export default class ProviderEditorModal extends Modal {
 		this.render()
 	}
 
+	open() {
+		super.open()
+		this.cleanupModalMount = applyObsidianModalMountTarget(
+			this,
+			this.mountTarget,
+		)
+	}
+
 	onClose() {
+		this.cleanupModalMount?.()
+		this.cleanupModalMount = undefined
 		this.modalEl.removeClass('provider-editor-modal')
 		this.contentEl.removeClass('provider-editor-modal__content')
 		this.contentEl.empty()

@@ -197,7 +197,7 @@ export function ensureUserContextItemHash(
 	}
 }
 
-export function cloneUserContextItem(item: UserContextItem): UserContextItem {
+export function copyUserContextItem(item: UserContextItem): UserContextItem {
 	const normalized = ensureUserContextItemHash(item)
 	if (normalized.type === 'vault-path') {
 		return { ...normalized }
@@ -223,8 +223,8 @@ export function cloneUserContextItem(item: UserContextItem): UserContextItem {
 	}
 }
 
-export function cloneUserContextItems(items: UserContextItem[]) {
-	return items.map(cloneUserContextItem)
+export function copyUserContextItems(items: UserContextItem[]) {
+	return items.map(copyUserContextItem)
 }
 
 export function blobToDataUrl(blob: Blob): Promise<string> {

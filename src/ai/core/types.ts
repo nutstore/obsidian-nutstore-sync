@@ -1,15 +1,7 @@
 import { z } from 'zod/mini'
-import type {
-	ChatMessage as DomainChatMessage,
-	ChatMessageContentPart as DomainChatMessageContentPart,
-	ChatMessageMeta as DomainChatMessageMeta,
-	ChatMessageRecord as DomainChatMessageRecord,
-	ChatTaskRecord as DomainChatTaskRecord,
-	ChatTodoItem as DomainChatTodoItem,
-} from '~/ai/chat/types'
-import type { ChatSession as DomainChatSession } from '~/ai/chat/domain'
+import type { ChatTodoItem, ReversibleToolOp } from '~/ai/chat/types'
+import type { ChatSession } from '~/ai/chat/domain'
 import type { ReadTracker } from '~/ai/tools/file-operation'
-import type { ToolCallPart } from 'ai'
 
 export const aiModelModalitySchema = z.enum([
 	'text',
@@ -126,36 +118,14 @@ export type AIProviderInput = z.infer<typeof aiProviderInputSchema>
 export type AIProviderConfigs = z.infer<typeof aiProviderConfigsSchema>
 export type AIProviderInputs = z.infer<typeof aiProviderInputsSchema>
 
-export type AIMessageContentPart = DomainChatMessageContentPart
-export type AIToolCall = ToolCallPart
-export type AIMessage = DomainChatMessage
-export type AITaskStatus = DomainChatTaskRecord['status']
-export type AIMessageMeta = DomainChatMessageMeta
-export type AIMessageRecord = DomainChatMessageRecord
-export type AISession = DomainChatSession
-export type AITaskRecord = DomainChatTaskRecord
-export type AITodoItem = DomainChatTodoItem
-
-export interface AIToolExecutionContext {
-	session: AISession
-	depth: number
-	maxDepth: number
-	parentTaskId?: string
+export type AppToolContext = {
+	session: ChatSession
+	agentId: string
 	readTracker?: ReadTracker
+	recordMetadata?: (toolCallId: string, metadata: AppToolMetadata) => void
 }
 
-export interface ToolExecutionResult {
-	result: string | Record<string, unknown>
-	reversibleOps?: DomainChatMessageRecord['reversibleOps']
-	todos?: DomainChatTodoItem[]
-}
-
-export interface AIToolDefinition {
-	name: string
-	description: string
-	inputSchema: z.ZodMiniType
-	execute: (
-		params: any,
-		context: AIToolExecutionContext,
-	) => Promise<ToolExecutionResult>
+export interface AppToolMetadata {
+	reversibleOps?: ReversibleToolOp[]
+	todos?: ChatTodoItem[]
 }

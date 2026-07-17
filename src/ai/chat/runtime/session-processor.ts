@@ -1,40 +1,37 @@
+import type { ModelMessage, ToolSet, UserModelMessage } from 'ai'
+import type { ChatSession } from '~/ai/chat/domain'
+
 import { getModelById, getProviderById } from '~/ai/catalog/config'
-import { generateAssistantTurn } from '~/ai/core/runtime'
-import {
-	REPEATED_TOOL_CALL_THRESHOLD,
-	ToolCallRepeatState,
-	updateToolCallRepeatState,
-} from '~/ai/core/tool-call-repeat'
-import type { AIMessage, AIMessageRecord, AISession } from '~/ai/core/types'
-import type { AssistantModelMessage, TextPart } from 'ai'
-import type { ChatUserMessage } from '~/ai/chat/types'
-import type { ChatFragment } from '~/ai/chat/domain'
+import type { ChatAgentState } from '~/ai/chat/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
-import {
-	deriveTitle,
-	getAssistantToolCalls,
-	isImageFilePart,
-	messageToText,
-} from '~/ai/chat/messages/message-utils'
-import { createMainSystemPrompt, MAX_TASK_DEPTH } from '~/ai/chat/prompts'
+import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { UserContextManager } from '~/ai/chat/context/user-context-manager'
-import { formatAdditionalContext } from '~/ai/chat/context/workspace-context'
 import {
 	runContextCompression,
-	shouldAutoCompressFragment,
+	shouldAutoCompressAgent,
 } from '~/ai/chat/runtime/context-compression'
 import { hasQueuedSubmission } from '~/ai/chat/runtime/pending-submission'
 import { isAbortError } from '~/ai/transport/abort'
 import i18n from '~/i18n'
 import type NutstorePlugin from '../../..'
+import type { ToolCallRepeatState } from '~/ai/core/tool-call-repeat'
+import { AgentRunner } from '~/ai/chat/runtime/agent-runner'
+import {
+	consumePendingInputs,
+	getUserContextItems,
+	selectContextTimeline,
+	uiMessagesToModelMessages,
+} from '~/ai/chat/messages/ui-message'
 
 export class SessionProcessor {
+	private agentRunner: AgentRunner
+
 	constructor(
 		private plugin: NutstorePlugin,
 		private state: ChatState,
@@ -42,10 +39,17 @@ export class SessionProcessor {
 		private store: SessionStore,
 		private notify: () => void,
 		private selection: Selection,
-		private toolExecutor: ToolExecutor,
+		toolExecutor: ToolExecutor,
 		private messageFactory: MessageFactory,
 		private userContextManager: UserContextManager,
-	) {}
+	) {
+		this.agentRunner = new AgentRunner(
+			toolExecutor,
+			store,
+			messageFactory,
+			notify,
+		)
+	}
 
 	async start(sessionId: string) {
 		const runtime = this.runtimeStates.get(sessionId)
@@ -56,9 +60,14 @@ export class SessionProcessor {
 		runtime.processing = this.run(sessionId).finally(() => {
 			const latestRuntime = this.runtimeStates.get(sessionId)
 			latestRuntime.processing = undefined
+			const latestSession = this.state.loadedSessions.get(sessionId)
+			const hasAgentInput = Boolean(
+				latestSession &&
+				this.messageFactory.getActiveAgent(latestSession).pendingInputs.length,
+			)
 			if (
 				latestRuntime.runState === 'idle' &&
-				hasQueuedSubmission(latestRuntime)
+				(hasQueuedSubmission(latestRuntime) || hasAgentInput)
 			) {
 				void this.start(sessionId)
 				return
@@ -79,21 +88,26 @@ export class SessionProcessor {
 		}
 
 		try {
+			const initialAgent = this.messageFactory.getActiveAgent(session)
+			if (this.messageFactory.removeIncompleteToolCalls(initialAgent)) {
+				const now = Date.now()
+				session.updatedAt = now
+				await this.store.persistSession(session)
+			}
 			const provider = this.selection.getProviderOrThrow(session)
 			const model = this.selection.getModelOrThrow(provider, session)
-			let repeatState: ToolCallRepeatState = {
-				consecutiveCount: 0,
-				isRepeatedTooManyTimes: false,
-			}
-
+			let agentContinuation: ToolCallRepeatState | undefined
 			while (true) {
-				const fragment = this.messageFactory.getActiveFragment(session)
-				const lastMessage =
-					fragment.messages[fragment.messages.length - 1]?.message
+				const agent = this.messageFactory.getActiveAgent(session)
+				if (consumePendingInputs(agent)) {
+					session.updatedAt = Date.now()
+					await this.store.persistSession(session)
+				}
+				const lastMessage = agent.timeline[agent.timeline.length - 1]
 
 				if (
-					!lastMessage ||
-					(lastMessage.role !== 'user' && lastMessage.role !== 'tool')
+					!agentContinuation &&
+					(!lastMessage || lastMessage.role !== 'user')
 				) {
 					const flushed = await this.flushPendingMessages(session)
 					if (!flushed) {
@@ -103,7 +117,7 @@ export class SessionProcessor {
 					}
 				}
 
-				if (shouldAutoCompressFragment(fragment, model)) {
+				if (shouldAutoCompressAgent(agent, model)) {
 					runtime.runState = 'compressing'
 					this.notify()
 					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
@@ -123,11 +137,11 @@ export class SessionProcessor {
 							provider,
 							model,
 							session,
-							sourceFragment: fragment,
-							runtimeStates: this.runtimeStates,
+							agent,
 							store: this.store,
 							messageFactory: this.messageFactory,
-							isSessionDeleted: () =>
+							isCancelled: () =>
+								this.runtimeStates.get(session.id).stopRequested ||
 								this.state.deletedSessionIds.has(session.id),
 							abortSignal: abortController.signal,
 						})
@@ -149,108 +163,45 @@ export class SessionProcessor {
 					continue
 				}
 
-				runtime.runState = 'thinking'
-				this.notify()
-
-				const tools = this.toolExecutor.createToolsForContext(
-					session,
-					0,
-					MAX_TASK_DEPTH,
-				)
 				await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
 					provider,
 				)
 				if (runtime.stopRequested) {
-					this.messageFactory.finishStoppedSessionRun(session, fragment)
+					this.messageFactory.finishStoppedSessionRun(session, agent)
 					await this.store.persistSession(session)
 					return
 				}
-				const requestMessages = await this.buildMessagesForFragment(fragment)
-				const systemPrompt =
-					session.systemPrompt || createMainSystemPrompt(MAX_TASK_DEPTH)
 				const assistantMeta = {
 					providerId: provider.id,
 					providerName: provider.name,
 					modelId: model.id,
 					modelName: model.name,
 				}
-				let assistantRecord: AIMessageRecord | undefined
-				const ensureAssistantRecord = () => {
-					if (assistantRecord) {
-						return assistantRecord
-					}
-					assistantRecord = this.messageFactory.createMessageRecord(
-						{
-							role: 'assistant',
-							content: [],
-						} as AssistantModelMessage,
-						{ meta: assistantMeta },
-					)
-					fragment.messages.push(assistantRecord)
-					fragment.updatedAt = Date.now()
-					session.updatedAt = Date.now()
-					return assistantRecord
-				}
-				let lastStreamNotifyAt = 0
 				const abortController = this.runtimeStates.createAbortController(
 					session.id,
 				)
-				const response = await (async () => {
+				const turnResult = await (async () => {
 					try {
-						return await generateAssistantTurn(
-							{
-								provider,
-								model: model.id,
-								messages: requestMessages,
-								systemPrompt,
-								tools,
-								abortSignal: abortController.signal,
-								...session.inferenceParams,
-							},
-							{
-								onTextDelta: async (delta) => {
-									if (
-										!delta ||
-										this.state.deletedSessionIds.has(session.id) ||
-										runtime.stopRequested
-									) {
-										return
-									}
-									const record = ensureAssistantRecord()
-									if (record.message.role !== 'assistant') {
-										return
-									}
-									type MutablePart = { type: string; text?: string }
-									const rawContent = (record.message as AssistantModelMessage)
-										.content
-									const content: MutablePart[] = Array.isArray(rawContent)
-										? [...(rawContent as MutablePart[])]
-										: []
-									const textIdx = content.findIndex((p) => p.type === 'text')
-									const existing =
-										textIdx >= 0 ? (content[textIdx].text ?? '') : ''
-									const textPart: MutablePart = {
-										type: 'text',
-										text: `${existing}${delta}`,
-									}
-									if (textIdx >= 0) {
-										content[textIdx] = textPart
-									} else {
-										content.push(textPart)
-									}
-									record.message = {
-										...record.message,
-										content,
-									} as AssistantModelMessage
-									fragment.updatedAt = Date.now()
-									session.updatedAt = Date.now()
-									if (Date.now() - lastStreamNotifyAt >= 33) {
-										lastStreamNotifyAt = Date.now()
-										this.notify()
-									}
-								},
-							},
-						)
+						return await this.agentRunner.runTurn({
+							session,
+							agent,
+							provider,
+							model,
+							depth: 0,
+							assistantMeta,
+							runtime,
+							isCancelled: () =>
+								runtime.stopRequested ||
+								this.state.deletedSessionIds.has(session.id),
+							isDeleted: () => this.state.deletedSessionIds.has(session.id),
+							continuation: agentContinuation,
+							abortSignal: abortController.signal,
+							buildMessages: (a, tools) => this.buildMessagesForAgent(a, tools),
+							shouldSuspendAfterToolStep: () =>
+								runtime.stopRequested ||
+								this.state.deletedSessionIds.has(session.id) ||
+								shouldAutoCompressAgent(agent, model),
+						})
 					} finally {
 						this.runtimeStates.clearAbortController(session.id, abortController)
 					}
@@ -263,78 +214,28 @@ export class SessionProcessor {
 				}
 
 				if (runtime.stopRequested) {
-					const record = ensureAssistantRecord()
-					record.message = response.message
-					record.meta = { ...response.meta, modelId: model.id }
-					this.messageFactory.finishStoppedSessionRun(session, fragment)
+					this.messageFactory.finishStoppedSessionRun(session, agent)
 					await this.store.persistSession(session)
 					return
 				}
 
-				const record = ensureAssistantRecord()
-				record.message = response.message
-				record.meta = { ...response.meta, modelId: model.id }
-				fragment.updatedAt = Date.now()
-				session.updatedAt = Date.now()
-				await this.store.persistSession(session)
-				this.notify()
-
-				const assistantToolCalls = getAssistantToolCalls(response.message)
-				if (!assistantToolCalls?.length) {
-					runtime.runState = 'idle'
-					continue
-				}
-
-				repeatState = updateToolCallRepeatState(repeatState, assistantToolCalls)
-				if (repeatState.isRepeatedTooManyTimes) {
+				if (turnResult.status === 'failed') {
 					this.messageFactory.reportFatalError(
 						session,
-						i18n.t('chatbox.repeatedToolCallsStopped', {
-							count: REPEATED_TOOL_CALL_THRESHOLD,
-						}),
-						{
-							providerId: provider.id,
-							providerName: provider.name,
-							modelId: model.id,
-							modelName: model.name,
-						},
-						fragment,
+						turnResult.error,
+						assistantMeta,
+						agent,
 					)
 					runtime.runState = 'idle'
 					await this.store.persistSession(session)
 					return
 				}
-
-				runtime.runState = 'waiting_for_tools'
-				this.notify()
-
-				const toolMessages = await this.toolExecutor.resolveToolCalls(
-					assistantToolCalls,
-					tools,
-					{
-						session,
-						depth: 0,
-						maxDepth: MAX_TASK_DEPTH,
-					},
-				)
-
-				if (runtime.stopRequested) {
-					this.messageFactory.finishStoppedSessionRun(session, fragment)
-					await this.store.persistSession(session)
-					return
-				}
-
-				for (const item of toolMessages) {
-					fragment.messages.push(
-						this.messageFactory.createMessageRecord(item.message, {
-							isError: item.isError,
-							reversibleOps: item.reversibleOps,
-							todos: item.todos,
-						}),
-					)
-				}
-				await this.store.persistSession(session)
-				this.notify()
+				agentContinuation =
+					turnResult.status === 'suspended'
+						? turnResult.continuation
+						: undefined
+				if (turnResult.status === 'completed') runtime.runState = 'idle'
+				continue
 			}
 		} catch (error) {
 			if (this.state.deletedSessionIds.has(session.id)) {
@@ -344,21 +245,19 @@ export class SessionProcessor {
 			if (isAbortError(error) && runtime.stopRequested) {
 				this.messageFactory.finishStoppedSessionRun(
 					session,
-					this.messageFactory.getActiveFragment(session),
+					this.messageFactory.getActiveAgent(session),
 				)
 				await this.store.persistSession(session)
 				return
 			}
-			const activeFragment = this.messageFactory.getActiveFragment(session)
-			const lastRecord =
-				activeFragment.messages[activeFragment.messages.length - 1]
+			const activeAgent = this.messageFactory.getActiveAgent(session)
+			this.messageFactory.removeIncompleteToolCalls(activeAgent)
+			const lastMessage = activeAgent.timeline[activeAgent.timeline.length - 1]
 			if (
-				lastRecord &&
-				lastRecord.message.role === 'assistant' &&
-				!getAssistantToolCalls(lastRecord.message)?.length &&
-				!messageToText(lastRecord.message).trim()
+				lastMessage?.role === 'assistant' &&
+				lastMessage.parts.every((part) => part.type === 'step-start')
 			) {
-				activeFragment.messages.pop()
+				activeAgent.timeline.pop()
 			}
 			const activeProvider = getProviderById(
 				this.plugin.settings.ai.providers,
@@ -374,20 +273,20 @@ export class SessionProcessor {
 					modelId: activeModel?.id,
 					modelName: activeModel?.name,
 				},
-				activeFragment,
+				activeAgent,
 			)
 			runtime.runState = 'idle'
 			await this.store.persistSession(session)
 		}
 	}
 
-	private async flushPendingMessages(session: AISession) {
+	private async flushPendingMessages(session: ChatSession) {
 		const runtime = this.runtimeStates.get(session.id)
 		if (!hasQueuedSubmission(runtime)) {
 			return false
 		}
 
-		const fragment = this.messageFactory.getActiveFragment(session)
+		const agent = this.messageFactory.getActiveAgent(session)
 		const pendingSubmissions = runtime.pending.splice(0)
 		let appended = false
 		for (const submission of pendingSubmissions) {
@@ -399,8 +298,8 @@ export class SessionProcessor {
 			if (!normalizedText && preparedContext.dedupedItems.length === 0) {
 				continue
 			}
-			this.messageFactory.appendUserMessage(
-				fragment,
+			await this.messageFactory.appendUserMessage(
+				agent,
 				normalizedText,
 				session,
 				preparedContext.dedupedItems.length > 0
@@ -420,56 +319,36 @@ export class SessionProcessor {
 		return true
 	}
 
-	private async buildMessagesForFragment(
-		fragment: ChatFragment,
-	): Promise<AIMessage[]> {
+	private async buildMessagesForAgent(
+		agent: ChatAgentState,
+		tools: ToolSet,
+	): Promise<ModelMessage[]> {
+		const timeline = selectContextTimeline(agent.timeline)
 		const messages = await Promise.all(
-			fragment.messages.map(async (item) => {
-				if (item.message.role !== 'user') {
-					return item.message
-				}
-				const prefixParts: TextPart[] = []
-				if (item.workspaceContextDelta?.length) {
-					prefixParts.push({
-						type: 'text',
-						text: formatAdditionalContext(item.workspaceContextDelta),
-					})
-				}
-				const dedupedContext = item.userContext?.length
-					? this.userContextManager.dedupeUserContextItems(item.userContext)
+			timeline.map(async (item) => {
+				const converted = await uiMessagesToModelMessages([item], tools)
+				if (item.role !== 'user' || converted.length === 0) return converted
+				const modelMessage = converted[0]
+				const userContext = getUserContextItems(item)
+				const dedupedContext = userContext.length
+					? this.userContextManager.dedupeUserContextItems(userContext)
 					: []
 				const contextParts =
 					await this.userContextManager.buildMessagePartsFromUserContext(
 						dedupedContext,
 					)
-				const userContent = Array.isArray(item.message.content)
-					? (
-							(item.message as ChatUserMessage).content as Array<{
-								type: string
-							}>
-						).filter((part) => {
-							if (part.type === 'text' || part.type === 'reasoning') {
-								return true
-							}
-							if (part.type !== 'file') {
-								return false
-							}
-							return (
-								!dedupedContext.some(
-									(contextItem) => contextItem.type === 'image',
-								) && isImageFilePart(part)
-							)
-						})
+				if (!contextParts.length) return converted
+				const userContent = Array.isArray(modelMessage.content)
+					? (modelMessage as UserModelMessage).content
 					: []
-				if (!prefixParts.length && !contextParts.length) {
-					return item.message
-				}
-				return {
-					...item.message,
-					content: [...prefixParts, ...contextParts, ...userContent],
-				} as AIMessage
+				return [
+					{
+						...modelMessage,
+						content: [...contextParts, ...userContent],
+					} as ModelMessage,
+				]
 			}),
 		)
-		return messages
+		return messages.flat()
 	}
 }

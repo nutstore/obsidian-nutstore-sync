@@ -1,18 +1,13 @@
-import { For, Match, Show, Switch } from 'solid-js'
+import { For, Show } from 'solid-js'
 import { t } from '../../../i18n'
 import type { ChatDisplayBlock } from '~/ai/chat/types'
 import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
-import { formatTime, formatUsage } from '../utils'
+import { formatTime, formatToolResult, formatUsage } from '../utils'
 import { ContentBlock } from './ContentBlock'
 import { ContextArea } from './ContextArea'
 import { CopyButton } from './CopyButton'
-import { ToolCallBlock, ToolResultBlock } from './ToolCallBlock'
+import { ToolCallBlock } from './ToolCallBlock'
 import { TodoListBlock } from './TodoListBlock'
-
-type CopyToolResultPart = {
-	type: string
-	output?: { type?: string; value?: string }
-}
 
 function fencedCode(language: string, value: string) {
 	const longestBacktickRun = Math.max(
@@ -31,24 +26,12 @@ function stringifyToolInput(input: unknown) {
 	}
 }
 
-function toolResultText(toolMessage?: { message: { content?: unknown } }) {
-	const parts = Array.isArray(toolMessage?.message.content)
-		? (toolMessage?.message.content as CopyToolResultPart[])
-		: []
-	return parts
-		.filter((part) => part.type === 'tool-result')
-		.map((part) =>
-			part.output?.type === 'text' ? (part.output.value ?? '') : '',
-		)
-		.join('\n')
-}
-
 function copyTextForContentBlock(
 	block: Extract<ChatDisplayBlock, { kind: 'content' }>,
 ) {
 	return block.parts
 		.filter((part) => part.type === 'text')
-		.map((part) => part.text ?? '')
+		.map((part) => part.text)
 		.join('\n')
 		.trim()
 }
@@ -56,8 +39,8 @@ function copyTextForContentBlock(
 function copyTextForToolCallBlock(
 	block: Extract<ChatDisplayBlock, { kind: 'tool-call' }>,
 ) {
-	const todos = block.toolMessage?.todos
-	if (block.toolCall.toolName === 'todowrite' && Array.isArray(todos)) {
+	const todos = block.todos
+	if (block.toolCall.toolName === 'todowrite' && todos) {
 		const lines = [`${t('chatbox.ui.labels.todoList')}:`, '']
 		for (const todo of todos) {
 			const checked =
@@ -74,7 +57,7 @@ function copyTextForToolCallBlock(
 		return lines.join('\n')
 	}
 
-	const resultText = toolResultText(block.toolMessage).trim()
+	const resultText = formatToolResult(block.toolCall).trim()
 	const lines = [
 		`${t('chatbox.ui.labels.toolCall')}: ${block.toolCall.toolName}`,
 		'',
@@ -93,57 +76,93 @@ function copyTextForToolCallBlock(
 	return lines.join('\n')
 }
 
+function MessageDisplayBlock(props: {
+	block: ChatDisplayBlock
+	renderMarkdown?: ChatboxProps['renderMarkdown']
+	onOpenSubagent?: (agentId: string) => void
+}) {
+	const contentBlock = () =>
+		props.block.kind === 'content' ? props.block : undefined
+	const toolBlock = () =>
+		props.block.kind === 'tool-call' ? props.block : undefined
+
+	return (
+		<Show
+			when={contentBlock()}
+			keyed
+			fallback={
+				<Show when={toolBlock()} keyed>
+					{(block) => (
+						<Show
+							when={block.toolCall.toolName === 'todowrite' && block.todos}
+							fallback={
+								<ToolCallBlock
+									block={block}
+									onOpenSubagent={props.onOpenSubagent}
+								/>
+							}
+						>
+							<TodoListBlock block={block} />
+						</Show>
+					)}
+				</Show>
+			}
+		>
+			{(block) => (
+				<ContentBlock block={block} renderMarkdown={props.renderMarkdown} />
+			)}
+		</Show>
+	)
+}
+
 export function MessageCard(props: {
 	item: ChatTimelineMessageItem
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 	onDeleteMessage?: ChatboxProps['onDeleteMessage']
 	onRegenerateMessage?: ChatboxProps['onRegenerateMessage']
 	onRecallMessage?: ChatboxProps['onRecallMessage']
+	onOpenSubagent?: (agentId: string) => void
 }) {
 	const usageText = () =>
 		formatUsage(
-			props.item.message.meta?.usage?.inputTokens,
-			props.item.message.meta?.usage?.outputTokens,
-			props.item.message.meta?.usage?.totalTokens,
+			props.item.message.metadata?.llm?.usage?.inputTokens,
+			props.item.message.metadata?.llm?.usage?.outputTokens,
+			props.item.message.metadata?.llm?.usage?.totalTokens,
 		)
 
 	const roleLabel = () => {
-		if (props.item.message.message.role === 'assistant') {
-			return props.item.message.meta?.modelName || 'Assistant'
+		if (props.item.message.role === 'assistant') {
+			return props.item.message.metadata?.llm?.modelName || 'Assistant'
 		}
-		if (props.item.message.message.role === 'user') {
+		if (props.item.message.role === 'user') {
 			return 'User'
 		}
 		return 'Tool'
 	}
 
 	const roleIconClass = () => {
-		if (props.item.message.message.role === 'assistant') {
+		if (props.item.message.role === 'assistant') {
 			return 'i-lucide-bot'
 		}
-		if (props.item.message.message.role === 'user') {
+		if (props.item.message.role === 'user') {
 			return 'i-lucide-circle-user-round'
 		}
 	}
 
 	const getText = () => {
 		return props.item.displayBlocks
-			.map((block) => {
-				if (block.kind === 'content') {
-					return copyTextForContentBlock(block)
-				}
-				if (block.kind === 'tool-call') {
-					return copyTextForToolCallBlock(block)
-				}
-				return toolResultText(block.toolMessage).trim()
-			})
+			.map((block) =>
+				block.kind === 'content'
+					? copyTextForContentBlock(block)
+					: copyTextForToolCallBlock(block),
+			)
 			.filter(Boolean)
 			.join('\n\n')
 	}
 
 	return (
 		<div
-			class={`${props.item.message.isError ? 'text-[var(--text-error)]' : ''}`}
+			class={`${props.item.message.metadata?.status === 'error' ? 'text-[var(--text-error)]' : ''}`}
 		>
 			<Show when={props.item.showHeader}>
 				<div class="mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
@@ -154,78 +173,40 @@ export function MessageCard(props: {
 						/>
 						<span>{roleLabel()}</span>
 					</div>
-					<span>{formatTime(props.item.message.createdAt)}</span>
+					<span>{formatTime(props.item.createdAt)}</span>
 				</div>
 			</Show>
 			<div class="flex flex-col gap-2">
 				<For each={props.item.displayBlocks}>
 					{(block) => (
-						<Switch>
-							<Match when={block.kind === 'content'}>
-								<ContentBlock
-									block={
-										block as Extract<ChatDisplayBlock, { kind: 'content' }>
-									}
-									renderMarkdown={props.renderMarkdown}
-								/>
-							</Match>
-							<Match when={block.kind === 'tool-call'}>
-								<Show
-									when={
-										(block as Extract<ChatDisplayBlock, { kind: 'tool-call' }>)
-											.toolCall.toolName === 'todowrite' &&
-										Array.isArray(
-											(
-												block as Extract<
-													ChatDisplayBlock,
-													{ kind: 'tool-call' }
-												>
-											).toolMessage?.todos,
-										)
-									}
-									fallback={
-										<ToolCallBlock
-											block={
-												block as Extract<
-													ChatDisplayBlock,
-													{ kind: 'tool-call' }
-												>
-											}
-										/>
-									}
-								>
-									<TodoListBlock
-										block={
-											block as Extract<ChatDisplayBlock, { kind: 'tool-call' }>
-										}
-									/>
-								</Show>
-							</Match>
-							<Match when={block.kind === 'tool-result'}>
-								<ToolResultBlock
-									block={
-										block as Extract<ChatDisplayBlock, { kind: 'tool-result' }>
-									}
-								/>
-							</Match>
-						</Switch>
+						<MessageDisplayBlock
+							block={block}
+							renderMarkdown={props.renderMarkdown}
+							onOpenSubagent={props.onOpenSubagent}
+						/>
 					)}
 				</For>
 			</div>
 			<Show
 				when={
-					props.item.message.message.role === 'user' &&
-					props.item.message.userContext?.length
+					props.item.message.role === 'user' &&
+					props.item.message.parts.some(
+						(part) => part.type === 'data-user-context',
+					)
 				}
 			>
 				<div class="mt-2">
-					<ContextArea items={props.item.message.userContext!} />
+					<ContextArea
+						items={props.item.message.parts.flatMap((part) =>
+							part.type === 'data-user-context' ? part.data.items : [],
+						)}
+					/>
 				</div>
 			</Show>
 			<Show
 				when={
-					props.item.message.message.role === 'assistant' ||
-					props.item.message.message.role === 'user'
+					props.item.message.role === 'assistant' ||
+					props.item.message.role === 'user'
 				}
 			>
 				<div class="mt-3 flex items-center justify-between gap-2 px-1">
@@ -245,10 +226,7 @@ export function MessageCard(props: {
 							</button>
 						</Show>
 						<Show
-							when={
-								props.item.message.message.role === 'user' &&
-								props.onRecallMessage
-							}
+							when={props.item.message.role === 'user' && props.onRecallMessage}
 						>
 							<button
 								class="cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
@@ -264,7 +242,7 @@ export function MessageCard(props: {
 						</Show>
 						<Show
 							when={
-								props.item.message.message.role === 'assistant' &&
+								props.item.message.role === 'assistant' &&
 								props.onRegenerateMessage
 							}
 						>
@@ -283,11 +261,7 @@ export function MessageCard(props: {
 							</button>
 						</Show>
 					</div>
-					<Show
-						when={
-							props.item.message.message.role === 'assistant' && usageText()
-						}
-					>
+					<Show when={props.item.message.role === 'assistant' && usageText()}>
 						<div class="text-[10px] text-[var(--text-faint)]">
 							{usageText()}
 						</div>

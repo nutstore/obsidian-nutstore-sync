@@ -1,3 +1,4 @@
+import type { LanguageModelUsage } from 'ai'
 import { Notice } from 'obsidian'
 import {
 	getModelById,
@@ -6,59 +7,60 @@ import {
 	listProviders,
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
-import { AISession, type AIModelConfig } from '~/ai/core/types'
-import { mutateTaskRecord, toCancelledTask } from '~/ai/chat/domain'
-import type { LanguageModelUsage } from 'ai'
-import { deriveTitle } from '~/ai/chat/messages/message-utils'
+import { type UserContextItem } from '~/ai/chat/context/user-context'
+import { UserContextManager } from '~/ai/chat/context/user-context-manager'
+import type { ChatSession } from '~/ai/chat/domain'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
+import { exportSessionToMarkdownFile } from '~/ai/chat/messages/export-session'
+import { MessageFactory } from '~/ai/chat/messages/message-factory'
+import { MessageOps } from '~/ai/chat/messages/message-ops'
+import { deriveTitle } from '~/ai/chat/messages/message-utils'
+import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
+import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
+import { Notifier } from '~/ai/chat/notifier'
 import {
 	ChatState,
 	type SessionRuntimeState,
 } from '~/ai/chat/runtime/chat-state'
 import {
-	runContextCompression,
 	resolveContextWindow,
+	runContextCompression,
 } from '~/ai/chat/runtime/context-compression'
 import {
 	enqueuePendingSubmission,
 	hasQueuedSubmission,
 } from '~/ai/chat/runtime/pending-submission'
-import { Notifier } from '~/ai/chat/notifier'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import { Selection } from '~/ai/chat/runtime/selection'
-import { SessionStore } from '~/ai/chat/session/session-store'
+import { SessionProcessor } from '~/ai/chat/runtime/session-processor'
 import { TaskManager } from '~/ai/chat/runtime/task-manager'
 import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
-import { UserContextManager } from '~/ai/chat/context/user-context-manager'
-import { MessageFactory } from '~/ai/chat/messages/message-factory'
-import { MessageOps } from '~/ai/chat/messages/message-ops'
-import { SessionProcessor } from '~/ai/chat/runtime/session-processor'
-import { exportSessionToMarkdownFile } from '~/ai/chat/messages/export-session'
-import {
-	buildTimeline,
-	collectOtherBusySessionIds,
-	collectOtherSessionTasks,
-} from '~/ai/chat/ui/view-projection'
-import { type UserContextItem } from '~/ai/chat/context/user-context'
-import type { ChatFragment } from '~/ai/chat/domain'
+import { SessionStore } from '~/ai/chat/session/session-store'
+import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import type {
 	ChatboxProps,
 	ChatProviderOption,
 	RecallMessageResult,
 } from '~/ai/chat/ui/types'
+import {
+	buildAgentViews,
+	buildTimeline,
+	collectOtherBusySessionIds,
+} from '~/ai/chat/ui/view-projection'
+import type { AIModelConfig } from '~/ai/core/types'
+import { SkillRepository } from '~/ai/skills/repository'
 import { isAbortError } from '~/ai/transport/abort'
 import SessionExportModal from '~/components/SessionExportModal'
 import i18n from '~/i18n'
 import { chatSessionKV } from '~/storage'
-import createId from '~/utils/create-id'
+import { createUniqueWordId } from '~/utils/create-id'
 import logger from '~/utils/logger'
-import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
+import { BaseService } from './service.interface'
 
 type ChatboxActionHandlers = Pick<
 	ChatboxProps,
 	| 'onNewSession'
-	| 'onNewFragment'
 	| 'onCompressContext'
 	| 'onSwitchSession'
 	| 'onExportSession'
@@ -72,7 +74,6 @@ type ChatboxActionHandlers = Pick<
 	| 'onResolvePendingContextItem'
 	| 'onDropContextItem'
 	| 'onStopActiveRun'
-	| 'onCancelTask'
 	| 'onDeleteMessage'
 	| 'onRegenerateMessage'
 	| 'onRecallMessage'
@@ -101,9 +102,11 @@ export default class ChatService extends BaseService {
 	private readonly messageFactory: MessageFactory
 	private readonly messageOps: MessageOps
 	private readonly sessionProcessor: SessionProcessor
+	private readonly skillRepository: SkillRepository
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
+		this.skillRepository = new SkillRepository(plugin.app)
 		this.selection = new Selection(
 			plugin,
 			this.state,
@@ -116,6 +119,17 @@ export default class ChatService extends BaseService {
 			this.selection,
 		)
 		this.toolExecutor = new ToolExecutor(plugin, this.state, this.runtimeStates)
+		this.userContextManager = new UserContextManager(
+			this.state,
+			this.runtimeStates,
+			() => this.notify(),
+		)
+		this.messageFactory = new MessageFactory(
+			plugin,
+			this.runtimeStates,
+			() => this.notify(),
+			this.skillRepository,
+		)
 		this.taskManager = new TaskManager(
 			plugin,
 			this.state,
@@ -123,17 +137,10 @@ export default class ChatService extends BaseService {
 			this.store,
 			() => this.notify(),
 			this.toolExecutor,
+			this.messageFactory,
 		)
-		this.toolExecutor.setSpawnTaskHandler((rawArgs, ctx) =>
-			this.taskManager.startSpawnedTask(rawArgs, ctx),
-		)
-		this.userContextManager = new UserContextManager(
-			this.state,
-			this.runtimeStates,
-			() => this.notify(),
-		)
-		this.messageFactory = new MessageFactory(plugin, this.runtimeStates, () =>
-			this.notify(),
+		this.toolExecutor.setDispatchTaskHandler((params) =>
+			this.taskManager.dispatchTask(params),
 		)
 		this.messageOps = new MessageOps(
 			plugin,
@@ -144,6 +151,7 @@ export default class ChatService extends BaseService {
 			this.messageFactory,
 			(session) => this.selection.validateSessionSelection(session),
 			(sessionId) => this.sessionProcessor.start(sessionId),
+			this.skillRepository,
 		)
 		this.sessionProcessor = new SessionProcessor(
 			plugin,
@@ -156,6 +164,11 @@ export default class ChatService extends BaseService {
 			this.messageFactory,
 			this.userContextManager,
 		)
+		this.taskManager.setWakeAgentHandler((sessionId, agentId) => {
+			if (agentId === MASTER_AGENT_ID) {
+				void this.sessionProcessor.start(sessionId)
+			}
+		})
 	}
 
 	private notify() {
@@ -248,11 +261,7 @@ export default class ChatService extends BaseService {
 			sessionHistory: this.state.sessionIndex.map((item) => ({ ...item })),
 			activeSessionId: this.state.activeSessionId,
 			timeline: activeSession ? buildTimeline(activeSession) : [],
-			currentSessionTasks: this.getCurrentSessionTasks(activeSession),
-			otherSessionTasks: collectOtherSessionTasks(
-				this.state.loadedSessions,
-				this.state.activeSessionId,
-			),
+			agentsById: activeSession ? buildAgentViews(activeSession) : {},
 			otherBusySessionIds: collectOtherBusySessionIds(
 				this.state.loadedSessions,
 				this.state.activeSessionId,
@@ -273,12 +282,10 @@ export default class ChatService extends BaseService {
 			canSend: !activeRuntime.draft.userContext.some(
 				(item) => item.type === 'pending-context',
 			),
-			canCreateFragment: !!activeSession && activeRuntime.runState === 'idle',
 			canCompress:
 				!!activeSession &&
 				activeRuntime.runState === 'idle' &&
-				this.messageFactory.getActiveFragment(activeSession).messages.length >
-					0,
+				this.messageFactory.getActiveAgent(activeSession).timeline.length > 0,
 			usage,
 			contextWindow,
 			...this.bindViewActions(),
@@ -286,7 +293,7 @@ export default class ChatService extends BaseService {
 	}
 
 	/**
-	 * Resolves raw context usage stats for the active fragment: the most recent
+	 * Resolves raw context usage stats for the active agent context: the most recent
 	 * assistant `LanguageModelUsage` record, plus the active model's context
 	 * window. Returns empty values when no usage data or model is available —
 	 * the UI layer decides how to present that (e.g. hide the ring, show "—",
@@ -295,21 +302,21 @@ export default class ChatService extends BaseService {
 	 * changing this service.
 	 */
 	private resolveContextUsage(
-		activeSession?: AISession,
+		activeSession?: ChatSession,
 		model?: AIModelConfig,
 	): { usage?: LanguageModelUsage; contextWindow?: number } {
 		if (!activeSession || !model) return {}
 		const contextWindow = resolveContextWindow(model)
-		const fragment = this.messageFactory.getActiveFragment(activeSession)
-		const latestUsage = [...fragment.messages]
+		const agent = this.messageFactory.getActiveAgent(activeSession)
+		const latestUsage = [...agent.timeline]
 			.reverse()
-			.find((item) => item.message.role === 'assistant' && item.meta?.usage)
-			?.meta?.usage
+			.find((item) => item.role === 'assistant' && item.metadata?.llm?.usage)
+			?.metadata?.llm?.usage
 		if (!latestUsage) return { contextWindow }
 		return { usage: latestUsage, contextWindow }
 	}
 
-	private getViewRuntime(activeSession?: AISession): ChatboxViewRuntime {
+	private getViewRuntime(activeSession?: ChatSession): ChatboxViewRuntime {
 		if (activeSession) {
 			return this.runtimeStates.get(activeSession.id)
 		}
@@ -323,7 +330,9 @@ export default class ChatService extends BaseService {
 		}
 	}
 
-	private resolveViewSelection(activeSession?: AISession): ViewSelectionState {
+	private resolveViewSelection(
+		activeSession?: ChatSession,
+	): ViewSelectionState {
 		const fallbackSelection = resolveInitialSelection(
 			this.plugin.settings.ai.providers,
 			this.plugin.settings.ai.defaultModel,
@@ -355,14 +364,6 @@ export default class ChatService extends BaseService {
 		)
 	}
 
-	private getCurrentSessionTasks(activeSession?: AISession) {
-		return activeSession
-			? activeSession.tasks
-					.slice()
-					.sort((left, right) => right.createdAt - left.createdAt)
-			: []
-	}
-
 	private buildProviderOptions(): ChatProviderOption[] {
 		return listProviders(this.plugin.settings.ai.providers).map((provider) => ({
 			id: provider.id,
@@ -377,11 +378,11 @@ export default class ChatService extends BaseService {
 	private bindViewActions(): ChatboxActionHandlers {
 		return {
 			onNewSession: () => void this.createSession(),
-			onNewFragment: () => this.createFragmentForActiveSession(),
 			onCompressContext: () => this.compressContext(),
 			onSwitchSession: (sessionId: string) =>
 				void this.switchSession(sessionId),
-			onExportSession: (sessionId: string) => this.exportSession(sessionId),
+			onExportSession: (sessionId, modalMountTarget) =>
+				this.exportSession(sessionId, modalMountTarget),
 			onDeleteSession: (sessionId: string) => this.deleteSession(sessionId),
 			onSelectProvider: (providerId: string) => this.selectProvider(providerId),
 			onSelectModel: (modelId: string) => this.selectModel(modelId),
@@ -397,7 +398,6 @@ export default class ChatService extends BaseService {
 				// overridden by the view layer which has access to app.vault
 			},
 			onStopActiveRun: () => this.stopActiveSessionRun(),
-			onCancelTask: (taskId: string) => this.cancelTask(taskId),
 			onDeleteMessage: (messageId: string) => this.deleteMessage(messageId),
 			onRegenerateMessage: (messageId: string) =>
 				this.regenerateMessage(messageId),
@@ -453,8 +453,8 @@ export default class ChatService extends BaseService {
 		const session = this.state.loadedSessions.get(sessionId)
 		if (session) {
 			await this.stopSessionRun(session)
-			this.taskManager.cancelAllNonTerminalTasks(session, 'user_cancelled')
-			this.taskManager.cleanupSessionTaskTracking(session)
+			this.taskManager.cancelAllNonTerminalAgents(session)
+			this.taskManager.cleanupSessionAgentTracking(session)
 		}
 
 		this.state.sessionIndex = this.state.sessionIndex.filter(
@@ -476,7 +476,10 @@ export default class ChatService extends BaseService {
 		new Notice(i18n.t('chatbox.sessionDeleted'))
 	}
 
-	async exportSession(sessionId: string) {
+	async exportSession(
+		sessionId: string,
+		modalMountTarget?: ChatModalMountTarget,
+	) {
 		await this.initialize()
 		if (!this.state.sessionIndex.some((item) => item.id === sessionId)) {
 			new Notice(i18n.t('chatbox.errors.sessionNotFound'))
@@ -485,7 +488,7 @@ export default class ChatService extends BaseService {
 
 		const options = await SessionExportModal.open(
 			this.plugin.app,
-			this.toolExecutor.getChatModalMountTarget(),
+			modalMountTarget ?? this.getChatModalMountTarget(),
 		)
 		if (!options) {
 			return
@@ -514,6 +517,10 @@ export default class ChatService extends BaseService {
 
 	setChatModalHost(rootEl?: HTMLElement) {
 		this.state.chatModalHostEl = rootEl?.isConnected ? rootEl : undefined
+	}
+
+	getChatModalMountTarget() {
+		return this.toolExecutor.getChatModalMountTarget()
 	}
 
 	selectProvider(providerId: string) {
@@ -588,8 +595,8 @@ export default class ChatService extends BaseService {
 			await this.userContextManager.prepareUserContextForMessage(
 				pendingUserContext,
 			)
-		this.messageFactory.appendUserMessage(
-			this.messageFactory.getActiveFragment(session),
+		await this.messageFactory.appendUserMessage(
+			this.messageFactory.getActiveAgent(session),
 			normalizedText,
 			session,
 			preparedContext.dedupedItems.length > 0
@@ -619,22 +626,6 @@ export default class ChatService extends BaseService {
 		return true
 	}
 
-	createFragmentForActiveSession() {
-		const session = this.getLoadedActiveSession()
-		if (!session) {
-			return
-		}
-
-		const runtime = this.runtimeStates.get(session.id)
-		if (runtime.runState !== 'idle' || runtime.processing) {
-			return
-		}
-
-		this.messageFactory.createFragment(session)
-		void this.store.persistSession(session)
-		this.notify()
-	}
-
 	async compressContext() {
 		await this.initialize()
 		const session = this.getLoadedActiveSession()
@@ -650,13 +641,13 @@ export default class ChatService extends BaseService {
 			return
 		}
 
-		const sourceFragment = this.messageFactory.getActiveFragment(session)
+		const agent = this.messageFactory.getActiveAgent(session)
 		runtime.runState = 'compressing'
 		this.notify()
 
 		const task = (async () => {
 			try {
-				if (sourceFragment.messages.length > 0) {
+				if (agent.timeline.length > 0) {
 					const provider = this.selection.getProviderOrThrow(session)
 					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
 						provider,
@@ -674,11 +665,11 @@ export default class ChatService extends BaseService {
 							provider,
 							model,
 							session,
-							sourceFragment,
-							runtimeStates: this.runtimeStates,
+							agent,
 							store: this.store,
 							messageFactory: this.messageFactory,
-							isSessionDeleted: () =>
+							isCancelled: () =>
+								runtime.stopRequested ||
 								this.state.deletedSessionIds.has(session.id),
 							abortSignal: abortController.signal,
 						})
@@ -705,7 +696,7 @@ export default class ChatService extends BaseService {
 						modelId: model?.id,
 						modelName: model?.name,
 					},
-					sourceFragment,
+					agent,
 				)
 				await this.store.persistSession(session)
 			} finally {
@@ -723,48 +714,6 @@ export default class ChatService extends BaseService {
 
 		runtime.processing = task
 		await task
-	}
-
-	cancelTask(taskId: string) {
-		const session = this.state.findLoadedSessionByTaskId(taskId)
-		const rootTask = session?.tasks.find((item) => item.id === taskId)
-		if (!session || !rootTask) {
-			return
-		}
-
-		const terminalTasks = session.tasks.filter(
-			(item) =>
-				item.id === taskId ||
-				this.taskManager.isTaskDescendantOf(session, item, taskId),
-		)
-		let changed = false
-
-		for (const task of terminalTasks) {
-			if (this.taskManager.isTaskTerminal(task)) {
-				continue
-			}
-			mutateTaskRecord(
-				task,
-				toCancelledTask(
-					task,
-					task.id === taskId ? 'user_cancelled' : 'ancestor_cancelled',
-					Date.now(),
-					i18n.t('chatbox.task.cancelledSummary', { task: task.title }),
-				),
-			)
-			this.taskManager.resolveTaskCompletion(
-				task.id,
-				this.taskManager.buildTaskToolPayload(task),
-			)
-			this.taskManager.cleanupTaskTracking(task.id)
-			changed = true
-		}
-
-		if (changed) {
-			void this.store.persistSession(session)
-			this.notify()
-			this.taskManager.startQueuedTasksForSession(session)
-		}
 	}
 
 	stopActiveSessionRun() {
@@ -791,7 +740,7 @@ export default class ChatService extends BaseService {
 		await this.messageOps.regenerateMessage(messageId)
 	}
 
-	private async stopSessionRun(session: AISession) {
+	private async stopSessionRun(session: ChatSession) {
 		const runtime = this.runtimeStates.get(session.id)
 		if (
 			runtime.runState !== 'thinking' &&
@@ -804,15 +753,12 @@ export default class ChatService extends BaseService {
 		runtime.stopRequested = true
 		this.runtimeStates.abortActiveRequest(session.id, 'Stopped by user')
 
-		const changed = this.taskManager.cancelAllNonTerminalTasks(
-			session,
-			'user_cancelled',
-		)
+		const changed = this.taskManager.cancelAllNonTerminalAgents(session)
 
 		if (changed) {
 			void this.store.persistSession(session)
 			this.notify()
-			this.taskManager.startQueuedTasksForSession(session)
+			this.taskManager.startQueuedAgentsForSession(session)
 		}
 
 		await runtime.processing
@@ -824,25 +770,19 @@ export default class ChatService extends BaseService {
 			: undefined
 	}
 
-	private createEmptySession(): AISession {
+	private createEmptySession(): ChatSession {
 		const { providerId, modelId } =
 			this.selection.getInitialSelectionForNewSession()
 		const now = Date.now()
-		const fragment: ChatFragment = {
-			id: createId('fragment'),
-			createdAt: now,
-			updatedAt: now,
-			messages: [],
-		}
-
 		return {
-			id: createId('session'),
+			schemaVersion: 2,
+			id: createUniqueWordId('session', (id) =>
+				this.state.sessionIndex.some((item) => item.id === id),
+			),
 			createdAt: now,
 			updatedAt: now,
 			model: providerId && modelId ? { providerId, modelId } : undefined,
-			fragments: [fragment],
-			activeFragmentId: fragment.id,
-			tasks: [],
+			subagents: { master: createEmptyMasterAgent(now) },
 		}
 	}
 }

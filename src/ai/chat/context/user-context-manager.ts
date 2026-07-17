@@ -1,7 +1,7 @@
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import {
-	cloneUserContextItem,
+	copyUserContextItem,
 	formatUserContext,
 	getUserContextItemHash,
 	type UserContextItem,
@@ -25,7 +25,7 @@ export class UserContextManager {
 		const session = this.getLoadedActiveSession()
 		if (!session) return
 		const runtime = this.runtimeStates.get(session.id)
-		const normalized = cloneUserContextItem(item)
+		const normalized = copyUserContextItem(item)
 		if (normalized.type === 'pending-context') {
 			if (
 				runtime.draft.userContext.some(
@@ -74,7 +74,7 @@ export class UserContextManager {
 			this.notify()
 			return
 		}
-		const normalized = cloneUserContextItem(replacement)
+		const normalized = copyUserContextItem(replacement)
 		const hash = getUserContextItemHash(normalized)
 		const duplicateIndex = runtime.draft.userContext.findIndex(
 			(item, idx) =>
@@ -107,7 +107,7 @@ export class UserContextManager {
 				continue
 			}
 			seen.add(hash)
-			deduped.push(cloneUserContextItem(item))
+			deduped.push(copyUserContextItem(item))
 		}
 		return deduped
 	}
@@ -190,14 +190,14 @@ export class UserContextManager {
 			}
 			seen.add(hash)
 			if (item.type === 'image') {
-				dedupedItems.push(cloneUserContextItem(item))
+				dedupedItems.push(copyUserContextItem(item))
 				continue
 			}
 			if (item.type === 'file') {
-				dedupedItems.push(cloneUserContextItem(item))
+				dedupedItems.push(copyUserContextItem(item))
 				continue
 			}
-			dedupedItems.push(cloneUserContextItem(item))
+			dedupedItems.push(copyUserContextItem(item))
 		}
 		return {
 			dedupedItems,

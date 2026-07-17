@@ -2,6 +2,7 @@ import { Notice } from 'obsidian'
 import SyncConfirmModal from '~/components/SyncConfirmModal'
 import { emitCancelSync } from '~/events'
 import i18n from '~/i18n'
+import { type SyncPolicy } from '~/settings'
 import { SyncStartMode } from '~/sync'
 import logger from '~/utils/logger'
 import { CHATBOX_VIEW_TYPE } from '~/views/chatbox.view'
@@ -42,9 +43,10 @@ export default class CommandService extends BaseService {
 					return
 				}
 
-				const startSync = async () => {
+				const startSync = async (syncPolicy?: SyncPolicy) => {
 					await this.plugin.syncExecutorService.executeSync({
 						mode: SyncStartMode.MANUAL_SYNC,
+						syncPolicy,
 					})
 				}
 				if (this.plugin.settings.confirmBeforeSync) {

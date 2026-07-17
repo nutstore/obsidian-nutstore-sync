@@ -17,7 +17,7 @@ function statusIconClass(status: ChatTodoStatus) {
 }
 
 export function TodoListBlock(props: { block: ChatDisplayToolCallBlock }) {
-	const todos = () => props.block.toolMessage?.todos ?? []
+	const todos = () => props.block.todos ?? []
 	const isEmpty = () => todos().length === 0
 
 	return (

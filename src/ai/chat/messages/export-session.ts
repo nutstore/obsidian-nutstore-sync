@@ -1,7 +1,11 @@
 import { normalizePath, TFile, Vault } from 'obsidian'
-import type { ChatDisplayBlock, ChatMessageRecord } from '~/ai/chat/types'
+import type {
+	AppUIMessage,
+	ChatDisplayBlock,
+	ChatDisplayContentBlock,
+} from '~/ai/chat/types'
 import { v7 as uuidv7 } from 'uuid'
-import type { AISession } from '~/ai/core/types'
+import type { ChatSession } from '~/ai/chat/domain'
 import {
 	formatUserContext,
 	type UserContextItem,
@@ -11,7 +15,9 @@ import {
 	isImageFilePart,
 } from '~/ai/chat/messages/message-utils'
 import type { FilePart } from 'ai'
-import { projectFragmentMessageGroups } from '~/ai/chat/ui/display-blocks'
+import { projectTimelineMessageGroups } from '~/ai/chat/ui/display-blocks'
+import { getUserContextItems } from '~/ai/chat/messages/ui-message'
+import { getMasterAgent } from '~/ai/chat/domain'
 import i18n from '~/i18n'
 import { writeLocalBinary, writeLocalText } from '~/utils/local-vault-io'
 import logger from '~/utils/logger'
@@ -20,7 +26,7 @@ import { mkdirsVault } from '~/utils/mkdirs-vault'
 interface ExportSessionParams {
 	vault: Vault
 	manifestId: string
-	session: AISession
+	session: ChatSession
 	title: string
 	includeToolMessages: boolean
 }
@@ -127,7 +133,7 @@ function resolveUniqueExportPath(
 		const filePath = normalizePath(`${directoryPath}/${fileStem}.md`)
 		const existing = vault.getAbstractFileByPath(filePath)
 		if (!existing) {
-			return { filePath, fileStem }
+			return filePath
 		}
 		index += 1
 	}
@@ -175,36 +181,22 @@ async function saveExportUserContextImage(
 	}
 }
 
-type ExportContentPart = {
-	type: string
-	text?: string
-	data?: unknown
-	mediaType?: string
-	output?: { type: string; value?: string }
-}
-
 async function buildMessageContentMarkdown(
 	vault: Vault,
-	content: ExportContentPart[],
+	content: ChatDisplayContentBlock['parts'],
 	assetsDirPath: string,
 	assetsMarkdownPrefix: string,
 ) {
 	const lines: string[] = []
 	for (const part of content) {
 		if (part.type === 'text') {
-			const text = (part.text ?? '').trim()
+			const text = part.text.trim()
 			if (text) lines.push(text)
 			continue
 		}
 		if (part.type === 'reasoning') {
-			const text = (part.text ?? '').trim()
+			const text = part.text.trim()
 			if (text) lines.push(`> ${text.replace(/\n/g, '\n> ')}`)
-			continue
-		}
-		if (part.type === 'tool-result') {
-			const value =
-				part.output?.type === 'text' ? (part.output.value ?? '') : ''
-			if (value.trim()) lines.push(value.trim())
 			continue
 		}
 		if (!isImageFilePart(part)) continue
@@ -222,21 +214,22 @@ async function buildMessageContentMarkdown(
 
 async function buildUserContextMarkdown(
 	vault: Vault,
-	record: ChatMessageRecord,
+	record: AppUIMessage,
 	assetsDirPath: string,
 	assetsMarkdownPrefix: string,
 ) {
-	if (!record.userContext?.length) {
+	const userContext = getUserContextItems(record)
+	if (!userContext.length) {
 		return []
 	}
 	const lines: string[] = []
-	const textContext = record.userContext.filter(
+	const textContext = userContext.filter(
 		(item) => item.type === 'vault-path' || item.type === 'selection',
 	)
 	if (textContext.length) {
 		lines.push(formatUserContext(textContext), '')
 	}
-	for (const item of record.userContext) {
+	for (const item of userContext) {
 		if (item.type === 'image') {
 			const imageRef = await saveExportUserContextImage(
 				vault,
@@ -278,27 +271,29 @@ async function buildUserContextMarkdown(
 	return lines
 }
 
-function getModelLabel(session: AISession, record: ChatMessageRecord) {
+function getModelLabel(session: ChatSession, record: AppUIMessage) {
 	const sessionModel =
 		session.model?.providerId && session.model?.modelId
 			? `${session.model.providerId}/${session.model.modelId}`
 			: undefined
-	const metaModel = record.meta?.modelName || record.meta?.modelId
-	const metaProvider = record.meta?.providerName || record.meta?.providerId
+	const metaModel =
+		record.metadata?.llm?.modelName || record.metadata?.llm?.modelId
+	const metaProvider =
+		record.metadata?.llm?.providerName || record.metadata?.llm?.providerId
 	return metaModel && metaProvider
 		? `${metaProvider}/${metaModel}`
 		: metaModel || metaProvider || sessionModel || 'unknown-model'
 }
 
 function getBlockHeadingLabel(
-	session: AISession,
-	record: ChatMessageRecord,
+	session: ChatSession,
+	record: AppUIMessage,
 	block: ChatDisplayBlock,
 ) {
-	if (record.message.role === 'user') {
+	if (record.role === 'user') {
 		return `👤 ${i18n.t('chatbox.exportRole.user')}`
 	}
-	if (record.message.role === 'assistant') {
+	if (record.role === 'assistant') {
 		const modelLabel = getModelLabel(session, record)
 		const emoji = block.kind === 'tool-call' ? '🔧' : '🤖'
 		return `${emoji} ${modelLabel}`
@@ -315,18 +310,7 @@ async function buildDisplayBlockMarkdown(
 	if (block.kind === 'content') {
 		return buildMessageContentMarkdown(
 			vault,
-			block.parts as unknown as ExportContentPart[],
-			assetsDirPath,
-			assetsMarkdownPrefix,
-		)
-	}
-	if (block.kind === 'tool-result') {
-		const toolMsgContent = Array.isArray(block.toolMessage.message.content)
-			? (block.toolMessage.message.content as unknown as ExportContentPart[])
-			: []
-		return buildMessageContentMarkdown(
-			vault,
-			toolMsgContent,
+			block.parts,
 			assetsDirPath,
 			assetsMarkdownPrefix,
 		)
@@ -335,8 +319,8 @@ async function buildDisplayBlockMarkdown(
 		`- ${i18n.t('chatbox.exportMeta.toolName')}: \`${block.toolCall.toolName}\``,
 		`- ${i18n.t('chatbox.exportMeta.toolCallId')}: \`${block.toolCall.toolCallId}\``,
 	]
-	const todos = block.toolMessage?.todos
-	if (block.toolCall.toolName === 'todowrite' && Array.isArray(todos)) {
+	const todos = block.todos
+	if (block.toolCall.toolName === 'todowrite' && todos) {
 		lines.push('')
 		for (const todo of todos) {
 			const checked =
@@ -358,25 +342,24 @@ async function buildDisplayBlockMarkdown(
 		JSON.stringify(block.toolCall.input ?? {}, null, 2),
 		'```',
 	)
-	if (block.toolMessage) {
-		const toolContentLines = await buildMessageContentMarkdown(
-			vault,
-			(Array.isArray(block.toolMessage.message.content)
-				? block.toolMessage.message.content
-				: []) as unknown as ExportContentPart[],
-			assetsDirPath,
-			assetsMarkdownPrefix,
+	if (block.toolCall.state === 'output-available') {
+		lines.push(
+			'',
+			'```text',
+			typeof block.toolCall.output === 'string'
+				? block.toolCall.output
+				: JSON.stringify(block.toolCall.output, null, 2),
+			'```',
 		)
-		if (toolContentLines.length > 0) {
-			lines.push('', ...toolContentLines)
-		}
+	} else if (block.toolCall.state === 'output-error') {
+		lines.push('', '```text', block.toolCall.errorText, '```')
 	}
 	return lines
 }
 
 async function buildSessionMarkdown(
 	vault: Vault,
-	session: AISession,
+	session: ChatSession,
 	title: string,
 	includeToolMessages: boolean,
 	assetsDirPath: string,
@@ -400,6 +383,7 @@ async function buildSessionMarkdown(
 	const lines: string[] = [
 		'---',
 		`${toYamlKeyLabel(frontmatter.title)}: ${JSON.stringify(toMarkdownHeadingText(title))}`,
+		`${toYamlKeyLabel(frontmatter.sessionId)}: ${JSON.stringify(session.id)}`,
 		`${toYamlKeyLabel(frontmatter.exportedAt)}: ${JSON.stringify(new Date().toLocaleString())}`,
 		`${toYamlKeyLabel(frontmatter.createdAt)}: ${JSON.stringify(new Date(session.createdAt).toLocaleString())}`,
 		`${toYamlKeyLabel(frontmatter.updatedAt)}: ${JSON.stringify(new Date(session.updatedAt).toLocaleString())}`,
@@ -411,92 +395,58 @@ async function buildSessionMarkdown(
 		'',
 	]
 
-	for (
-		let fragmentIndex = 0;
-		fragmentIndex < session.fragments.length;
-		fragmentIndex += 1
-	) {
-		const fragment = session.fragments[fragmentIndex]
-		if (fragmentIndex > 0) {
-			lines.push('---', '')
-		}
-		for (const { record, blocks } of projectFragmentMessageGroups(
-			fragment.messages,
-		)) {
-			if (blocks.length === 0) {
-				lines.push(
-					`### ${record.message.role === 'user' ? `👤 ${i18n.t('chatbox.exportRole.user')}` : getModelLabel(session, record)}`,
-					'',
-					`${i18n.t('chatbox.exportMeta.messageTime')}: ${new Date(record.createdAt).toLocaleString()}`,
-					'',
-				)
-				const contextLines = await buildUserContextMarkdown(
-					vault,
-					record,
-					assetsDirPath,
-					assetsMarkdownPrefix,
-				)
-				if (contextLines.length > 0) {
-					lines.push(...contextLines)
-				} else {
-					lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
-				}
-				continue
-			}
-			let appendedUserContext = false
-			for (const block of blocks) {
-				if (
-					!includeToolMessages &&
-					(block.kind === 'tool-call' || block.kind === 'tool-result')
-				) {
-					continue
-				}
-				lines.push(`### ${getBlockHeadingLabel(session, record, block)}`, '')
-				lines.push(
-					`${i18n.t('chatbox.exportMeta.messageTime')}: ${new Date(record.createdAt).toLocaleString()}`,
-					'',
-				)
-				const blockLines = await buildDisplayBlockMarkdown(
-					vault,
-					block,
-					assetsDirPath,
-					assetsMarkdownPrefix,
-				)
-				if (blockLines.length > 0) {
-					lines.push(...blockLines, '')
-				}
-				if (
-					!appendedUserContext &&
-					record.message.role === 'user' &&
-					record.userContext?.length
-				) {
-					const contextLines = await buildUserContextMarkdown(
+	for (const { message: record, blocks } of projectTimelineMessageGroups(
+		getMasterAgent(session).timeline,
+	)) {
+		const userContextLines =
+			record.role === 'user'
+				? await buildUserContextMarkdown(
 						vault,
 						record,
 						assetsDirPath,
 						assetsMarkdownPrefix,
 					)
-					if (contextLines.length > 0) {
-						lines.push(...contextLines)
-						appendedUserContext = true
-					}
-				}
-				if (blockLines.length === 0 && record.message.role !== 'assistant') {
-					if (!appendedUserContext) {
-						const contextLines = await buildUserContextMarkdown(
-							vault,
-							record,
-							assetsDirPath,
-							assetsMarkdownPrefix,
-						)
-						if (contextLines.length > 0) {
-							lines.push(...contextLines)
-							appendedUserContext = true
-						}
-					}
-					if (!appendedUserContext) {
-						lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
-					}
+				: []
+		if (blocks.length === 0) {
+			lines.push(
+				`### ${record.role === 'user' ? `👤 ${i18n.t('chatbox.exportRole.user')}` : getModelLabel(session, record)}`,
+				'',
+				`${i18n.t('chatbox.exportMeta.messageTime')}: ${new Date(record.metadata?.createdAt ?? session.createdAt).toLocaleString()}`,
+				'',
+			)
+			if (userContextLines.length > 0) {
+				lines.push(...userContextLines)
+			} else {
+				lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
+			}
+			continue
+		}
+		let appendedUserContext = false
+		for (const block of blocks) {
+			if (!includeToolMessages && block.kind === 'tool-call') {
+				continue
+			}
+			lines.push(`### ${getBlockHeadingLabel(session, record, block)}`, '')
+			lines.push(
+				`${i18n.t('chatbox.exportMeta.messageTime')}: ${new Date(record.metadata?.createdAt ?? session.createdAt).toLocaleString()}`,
+				'',
+			)
+			const blockLines = await buildDisplayBlockMarkdown(
+				vault,
+				block,
+				assetsDirPath,
+				assetsMarkdownPrefix,
+			)
+			if (blockLines.length > 0) {
+				lines.push(...blockLines, '')
+			}
+			if (!appendedUserContext && userContextLines.length > 0) {
+				lines.push(...userContextLines)
+				appendedUserContext = true
+			}
+			if (blockLines.length === 0 && record.role !== 'assistant') {
+				if (!appendedUserContext) {
+					lines.push(i18n.t('chatbox.exportMeta.emptyContent'), '')
 				}
 			}
 		}
@@ -510,7 +460,7 @@ export async function exportSessionToMarkdownFile(params: ExportSessionParams) {
 	await mkdirsVault(params.vault, exportDirPath)
 	const exportDate = new Date()
 	const baseFileName = `${sanitizeExportFileName(params.title)}-${formatExportTimestamp(exportDate)}`
-	const { filePath } = resolveUniqueExportPath(
+	const filePath = resolveUniqueExportPath(
 		params.vault,
 		exportDirPath,
 		baseFileName,

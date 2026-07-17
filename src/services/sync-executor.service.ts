@@ -5,6 +5,7 @@ import { emitStopGc, emitSyncError } from '~/events'
 import i18n from '~/i18n'
 import type { SyncStartResult } from '~/sync'
 import { getSyncPolicyLabel, getSyncTriggerLabel } from '~/sync/log'
+import { type SyncPolicy } from '~/settings'
 import logger from '~/utils/logger'
 import waitUntil from '~/utils/wait-until'
 import { BaseService } from './service.interface'
@@ -12,6 +13,8 @@ import type NutstorePlugin from '..'
 
 export interface SyncOptions {
 	mode: SyncStartMode
+	/** A manual-sync override. This is deliberately not persisted. */
+	syncPolicy?: SyncPolicy
 }
 
 export default class SyncExecutorService extends BaseService {
@@ -32,6 +35,8 @@ export default class SyncExecutorService extends BaseService {
 		}
 
 		this.inFlight = true
+		const syncPolicy =
+			options.syncPolicy ?? this.plugin.localSettings.syncPolicy
 
 		let result: SyncStartResult | undefined
 		try {
@@ -50,7 +55,7 @@ export default class SyncExecutorService extends BaseService {
 
 			logger.info('Sync starting with settings:', {
 				triggerMode: getSyncTriggerLabel(options.mode),
-				syncPolicy: getSyncPolicyLabel(this.plugin.localSettings.syncPolicy),
+				syncPolicy: getSyncPolicyLabel(syncPolicy),
 				loginMode: this.plugin.settings.loginMode,
 				remoteBaseDir: this.plugin.remoteBaseDir,
 				syncMode: this.plugin.settings.syncMode,
@@ -74,6 +79,7 @@ export default class SyncExecutorService extends BaseService {
 
 			result = await sync.start({
 				mode: options.mode,
+				syncPolicy,
 			})
 
 			return result.ended

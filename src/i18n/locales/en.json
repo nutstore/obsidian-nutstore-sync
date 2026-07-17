@@ -387,6 +387,7 @@
 		"alwaysAllow": "Auto-approve this operation",
 		"deny": "Deny",
 		"denied": "Permission denied: {{summary}}",
+		"readonly": "This agent is read-only and cannot modify files. Attempted: {{summary}}",
 		"source": "Source",
 		"destination": "Destination",
 		"operations": {
@@ -462,12 +463,12 @@
 		},
 		"confirmModal": {
 			"title": "Sync confirmation",
+			"policyTitle": "Sync policy for this sync",
 			"message": "⚠️ Please note:\n\n1. Sync operation may modify or delete local files\n2. We recommend backing up important files before syncing\n3. In case of file conflicts, manual resolution may be required\n4. Initial sync will process all files and may take longer, please be patient\n\nAre you sure you want to start syncing?",
 			"confirm": "Confirm sync",
 			"cancel": "Cancel",
 			"remoteDir": "Remote directory: {{dir}}",
-			"strategy": "Sync strategy: {{strategy}}",
-			"policy": "Sync policy: {{policy}}"
+			"strategy": "Conflict strategy: {{strategy}}"
 		}
 	},
 	"taskList": {
@@ -555,13 +556,11 @@
 				"exportAsMarkdown": "Export as Markdown",
 				"deleteSession": "Delete",
 				"cancel": "Cancel",
+				"close": "Close",
 				"selectFile": "Select File",
 				"send": "Send",
 				"stopRun": "Stop",
-				"newFragment": "New Fragment",
 				"compressContext": "Compress Context",
-				"closeTasks": "Close",
-				"cancelTask": "Cancel",
 				"copy": "Copy",
 				"deleteMessage": "Delete message",
 				"regenerateMessage": "Regenerate",
@@ -578,12 +577,7 @@
 				"toolCall": "Tool call",
 				"params": "Params",
 				"result": "Result",
-				"tasks": "Tasks",
-				"currentSession": "Current session",
-				"otherSessions": "Other sessions",
 				"queuedSubmissions": "Queued Submissions",
-				"depth": "Depth",
-				"sources": "Sources",
 				"contextArea": "Context",
 				"todoList": "Todo List"
 			},
@@ -595,20 +589,19 @@
 				"processingTools": "Processing Tools",
 				"noProvider": "No provider",
 				"noModel": "No model",
-				"noTasks": "No tasks yet",
+				"taskDispatching": "Dispatching…",
+				"noSubagentMessages": "This subagent has not produced any messages yet.",
 				"copied": "Copied!",
 				"loadingContextItem": "Loading…",
-				"taskQueued": "Queued",
-				"taskRunning": "Running",
-				"taskCompleted": "Completed",
-				"taskFailed": "Failed",
-				"taskCancelled": "Cancelled",
 				"todoEmpty": "No todos"
 			},
 			"placeholders": {
 				"input": "Type a message. Enter to send, Shift+Enter for newline"
 			},
 			"dialogs": {
+				"subagentTimeline": {
+					"title": "Subagent timeline"
+				},
 				"deleteSession": {
 					"title": "Delete Session",
 					"message": "Delete this session permanently? This action cannot be undone.",
@@ -621,11 +614,6 @@
 					"toolConfirm": "This will delete this tool result and remove the corresponding tool call from the AI message. This action cannot be undone.",
 					"toolRestoreWarning": "After deletion, these file changes can no longer be restored by recalling the message.",
 					"confirm": "Delete"
-				},
-				"newFragment": {
-					"title": "New Fragment",
-					"message": "This starts a fresh stretch of chat in the current conversation. Earlier messages are kept, but the AI will rely less on older parts of the conversation.",
-					"confirm": "Create fragment"
 				},
 				"compressContext": {
 					"title": "Compress Context",
@@ -664,7 +652,6 @@
 			"editMatchNotFound": "Exact text to replace was not found in the file.",
 			"editMatchNotUnique": "Exact text to replace must match exactly once in the file.",
 			"sessionNotFound": "The target session no longer exists",
-			"taskDepthExceeded": "The task depth limit has been reached",
 			"taskSessionUnavailable": "The task session or model configuration is no longer available"
 		}
 	},

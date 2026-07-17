@@ -12,6 +12,7 @@ export interface SessionExportOptions {
 export default class SessionExportModal extends Modal {
 	private includeToolMessages = false
 	private resolved = false
+	private cleanupModalMount?: () => void
 
 	constructor(
 		app: App,
@@ -67,6 +68,8 @@ export default class SessionExportModal extends Modal {
 	}
 
 	onClose() {
+		this.cleanupModalMount?.()
+		this.cleanupModalMount = undefined
 		this.contentEl.empty()
 		if (this.resolved) {
 			return
@@ -76,6 +79,9 @@ export default class SessionExportModal extends Modal {
 
 	open() {
 		super.open()
-		applyObsidianModalMountTarget(this, this.mountTarget)
+		this.cleanupModalMount = applyObsidianModalMountTarget(
+			this,
+			this.mountTarget,
+		)
 	}
 }

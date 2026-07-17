@@ -1,3 +1,4 @@
+import type { ChatSession } from '~/ai/chat/domain'
 import { Notice } from 'obsidian'
 import {
 	getFirstModel,
@@ -6,23 +7,18 @@ import {
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
 import { assertProviderUsable } from '~/ai/core/runtime'
-import type { AIProviderConfig, AISession } from '~/ai/core/types'
+import type { AIProviderConfig } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '../../..'
-
-export interface ModelDescriptor {
-	id: string
-	name?: string
-}
 
 export class Selection {
 	constructor(
 		private plugin: NutstorePlugin,
 		private state: ChatState,
 		private notify: () => void,
-		private persistSession: (session: AISession) => Promise<void>,
+		private persistSession: (session: ChatSession) => Promise<void>,
 	) {}
 
 	getLoadedActiveSession() {
@@ -122,7 +118,7 @@ export class Selection {
 		this.notify()
 	}
 
-	sanitizeSessionSelection(session: AISession) {
+	sanitizeSessionSelection(session: ChatSession) {
 		if (!session.model) {
 			if (this.sessionHasMessages(session)) {
 				return false
@@ -173,8 +169,8 @@ export class Selection {
 		return changed
 	}
 
-	sessionHasMessages(session: AISession) {
-		return session.fragments.some((fragment) => fragment.messages.length > 0)
+	sessionHasMessages(session: ChatSession) {
+		return session.subagents.master.timeline.length > 0
 	}
 
 	getInitialSelectionForNewSession() {
@@ -222,7 +218,7 @@ export class Selection {
 		this.state.pendingModelId = model?.id
 	}
 
-	validateSessionSelection(session: AISession) {
+	validateSessionSelection(session: ChatSession) {
 		try {
 			const provider = this.getProviderOrThrow(session)
 			this.getModelOrThrow(provider, session)
@@ -249,7 +245,7 @@ export class Selection {
 		return model
 	}
 
-	getProviderOrThrow(session: AISession) {
+	getProviderOrThrow(session: ChatSession) {
 		return this.requireProvider(session.model?.providerId)
 	}
 
@@ -257,7 +253,7 @@ export class Selection {
 		return this.requireProvider(id)
 	}
 
-	getModelOrThrow(provider: AIProviderConfig, session: AISession) {
+	getModelOrThrow(provider: AIProviderConfig, session: ChatSession) {
 		return this.requireModel(provider, session.model?.modelId)
 	}
 

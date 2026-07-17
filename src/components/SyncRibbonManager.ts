@@ -5,6 +5,7 @@ import i18n from '../i18n'
 import type NutstorePlugin from '../index'
 import { BaseService } from '../services/service.interface'
 import { SyncStartMode } from '../sync'
+import { type SyncPolicy } from '../settings'
 import { CHATBOX_VIEW_TYPE } from '../views/chatbox.view'
 import SyncConfirmModal from './SyncConfirmModal'
 
@@ -41,9 +42,10 @@ export class SyncRibbonManager extends BaseService {
 					return
 				}
 
-				const startSync = async () => {
+				const startSync = async (syncPolicy?: SyncPolicy) => {
 					await this.plugin.syncExecutorService.executeSync({
 						mode: SyncStartMode.MANUAL_SYNC,
+						syncPolicy,
 					})
 				}
 				if (this.plugin.settings.confirmBeforeSync) {
