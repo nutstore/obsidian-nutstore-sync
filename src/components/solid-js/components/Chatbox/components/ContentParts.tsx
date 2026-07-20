@@ -1,8 +1,8 @@
-import { For, Match, Show, Switch } from 'solid-js'
-import type { ChatMessageContentPart, ReasoningPart } from '~/ai/chat/types'
 import type { TextPart, ToolCallPart } from 'ai'
-import type { ChatboxProps } from '~/ai/chat/ui/types'
+import { For, Match, Show, Switch } from 'solid-js'
 import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
+import type { ChatMessageContentPart, ReasoningPart } from '~/ai/chat/types'
+import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { MarkdownContent } from './MarkdownContent'
 
 function isTextPart(part: ChatMessageContentPart): part is TextPart {

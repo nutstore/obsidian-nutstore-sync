@@ -14,7 +14,10 @@ function todosFromMessage(message: AppUIMessage): ChatTodoItem[] | undefined {
 	return undefined
 }
 
-function buildMessageDisplayBlocks(message: AppUIMessage) {
+function buildMessageDisplayBlocks(
+	message: AppUIMessage,
+	toolTimings: import('~/ai/chat/types').ChatAgentState['toolTimings'],
+) {
 	const blocks: ChatDisplayBlock[] = []
 	let content: Extract<ChatDisplayBlock, { kind: 'content' }>['parts'] = []
 	let todos: ChatTodoItem[] | undefined
@@ -45,6 +48,7 @@ function buildMessageDisplayBlocks(message: AppUIMessage) {
 			const block: Extract<ChatDisplayBlock, { kind: 'tool-call' }> = {
 				kind: 'tool-call',
 				toolCall: part,
+				timing: toolTimings[part.toolCallId],
 			}
 			if (part.toolName === 'todowrite') {
 				todos ??= todosFromMessage(message)
@@ -57,10 +61,13 @@ function buildMessageDisplayBlocks(message: AppUIMessage) {
 	return blocks
 }
 
-export function projectTimelineMessageGroups(messages: AppUIMessage[]) {
+export function projectTimelineMessageGroups(
+	messages: AppUIMessage[],
+	toolTimings: import('~/ai/chat/types').ChatAgentState['toolTimings'] = {},
+) {
 	return messages.flatMap((message) => {
 		if (message.role === 'system') return []
-		const blocks = buildMessageDisplayBlocks(message)
+		const blocks = buildMessageDisplayBlocks(message, toolTimings)
 		const hasContext = message.parts.some(
 			(part) => part.type === 'data-user-context',
 		)

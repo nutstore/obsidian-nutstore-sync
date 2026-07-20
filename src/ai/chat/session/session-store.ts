@@ -137,6 +137,7 @@ export class SessionStore {
 				continue
 			}
 			agent.status = 'cancelled'
+			agent.finishedAt = Date.now()
 			changed = true
 		}
 
@@ -158,6 +159,8 @@ export class SessionStore {
 			parts: [...message.parts],
 		})
 		const normalizeAgent = (agent: ChatAgentState): ChatAgentState => {
+			const normalizeTimestamp = (value: unknown) =>
+				typeof value === 'number' && Number.isFinite(value) ? value : undefined
 			const subagents = Object.fromEntries(
 				Object.entries(agent.subagents ?? {}).map(([id, child]) => [
 					id,
@@ -171,6 +174,8 @@ export class SessionStore {
 					(agent.id === MASTER_AGENT_ID ? MASTER_AGENT_ID : 'subagent'),
 				status: agent.id === MASTER_AGENT_ID ? 'idle' : agent.status,
 				createdAt: agent.createdAt || session.createdAt,
+				startedAt: normalizeTimestamp(agent.startedAt),
+				finishedAt: normalizeTimestamp(agent.finishedAt),
 				timeline: Array.isArray(agent.timeline)
 					? agent.timeline.map(normalizeMessage)
 					: [],
@@ -185,6 +190,24 @@ export class SessionStore {
 								.map(normalizeReversibleToolOpRecord)
 								.filter((op): op is NonNullable<typeof op> => !!op),
 						],
+					),
+				),
+				toolTimings: Object.fromEntries(
+					Object.entries(agent.toolTimings ?? {}).flatMap(
+						([toolCallId, timing]) => {
+							const startedAt = normalizeTimestamp(timing?.startedAt)
+							if (startedAt === undefined) return []
+							const finishedAt = normalizeTimestamp(timing.finishedAt)
+							return [
+								[
+									toolCallId,
+									{
+										startedAt,
+										...(finishedAt === undefined ? {} : { finishedAt }),
+									},
+								],
+							]
+						},
 					),
 				),
 				readVaultPaths: Array.isArray(agent.readVaultPaths)

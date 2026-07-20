@@ -378,6 +378,7 @@ export function createEmptyMasterAgent(createdAt: number): ChatAgentState {
 		timeline: [],
 		pendingInputs: [],
 		operations: {},
+		toolTimings: {},
 		subagents: {},
 	}
 }

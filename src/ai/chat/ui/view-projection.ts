@@ -40,7 +40,8 @@ function buildAgentTimeline(
 	createdAt: number,
 ): ChatboxProps['timeline'] {
 	const messages = snapshotViewValue(agent.timeline)
-	const timeline = projectTimelineMessageGroups(messages).map(
+	const toolTimings = snapshotViewValue(agent.toolTimings)
+	const timeline = projectTimelineMessageGroups(messages, toolTimings).map(
 		({ message, blocks }) => ({
 			createdAt: message.metadata?.createdAt ?? createdAt,
 			message,
@@ -78,6 +79,9 @@ export function buildAgentViews(
 				id: child.id,
 				type: child.type,
 				status: child.status,
+				createdAt: child.createdAt,
+				startedAt: child.startedAt,
+				finishedAt: child.finishedAt,
 				timeline: buildAgentTimeline(child, child.createdAt),
 			}
 			visit(child)

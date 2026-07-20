@@ -2,6 +2,7 @@ import { For, Show } from 'solid-js'
 import { t } from '../../../i18n'
 import type { ChatDisplayBlock } from '~/ai/chat/types'
 import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
+import type { ChatAgentView } from '~/ai/chat/ui/types'
 import { formatTime, formatToolResult, formatUsage } from '../utils'
 import { ContentBlock } from './ContentBlock'
 import { ContextArea } from './ContextArea'
@@ -85,7 +86,9 @@ function copyTextForSystemNotificationBlock(
 
 function MessageDisplayBlock(props: {
 	block: ChatDisplayBlock
+	now: number
 	renderMarkdown?: ChatboxProps['renderMarkdown']
+	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 }) {
 	const contentBlock = () =>
@@ -115,11 +118,13 @@ function MessageDisplayBlock(props: {
 							fallback={
 								<ToolCallBlock
 									block={block}
+									now={props.now}
+									getSubagent={props.getSubagent}
 									onOpenSubagent={props.onOpenSubagent}
 								/>
 							}
 						>
-							<TodoListBlock block={block} />
+							<TodoListBlock block={block} now={props.now} />
 						</Show>
 					)}
 				</Show>
@@ -134,10 +139,12 @@ function MessageDisplayBlock(props: {
 
 export function MessageCard(props: {
 	item: ChatTimelineMessageItem
+	now: number
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 	onDeleteMessage?: ChatboxProps['onDeleteMessage']
 	onRegenerateMessage?: ChatboxProps['onRegenerateMessage']
 	onRecallMessage?: ChatboxProps['onRecallMessage']
+	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 }) {
 	const usageText = () =>
@@ -205,7 +212,9 @@ export function MessageCard(props: {
 					{(block) => (
 						<MessageDisplayBlock
 							block={block}
+							now={props.now}
 							renderMarkdown={props.renderMarkdown}
+							getSubagent={props.getSubagent}
 							onOpenSubagent={props.onOpenSubagent}
 						/>
 					)}

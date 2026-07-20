@@ -7,9 +7,11 @@ import { MessageCard } from './MessageCard'
 
 export function SubagentTimelineDialog(props: {
 	agent: ChatAgentView | undefined
+	now: number
 	mountEl?: HTMLElement
 	contained?: boolean
 	renderMarkdown?: ChatboxProps['renderMarkdown']
+	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onSelectAgent: (agentId: string) => void
 	onClose: () => void
 }) {
@@ -44,7 +46,9 @@ export function SubagentTimelineDialog(props: {
 										{(item) => (
 											<MessageCard
 												item={item}
+												now={props.now}
 												renderMarkdown={props.renderMarkdown}
+												getSubagent={props.getSubagent}
 												onOpenSubagent={props.onSelectAgent}
 											/>
 										)}

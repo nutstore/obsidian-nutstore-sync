@@ -76,6 +76,7 @@ export interface ChatDisplayContentBlock {
 export interface ChatDisplayToolCallBlock {
 	kind: 'tool-call'
 	toolCall: DynamicToolUIPart
+	timing?: ToolTiming
 	todos?: ChatTodoItem[]
 }
 
@@ -160,14 +161,22 @@ export type ChatAgentStatus =
 	| 'failed'
 	| 'cancelled'
 
+export interface ToolTiming {
+	startedAt: number
+	finishedAt?: number
+}
+
 export interface ChatAgentState {
 	id: string
 	type: string
 	status: ChatAgentStatus
 	createdAt: number
+	startedAt?: number
+	finishedAt?: number
 	timeline: AppUIMessage[]
 	pendingInputs: AppUIMessage[]
 	operations: Record<string, ReversibleToolOp[]>
+	toolTimings: Record<string, ToolTiming>
 	readVaultPaths?: string[]
 	subagents: Record<string, ChatAgentState>
 }

@@ -86,6 +86,7 @@ function Chatbox(props: ChatboxProps) {
 	const [inputPaneHeight, setInputPaneHeight] = createSignal<number>()
 	const [stickToBottom, setStickToBottom] = createSignal(true)
 	const [isFileDragActive, setIsFileDragActive] = createSignal(false)
+	const [now, setNow] = createSignal(Date.now())
 	let chatboxRootEl: HTMLDivElement | undefined
 	let messagesEl: HTMLDivElement | undefined
 	let splitLayoutEl: HTMLDivElement | undefined
@@ -96,6 +97,29 @@ function Chatbox(props: ChatboxProps) {
 	let previousActiveSessionId: string | undefined
 	let defaultInputHeight = DEFAULT_INPUT_HEIGHT
 	let dragStartHeight = 0
+
+	createEffect(() => {
+		const hasLiveDuration =
+			Object.values(props.agentsById).some(
+				(agent) =>
+					agent.status === 'queued' ||
+					agent.status === 'running' ||
+					agent.status === 'idle',
+			) ||
+			props.timeline.some((item) =>
+				item.displayBlocks.some(
+					(block) =>
+						block.kind === 'tool-call' &&
+						!!block.timing &&
+						block.timing.finishedAt === undefined,
+				),
+			)
+		if (!hasLiveDuration) return
+		const viewWindow = getViewWindow()
+		setNow(Date.now())
+		const interval = viewWindow.setInterval(() => setNow(Date.now()), 1000)
+		onCleanup(() => viewWindow.clearInterval(interval))
+	})
 
 	function getViewDocument() {
 		return (
@@ -905,10 +929,12 @@ function Chatbox(props: ChatboxProps) {
 									{(item) => (
 										<MessageCard
 											item={item}
+											now={now()}
 											renderMarkdown={props.renderMarkdown}
 											onDeleteMessage={requestDeleteMessage}
 											onRegenerateMessage={requestRegenerateMessage}
 											onRecallMessage={requestRecallMessage}
+											getSubagent={(agentId) => props.agentsById[agentId]}
 											onOpenSubagent={setSelectedAgentId}
 										/>
 									)}
@@ -1062,9 +1088,11 @@ function Chatbox(props: ChatboxProps) {
 
 			<SubagentTimelineDialog
 				agent={selectedAgent()}
+				now={now()}
 				mountEl={dialogMountTarget().mountEl}
 				contained={dialogMountTarget().contained}
 				renderMarkdown={props.renderMarkdown}
+				getSubagent={(agentId) => props.agentsById[agentId]}
 				onSelectAgent={setSelectedAgentId}
 				onClose={() => setSelectedAgentId(undefined)}
 			/>

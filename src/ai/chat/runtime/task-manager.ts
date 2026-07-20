@@ -65,6 +65,7 @@ export class TaskManager {
 		}
 
 		agent.status = 'running'
+		agent.startedAt ??= Date.now()
 		try {
 			const provider = this.selection.getProviderByIdOrThrow(
 				selectedModel.providerId,
@@ -178,6 +179,7 @@ export class TaskManager {
 			type: definition.id,
 			status: shouldQueue ? 'queued' : 'running',
 			createdAt: now,
+			startedAt: shouldQueue ? undefined : now,
 			timeline: [
 				{
 					id: createId('message'),
@@ -190,6 +192,7 @@ export class TaskManager {
 			],
 			pendingInputs: [],
 			operations: {},
+			toolTimings: {},
 			subagents: {},
 		}
 		parent.subagents[agent.id] = agent
@@ -257,6 +260,7 @@ export class TaskManager {
 		const agent = findAgent(getMasterAgent(session), agentId)
 		if (!agent || agent.status === 'running' || isTerminalAgent(agent)) return
 		agent.status = 'running'
+		agent.startedAt ??= Date.now()
 		void this.store.persistSession(session)
 		void this.runAgent(session, agent)
 	}
@@ -276,6 +280,7 @@ export class TaskManager {
 		const text = summary || i18n.t('chatbox.task.emptyResult')
 		const resultPath = await this.persistAgentResult(session, agent, text)
 		agent.status = 'completed'
+		agent.finishedAt = Date.now()
 		await this.afterAgentSettled(session, agent, resultPath)
 	}
 
@@ -287,6 +292,7 @@ export class TaskManager {
 		if (agent.status !== 'queued' && agent.status !== 'running') return
 		const resultPath = await this.persistAgentResult(session, agent, message)
 		agent.status = 'failed'
+		agent.finishedAt = Date.now()
 		await this.afterAgentSettled(session, agent, resultPath)
 	}
 
@@ -295,6 +301,7 @@ export class TaskManager {
 		const text = i18n.t('chatbox.task.cancelledSummary', { task: agent.id })
 		const resultPath = await this.persistAgentResult(session, agent, text)
 		agent.status = 'cancelled'
+		agent.finishedAt = Date.now()
 		await this.afterAgentSettled(session, agent, resultPath)
 	}
 
@@ -315,6 +322,7 @@ export class TaskManager {
 				.sort((left, right) => left.createdAt - right.createdAt)[0]
 			if (!nextAgent) return
 			nextAgent.status = 'running'
+			nextAgent.startedAt ??= Date.now()
 			void this.store.persistSession(session)
 			this.notify()
 			void this.runAgent(session, nextAgent)
@@ -326,6 +334,7 @@ export class TaskManager {
 		for (const agent of getSessionSubagents(session)) {
 			if (isTerminalAgent(agent)) continue
 			agent.status = 'cancelled'
+			agent.finishedAt = Date.now()
 			this.cleanupAgentTracking(agent.id)
 			changed = true
 		}

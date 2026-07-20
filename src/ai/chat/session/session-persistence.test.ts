@@ -28,6 +28,7 @@ describe('chat session persistence', () => {
 				},
 			],
 		})
+		master.toolTimings.call = { startedAt: 10, finishedAt: 35 }
 		const session: ChatSession = {
 			schemaVersion: 2,
 			id: 'session',
@@ -44,6 +45,10 @@ describe('chat session persistence', () => {
 		expect(part).toMatchObject({
 			type: 'dynamic-tool',
 			input: { nested: { value: 'before' } },
+		})
+		expect(decoded.subagents.master.toolTimings.call).toEqual({
+			startedAt: 10,
+			finishedAt: 35,
 		})
 	})
 

@@ -25,6 +25,7 @@ describe('buildTimeline', () => {
 			],
 		}
 		master.timeline.push(message)
+		master.toolTimings['task-call'] = { startedAt: 10, finishedAt: 25 }
 		const session: ChatSession = {
 			schemaVersion: 2,
 			id: 'session',
@@ -42,6 +43,7 @@ describe('buildTimeline', () => {
 		if (block?.kind !== 'tool-call') throw new Error('Expected tool block')
 		expect(block.toolCall).toBe(item.message.parts[0])
 		expect(block.toolCall.output).not.toBe(message.parts[0].output)
+		expect(block.timing).toEqual({ startedAt: 10, finishedAt: 25 })
 	})
 
 	it('keeps reactive metadata out of task results sent back to the model', async () => {

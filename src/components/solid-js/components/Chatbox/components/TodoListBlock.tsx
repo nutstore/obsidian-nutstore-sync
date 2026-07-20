@@ -1,6 +1,7 @@
 import { For, Show } from 'solid-js'
 import type { ChatDisplayToolCallBlock, ChatTodoStatus } from '~/ai/chat/types'
 import { t } from '../../../i18n'
+import { timingDuration, toolStatusVisual } from '../tool-call-status'
 
 function statusIconClass(status: ChatTodoStatus) {
 	switch (status) {
@@ -16,20 +17,40 @@ function statusIconClass(status: ChatTodoStatus) {
 	}
 }
 
-export function TodoListBlock(props: { block: ChatDisplayToolCallBlock }) {
+export function TodoListBlock(props: {
+	block: ChatDisplayToolCallBlock
+	now: number
+}) {
 	const todos = () => props.block.todos ?? []
 	const isEmpty = () => todos().length === 0
+	const visual = () => toolStatusVisual(props.block.toolCall)
 
 	return (
 		<div class="rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
 			<div class="flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)]">
-				<span class="flex size-5 shrink-0 items-center justify-center rounded-full border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-muted)]">
-					<span class="i-lucide-list-checks size-3.5 shrink-0" />
+				<span
+					class="flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
+					title={visual().label}
+					aria-label={visual().label}
+					role="img"
+				>
+					<span
+						class={`${visual().iconClass} size-5 shrink-0`}
+						aria-hidden="true"
+					/>
 				</span>
 				<div class="truncate font-medium text-[var(--text-normal)]">
 					{isEmpty()
 						? t('chatbox.ui.states.todoEmpty')
 						: t('chatbox.ui.labels.todoList')}
+					<Show when={timingDuration(props.block.timing, props.now)}>
+						{(duration) => (
+							<span class="font-normal text-[var(--text-muted)]">
+								{' '}
+								· {duration()}
+							</span>
+						)}
+					</Show>
 				</div>
 				<Show when={!isEmpty()}>
 					<span class="ml-auto shrink-0 rounded-full bg-[var(--background-modifier-border)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--text-muted)]">

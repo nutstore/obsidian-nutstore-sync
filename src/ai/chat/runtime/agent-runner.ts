@@ -182,6 +182,22 @@ export class AgentRunner {
 				messages,
 			),
 			abortSignal: options.abortSignal,
+			onToolExecutionStart: async (event) => {
+				if (!event) return
+				await projector.project({
+					type: 'tool-execution-start',
+					toolCall: event.toolCall as ToolCallPart,
+				})
+			},
+			onToolExecutionEnd: async (event) => {
+				if (!event?.toolOutput) return
+				await projector.project({
+					type: 'tool-execution-end',
+					toolCallId: event.toolCall.toolCallId,
+					durationMs: event.toolExecutionMs,
+					toolOutput: event.toolOutput,
+				})
+			},
 			onStepEnd: async (step) => {
 				const message = step.response.messages.find(
 					(candidate): candidate is AssistantModelMessage =>

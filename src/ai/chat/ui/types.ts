@@ -38,6 +38,9 @@ export interface ChatAgentView {
 	id: string
 	type: string
 	status: ChatAgentStatus
+	createdAt: number
+	startedAt?: number
+	finishedAt?: number
 	timeline: ChatTimelineMessageItem[]
 }
 

@@ -6,6 +6,93 @@ import { AgentEventProjector } from '~/ai/chat/runtime/agent-event-projector'
 import type { SessionRuntimeState } from '~/ai/chat/runtime/chat-state'
 
 describe('AgentEventProjector', () => {
+	it('projects a running tool immediately and records its exact duration', async () => {
+		const agent = createEmptyMasterAgent(1)
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'session',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master: agent },
+		}
+		const runtime = {
+			runState: 'thinking',
+			stopRequested: false,
+		} as SessionRuntimeState
+		const notify = vi.fn()
+		const projector = new AgentEventProjector({
+			session,
+			agent,
+			runtime,
+			store: { persistSession: vi.fn(async () => undefined) } as never,
+			messageFactory: new MessageFactory(
+				{ app: {} } as never,
+				{} as never,
+				vi.fn(),
+			),
+			notify,
+			assistantMeta: { providerId: 'provider', modelId: 'model' },
+			isDeleted: () => false,
+			isCancelled: () => false,
+		})
+
+		await projector.project({
+			type: 'tool-execution-start',
+			toolCall: {
+				type: 'tool-call',
+				toolCallId: 'call-1',
+				toolName: 'lookup',
+				input: { query: 'status' },
+			} as never,
+		})
+
+		expect(agent.timeline[0].parts[0]).toMatchObject({
+			type: 'dynamic-tool',
+			state: 'input-available',
+			toolCallId: 'call-1',
+		})
+		expect(runtime.runState).toBe('waiting_for_tools')
+		expect(agent.toolTimings['call-1'].finishedAt).toBeUndefined()
+
+		await projector.project({
+			type: 'tool-execution-end',
+			toolCallId: 'call-1',
+			durationMs: 125,
+			toolOutput: { type: 'tool-result', output: 'ok' },
+		})
+
+		const timing = agent.toolTimings['call-1']
+		expect(timing.finishedAt! - timing.startedAt).toBe(125)
+		expect(agent.timeline[0].parts[0]).toMatchObject({
+			state: 'output-available',
+			output: 'ok',
+		})
+
+		await projector.project({
+			type: 'assistant-step',
+			response: {
+				message: {
+					role: 'assistant',
+					content: [
+						{
+							type: 'tool-call',
+							toolCallId: 'call-1',
+							toolName: 'lookup',
+							input: { query: 'status' },
+						},
+					],
+				},
+				meta: { modelId: 'provider-model' },
+			},
+		})
+
+		expect(agent.timeline[0].parts[0]).toMatchObject({
+			state: 'output-available',
+			output: 'ok',
+		})
+		expect(notify).toHaveBeenCalledTimes(3)
+	})
+
 	it('merges tool results into the assistant UI message', async () => {
 		const agent = createEmptyMasterAgent(1)
 		const session: ChatSession = {

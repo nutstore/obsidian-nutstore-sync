@@ -2,8 +2,18 @@ import { Show } from 'solid-js'
 import type { JSX } from 'solid-js'
 
 import type { ChatDisplayToolCallBlock } from '~/ai/chat/types'
+import type { ChatAgentView } from '~/ai/chat/ui/types'
 import { t } from '../../../i18n'
-import { formatToolResult } from '../utils'
+import { formatDuration, formatToolResult } from '../utils'
+import {
+	cancelledVisual,
+	failedVisual,
+	runningVisual,
+	successVisual,
+	timingDuration,
+	toolStatusVisual,
+	waitingVisual,
+} from '../tool-call-status'
 import { CollapsibleBlock } from './CollapsibleBlock'
 
 function taskIdFromOutput(output: unknown) {
@@ -14,15 +24,19 @@ function taskIdFromOutput(output: unknown) {
 
 export function ToolCallBlock(props: {
 	block: ChatDisplayToolCallBlock
+	now: number
+	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 }) {
 	return (
 		<Show
 			when={props.block.toolCall.toolName === 'task'}
-			fallback={<GenericToolCallBlock block={props.block} />}
+			fallback={<GenericToolCallBlock block={props.block} now={props.now} />}
 		>
 			<TaskToolCallBlock
 				block={props.block}
+				now={props.now}
+				getSubagent={props.getSubagent}
 				onOpenSubagent={props.onOpenSubagent}
 			/>
 		</Show>
@@ -30,8 +44,9 @@ export function ToolCallBlock(props: {
 }
 
 function CollapsibleToolCallBlock(props: {
-	title: string
+	title: JSX.Element
 	iconClass: string
+	iconLabel: string
 	params: unknown
 	result?: string
 	headerActions?: JSX.Element
@@ -40,6 +55,7 @@ function CollapsibleToolCallBlock(props: {
 		<CollapsibleBlock
 			title={props.title}
 			iconClass={props.iconClass}
+			iconLabel={props.iconLabel}
 			headerActions={props.headerActions}
 		>
 			<div class="text-xs text-[var(--text-muted)]">
@@ -62,6 +78,8 @@ function CollapsibleToolCallBlock(props: {
 
 function TaskToolCallBlock(props: {
 	block: ChatDisplayToolCallBlock
+	now: number
+	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 }) {
 	const toolCall = () => props.block.toolCall
@@ -74,11 +92,33 @@ function TaskToolCallBlock(props: {
 			(toolCall().input as { subagent_type?: unknown })?.subagent_type ??
 				'unknown',
 		)
+	const subagent = () => {
+		const id = taskId()
+		return id ? props.getSubagent?.(id) : undefined
+	}
+	const visual = () => {
+		const agent = subagent()
+		return agent
+			? agentStatusVisual(agent.status)
+			: toolStatusVisual(toolCall())
+	}
+	const duration = () => {
+		const agent = subagent()
+		if (!agent) return timingDuration(props.block.timing, props.now)
+		const startedAt =
+			agent.status === 'queued'
+				? agent.createdAt
+				: (agent.startedAt ?? agent.createdAt)
+		return formatDuration((agent.finishedAt ?? props.now) - startedAt)
+	}
 
 	return (
 		<CollapsibleToolCallBlock
-			title={`task · ${subagentType()}`}
-			iconClass="i-lucide-bot"
+			title={
+				<ToolTitle title={`task · ${subagentType()}`} duration={duration()} />
+			}
+			iconClass={visual().iconClass}
+			iconLabel={visual().label}
 			params={toolCall().input}
 			result={formatToolResult(toolCall())}
 			headerActions={
@@ -102,13 +142,60 @@ function TaskToolCallBlock(props: {
 	)
 }
 
-function GenericToolCallBlock(props: { block: ChatDisplayToolCallBlock }) {
+function GenericToolCallBlock(props: {
+	block: ChatDisplayToolCallBlock
+	now: number
+}) {
+	const visual = () => toolStatusVisual(props.block.toolCall)
 	return (
 		<CollapsibleToolCallBlock
-			title={props.block.toolCall.toolName}
-			iconClass="i-lucide-hammer"
+			title={
+				<ToolTitle
+					title={props.block.toolCall.toolName}
+					duration={timingDuration(props.block.timing, props.now)}
+				/>
+			}
+			iconClass={visual().iconClass}
+			iconLabel={visual().label}
 			params={props.block.toolCall.input}
 			result={formatToolResult(props.block.toolCall)}
 		/>
 	)
+}
+
+function ToolTitle(props: { title: string; duration?: string }) {
+	return (
+		<span>
+			{props.title}
+			<Show when={props.duration}>
+				<span class="font-normal text-[var(--text-muted)]">
+					{' '}
+					· {props.duration}
+				</span>
+			</Show>
+		</span>
+	)
+}
+
+function agentStatusVisual(status: ChatAgentView['status']) {
+	switch (status) {
+		case 'queued':
+			return waitingVisual(
+				t('chatbox.ui.states.taskQueued'),
+				'i-lucide-clock-3',
+			)
+		case 'running':
+			return runningVisual()
+		case 'idle':
+			return waitingVisual(
+				t('chatbox.ui.states.taskWaiting'),
+				'i-lucide-hourglass',
+			)
+		case 'completed':
+			return successVisual()
+		case 'failed':
+			return failedVisual()
+		case 'cancelled':
+			return cancelledVisual(t('chatbox.ui.states.cancelled'))
+	}
 }

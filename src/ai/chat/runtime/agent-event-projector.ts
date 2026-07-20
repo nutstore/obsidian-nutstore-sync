@@ -1,4 +1,9 @@
-import type { AssistantModelMessage, ContentPart, ToolSet } from 'ai'
+import type {
+	AssistantModelMessage,
+	ContentPart,
+	ToolCallPart,
+	ToolSet,
+} from 'ai'
 import type { ChatSession } from '~/ai/chat/domain'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
@@ -16,6 +21,15 @@ import type { AppToolMetadata } from '~/ai/core/types'
 export type AgentProjectionEvent =
 	| { type: 'step-start' }
 	| { type: 'text-delta'; delta: string }
+	| { type: 'tool-execution-start'; toolCall: ToolCallPart }
+	| {
+			type: 'tool-execution-end'
+			toolCallId: string
+			durationMs: number
+			toolOutput:
+				| { type: 'tool-result'; output: unknown }
+				| { type: 'tool-error'; error: unknown }
+	  }
 	| {
 			type: 'assistant-step'
 			response: {
@@ -60,6 +74,83 @@ export class AgentEventProjector {
 			case 'text-delta':
 				this.projectTextDelta(event.delta)
 				return
+			case 'tool-execution-start': {
+				const message = this.ensureAssistantMessage()
+				const existing = message.parts.find(
+					(part) =>
+						part.type === 'dynamic-tool' &&
+						part.toolCallId === event.toolCall.toolCallId,
+				)
+				if (!existing) {
+					message.parts.push({
+						type: 'dynamic-tool',
+						toolName: event.toolCall.toolName,
+						toolCallId: event.toolCall.toolCallId,
+						state: 'input-available',
+						input: event.toolCall.input,
+						...(event.toolCall.providerExecuted === true
+							? { providerExecuted: true }
+							: {}),
+					})
+				}
+				this.options.agent.toolTimings[event.toolCall.toolCallId] ??= {
+					startedAt: Date.now(),
+				}
+				if (this.options.runtime)
+					this.options.runtime.runState = 'waiting_for_tools'
+				this.touch()
+				this.options.notify()
+				return
+			}
+			case 'tool-execution-end': {
+				const existing = this.options.agent.toolTimings[event.toolCallId]
+				const finishedAt = Date.now()
+				const startedAt = existing?.startedAt ?? finishedAt - event.durationMs
+				this.options.agent.toolTimings[event.toolCallId] = {
+					startedAt,
+					finishedAt: startedAt + event.durationMs,
+				}
+				const message = this.assistantMessage
+				const partIndex =
+					message?.parts.findIndex(
+						(part) =>
+							part.type === 'dynamic-tool' &&
+							part.toolCallId === event.toolCallId,
+					) ?? -1
+				const part = message?.parts[partIndex]
+				if (message && part?.type === 'dynamic-tool') {
+					const common = {
+						type: 'dynamic-tool' as const,
+						toolName: part.toolName,
+						toolCallId: part.toolCallId,
+						input: part.input,
+						...(part.providerExecuted === true
+							? { providerExecuted: true }
+							: {}),
+						...('callProviderMetadata' in part && part.callProviderMetadata
+							? { callProviderMetadata: part.callProviderMetadata }
+							: {}),
+					}
+					message.parts[partIndex] =
+						event.toolOutput.type === 'tool-error'
+							? {
+									...common,
+									state: 'output-error',
+									errorText: extractErrorMessage(
+										event.toolOutput.error,
+										String(event.toolOutput.error),
+									),
+								}
+							: {
+									...common,
+									state: 'output-available',
+									output: event.toolOutput.output,
+								}
+				}
+				this.touch()
+				this.options.notify()
+				return
+			}
 			case 'assistant-step': {
 				const message = this.options.messageFactory.createMessage(
 					event.response.message,
@@ -71,6 +162,19 @@ export class AgentEventProjector {
 					},
 				)
 				if (this.assistantMessage) {
+					for (let index = 0; index < message.parts.length; index += 1) {
+						const part = message.parts[index]
+						if (part.type !== 'dynamic-tool') continue
+						const existing = this.assistantMessage.parts.find(
+							(candidate) =>
+								candidate.type === 'dynamic-tool' &&
+								candidate.toolCallId === part.toolCallId &&
+								(candidate.state === 'output-available' ||
+									candidate.state === 'output-error' ||
+									candidate.state === 'output-denied'),
+						)
+						if (existing) message.parts[index] = existing
+					}
 					message.id = this.assistantMessage.id
 					const index = this.options.agent.timeline.findIndex(
 						(item) => item.id === this.assistantMessage?.id,

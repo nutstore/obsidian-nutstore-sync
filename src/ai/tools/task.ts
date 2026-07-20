@@ -37,7 +37,7 @@ export const taskTool = tool({
 		)
 			.map((definition) => `${definition.id}: ${definition.description}`)
 			.join('; ')
-		return `Dispatch work to a specialized subagent in an isolated context. Available subagent types: ${availableTypes}. Returns immediately with a task ID while the subagent continues asynchronously. The subagent receives only prompt, so include all necessary context. After dispatching, continue only with non-overlapping work or stop and wait. When the task finishes, a task-result-ready system notification provides the absolute result file path under /tmp; use bash to read that file.`
+		return `Dispatch work to a specialized subagent in an isolated context. Available subagent types: ${availableTypes}. Returns immediately with a task ID while the subagent continues asynchronously. The subagent receives only prompt, so include all necessary context. After dispatching, continue only with work that neither overlaps with this task nor depends on its result. Otherwise, stop and wait for the task-result-ready system notification. When the task settles, the notification provides the absolute result file path.`
 	},
 	inputSchema: z.object({
 		subagent_type: z.string().check(
@@ -68,7 +68,7 @@ export const taskTool = tool({
 	outputSchema: taskOutputSchema,
 	toModelOutput: ({ output }) => ({
 		type: 'text',
-		value: `Task dispatched. Task ID: ${output.taskId}. Continue only with non-overlapping work or wait. Do not expect the task result yet. When a task-result-ready system notification arrives, use bash to read its resultPath.`,
+		value: `Task dispatched. Task ID: ${output.taskId}. Do not attempt to read the task result yet. Continue only with work that neither overlaps with this task nor depends on its result. Otherwise, stop and wait for the task-result-ready system notification. When the notification arrives, the task has completed, failed, or been cancelled; use tool to read its resultPath.`,
 	}),
 	execute: async (params, { context }) =>
 		context.dispatchTask({
