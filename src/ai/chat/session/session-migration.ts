@@ -10,6 +10,98 @@ import {
 	mergeLegacyToolRecord,
 	modelMessageToUIMessage,
 } from '~/ai/chat/messages/ui-message'
+import {
+	migrateDeprecatedImageParts,
+	migrateMessageFromV0,
+	needsDeprecatedImagePartMigration,
+	needsV0Migration,
+} from '~/ai/chat/messages/message-utils'
+import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
+import { copyModelMessage } from '~/ai/chat/messages/message-copy'
+import createId from '~/utils/create-id'
+
+export function normalizeLegacySession(
+	session: LegacyChatSession,
+): LegacyChatSession {
+	return {
+		id: session.id,
+		createdAt: session.createdAt,
+		updatedAt: session.updatedAt || session.createdAt,
+		model: session.model ? { ...session.model } : undefined,
+		systemPrompt: session.systemPrompt,
+		inferenceParams: session.inferenceParams
+			? { ...session.inferenceParams }
+			: undefined,
+		fragments:
+			Array.isArray(session.fragments) && session.fragments.length > 0
+				? session.fragments.map((fragment) => ({
+						id: fragment.id,
+						createdAt: fragment.createdAt,
+						updatedAt: fragment.updatedAt || fragment.createdAt,
+						summary: fragment.summary,
+						readVaultPaths: Array.isArray(fragment.readVaultPaths)
+							? fragment.readVaultPaths.filter(
+									(path): path is string =>
+										typeof path === 'string' && path.length > 0,
+								)
+							: undefined,
+						messages: Array.isArray(fragment.messages)
+							? fragment.messages.map((message) => ({
+									...message,
+									reversibleOps: Array.isArray(message.reversibleOps)
+										? message.reversibleOps
+												.filter(
+													(op) =>
+														!!op &&
+														typeof op.vaultPath === 'string' &&
+														(op.operation === 'create' ||
+															op.operation === 'update' ||
+															op.operation === 'delete') &&
+														!!op.before &&
+														(op.before.kind === 'file' ||
+															op.before.kind === 'dir') &&
+														(op.operation !== 'update' ||
+															op.before.kind === 'file'),
+												)
+												.map(normalizeReversibleToolOpRecord)
+												.filter(
+													(
+														op,
+													): op is NonNullable<
+														LegacyChatMessageRecord['reversibleOps']
+													>[number] => !!op,
+												)
+										: undefined,
+									message: copyModelMessage(
+										needsV0Migration(message.message)
+											? migrateMessageFromV0(message.message)
+											: needsDeprecatedImagePartMigration(message.message)
+												? migrateDeprecatedImageParts(message.message)
+												: message.message,
+									),
+									meta: message.meta
+										? {
+												...message.meta,
+												usage: message.meta.usage
+													? { ...message.meta.usage }
+													: undefined,
+											}
+										: undefined,
+								}))
+							: [],
+					}))
+				: [
+						{
+							id: createId('fragment'),
+							createdAt: Date.now(),
+							updatedAt: Date.now(),
+							messages: [],
+						},
+					],
+		activeFragmentId: session.activeFragmentId,
+	}
+}
+
 function isV2Session(value: unknown): value is ChatSession {
 	return (
 		!!value &&

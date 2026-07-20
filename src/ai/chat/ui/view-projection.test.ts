@@ -5,7 +5,7 @@ import {
 	uiMessagesToModelMessages,
 } from '~/ai/chat/messages/ui-message'
 import { buildTimeline } from './view-projection'
-import { createTaskTool } from '~/ai/tools/task'
+import { taskTool } from '~/ai/tools/task'
 
 describe('buildTimeline', () => {
 	it('projects a detached snapshot of the canonical UI message', () => {
@@ -119,15 +119,9 @@ describe('buildTimeline', () => {
 				},
 			],
 		})
-		const task = createTaskTool({
-			dispatchTask: async () => ({
-				taskId: 'unused',
-				subagentType: 'explorer',
-				status: 'dispatched',
-			}),
+		const messages = await uiMessagesToModelMessages(master.timeline, {
+			task: taskTool,
 		})
-
-		const messages = await uiMessagesToModelMessages(master.timeline, { task })
 		const toolMessage = messages[1]
 		if (toolMessage?.role !== 'tool') throw new Error('Expected tool message')
 		const result = toolMessage.content[0]

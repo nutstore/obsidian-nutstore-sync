@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
-import { InMemoryFs, MountableFs } from 'just-bash/browser'
+import { InMemoryFs, MountableFs, type IFileSystem } from 'just-bash/browser'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import type { PermissionRequest } from '~/ai/tools/permission-guard'
 import { createVaultBash, execVaultBash, VAULT_MOUNT_POINT } from './runtime'
 import { listVaultPaths, ObsidianVaultFs, ReversibleOpRecorder } from './fs'
+import { ObsidianAdapterFs } from './adapter-fs'
 
 interface MockEntryFile {
 	type: 'file'
@@ -356,6 +357,38 @@ function createApp(vault: Vault) {
 		vault,
 	} as unknown as App
 }
+
+const filesystemCases: Array<[string, () => Promise<IFileSystem>]> = [
+	[
+		'Vault',
+		async () => {
+			const { vault } = createMockVault()
+			return new ObsidianVaultFs(vault, ['/'])
+		},
+	],
+	[
+		'DataAdapter',
+		async () => {
+			const { vault } = createMockVault({}, ['.agents'])
+			return ObsidianAdapterFs.create(vault.adapter, '.agents')
+		},
+	],
+]
+
+describe.each(filesystemCases)('%s filesystem contract', (_name, createFs) => {
+	it('supports the shared mutable file lifecycle', async () => {
+		const fs = await createFs()
+		await fs.writeFile('/notes/a.md', 'a')
+		await fs.appendFile('/notes/a.md', 'b')
+		await fs.cp('/notes/a.md', '/notes/b.md')
+		await fs.mv('/notes/b.md', '/notes/c.md')
+
+		expect(await fs.readFile('/notes/a.md')).toBe('ab')
+		expect(await fs.readdir('/notes')).toEqual(['a.md', 'c.md'])
+		await fs.rm('/notes/c.md')
+		expect(await fs.exists('/notes/c.md')).toBe(false)
+	})
+})
 
 describe('vault bash runtime', () => {
 	it('reads and writes hidden Vault Skills through the adapter mount', async () => {

@@ -21,7 +21,7 @@ import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import createId from '~/utils/create-id'
 import logger from '~/utils/logger'
 import type { SkillRepository } from '~/ai/skills/repository'
-import type NutstorePlugin from '../../..'
+import type { App } from 'obsidian'
 import {
 	getMessageText,
 	modelMessageToUIMessage,
@@ -29,7 +29,7 @@ import {
 
 export class MessageFactory {
 	constructor(
-		private plugin: NutstorePlugin,
+		private app: App,
 		private runtimeStates: RuntimeStates,
 		private notify: () => void,
 		private skillRepository?: SkillRepository,
@@ -110,10 +110,7 @@ export class MessageFactory {
 		await this.skillRepository?.refresh()
 		const now = Date.now()
 		if (session) session.updatedAt = now
-		const current = captureWorkspaceContexts(
-			this.plugin.app,
-			this.skillRepository,
-		)
+		const current = captureWorkspaceContexts(this.app, this.skillRepository)
 		const changed = computeChangedContexts(agent.timeline, current)
 		const message: AppUIMessage = {
 			id: createId('message'),

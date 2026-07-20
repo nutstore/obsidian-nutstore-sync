@@ -1,6 +1,8 @@
 import type { AssistantModelMessage, ContentPart, ToolSet } from 'ai'
 import type { ChatSession } from '~/ai/chat/domain'
+import { extractErrorMessage } from '~/ai/chat/error-utils'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
+import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import type { SessionRuntimeState } from '~/ai/chat/runtime/chat-state'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type {
@@ -9,8 +11,6 @@ import type {
 	ChatMessageMeta,
 	ReversibleToolOp,
 } from '~/ai/chat/types'
-import { extractErrorMessage } from '~/ai/chat/error-utils'
-import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import type { AppToolMetadata } from '~/ai/core/types'
 
 export type AgentProjectionEvent =
@@ -89,8 +89,9 @@ export class AgentEventProjector {
 				this.options.notify()
 				return
 			}
-			case 'tool-results':
+			case 'tool-results': {
 				if (this.options.isCancelled()) return
+				let titleUpdated = false
 				for (const outcome of event.outcomes) {
 					const target = this.options.messageFactory.findToolPart(
 						this.options.agent,
@@ -134,6 +135,13 @@ export class AgentEventProjector {
 							data: { items: metadata.todos },
 						})
 					}
+					if (metadata?.sessionTitle) {
+						this.options.store.upsertSessionIndexItem(
+							this.options.session,
+							metadata.sessionTitle,
+						)
+						titleUpdated = true
+					}
 					this.options.messageFactory.setMessageOperations(
 						this.options.agent,
 						target.message.id,
@@ -147,7 +155,11 @@ export class AgentEventProjector {
 				this.assistantMessage = undefined
 				this.touch()
 				await this.options.store.persistSession(this.options.session)
+				if (titleUpdated) {
+					await this.options.store.persistMetaAndIndex()
+				}
 				this.options.notify()
+			}
 		}
 	}
 

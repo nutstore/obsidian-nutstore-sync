@@ -1,16 +1,21 @@
+import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
+import type { App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 
 import {
 	createPermissionGuard,
 	createReadonlyPermissionGuard,
 	createFullAccessPermissionGuard,
+	type PermissionGuard,
 } from '~/ai/tools/permission-guard'
 import { createAITools } from '~/ai/tools/tools'
-import type { AppToolContext } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import { getMasterAgent } from '~/ai/chat/domain'
 import { findAgent } from '~/ai/chat/agents/agent-tree'
-import { createFragmentReadTracker } from '~/ai/tools/file-operation'
+import {
+	createFragmentReadTracker,
+	type ReadTracker,
+} from '~/ai/tools/file-operation'
 import {
 	createAgentDefinitions,
 	filterToolsForAgent,
@@ -20,24 +25,30 @@ import { MAX_TASK_DEPTH } from '~/ai/chat/prompts'
 import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
-import { InMemoryFs } from 'just-bash/browser'
-import type NutstorePlugin from '../../..'
+import type { DispatchTaskFn } from '~/ai/tools/task'
+import type { NutstoreSettings } from '~/settings'
 
-type DispatchTaskHandler =
-	import('~/ai/tools/task').CreateTaskToolOptions['dispatchTask']
+export interface StableToolsContext {
+	app: App
+	permissionGuard?: PermissionGuard
+	scratch: IFileSystem
+	dispatchTask?: DispatchTaskFn
+	dispatchableDefinitions?: readonly AgentDefinition[]
+}
 
 export class ToolExecutor {
-	private dispatchTaskHandler: DispatchTaskHandler = () => {
+	private dispatchTaskHandler: DispatchTaskFn = () => {
 		throw new Error('task handler not set')
 	}
 
 	constructor(
-		private plugin: NutstorePlugin,
+		private app: App,
+		private getSettings: () => NutstoreSettings['ai'],
 		private state: ChatState,
 		private runtimeStates: RuntimeStates,
 	) {}
 
-	setDispatchTaskHandler(handler: DispatchTaskHandler) {
+	setDispatchTaskHandler(handler: DispatchTaskFn) {
 		this.dispatchTaskHandler = handler
 	}
 
@@ -47,7 +58,7 @@ export class ToolExecutor {
 
 	getAgentDefinitions() {
 		return createAgentDefinitions({
-			fullAccess: Boolean(this.plugin.settings.ai.yolo),
+			fullAccess: Boolean(this.getSettings().yolo),
 		})
 	}
 
@@ -59,12 +70,19 @@ export class ToolExecutor {
 		return definition
 	}
 
-	createToolsForContext(
-		session: ChatSession,
-		depth: number,
-		definition: AgentDefinition,
-	) {
+	createTools(depth: number, definition: AgentDefinition) {
 		const allowSpawn = depth < MAX_TASK_DEPTH
+		const tools = createAITools({
+			allowSpawn,
+			enableTodoWrite: depth === 0,
+		})
+		return filterToolsForAgent(tools, definition)
+	}
+
+	createStableToolsContext(
+		session: ChatSession,
+		definition: AgentDefinition,
+	): StableToolsContext {
 		const runtime = this.runtimeStates.get(session.id)
 		const bashScratch = runtime.bashScratch ?? new InMemoryFs()
 		runtime.bashScratch = bashScratch
@@ -74,7 +92,7 @@ export class ToolExecutor {
 				: definition.permissionMode === 'full'
 					? createFullAccessPermissionGuard()
 					: createPermissionGuard(
-							this.plugin.app,
+							this.app,
 							{
 								has: (signature) =>
 									this.runtimeStates
@@ -93,25 +111,19 @@ export class ToolExecutor {
 								modalMountTarget: this.getChatModalMountTarget(),
 							},
 						)
-		const tools = createAITools(this.plugin.app, {
-			allowSpawn,
-			bashScratch,
+		return {
+			app: this.app,
 			permissionGuard,
-			enableTodoWrite: depth === 0,
+			scratch: bashScratch,
 			dispatchTask: (params) => this.dispatchTaskHandler(params),
 			dispatchableDefinitions: this.getAgentDefinitions(),
-		})
-		return filterToolsForAgent(tools, definition)
+		}
 	}
 
-	prepareExecutionContext(context: AppToolContext): AppToolContext {
+	prepareReadTracker(session: ChatSession, agentId: string): ReadTracker {
 		const agent =
-			findAgent(getMasterAgent(context.session), context.agentId) ??
-			getMasterAgent(context.session)
+			findAgent(getMasterAgent(session), agentId) ?? getMasterAgent(session)
 		const readSnapshot = new Set<string>(agent.readVaultPaths ?? [])
-		return {
-			...context,
-			readTracker: createFragmentReadTracker(agent, readSnapshot),
-		}
+		return createFragmentReadTracker(agent, readSnapshot)
 	}
 }

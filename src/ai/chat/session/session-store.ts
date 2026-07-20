@@ -1,14 +1,7 @@
 import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 
-import type { LegacyChatMessageRecord } from '~/ai/chat/types'
 import { ChatSessionIndexItem } from '~/ai/chat/domain'
-import {
-	deriveTitle,
-	migrateDeprecatedImageParts,
-	migrateMessageFromV0,
-	needsDeprecatedImagePartMigration,
-	needsV0Migration,
-} from '~/ai/chat/messages/message-utils'
+import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { CHAT_INDEX_KEY, CHAT_META_KEY } from '~/ai/chat/prompts'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
@@ -16,13 +9,14 @@ import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import i18n from '~/i18n'
 import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
-import createId from '~/utils/create-id'
 import {
 	decodeChatSessionFromStorage,
 	encodeChatSessionForStorage,
 } from '~/ai/chat/session/session-persistence'
-import { copyModelMessage } from '~/ai/chat/messages/message-copy'
-import { migrateChatSession } from '~/ai/chat/session/session-migration'
+import {
+	migrateChatSession,
+	normalizeLegacySession,
+} from '~/ai/chat/session/session-migration'
 import type { ChatAgentState } from '~/ai/chat/types'
 import { getSessionSubagents } from '~/ai/chat/domain'
 import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
@@ -132,9 +126,7 @@ export class SessionStore {
 
 	rehydrateSession(session: ChatSession | LegacyChatSession) {
 		const migrated = migrateChatSession(
-			'schemaVersion' in session
-				? session
-				: this.normalizeLegacySession(session),
+			'schemaVersion' in session ? session : normalizeLegacySession(session),
 		)
 		const rehydrated = this.normalizeSession(migrated.session)
 		let changed =
@@ -151,87 +143,6 @@ export class SessionStore {
 		return {
 			session: rehydrated,
 			changed,
-		}
-	}
-
-	normalizeLegacySession(session: LegacyChatSession): LegacyChatSession {
-		return {
-			id: session.id,
-			createdAt: session.createdAt,
-			updatedAt: session.updatedAt || session.createdAt,
-			model: session.model ? { ...session.model } : undefined,
-			systemPrompt: session.systemPrompt,
-			inferenceParams: session.inferenceParams
-				? { ...session.inferenceParams }
-				: undefined,
-			fragments:
-				Array.isArray(session.fragments) && session.fragments.length > 0
-					? session.fragments.map((fragment) => ({
-							id: fragment.id,
-							createdAt: fragment.createdAt,
-							updatedAt: fragment.updatedAt || fragment.createdAt,
-							summary: fragment.summary,
-							readVaultPaths: Array.isArray(fragment.readVaultPaths)
-								? fragment.readVaultPaths.filter(
-										(p): p is string => typeof p === 'string' && p.length > 0,
-									)
-								: undefined,
-							messages: Array.isArray(fragment.messages)
-								? fragment.messages.map((message) => ({
-										...message,
-										reversibleOps: Array.isArray(message.reversibleOps)
-											? message.reversibleOps
-													.filter(
-														(op) =>
-															!!op &&
-															typeof op.vaultPath === 'string' &&
-															(op.operation === 'create' ||
-																op.operation === 'update' ||
-																op.operation === 'delete') &&
-															!!op.before &&
-															(op.before.kind === 'file' ||
-																op.before.kind === 'dir') &&
-															(op.operation !== 'update' ||
-																op.before.kind === 'file'),
-													)
-													.map(normalizeReversibleToolOpRecord)
-													.filter(
-														(
-															op,
-														): op is NonNullable<
-															LegacyChatMessageRecord['reversibleOps']
-														>[number] => !!op,
-													)
-											: undefined,
-										message: copyModelMessage(
-											needsV0Migration(message.message)
-												? migrateMessageFromV0(message.message)
-												: needsDeprecatedImagePartMigration(message.message)
-													? migrateDeprecatedImageParts(message.message)
-													: message.message,
-										),
-										meta: message.meta
-											? {
-													...message.meta,
-													usage: message.meta.usage
-														? {
-																...message.meta.usage,
-															}
-														: undefined,
-												}
-											: undefined,
-									}))
-								: [],
-						}))
-					: [
-							{
-								id: createId('fragment'),
-								createdAt: Date.now(),
-								updatedAt: Date.now(),
-								messages: [],
-							},
-						],
-			activeFragmentId: session.activeFragmentId,
 		}
 	}
 

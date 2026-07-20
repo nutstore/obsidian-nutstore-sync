@@ -1,6 +1,6 @@
 import type { ChatSession } from '~/ai/chat/domain'
 import type { ReversibleToolOp } from '~/ai/chat/types'
-import { Notice } from 'obsidian'
+import { Notice, type App } from 'obsidian'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import {
 	getMessageText,
@@ -25,11 +25,10 @@ import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { RecallMessageResult } from '~/ai/chat/ui/types'
 import logger from '~/utils/logger'
 import type { SkillRepository } from '~/ai/skills/repository'
-import type NutstorePlugin from '../../..'
 
 export class MessageOps {
 	constructor(
-		private plugin: NutstorePlugin,
+		private app: App,
 		private state: ChatState,
 		private runtimeStates: RuntimeStates,
 		private store: SessionStore,
@@ -160,10 +159,7 @@ export class MessageOps {
 		if (lastUserIdx !== -1) {
 			await this.skillRepository?.refresh()
 			const prevMessages = agent.timeline.slice(0, lastUserIdx)
-			const current = captureWorkspaceContexts(
-				this.plugin.app,
-				this.skillRepository,
-			)
+			const current = captureWorkspaceContexts(this.app, this.skillRepository)
 			const changed = computeChangedContexts(prevMessages, current)
 			const message = agent.timeline[lastUserIdx]
 			message.parts = message.parts.filter(
@@ -270,7 +266,7 @@ export class MessageOps {
 	}
 
 	private async deleteVaultPathIfExists(path: string) {
-		const target = this.plugin.app.vault.getAbstractFileByPath(path)
+		const target = this.app.vault.getAbstractFileByPath(path)
 		if (!target) {
 			return
 		}
@@ -279,12 +275,12 @@ export class MessageOps {
 			return
 		}
 		logger.info(`Recall restore delete: ${path}`)
-		if (typeof this.plugin.app.vault.delete === 'function') {
-			await this.plugin.app.vault.delete(target, true)
+		if (typeof this.app.vault.delete === 'function') {
+			await this.app.vault.delete(target, true)
 			return
 		}
-		if (typeof this.plugin.app.vault.trash === 'function') {
-			await this.plugin.app.vault.trash(target, false)
+		if (typeof this.app.vault.trash === 'function') {
+			await this.app.vault.trash(target, false)
 			return
 		}
 		throw new Error(`Unable to delete ${path}: vault delete is unavailable.`)
@@ -294,7 +290,7 @@ export class MessageOps {
 		if (!path) {
 			return
 		}
-		const target = this.plugin.app.vault.getAbstractFileByPath(path)
+		const target = this.app.vault.getAbstractFileByPath(path)
 		if (target) {
 			if (isVaultFolder(target)) {
 				return
@@ -302,7 +298,7 @@ export class MessageOps {
 			throw new Error(`Unable to restore ${path}: a file already exists there.`)
 		}
 		logger.info(`Recall restore mkdir: ${path}`)
-		await this.plugin.app.vault.createFolder(path)
+		await this.app.vault.createFolder(path)
 	}
 
 	private async writeVaultFile(
@@ -310,7 +306,7 @@ export class MessageOps {
 		content: Extract<ReversibleToolOp, { operation: 'update' }>['before'],
 	) {
 		const data = await decodeReversibleFileSnapshot(content)
-		const existing = this.plugin.app.vault.getAbstractFileByPath(path)
+		const existing = this.app.vault.getAbstractFileByPath(path)
 		if (existing && isVaultFolder(existing)) {
 			throw new Error(
 				`Unable to restore ${path}: a directory already exists there.`,
@@ -318,11 +314,11 @@ export class MessageOps {
 		}
 		if (existing && isVaultFile(existing)) {
 			logger.info(`Recall restore write: ${path} (overwrite)`)
-			await this.plugin.app.vault.modifyBinary(existing as never, data)
+			await this.app.vault.modifyBinary(existing as never, data)
 			return
 		}
 		logger.info(`Recall restore write: ${path} (create)`)
-		await this.plugin.app.vault.createBinary(path, data)
+		await this.app.vault.createBinary(path, data)
 	}
 
 	private getLoadedActiveSession() {

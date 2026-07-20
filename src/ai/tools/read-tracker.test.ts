@@ -155,4 +155,42 @@ describe('createFragmentReadTracker', () => {
 		expect(fragment.readVaultPaths).toEqual(['notes/live.md', 'notes/new.md'])
 		expect(tracker.hasRead('notes/new.md')).toBe(false)
 	})
+
+	it('resetSnapshot advances to include reads from the current batch', () => {
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const tracker = createFragmentReadTracker(fragment)
+
+		tracker.markRead('notes/a.md')
+		expect(tracker.hasRead('notes/a.md')).toBe(false)
+
+		tracker.resetSnapshot()
+		expect(tracker.hasRead('notes/a.md')).toBe(true)
+		expect(tracker.hasRead('notes/b.md')).toBe(false)
+	})
+
+	it('resetSnapshot picks up reads from multiple batches', () => {
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const tracker = createFragmentReadTracker(fragment)
+
+		tracker.markRead('notes/a.md')
+		tracker.resetSnapshot()
+		expect(tracker.hasRead('notes/a.md')).toBe(true)
+
+		tracker.markRead('notes/b.md')
+		expect(tracker.hasRead('notes/b.md')).toBe(false)
+
+		tracker.resetSnapshot()
+		expect(tracker.hasRead('notes/a.md')).toBe(true)
+		expect(tracker.hasRead('notes/b.md')).toBe(true)
+	})
 })

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
-import { migrateChatSession } from '~/ai/chat/session/session-migration'
+import {
+	migrateChatSession,
+	normalizeLegacySession,
+} from '~/ai/chat/session/session-migration'
 import {
 	decodeChatSessionFromStorage,
 	encodeChatSessionForStorage,
@@ -136,6 +139,30 @@ describe('chat session persistence', () => {
 		const second = migrateChatSession(first.session)
 		expect(second.changed).toBe(false)
 		expect(second.session).toBe(first.session)
+	})
+
+	it('normalizes malformed legacy collections before migration', () => {
+		const normalized = normalizeLegacySession({
+			id: 'legacy',
+			createdAt: 1,
+			updatedAt: 0,
+			activeFragmentId: 'fragment',
+			fragments: [
+				{
+					id: 'fragment',
+					createdAt: 1,
+					updatedAt: 0,
+					readVaultPaths: ['note.md', '', 1] as string[],
+					messages: null as never,
+				},
+			],
+		})
+
+		expect(normalized.fragments?.[0]).toMatchObject({
+			updatedAt: 1,
+			readVaultPaths: ['note.md'],
+			messages: [],
+		})
 	})
 
 	it('attaches V1 tool-record metadata once when a message has multiple results', () => {

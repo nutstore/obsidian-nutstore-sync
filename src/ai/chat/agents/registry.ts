@@ -1,3 +1,5 @@
+import type { ToolSet } from 'ai'
+
 export type AgentPermissionMode = 'ask' | 'readonly' | 'full'
 
 export interface AgentDefinition {
@@ -43,7 +45,14 @@ function createMasterAgentDefinition({
 		id: MASTER_AGENT_ID,
 		description: 'Main conversational assistant with full vault access.',
 		systemPrompt: MASTER_SYSTEM_PROMPT,
-		tools: ['bash', 'edit_file', 'note_neighborhood', 'todowrite', 'task'],
+		tools: [
+			'bash',
+			'edit_file',
+			'note_neighborhood',
+			'todowrite',
+			'update_session_title',
+			'task',
+		],
 		permissionMode: fullAccess ? 'full' : 'ask',
 		dispatchable: false,
 	}
@@ -87,13 +96,12 @@ export function listDispatchableDefinitions(
 	)
 }
 
-export function filterToolsForAgent(
-	tools: ToolSet,
+export function filterToolsForAgent<T extends ToolSet>(
+	tools: T,
 	definition: AgentDefinition,
-): ToolSet {
+): T {
 	const allowed = new Set(definition.tools)
 	return Object.fromEntries(
 		Object.entries(tools).filter(([name]) => allowed.has(name)),
-	)
+	) as T
 }
-import type { ToolSet } from 'ai'

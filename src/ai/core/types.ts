@@ -1,7 +1,5 @@
 import { z } from 'zod/mini'
 import type { ChatTodoItem, ReversibleToolOp } from '~/ai/chat/types'
-import type { ChatSession } from '~/ai/chat/domain'
-import type { ReadTracker } from '~/ai/tools/file-operation'
 
 export const aiModelModalitySchema = z.enum([
 	'text',
@@ -118,14 +116,8 @@ export type AIProviderInput = z.infer<typeof aiProviderInputSchema>
 export type AIProviderConfigs = z.infer<typeof aiProviderConfigsSchema>
 export type AIProviderInputs = z.infer<typeof aiProviderInputsSchema>
 
-export type AppToolContext = {
-	session: ChatSession
-	agentId: string
-	readTracker?: ReadTracker
-	recordMetadata?: (toolCallId: string, metadata: AppToolMetadata) => void
-}
-
 export interface AppToolMetadata {
 	reversibleOps?: ReversibleToolOp[]
 	todos?: ChatTodoItem[]
+	sessionTitle?: string
 }

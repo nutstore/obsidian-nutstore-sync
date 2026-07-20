@@ -1,16 +1,17 @@
 import type { ModelMessage, ToolSet, UserModelMessage } from 'ai'
 import type { ChatSession } from '~/ai/chat/domain'
 
-import { getModelById, getProviderById } from '~/ai/catalog/config'
 import type { ChatAgentState } from '~/ai/chat/types'
-import type { ChatState } from '~/ai/chat/runtime/chat-state'
+import type {
+	ChatState,
+	SessionRuntimeState,
+} from '~/ai/chat/runtime/chat-state'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
 import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import type { SessionStore } from '~/ai/chat/session/session-store'
-import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { UserContextManager } from '~/ai/chat/context/user-context-manager'
 import {
 	runContextCompression,
@@ -19,8 +20,8 @@ import {
 import { hasQueuedSubmission } from '~/ai/chat/runtime/pending-submission'
 import { isAbortError } from '~/ai/transport/abort'
 import i18n from '~/i18n'
-import type NutstorePlugin from '../../..'
 import type { ToolCallRepeatState } from '~/ai/core/tool-call-repeat'
+import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
 import { AgentRunner } from '~/ai/chat/runtime/agent-runner'
 import {
 	consumePendingInputs,
@@ -30,26 +31,17 @@ import {
 } from '~/ai/chat/messages/ui-message'
 
 export class SessionProcessor {
-	private agentRunner: AgentRunner
-
 	constructor(
-		private plugin: NutstorePlugin,
+		private ensureProviderReady: (provider: AIProviderConfig) => Promise<void>,
 		private state: ChatState,
 		private runtimeStates: RuntimeStates,
 		private store: SessionStore,
 		private notify: () => void,
 		private selection: Selection,
-		toolExecutor: ToolExecutor,
 		private messageFactory: MessageFactory,
 		private userContextManager: UserContextManager,
-	) {
-		this.agentRunner = new AgentRunner(
-			toolExecutor,
-			store,
-			messageFactory,
-			notify,
-		)
-	}
+		private agentRunner: AgentRunner,
+	) {}
 
 	async start(sessionId: string) {
 		const runtime = this.runtimeStates.get(sessionId)
@@ -87,6 +79,8 @@ export class SessionProcessor {
 			return
 		}
 
+		let provider: AIProviderConfig | undefined
+		let model: AIModelConfig | undefined
 		try {
 			const initialAgent = this.messageFactory.getActiveAgent(session)
 			if (this.messageFactory.removeIncompleteToolCalls(initialAgent)) {
@@ -94,8 +88,8 @@ export class SessionProcessor {
 				session.updatedAt = now
 				await this.store.persistSession(session)
 			}
-			const provider = this.selection.getProviderOrThrow(session)
-			const model = this.selection.getModelOrThrow(provider, session)
+			provider = this.selection.getProviderOrThrow(session)
+			model = this.selection.getModelOrThrow(provider, session)
 			let agentContinuation: ToolCallRepeatState | undefined
 			while (true) {
 				const agent = this.messageFactory.getActiveAgent(session)
@@ -118,54 +112,12 @@ export class SessionProcessor {
 				}
 
 				if (shouldAutoCompressAgent(agent, model)) {
-					runtime.runState = 'compressing'
-					this.notify()
-					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
-						provider,
-					)
-					if (runtime.stopRequested) {
-						runtime.runState = 'idle'
-						await this.store.persistSession(session)
-						this.notify()
+					if (!(await this.compressContext(session, agent, provider, model)))
 						return
-					}
-					const abortController = this.runtimeStates.createAbortController(
-						session.id,
-					)
-					try {
-						await runContextCompression({
-							provider,
-							model,
-							session,
-							agent,
-							store: this.store,
-							messageFactory: this.messageFactory,
-							isCancelled: () =>
-								this.runtimeStates.get(session.id).stopRequested ||
-								this.state.deletedSessionIds.has(session.id),
-							abortSignal: abortController.signal,
-						})
-					} finally {
-						this.runtimeStates.clearAbortController(session.id, abortController)
-					}
-					if (this.state.deletedSessionIds.has(session.id)) {
-						runtime.stopRequested = false
-						runtime.runState = 'idle'
-						return
-					}
-					if (runtime.stopRequested) {
-						runtime.runState = 'idle'
-						await this.store.persistSession(session)
-						this.notify()
-						return
-					}
-					this.notify()
 					continue
 				}
 
-				await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
-					provider,
-				)
+				await this.ensureProviderReady(provider)
 				if (runtime.stopRequested) {
 					this.messageFactory.finishStoppedSessionRun(session, agent)
 					await this.store.persistSession(session)
@@ -238,46 +190,94 @@ export class SessionProcessor {
 				continue
 			}
 		} catch (error) {
-			if (this.state.deletedSessionIds.has(session.id)) {
-				runtime.runState = 'idle'
-				return
-			}
-			if (isAbortError(error) && runtime.stopRequested) {
-				this.messageFactory.finishStoppedSessionRun(
+			await this.handleRunError(error, session, runtime, provider, model)
+		}
+	}
+
+	private async handleRunError(
+		error: unknown,
+		session: ChatSession,
+		runtime: SessionRuntimeState,
+		provider?: AIProviderConfig,
+		model?: AIModelConfig,
+	) {
+		if (this.state.deletedSessionIds.has(session.id)) {
+			runtime.runState = 'idle'
+			return
+		}
+		const activeAgent = this.messageFactory.getActiveAgent(session)
+		if (isAbortError(error) && runtime.stopRequested) {
+			this.messageFactory.finishStoppedSessionRun(session, activeAgent)
+			await this.store.persistSession(session)
+			return
+		}
+		this.messageFactory.removeIncompleteToolCalls(activeAgent)
+		const lastMessage = activeAgent.timeline.at(-1)
+		if (
+			lastMessage?.role === 'assistant' &&
+			lastMessage.parts.every((part) => part.type === 'step-start')
+		) {
+			activeAgent.timeline.pop()
+		}
+		this.messageFactory.reportFatalError(
+			session,
+			extractErrorMessage(error, i18n.t('chatbox.requestFailed')),
+			{
+				providerId: provider?.id,
+				providerName: provider?.name,
+				modelId: model?.id,
+				modelName: model?.name,
+			},
+			activeAgent,
+		)
+		runtime.runState = 'idle'
+		await this.store.persistSession(session)
+	}
+
+	private async compressContext(
+		session: ChatSession,
+		agent: ChatAgentState,
+		provider: AIProviderConfig,
+		model: AIModelConfig,
+	) {
+		const runtime = this.runtimeStates.get(session.id)
+		runtime.runState = 'compressing'
+		this.notify()
+		await this.ensureProviderReady(provider)
+		if (!runtime.stopRequested) {
+			const abortController = this.runtimeStates.createAbortController(
+				session.id,
+			)
+			try {
+				await runContextCompression({
+					provider,
+					model,
 					session,
-					this.messageFactory.getActiveAgent(session),
-				)
-				await this.store.persistSession(session)
-				return
+					agent,
+					store: this.store,
+					messageFactory: this.messageFactory,
+					isCancelled: () =>
+						this.runtimeStates.get(session.id).stopRequested ||
+						this.state.deletedSessionIds.has(session.id),
+					abortSignal: abortController.signal,
+				})
+			} finally {
+				this.runtimeStates.clearAbortController(session.id, abortController)
 			}
-			const activeAgent = this.messageFactory.getActiveAgent(session)
-			this.messageFactory.removeIncompleteToolCalls(activeAgent)
-			const lastMessage = activeAgent.timeline[activeAgent.timeline.length - 1]
-			if (
-				lastMessage?.role === 'assistant' &&
-				lastMessage.parts.every((part) => part.type === 'step-start')
-			) {
-				activeAgent.timeline.pop()
-			}
-			const activeProvider = getProviderById(
-				this.plugin.settings.ai.providers,
-				session.model?.providerId,
-			)
-			const activeModel = getModelById(activeProvider, session.model?.modelId)
-			this.messageFactory.reportFatalError(
-				session,
-				extractErrorMessage(error, i18n.t('chatbox.requestFailed')),
-				{
-					providerId: activeProvider?.id,
-					providerName: activeProvider?.name,
-					modelId: activeModel?.id,
-					modelName: activeModel?.name,
-				},
-				activeAgent,
-			)
+		}
+		if (this.state.deletedSessionIds.has(session.id)) {
+			runtime.stopRequested = false
+			runtime.runState = 'idle'
+			return false
+		}
+		if (runtime.stopRequested) {
 			runtime.runState = 'idle'
 			await this.store.persistSession(session)
+			this.notify()
+			return false
 		}
+		this.notify()
+		return true
 	}
 
 	private async flushPendingMessages(session: ChatSession) {

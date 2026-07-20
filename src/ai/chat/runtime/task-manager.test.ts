@@ -48,10 +48,12 @@ describe('TaskManager parent notifications', () => {
 		} as never
 		const manager = new TaskManager(
 			{} as never,
+			vi.fn(),
 			state,
 			{} as never,
 			{ persistSession: vi.fn(async () => undefined) } as never,
 			vi.fn(),
+			{} as never,
 			{} as never,
 			{} as never,
 		)
@@ -59,7 +61,7 @@ describe('TaskManager parent notifications', () => {
 		await manager.finishAgentAsCompleted(session, child, 'done')
 
 		expect(writeTaskResult).toHaveBeenCalledWith(
-			undefined,
+			{},
 			'/tmp/session/tasks/child.txt',
 			'done',
 		)
@@ -102,10 +104,12 @@ describe('TaskManager parent notifications', () => {
 		const persistSession = vi.fn(async () => undefined)
 		const manager = new TaskManager(
 			{} as never,
+			vi.fn(),
 			state,
 			{} as never,
 			{ persistSession } as never,
 			vi.fn(),
+			{} as never,
 			{} as never,
 			{} as never,
 		)
@@ -143,11 +147,13 @@ describe('TaskManager parent notifications', () => {
 		}
 		const manager = new TaskManager(
 			{} as never,
+			vi.fn(),
 			state,
 			{} as never,
 			{ persistSession: vi.fn(async () => undefined) } as never,
 			vi.fn(),
 			toolExecutor as never,
+			{} as never,
 			{} as never,
 		)
 		vi.spyOn(manager as never, 'runAgent' as never).mockResolvedValue(
@@ -203,12 +209,14 @@ describe('TaskManager parent notifications', () => {
 		} as never
 		const manager = new TaskManager(
 			{} as never,
+			vi.fn(),
 			state,
 			{} as never,
 			{} as never,
 			vi.fn(),
 			{} as never,
 			{} as never,
+			{ runTurn: vi.fn() } as never,
 		)
 		const runTurn = vi
 			.spyOn(

@@ -1,4 +1,4 @@
-import type NutstorePlugin from '../../..'
+import type { App } from 'obsidian'
 
 import {
 	findAgent,
@@ -36,24 +36,18 @@ import type { DispatchTaskParams, DispatchTaskResult } from '~/ai/tools/task'
 
 export class TaskManager {
 	private wakeAgent: (sessionId: string, agentId: string) => void = () => {}
-	private agentRunner: AgentRunner
 
 	constructor(
-		private plugin: NutstorePlugin,
+		private app: App,
+		private ensureProviderReady: (provider: AIProviderConfig) => Promise<void>,
 		private state: ChatState,
 		private selection: Selection,
 		private store: SessionStore,
 		private notify: () => void,
 		private toolExecutor: ToolExecutor,
 		private messageFactory: import('~/ai/chat/messages/message-factory').MessageFactory,
-	) {
-		this.agentRunner = new AgentRunner(
-			toolExecutor,
-			store,
-			messageFactory,
-			notify,
-		)
-	}
+		private agentRunner: AgentRunner,
+	) {}
 
 	setWakeAgentHandler(handler: (sessionId: string, agentId: string) => void) {
 		this.wakeAgent = handler
@@ -75,7 +69,7 @@ export class TaskManager {
 			const provider = this.selection.getProviderByIdOrThrow(
 				selectedModel.providerId,
 			)
-			await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
+			await this.ensureProviderReady(provider)
 			const model = this.selection.getModelByIdsOrThrow(
 				provider,
 				selectedModel.modelId,
@@ -255,7 +249,7 @@ export class TaskManager {
 		resultText: string,
 	) {
 		const resultPath = `/tmp/${session.id}/tasks/${agent.id}.txt`
-		await writeBashTmpText(this.plugin.app, resultPath, resultText)
+		await writeBashTmpText(this.app, resultPath, resultText)
 		return resultPath
 	}
 

@@ -648,6 +648,7 @@
 			"unsupportedAttachmentType": "暂不支持该文件类型：{{name}}",
 			"unknownTool": "未知工具：{{name}}",
 			"toolFieldRequired": "{{field}} 为必填项",
+			"toolFieldTooLong": "{{field}} 过长",
 			"fileNotFound": "未找到文件：{{path}}",
 			"notFile": "该路径不是文件：{{path}}",
 			"fileNotRead": "编辑失败，请至少先读取一次 {{path}} 再编辑。",

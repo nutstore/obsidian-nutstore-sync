@@ -648,6 +648,7 @@
 			"unsupportedAttachmentType": "Unsupported file type: {{name}}",
 			"unknownTool": "Unknown tool: {{name}}",
 			"toolFieldRequired": "{{field}} is required",
+			"toolFieldTooLong": "{{field}} is too long",
 			"fileNotFound": "File not found: {{path}}",
 			"notFile": "Path is not a file: {{path}}",
 			"fileNotRead": "Editing failed — read {{path}} at least once before editing it.",

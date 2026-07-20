@@ -5,16 +5,15 @@ import {
 	type ContentPart,
 	type ModelMessage,
 	type StopCondition,
-	type Tool,
 	type ToolCallPart,
 	type ToolSet,
 } from 'ai'
 import type {
 	AIModelConfig,
 	AIProviderConfig,
-	AppToolContext,
 	AppToolMetadata,
 } from '~/ai/core/types'
+import type { RecordMetadataFn } from '~/ai/tools/tool-context'
 import { createSystemPromptForAgent } from '~/ai/chat/prompts'
 import type { ChatSession } from '~/ai/chat/domain'
 import { AgentEventProjector } from '~/ai/chat/runtime/agent-event-projector'
@@ -75,9 +74,9 @@ export class AgentRunner {
 	async runTurn(options: RunAgentTurnOptions): Promise<AgentRunResult> {
 		const { session, agent } = options
 		const definition = this.toolExecutor.getAgentDefinition(agent.type)
-		const tools = this.toolExecutor.createToolsForContext(
+		const tools = this.toolExecutor.createTools(options.depth, definition)
+		const stableContext = this.toolExecutor.createStableToolsContext(
 			session,
-			options.depth,
 			definition,
 		)
 		const systemPrompt = createSystemPromptForAgent(
@@ -104,35 +103,49 @@ export class AgentRunner {
 		})
 
 		const { model } = resolveLanguageModel(options.provider, options.model.id)
-		const contextualTools = tools as Record<
-			string,
-			Tool<any, any, AppToolContext>
-		>
-		let executionContext: AppToolContext = {
-			session,
-			agentId: agent.id,
-		}
 		const metadata = new Map<string, AppToolMetadata>()
-		const createToolsContext = () =>
-			Object.fromEntries(
-				Object.keys(contextualTools).map((name) => [
-					name,
-					{
-						...executionContext,
-						recordMetadata: (toolCallId: string, value: AppToolMetadata) =>
-							metadata.set(toolCallId, value),
-					},
-				]),
-			) as Record<string, AppToolContext>
+		const recordMetadata: RecordMetadataFn = (toolCallId, value) =>
+			metadata.set(toolCallId, value)
+
+		const readTracker = this.toolExecutor.prepareReadTracker(session, agent.id)
+		const fileToolsContext = {
+			app: stableContext.app,
+			permissionGuard: stableContext.permissionGuard,
+			readTracker,
+			recordMetadata,
+		}
+		const toolsContext = {
+			bash: {
+				...fileToolsContext,
+				scratch: stableContext.scratch,
+			},
+			edit_file: fileToolsContext,
+			note_neighborhood: {
+				app: stableContext.app,
+				session,
+				agentId: agent.id,
+			},
+			update_session_title: { recordMetadata },
+			...(tools.todowrite ? { todowrite: { session, recordMetadata } } : {}),
+			...(tools.task
+				? {
+						task: {
+							session,
+							agentId: agent.id,
+							dispatchTask: stableContext.dispatchTask,
+							dispatchableDefinitions: stableContext.dispatchableDefinitions,
+						},
+					}
+				: {}),
+		}
+
 		let repeatState: ToolCallRepeatState = options.continuation ?? {
 			consecutiveCount: 0,
 			isRepeatedTooManyTimes: false,
 		}
 		let shouldSuspend = false
 		let finalMessage: AssistantModelMessage | undefined
-		const repeatedToolCalls: StopCondition<typeof contextualTools> = ({
-			steps,
-		}) => {
+		const repeatedToolCalls: StopCondition<typeof tools> = ({ steps }) => {
 			const calls = steps.at(-1)?.toolCalls ?? []
 			if (!calls.length) return false
 			repeatState = updateToolCallRepeatState(
@@ -141,9 +154,9 @@ export class AgentRunner {
 			)
 			return repeatState.isRepeatedTooManyTimes
 		}
-		const suspendAtStepBoundary: StopCondition<
-			typeof contextualTools
-		> = async ({ steps }) => {
+		const suspendAtStepBoundary: StopCondition<typeof tools> = async ({
+			steps,
+		}) => {
 			if (!steps.at(-1)?.toolCalls.length) return false
 			shouldSuspend = (await options.shouldSuspendAfterToolStep?.()) ?? false
 			return shouldSuspend
@@ -151,18 +164,15 @@ export class AgentRunner {
 		const toolLoop = new ToolLoopAgent({
 			model,
 			instructions: systemPrompt,
-			tools: contextualTools,
-			toolsContext: createToolsContext(),
+			tools,
+			toolsContext,
 			stopWhen: [isLoopFinished(), repeatedToolCalls, suspendAtStepBoundary],
 			temperature: session.inferenceParams?.temperature,
 			maxOutputTokens: session.inferenceParams?.maxTokens,
 			prepareStep: async () => {
-				executionContext = this.toolExecutor.prepareExecutionContext({
-					session,
-					agentId: agent.id,
-				})
+				readTracker.resetSnapshot()
 				await projector.project({ type: 'step-start' })
-				return { toolsContext: createToolsContext() }
+				return {}
 			},
 		})
 		const result = await toolLoop.stream({
@@ -195,13 +205,10 @@ export class AgentRunner {
 					},
 				})
 				const outcomes = step.content.filter(
-					(
-						part,
-					): part is Extract<
-						ContentPart<ToolSet>,
-						{ type: 'tool-result' | 'tool-error' }
-					> => part.type === 'tool-result' || part.type === 'tool-error',
-				)
+					(part) => part.type === 'tool-result' || part.type === 'tool-error',
+				) as Array<
+					Extract<ContentPart<ToolSet>, { type: 'tool-result' | 'tool-error' }>
+				>
 				if (outcomes.length) {
 					await projector.project({
 						type: 'tool-results',

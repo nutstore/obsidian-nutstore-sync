@@ -31,6 +31,7 @@ import {
 	hasQueuedSubmission,
 } from '~/ai/chat/runtime/pending-submission'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
+import { AgentRunner } from '~/ai/chat/runtime/agent-runner'
 import { Selection } from '~/ai/chat/runtime/selection'
 import { SessionProcessor } from '~/ai/chat/runtime/session-processor'
 import { TaskManager } from '~/ai/chat/runtime/task-manager'
@@ -47,7 +48,7 @@ import {
 	buildTimeline,
 	collectOtherBusySessionIds,
 } from '~/ai/chat/ui/view-projection'
-import type { AIModelConfig } from '~/ai/core/types'
+import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
 import { SkillRepository } from '~/ai/skills/repository'
 import { isAbortError } from '~/ai/transport/abort'
 import SessionExportModal from '~/components/SessionExportModal'
@@ -108,7 +109,7 @@ export default class ChatService extends BaseService {
 		super()
 		this.skillRepository = new SkillRepository(plugin.app)
 		this.selection = new Selection(
-			plugin,
+			() => plugin.settings.ai,
 			this.state,
 			() => this.notify(),
 			(session) => this.store.persistSession(session),
@@ -118,32 +119,47 @@ export default class ChatService extends BaseService {
 			this.runtimeStates,
 			this.selection,
 		)
-		this.toolExecutor = new ToolExecutor(plugin, this.state, this.runtimeStates)
+		this.toolExecutor = new ToolExecutor(
+			plugin.app,
+			() => plugin.settings.ai,
+			this.state,
+			this.runtimeStates,
+		)
 		this.userContextManager = new UserContextManager(
 			this.state,
 			this.runtimeStates,
 			() => this.notify(),
 		)
 		this.messageFactory = new MessageFactory(
-			plugin,
+			plugin.app,
 			this.runtimeStates,
 			() => this.notify(),
 			this.skillRepository,
 		)
+		const ensureProviderReady = (provider: AIProviderConfig) =>
+			plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
+		const agentRunner = new AgentRunner(
+			this.toolExecutor,
+			this.store,
+			this.messageFactory,
+			() => this.notify(),
+		)
 		this.taskManager = new TaskManager(
-			plugin,
+			plugin.app,
+			ensureProviderReady,
 			this.state,
 			this.selection,
 			this.store,
 			() => this.notify(),
 			this.toolExecutor,
 			this.messageFactory,
+			agentRunner,
 		)
 		this.toolExecutor.setDispatchTaskHandler((params) =>
 			this.taskManager.dispatchTask(params),
 		)
 		this.messageOps = new MessageOps(
-			plugin,
+			plugin.app,
 			this.state,
 			this.runtimeStates,
 			this.store,
@@ -154,15 +170,15 @@ export default class ChatService extends BaseService {
 			this.skillRepository,
 		)
 		this.sessionProcessor = new SessionProcessor(
-			plugin,
+			ensureProviderReady,
 			this.state,
 			this.runtimeStates,
 			this.store,
 			() => this.notify(),
 			this.selection,
-			this.toolExecutor,
 			this.messageFactory,
 			this.userContextManager,
+			agentRunner,
 		)
 		this.taskManager.setWakeAgentHandler((sessionId, agentId) => {
 			if (agentId === MASTER_AGENT_ID) {
