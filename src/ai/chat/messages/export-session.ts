@@ -26,6 +26,7 @@ import { mkdirsVault } from '~/utils/mkdirs-vault'
 interface ExportSessionParams {
 	vault: Vault
 	manifestId: string
+	manifestVersion: string
 	session: ChatSession
 	title: string
 	includeToolMessages: boolean
@@ -368,6 +369,7 @@ async function buildSessionMarkdown(
 	session: ChatSession,
 	title: string,
 	includeToolMessages: boolean,
+	manifestVersion: string,
 	assetsDirPath: string,
 	assetsMarkdownPrefix: string,
 ) {
@@ -385,6 +387,7 @@ async function buildSessionMarkdown(
 		includeToolMessages: i18n.t(
 			'chatbox.exportFrontmatter.includeToolMessages',
 		),
+		pluginVersion: i18n.t('chatbox.exportFrontmatter.pluginVersion'),
 	}
 	const lines: string[] = [
 		'---',
@@ -395,6 +398,7 @@ async function buildSessionMarkdown(
 		`${toYamlKeyLabel(frontmatter.updatedAt)}: ${JSON.stringify(new Date(session.updatedAt).toLocaleString())}`,
 		`${toYamlKeyLabel(frontmatter.model)}: ${JSON.stringify(sessionModel || null)}`,
 		`${toYamlKeyLabel(frontmatter.includeToolMessages)}: ${includeToolMessages ? 'true' : 'false'}`,
+		`${toYamlKeyLabel(frontmatter.pluginVersion)}: ${JSON.stringify(manifestVersion)}`,
 		'---',
 		'',
 		`# ${toMarkdownHeadingText(title)}`,
@@ -480,6 +484,7 @@ export async function exportSessionToMarkdownFile(params: ExportSessionParams) {
 		params.session,
 		params.title,
 		params.includeToolMessages,
+		params.manifestVersion,
 		assetsDirPath,
 		assetsMarkdownPrefix,
 	)

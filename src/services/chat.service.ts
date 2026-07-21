@@ -518,6 +518,7 @@ export default class ChatService extends BaseService {
 			const file = await exportSessionToMarkdownFile({
 				vault: this.plugin.app.vault,
 				manifestId: this.plugin.manifest.id,
+				manifestVersion: this.plugin.manifest.version,
 				session,
 				title,
 				includeToolMessages: options.includeToolMessages,

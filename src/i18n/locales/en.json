@@ -533,7 +533,8 @@
 			"createdAt": "created_at",
 			"updatedAt": "updated_at",
 			"model": "model",
-			"includeToolMessages": "include_tool_messages"
+			"includeToolMessages": "include_tool_messages",
+			"pluginVersion": "plugin_version"
 		},
 		"exportMeta": {
 			"messageTime": "Time",

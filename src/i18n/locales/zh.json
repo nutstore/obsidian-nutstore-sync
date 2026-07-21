@@ -533,7 +533,8 @@
 			"createdAt": "创建时间",
 			"updatedAt": "更新时间",
 			"model": "模型",
-			"includeToolMessages": "包含工具消息"
+			"includeToolMessages": "包含工具消息",
+			"pluginVersion": "插件版本"
 		},
 		"exportMeta": {
 			"messageTime": "时间",
