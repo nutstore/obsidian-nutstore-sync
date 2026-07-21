@@ -26,6 +26,15 @@ describe('buildTimeline', () => {
 		}
 		master.timeline.push(message)
 		master.toolTimings['task-call'] = { startedAt: 10, finishedAt: 25 }
+		master.operations.message = [
+			{
+				vaultPath: 'note.md',
+				operation: 'update',
+				before: { kind: 'file', contentBase64: 'YQ==' },
+				after: { kind: 'file', contentBase64: 'Yg==' },
+				toolCallId: 'task-call',
+			},
+		]
 		const session: ChatSession = {
 			schemaVersion: 2,
 			id: 'session',
@@ -44,6 +53,7 @@ describe('buildTimeline', () => {
 		expect(block.toolCall).toBe(item.message.parts[0])
 		expect(block.toolCall.output).not.toBe(message.parts[0].output)
 		expect(block.timing).toEqual({ startedAt: 10, finishedAt: 25 })
+		expect(block.fileChanges).toEqual(master.operations.message)
 	})
 
 	it('keeps reactive metadata out of task results sent back to the model', async () => {

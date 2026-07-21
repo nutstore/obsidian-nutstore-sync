@@ -583,6 +583,12 @@
 				"todoList": "待办列表",
 				"systemNotification": "系统通知"
 			},
+			"fileChanges": {
+				"create": "新增",
+				"update": "修改",
+				"delete": "删除",
+				"binary": "二进制文件，无法显示文本差异"
+			},
 			"states": {
 				"empty": "开始发送一条消息",
 				"dragFilePrompt": "松手以添加文件",

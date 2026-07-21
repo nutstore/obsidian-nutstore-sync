@@ -41,14 +41,17 @@ function buildAgentTimeline(
 ): ChatboxProps['timeline'] {
 	const messages = snapshotViewValue(agent.timeline)
 	const toolTimings = snapshotViewValue(agent.toolTimings)
-	const timeline = projectTimelineMessageGroups(messages, toolTimings).map(
-		({ message, blocks }) => ({
-			createdAt: message.metadata?.createdAt ?? createdAt,
-			message,
-			displayBlocks: blocks,
-			showHeader: true,
-		}),
-	)
+	const operations = snapshotViewValue(agent.operations)
+	const timeline = projectTimelineMessageGroups(
+		messages,
+		toolTimings,
+		operations,
+	).map(({ message, blocks }) => ({
+		createdAt: message.metadata?.createdAt ?? createdAt,
+		message,
+		displayBlocks: blocks,
+		showHeader: true,
+	}))
 	let previousModelId: string | undefined
 	let canContinue = false
 	for (const item of timeline) {

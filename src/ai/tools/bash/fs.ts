@@ -24,7 +24,10 @@ import type {
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { copyReversibleToolOp } from '~/ai/chat/messages/reversible-op-utils'
 import type { ReversibleToolOp } from '~/ai/chat/types'
-import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
+import {
+	createCompressedFileContent,
+	decodeReversibleFileSnapshot,
+} from '~/ai/chat/messages/reversible-content'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { existsLocalPath } from '~/utils/local-vault-io'
 import { sha256Base64 } from '~/utils/sha256'
@@ -206,6 +209,34 @@ export async function listVaultPaths(app: App) {
 export class ReversibleOpRecorder {
 	private readonly operations: ReversibleToolOp[] = []
 
+	private async currentState(vault: Vault, vaultPath: string) {
+		if (!(await vault.adapter.exists(vaultPath))) return undefined
+		const stat = await vault.adapter.stat(vaultPath)
+		if (!stat) return undefined
+		if (stat.type === 'folder') return { kind: 'dir' as const }
+		const content = await vault.adapter.readBinary(vaultPath)
+		return {
+			kind: 'file' as const,
+			contentCompressed: createCompressedFileContent(content),
+		}
+	}
+
+	private async sameFileContent(
+		left: Extract<ReversibleToolOp, { operation: 'update' }>['before'],
+		right: Extract<ReversibleToolOp, { operation: 'update' }>['before'],
+	) {
+		const [leftBuffer, rightBuffer] = await Promise.all([
+			decodeReversibleFileSnapshot(left),
+			decodeReversibleFileSnapshot(right),
+		])
+		const leftBytes = new Uint8Array(leftBuffer)
+		const rightBytes = new Uint8Array(rightBuffer)
+		return (
+			leftBytes.length === rightBytes.length &&
+			leftBytes.every((byte, index) => byte === rightBytes[index])
+		)
+	}
+
 	recordCreate(vaultPath: string, kind: SnapshotKind) {
 		const normalizedPath = normalizeReversibleVaultPath(vaultPath)
 		if (!normalizedPath) {
@@ -256,6 +287,59 @@ export class ReversibleOpRecorder {
 
 	getOperations(): ReversibleToolOp[] {
 		return this.operations.map(copyReversibleToolOp)
+	}
+
+	async getNetOperations(vault: Vault): Promise<ReversibleToolOp[]> {
+		const firstByPath = new Map<string, ReversibleToolOp>()
+		for (const operation of this.operations) {
+			firstByPath.set(
+				operation.vaultPath,
+				firstByPath.get(operation.vaultPath) ?? operation,
+			)
+		}
+
+		const result: ReversibleToolOp[] = []
+		for (const [vaultPath, first] of firstByPath) {
+			const initial = first.operation === 'create' ? undefined : first.before
+			const after = await this.currentState(vault, vaultPath)
+			if (!initial && !after) continue
+			if (!initial && after) {
+				result.push({
+					vaultPath,
+					operation: 'create',
+					before: { kind: after.kind },
+					after,
+				})
+				continue
+			}
+			if (initial && !after) {
+				result.push({ vaultPath, operation: 'delete', before: initial })
+				continue
+			}
+			if (initial?.kind === 'file' && after?.kind === 'file') {
+				if (await this.sameFileContent(initial, after)) continue
+				result.push({
+					vaultPath,
+					operation: 'update',
+					before: initial,
+					after,
+				})
+				continue
+			}
+			if (initial?.kind === after?.kind) continue
+			if (initial) {
+				result.push({ vaultPath, operation: 'delete', before: initial })
+			}
+			if (after) {
+				result.push({
+					vaultPath,
+					operation: 'create',
+					before: { kind: after.kind },
+					after,
+				})
+			}
+		}
+		return result
 	}
 }
 

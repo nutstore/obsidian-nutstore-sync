@@ -245,17 +245,26 @@ export default class ChatboxView extends ItemView {
 		this.highlightedEditorView = undefined
 	}
 
+	private getLastActiveMarkdownView(): MarkdownView | null {
+		const leaf = this.lastActiveMarkdownLeaf
+		if (
+			!(leaf?.view instanceof MarkdownView) ||
+			!leaf.view.containerEl.isConnected
+		) {
+			this.lastActiveMarkdownLeaf = null
+			return null
+		}
+		return leaf.view
+	}
+
 	private resolveMarkdownView(allowFallback = false): MarkdownView | null {
 		const activeMarkdownView =
 			this.app.workspace.getActiveViewOfType(MarkdownView)
 		if (activeMarkdownView) {
 			return activeMarkdownView
 		}
-		if (
-			allowFallback &&
-			this.lastActiveMarkdownLeaf?.view instanceof MarkdownView
-		) {
-			return this.lastActiveMarkdownLeaf.view
+		if (allowFallback) {
+			return this.getLastActiveMarkdownView()
 		}
 		return null
 	}
@@ -359,6 +368,33 @@ export default class ChatboxView extends ItemView {
 		return []
 	}
 
+	private async openFileChange(vaultPath: string, line?: number) {
+		const target = this.app.vault.getAbstractFileByPath(
+			normalizePath(vaultPath),
+		)
+		if (!(target instanceof TFile)) return
+		const leaf =
+			this.app.workspace
+				.getLeavesOfType('markdown')
+				.find(
+					(candidate) =>
+						candidate.view instanceof MarkdownView &&
+						candidate.view.file?.path === target.path,
+				) ??
+			this.getLastActiveMarkdownView()?.leaf ??
+			this.app.workspace.getLeaf('tab')
+		await leaf.openFile(target, { active: true })
+		if (line === undefined || !(leaf.view instanceof MarkdownView)) return
+		const editor = leaf.view.editor
+		const position = {
+			line: Math.max(0, Math.min(line - 1, editor.lastLine())),
+			ch: 0,
+		}
+		editor.setCursor(position)
+		editor.scrollIntoView({ from: position, to: position }, true)
+		editor.focus()
+	}
+
 	private getChatboxProps(): ChatboxProps {
 		const viewProps = this.plugin.chatService.getViewProps()
 		const activeContextItems = this.getActiveContextItems().filter((item) => {
@@ -373,6 +409,8 @@ export default class ChatboxView extends ItemView {
 			renderMarkdown: this.renderMarkdown,
 			onModalHostChange: (rootEl) =>
 				this.plugin.chatService.setChatModalHost(rootEl),
+			onOpenFileChange: (vaultPath, line) =>
+				this.openFileChange(vaultPath, line),
 			onSendMessage: (text: string, contextItems?: UserContextItem[]) =>
 				this.plugin.chatService.sendMessage(text, contextItems ?? []),
 			onCaptureActiveContext: () => {

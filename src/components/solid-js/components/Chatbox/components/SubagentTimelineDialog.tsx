@@ -13,6 +13,7 @@ export function SubagentTimelineDialog(props: {
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onSelectAgent: (agentId: string) => void
+	onOpenFileChange?: ChatboxProps['onOpenFileChange']
 	onClose: () => void
 }) {
 	return (
@@ -50,6 +51,7 @@ export function SubagentTimelineDialog(props: {
 												renderMarkdown={props.renderMarkdown}
 												getSubagent={props.getSubagent}
 												onOpenSubagent={props.onSelectAgent}
+												onOpenFileChange={props.onOpenFileChange}
 											/>
 										)}
 									</For>

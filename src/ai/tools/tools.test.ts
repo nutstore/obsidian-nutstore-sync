@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import { createAITools } from '~/ai/tools/tools'
+import i18n from '~/i18n'
 import { createFragmentReadTracker } from '~/ai/tools/file-operation'
 import type { ChatFragment, ChatSession } from '~/ai/chat/domain'
 import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
@@ -526,6 +527,32 @@ describe('update_session_title tool', () => {
 })
 
 describe('note_neighborhood path resolution', () => {
+	it('rejects a folder path with a clear error', async () => {
+		const folder = Object.assign(new TFolder(), {
+			path: 'projects',
+			name: 'projects',
+			children: [],
+		})
+		const app = {
+			vault: {
+				getAbstractFileByPath: (path: string) =>
+					path === folder.path ? folder : null,
+			},
+			metadataCache: {
+				getFirstLinkpathDest: () => null,
+			},
+		} as unknown as App
+		const tool = findTool(createAITools(), 'note_neighborhood')
+
+		await expect(
+			executeToolForTest(
+				tool,
+				{ note: folder.path, depth: 1 },
+				makeContext(app, makeSession()),
+			),
+		).rejects.toThrow(i18n.t('chatbox.errors.notFile', { path: folder.path }))
+	})
+
 	it('resolves an ambiguous link path relative to the current note', async () => {
 		const { app } = createMockApp([
 			{ path: 'projects/a/Shared.md', content: 'A' },

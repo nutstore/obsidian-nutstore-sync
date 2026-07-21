@@ -2,6 +2,18 @@ import type { ReversibleToolOp } from '~/ai/chat/types'
 import { normalizePath } from 'obsidian'
 import { hasCompressedFileContent } from '~/ai/chat/messages/reversible-content'
 
+function copyFileSnapshot(
+	snapshot: Extract<ReversibleToolOp, { operation: 'update' }>['before'],
+) {
+	return {
+		kind: 'file' as const,
+		contentCompressed: snapshot.contentCompressed
+			? { ...snapshot.contentCompressed }
+			: undefined,
+		contentBase64: snapshot.contentBase64,
+	}
+}
+
 export function copyReversibleToolOp(op: ReversibleToolOp): ReversibleToolOp {
 	switch (op.operation) {
 		case 'create':
@@ -9,18 +21,21 @@ export function copyReversibleToolOp(op: ReversibleToolOp): ReversibleToolOp {
 				vaultPath: op.vaultPath,
 				operation: 'create',
 				before: { kind: op.before.kind },
+				after:
+					op.after?.kind === 'file'
+						? copyFileSnapshot(op.after)
+						: op.after
+							? { kind: 'dir' as const }
+							: undefined,
+				toolCallId: op.toolCallId,
 			}
 		case 'update':
 			return {
 				vaultPath: op.vaultPath,
 				operation: 'update',
-				before: {
-					kind: 'file',
-					contentCompressed: op.before.contentCompressed
-						? { ...op.before.contentCompressed }
-						: undefined,
-					contentBase64: op.before.contentBase64,
-				},
+				before: copyFileSnapshot(op.before),
+				after: op.after ? copyFileSnapshot(op.after) : undefined,
+				toolCallId: op.toolCallId,
 			}
 		case 'delete':
 			return {
@@ -36,6 +51,7 @@ export function copyReversibleToolOp(op: ReversibleToolOp): ReversibleToolOp {
 									: undefined,
 								contentBase64: op.before.contentBase64,
 							},
+				toolCallId: op.toolCallId,
 			}
 	}
 }
@@ -73,6 +89,21 @@ export function normalizeReversibleToolOpRecord(op: ReversibleToolOp) {
 		if (
 			!hasCompressedFileContent(op.before) &&
 			typeof op.before.contentBase64 !== 'string'
+		) {
+			return null
+		}
+		if (
+			op.after &&
+			!hasCompressedFileContent(op.after) &&
+			typeof op.after.contentBase64 !== 'string'
+		) {
+			return null
+		}
+	}
+	if (op.operation === 'create' && op.after?.kind === 'file') {
+		if (
+			!hasCompressedFileContent(op.after) &&
+			typeof op.after.contentBase64 !== 'string'
 		) {
 			return null
 		}

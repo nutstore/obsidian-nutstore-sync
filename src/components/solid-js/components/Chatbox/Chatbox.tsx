@@ -936,6 +936,7 @@ function Chatbox(props: ChatboxProps) {
 											onRecallMessage={requestRecallMessage}
 											getSubagent={(agentId) => props.agentsById[agentId]}
 											onOpenSubagent={setSelectedAgentId}
+											onOpenFileChange={props.onOpenFileChange}
 										/>
 									)}
 								</For>
@@ -1094,6 +1095,7 @@ function Chatbox(props: ChatboxProps) {
 				renderMarkdown={props.renderMarkdown}
 				getSubagent={(agentId) => props.agentsById[agentId]}
 				onSelectAgent={setSelectedAgentId}
+				onOpenFileChange={props.onOpenFileChange}
 				onClose={() => setSelectedAgentId(undefined)}
 			/>
 

@@ -583,6 +583,12 @@
 				"todoList": "Todo List",
 				"systemNotification": "System Notification"
 			},
+			"fileChanges": {
+				"create": "Added",
+				"update": "Modified",
+				"delete": "Deleted",
+				"binary": "Binary file; text diff is unavailable"
+			},
 			"states": {
 				"empty": "Start by sending a message",
 				"dragFilePrompt": "Drop to add file",

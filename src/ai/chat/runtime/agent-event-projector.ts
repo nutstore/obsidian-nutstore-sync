@@ -250,6 +250,10 @@ export class AgentEventProjector {
 						this.options.agent,
 						target.message.id,
 						metadata?.reversibleOps
+							?.map((operation) => ({
+								...operation,
+								toolCallId: outcome.toolCallId,
+							}))
 							?.map(normalizeReversibleToolOpRecord)
 							.filter(
 								(operation): operation is ReversibleToolOp => !!operation,

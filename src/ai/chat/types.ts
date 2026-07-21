@@ -78,6 +78,7 @@ export interface ChatDisplayToolCallBlock {
 	toolCall: DynamicToolUIPart
 	timing?: ToolTiming
 	todos?: ChatTodoItem[]
+	fileChanges?: ReversibleToolOp[]
 }
 
 export interface ChatDisplaySystemNotificationBlock {
@@ -106,16 +107,21 @@ export type ReversibleToolOp =
 			vaultPath: string
 			operation: 'create'
 			before: { kind: 'file' | 'dir' }
+			after?: ReversibleFileSnapshot | { kind: 'dir' }
+			toolCallId?: string
 	  }
 	| {
 			vaultPath: string
 			operation: 'update'
 			before: ReversibleFileSnapshot
+			after?: ReversibleFileSnapshot
+			toolCallId?: string
 	  }
 	| {
 			vaultPath: string
 			operation: 'delete'
 			before: ReversibleFileSnapshot | { kind: 'dir' }
+			toolCallId?: string
 	  }
 
 export type ChatRunState =

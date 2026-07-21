@@ -433,11 +433,19 @@ describe('vault bash runtime', () => {
 				vaultPath: '.agents/skills/new',
 				operation: 'create',
 				before: { kind: 'dir' },
+				after: { kind: 'dir' },
 			},
 			{
 				vaultPath: '.agents/skills/new/SKILL.md',
 				operation: 'create',
 				before: { kind: 'file' },
+				after: expect.objectContaining({
+					kind: 'file',
+					contentCompressed: {
+						compress: 'deflate',
+						blob: expect.any(Blob),
+					},
+				}),
 			},
 		])
 	})

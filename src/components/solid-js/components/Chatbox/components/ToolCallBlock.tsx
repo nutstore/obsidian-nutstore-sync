@@ -14,7 +14,8 @@ import {
 	toolStatusVisual,
 	waitingVisual,
 } from '../tool-call-status'
-import { CollapsibleBlock } from './CollapsibleBlock'
+import { TitledCollapsibleBlock } from './CollapsibleBlock'
+import { FileChangesBlock } from './FileChangesBlock'
 
 function taskIdFromOutput(output: unknown) {
 	if (!output || typeof output !== 'object' || Array.isArray(output)) return
@@ -27,17 +28,25 @@ export function ToolCallBlock(props: {
 	now: number
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
+	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 }) {
 	return (
 		<Show
 			when={props.block.toolCall.toolName === 'task'}
-			fallback={<GenericToolCallBlock block={props.block} now={props.now} />}
+			fallback={
+				<GenericToolCallBlock
+					block={props.block}
+					now={props.now}
+					onOpenFileChange={props.onOpenFileChange}
+				/>
+			}
 		>
 			<TaskToolCallBlock
 				block={props.block}
 				now={props.now}
 				getSubagent={props.getSubagent}
 				onOpenSubagent={props.onOpenSubagent}
+				onOpenFileChange={props.onOpenFileChange}
 			/>
 		</Show>
 	)
@@ -49,30 +58,38 @@ function CollapsibleToolCallBlock(props: {
 	iconLabel: string
 	params: unknown
 	result?: string
+	fileChanges?: ChatDisplayToolCallBlock['fileChanges']
+	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 	headerActions?: JSX.Element
 }) {
 	return (
-		<CollapsibleBlock
-			title={props.title}
-			iconClass={props.iconClass}
-			iconLabel={props.iconLabel}
-			headerActions={props.headerActions}
-		>
-			<div class="text-xs text-[var(--text-muted)]">
-				{t('chatbox.ui.labels.params')}
-			</div>
-			<pre class="m-0 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-primary)] p-2 text-xs leading-5">
-				{JSON.stringify(props.params ?? {}, null, 2)}
-			</pre>
-			<Show when={props.result?.trim()}>
-				<div class="mt-3 text-xs text-[var(--text-muted)]">
-					{t('chatbox.ui.labels.result')}
+		<>
+			<TitledCollapsibleBlock
+				title={props.title}
+				iconClass={props.iconClass}
+				iconLabel={props.iconLabel}
+				headerActions={props.headerActions}
+			>
+				<div class="text-xs text-[var(--text-muted)]">
+					{t('chatbox.ui.labels.params')}
 				</div>
 				<pre class="m-0 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-primary)] p-2 text-xs leading-5">
-					{props.result}
+					{JSON.stringify(props.params ?? {}, null, 2)}
 				</pre>
-			</Show>
-		</CollapsibleBlock>
+				<Show when={props.result?.trim()}>
+					<div class="mt-3 text-xs text-[var(--text-muted)]">
+						{t('chatbox.ui.labels.result')}
+					</div>
+					<pre class="m-0 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-primary)] p-2 text-xs leading-5">
+						{props.result}
+					</pre>
+				</Show>
+			</TitledCollapsibleBlock>
+			<FileChangesBlock
+				changes={props.fileChanges}
+				onOpenFile={props.onOpenFileChange}
+			/>
+		</>
 	)
 }
 
@@ -81,6 +98,7 @@ function TaskToolCallBlock(props: {
 	now: number
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
+	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 }) {
 	const toolCall = () => props.block.toolCall
 	const taskId = () =>
@@ -121,6 +139,8 @@ function TaskToolCallBlock(props: {
 			iconLabel={visual().label}
 			params={toolCall().input}
 			result={formatToolResult(toolCall())}
+			fileChanges={props.block.fileChanges}
+			onOpenFileChange={props.onOpenFileChange}
 			headerActions={
 				<button
 					type="button"
@@ -145,6 +165,7 @@ function TaskToolCallBlock(props: {
 function GenericToolCallBlock(props: {
 	block: ChatDisplayToolCallBlock
 	now: number
+	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 }) {
 	const visual = () => toolStatusVisual(props.block.toolCall)
 	return (
@@ -159,6 +180,8 @@ function GenericToolCallBlock(props: {
 			iconLabel={visual().label}
 			params={props.block.toolCall.input}
 			result={formatToolResult(props.block.toolCall)}
+			fileChanges={props.block.fileChanges}
+			onOpenFileChange={props.onOpenFileChange}
 		/>
 	)
 }

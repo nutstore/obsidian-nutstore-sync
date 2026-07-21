@@ -89,7 +89,7 @@ export async function execVaultBash(
 	})
 	return {
 		...result,
-		reversibleOps: recorder.getOperations(),
+		reversibleOps: await recorder.getNetOperations(app.vault),
 	}
 }
 

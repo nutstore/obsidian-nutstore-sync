@@ -108,6 +108,7 @@ export interface ChatboxProps extends ChatboxViewModel {
 		options?: { restoreFiles?: boolean },
 	) => Promise<RecallMessageResult | void> | void
 	onRecallHasReversibleOps?: (messageId: string) => boolean
+	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 	renderMarkdown?: (
 		el: HTMLElement,
 		markdown: string,

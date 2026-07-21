@@ -86,6 +86,10 @@ export const editFileTool = tool({
 						kind: 'file',
 						contentCompressed: createCompressedFileContent(content),
 					},
+					after: {
+						kind: 'file',
+						contentCompressed: createCompressedFileContent(replaced.content),
+					},
 				},
 			],
 		})

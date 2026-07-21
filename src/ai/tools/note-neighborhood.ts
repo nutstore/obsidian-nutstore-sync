@@ -84,11 +84,14 @@ export function buildNoteNeighborhood(
 
 export const noteNeighborhoodTool = tool({
 	description:
-		'Return an Obsidian-style local knowledge graph neighborhood for a note as a simple adjacency map. Input a note path or link path plus a depth. Output includes the resolved root path, normalized depth, and adj where each key is a note path and each value is the sorted list of related note paths within the returned neighborhood.',
+		'Discover notes related to one existing note through Obsidian links. Use this tool when investigating backlinks, outgoing links, nearby graph context, related notes, or notes potentially affected by changes. Use the returned note paths as candidates for subsequent reading. Input one concrete note file or Obsidian link path plus a depth. Do not use it for full-text search, directory enumeration, or note content retrieval.',
 	inputSchema: z.object({
 		note: z
 			.string()
 			.check(
+				z.describe(
+					'An existing note file path or Obsidian link path. Must not be a folder path.',
+				),
 				z.trim(),
 				z.minLength(
 					1,

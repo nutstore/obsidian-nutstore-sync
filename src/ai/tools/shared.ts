@@ -1,4 +1,4 @@
-import { normalizePath, TFile, type App } from 'obsidian'
+import { normalizePath, TFile, TFolder, type App } from 'obsidian'
 import { z } from 'zod/mini'
 import i18n from '~/i18n'
 import { getMasterAgent, type ChatSession } from '~/ai/chat/domain'
@@ -118,6 +118,9 @@ export function resolveNotePath(app: App, note: string, sourcePath: string) {
 	const direct = app.vault.getAbstractFileByPath(normalizedPath)
 	if (direct instanceof TFile) {
 		return direct.path
+	}
+	if (direct instanceof TFolder) {
+		throw new Error(i18n.t('chatbox.errors.notFile', { path: note }))
 	}
 
 	const resolved = app.metadataCache.getFirstLinkpathDest(note, sourcePath)
