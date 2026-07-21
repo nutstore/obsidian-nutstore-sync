@@ -1000,4 +1000,70 @@ describe('vault bash runtime', () => {
 			expect(reads).toEqual([])
 		})
 	})
+
+	describe('UTF-8 byte-stream regression', () => {
+		it('preserves UTF-8 when cat writes a heredoc with Chinese text', async () => {
+			const { vault, store } = createMockVault({}, ['docs'])
+			const app = createApp(vault)
+
+			const result = await execVaultBash(
+				app,
+				`cat > /vault/docs/heredoc.md << 'EOF'
+你好世界
+EOF`,
+			)
+
+			expect(result.exitCode).toBe(0)
+			expect(
+				new TextDecoder().decode(store.readBinary('docs/heredoc.md')),
+			).toBe('你好世界\n')
+		})
+
+		it('preserves 4-byte UTF-8 (emoji) when cat writes a heredoc', async () => {
+			const { vault, store } = createMockVault({}, ['docs'])
+			const app = createApp(vault)
+
+			const result = await execVaultBash(
+				app,
+				`cat > /vault/docs/emoji.md << 'EOF'
+🚀中文
+EOF`,
+			)
+
+			expect(result.exitCode).toBe(0)
+			expect(new TextDecoder().decode(store.readBinary('docs/emoji.md'))).toBe(
+				'🚀中文\n',
+			)
+		})
+
+		it('preserves UTF-8 when echo pipes through tee into a vault file', async () => {
+			const { vault, store } = createMockVault({}, ['docs'])
+			const app = createApp(vault)
+
+			const result = await execVaultBash(
+				app,
+				`echo '你好世界' | tee /vault/docs/tee.md > /dev/null`,
+			)
+
+			expect(result.exitCode).toBe(0)
+			expect(new TextDecoder().decode(store.readBinary('docs/tee.md'))).toBe(
+				'你好世界\n',
+			)
+		})
+
+		it('preserves UTF-8 when echo writes directly to a vault file (text path)', async () => {
+			const { vault, store } = createMockVault({}, ['docs'])
+			const app = createApp(vault)
+
+			const result = await execVaultBash(
+				app,
+				`echo '你好世界' > /vault/docs/echo.md`,
+			)
+
+			expect(result.exitCode).toBe(0)
+			expect(new TextDecoder().decode(store.readBinary('docs/echo.md'))).toBe(
+				'你好世界\n',
+			)
+		})
+	})
 })
