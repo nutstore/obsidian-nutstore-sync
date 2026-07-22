@@ -17,6 +17,20 @@ import { stdRemotePath } from '~/utils/std-remote-path'
 import type NutstorePlugin from '../..'
 import RemoveRemoteRecursivelyTask from '../tasks/remove-remote-recursively.task'
 
+export interface UpdateMtimeProgress {
+	total: number
+	completed: number
+}
+
+export function countRecordUpdateOperations(tasks: BaseTask[]): number {
+	return tasks.reduce(
+		(total, task) =>
+			total +
+			(task instanceof MkdirsRemoteTask ? task.getAllPaths().length : 1),
+		0,
+	)
+}
+
 /**
  * 批量更新同步记录的工具函数
  */
@@ -28,16 +42,20 @@ export async function updateMtimeInRecord(
 	results: TaskResult[],
 	batch_size: number,
 	logger: SyncLogger,
+	progress: UpdateMtimeProgress,
 ): Promise<void> {
 	if (tasks.length === 0) {
 		return
 	}
+	const operationCount = countRecordUpdateOperations(tasks)
 	// Filter out tasks that don't need record updates
 	const tasksNeedingUpdate = tasks.filter((_task, idx) => {
 		return results[idx]?.success && !results[idx]?.skipRecord
 	})
 
 	if (tasksNeedingUpdate.length === 0) {
+		progress.completed += operationCount
+		emitSyncUpdateMtimeProgress(progress.total, progress.completed)
 		return
 	}
 
@@ -59,7 +77,6 @@ export async function updateMtimeInRecord(
 	)
 	const records = await syncRecord.getRecords()
 	const startAt = Date.now()
-	let completedCount = 0
 
 	const debouncedSetRecords = debounce(
 		(records) => syncRecord.setRecords(records),
@@ -85,6 +102,8 @@ export async function updateMtimeInRecord(
 	}
 
 	const taskChunks = chunk(expandedTasks, batch_size)
+	progress.completed += operationCount - expandedTasks.length
+	emitSyncUpdateMtimeProgress(progress.total, progress.completed)
 
 	for (const taskChunk of taskChunks) {
 		const batch = taskChunk.map(async ({ task, localPath }) => {
@@ -137,12 +156,11 @@ export async function updateMtimeInRecord(
 					},
 					task.toJSON(),
 				)
-			} finally {
-				completedCount++
 			}
 		})
 		await Promise.all(batch)
-		emitSyncUpdateMtimeProgress(expandedTasks.length, completedCount)
+		progress.completed += taskChunk.length
+		emitSyncUpdateMtimeProgress(progress.total, progress.completed)
 		debouncedSetRecords(records)
 	}
 

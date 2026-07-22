@@ -28,8 +28,15 @@ function getTraversalLock(kvKey: string): Mutex {
 	return traversalLocks.get(kvKey)!
 }
 
-async function executeWithRetry<T>(func: () => MaybePromise<T>): Promise<T> {
+async function executeWithRetry<T>(
+	func: () => MaybePromise<T>,
+	options: {
+		onRetry?: () => void
+		throwIfCancelled?: () => void
+	} = {},
+): Promise<T> {
 	while (true) {
+		options.throwIfCancelled?.()
 		try {
 			return await func()
 		} catch (err) {
@@ -38,12 +45,25 @@ async function executeWithRetry<T>(func: () => MaybePromise<T>): Promise<T> {
 					? err
 					: new Error(String(err))
 			if (is503Error(normalizedError)) {
-				await sleep(30_000)
+				options.onRetry?.()
+				for (let waited = 0; waited < 30_000; waited += 500) {
+					options.throwIfCancelled?.()
+					await sleep(500)
+				}
 			} else {
 				throw err
 			}
 		}
 	}
+}
+
+export interface WebDAVTraversalProgress {
+	phase: 'scanning' | 'incremental' | 'retrying' | 'complete'
+	currentPath?: string
+	processedDirectories: number
+	queuedDirectories: number
+	discoveredItems: number
+	processedChanges: number
 }
 
 export class ResumableWebDAVTraversal {
@@ -52,11 +72,15 @@ export class ResumableWebDAVTraversal {
 	private kvKey: string
 	private saveInterval: number
 	private settings: NutstoreSettings
+	private onProgress?: (progress: WebDAVTraversalProgress) => void
+	private throwIfCancelled?: () => void
 
 	private rootCursor: string = ''
 	private queue: string[] = []
 	private nodes: Record<string, StatModel[]> = {}
 	private processedCount: number = 0
+	private discoveredCount: number = 0
+	private processedChanges: number = 0
 
 	/**
 	 * Normalize directory path for use as nodes key
@@ -83,12 +107,44 @@ export class ResumableWebDAVTraversal {
 		remoteBaseDir: string
 		kvKey: string
 		saveInterval?: number
+		onProgress?: (progress: WebDAVTraversalProgress) => void
+		throwIfCancelled?: () => void
 	}) {
 		this.settings = options.settings
 		this.token = options.token
 		this.remoteBaseDir = options.remoteBaseDir
 		this.kvKey = options.kvKey
 		this.saveInterval = Math.max(options.saveInterval || 1, 1)
+		this.onProgress = options.onProgress
+		this.throwIfCancelled = options.throwIfCancelled
+	}
+
+	private emitProgress(
+		phase: WebDAVTraversalProgress['phase'],
+		currentPath?: string,
+	): void {
+		this.onProgress?.({
+			phase,
+			currentPath,
+			processedDirectories: this.processedCount,
+			queuedDirectories: this.queue.length,
+			discoveredItems: this.discoveredCount,
+			processedChanges: this.processedChanges,
+		})
+	}
+
+	private checkCancelled(): void {
+		this.throwIfCancelled?.()
+	}
+
+	private executeWithRetry<T>(
+		func: () => MaybePromise<T>,
+		currentPath?: string,
+	): Promise<T> {
+		return executeWithRetry(func, {
+			throwIfCancelled: this.throwIfCancelled,
+			onRetry: () => this.emitProgress('retrying', currentPath),
+		})
 	}
 
 	get lock() {
@@ -101,6 +157,7 @@ export class ResumableWebDAVTraversal {
 
 	async traverse(): Promise<StatModel[]> {
 		return await this.lock.runExclusive(async () => {
+			this.checkCancelled()
 			await this.loadState()
 
 			// Use incremental scan if already traversed once
@@ -112,7 +169,7 @@ export class ResumableWebDAVTraversal {
 			} else {
 				// Initial scan or resume: BFS traversal
 				if (this.queue.length === 0) {
-					const { response } = await executeWithRetry(() =>
+					const { response } = await this.executeWithRetry(() =>
 						getLatestDeltaCursor({
 							token: this.token,
 							settings: this.settings,
@@ -127,6 +184,7 @@ export class ResumableWebDAVTraversal {
 			}
 
 			await this.saveState()
+			this.emitProgress('complete')
 
 			return this.getAllFromCache()
 		})
@@ -142,7 +200,9 @@ export class ResumableWebDAVTraversal {
 			const results: StatModel[] = []
 
 			while (this.queue.length > 0) {
+				this.checkCancelled()
 				const currentPath = this.queue[0]
+				this.emitProgress('scanning', currentPath)
 				const normalizedPath = this.normalizeDirPath(currentPath)
 				const resultItems: StatModel[] = []
 
@@ -152,14 +212,16 @@ export class ResumableWebDAVTraversal {
 					if (cachedItems) {
 						resultItems.push(...cachedItems)
 					} else {
-						const contents = await executeWithRetry(() =>
-							getContents(this.settings, this.token, currentPath),
+						const contents = await this.executeWithRetry(
+							() => getContents(this.settings, this.token, currentPath),
+							currentPath,
 						)
 
 						for (const item of contents) {
 							const stat = fileStatToStatModel(item)
 							resultItems.push(stat)
 						}
+						this.discoveredCount += resultItems.length
 					}
 
 					results.push(...resultItems)
@@ -174,6 +236,7 @@ export class ResumableWebDAVTraversal {
 
 					this.queue.shift()
 					this.processedCount++
+					this.emitProgress('scanning', currentPath)
 
 					if (this.processedCount % this.saveInterval === 0) {
 						await this.saveState()
@@ -185,7 +248,7 @@ export class ResumableWebDAVTraversal {
 				}
 			}
 
-			const { response: endResponse } = await executeWithRetry(() =>
+			const { response: endResponse } = await this.executeWithRetry(() =>
 				getLatestDeltaCursor({
 					token: this.token,
 					settings: this.settings,
@@ -230,7 +293,7 @@ export class ResumableWebDAVTraversal {
 		let currentCursor = startCursor
 
 		while (true) {
-			const { response } = await executeWithRetry(() =>
+			const { response } = await this.executeWithRetry(() =>
 				getDelta({
 					token: this.token,
 					settings: this.settings,
@@ -277,6 +340,7 @@ export class ResumableWebDAVTraversal {
 		for await (const { entries, cursor, reset } of this.fetchAllDelta(
 			startCursor,
 		)) {
+			this.checkCancelled()
 			if (reset) {
 				logger.warn(
 					'Delta reset during traversal, clearing cache and will trigger full re-scan',
@@ -284,7 +348,7 @@ export class ResumableWebDAVTraversal {
 				this.nodes = {}
 				this.queue = [this.remoteBaseDir]
 				this.processedCount = 0
-				const { response: cursorResponse } = await executeWithRetry(() =>
+				const { response: cursorResponse } = await this.executeWithRetry(() =>
 					getLatestDeltaCursor({
 						token: this.token,
 						settings: this.settings,
@@ -295,8 +359,7 @@ export class ResumableWebDAVTraversal {
 			}
 
 			if (entries.length > 0) {
-				this.applyDeltaToNodes(entries)
-				processedEntries += entries.length
+				processedEntries += this.applyDeltaEntries(entries)
 
 				// Save state periodically based on number of processed entries
 				if (processedEntries >= this.saveInterval) {
@@ -321,6 +384,7 @@ export class ResumableWebDAVTraversal {
 		let processedEntries = 0
 
 		for await (const deltas of this.fetchAllDelta(this.rootCursor)) {
+			this.checkCancelled()
 			const { entries, cursor, reset } = deltas
 
 			this.rootCursor = cursor
@@ -335,14 +399,15 @@ export class ResumableWebDAVTraversal {
 
 			if (entries.length > 0) {
 				hasAnyEntries = true
-				this.applyDeltaToNodes(entries)
-				processedEntries += entries.length
+				processedEntries += this.applyDeltaEntries(entries)
 
 				// Save state periodically based on number of processed entries
 				if (processedEntries >= this.saveInterval) {
 					await this.saveState()
 					processedEntries = 0
 				}
+			} else {
+				this.emitProgress('incremental')
 			}
 		}
 
@@ -506,6 +571,21 @@ export class ResumableWebDAVTraversal {
 		return results
 	}
 
+	private countDiscoveredItems(): number {
+		return Object.values(this.nodes).reduce(
+			(total, items) => total + items.length,
+			0,
+		)
+	}
+
+	private applyDeltaEntries(entries: DeltaEntry[]): number {
+		this.applyDeltaToNodes(entries)
+		this.processedChanges += entries.length
+		this.discoveredCount = this.countDiscoveredItems()
+		this.emitProgress('incremental')
+		return entries.length
+	}
+
 	/**
 	 * Load state
 	 */
@@ -525,6 +605,8 @@ export class ResumableWebDAVTraversal {
 			this.rootCursor = cache.rootCursor || ''
 			this.queue = cache.queue || []
 			this.nodes = cache.nodes || {}
+			this.processedCount = Object.keys(this.nodes).length
+			this.discoveredCount = this.countDiscoveredItems()
 		}
 	}
 
@@ -548,6 +630,8 @@ export class ResumableWebDAVTraversal {
 		this.queue = []
 		this.nodes = {}
 		this.processedCount = 0
+		this.discoveredCount = 0
+		this.processedChanges = 0
 	}
 
 	/**

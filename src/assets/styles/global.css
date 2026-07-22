@@ -475,3 +475,16 @@ input.success {
 		max-height: clamp(2.5rem, 18vh, 6rem);
 	}
 }
+@keyframes nutstore-sync-progress-indeterminate {
+	from {
+		transform: translateX(-100%);
+	}
+
+	to {
+		transform: translateX(250%);
+	}
+}
+
+.nutstore-sync-progress-indeterminate {
+	animation: nutstore-sync-progress-indeterminate 1.4s ease-in-out infinite;
+}

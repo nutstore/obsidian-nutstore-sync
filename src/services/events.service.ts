@@ -4,11 +4,14 @@ import {
 	onEndSync,
 	onPreparingSync,
 	onStartSync,
+	onSyncCancelled,
+	onSyncPreparationProgress,
 	onSyncError,
 	onSyncProgress,
 } from '~/events'
 import i18n from '~/i18n'
 import { is503Error } from '~/utils/is-503-error'
+import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 
@@ -28,6 +31,15 @@ export default class EventsService extends BaseService {
 					text: i18n.t('sync.preparing'),
 					showNotice,
 				})
+				if (showNotice) {
+					this.plugin.progressService.showProgressModal()
+				}
+			}),
+
+			onSyncPreparationProgress().subscribe((progress) => {
+				this.plugin.statusService.updateSyncStatus({
+					text: getSyncPreparationText(progress).operation,
+				})
 			}),
 
 			onStartSync().subscribe(({ showNotice }) => {
@@ -45,11 +57,18 @@ export default class EventsService extends BaseService {
 				})
 			}),
 
+			onSyncCancelled().subscribe(() => {
+				this.plugin.toggleSyncUI(false)
+				this.plugin.statusService.updateSyncStatus({
+					text: i18n.t('sync.cancelled'),
+				})
+			}),
+
 			onEndSync().subscribe(({ failedCount, showNotice }) => {
 				this.plugin.toggleSyncUI(false)
 				const now = Date.now()
 				this.plugin.statusService.setLastSyncTime(now, failedCount)
-				if (showNotice) {
+				if (showNotice && !this.plugin.progressService.hasVisibleSyncModal()) {
 					const text =
 						failedCount > 0
 							? i18n.t('sync.completeWithFailed', { failedCount })

@@ -83,8 +83,12 @@ export default class CacheServiceV1 extends BaseService {
 
 	async saveRemoteTraversalCache(
 		logger: SyncLogger = globalLogger,
+		isCancelled: () => boolean = () => false,
 	): Promise<boolean> {
 		try {
+			if (isCancelled()) {
+				return false
+			}
 			const traverseWebDAVCache = await traverseWebDAVKV.get(
 				await this.getKVKey(),
 			)
@@ -97,6 +101,9 @@ export default class CacheServiceV1 extends BaseService {
 			const metaKey = await this.getKVKey()
 
 			const webdav = await this.plugin.webDAVService.createWebDAVClient()
+			if (isCancelled()) {
+				return false
+			}
 			const remoteExists = await webdav
 				.exists(this.remoteCacheFilePath)
 				.catch(() => false)
@@ -114,8 +121,14 @@ export default class CacheServiceV1 extends BaseService {
 				exportedAt: new Date().toISOString(),
 				remoteBaseDir: stdRemotePath(this.plugin.remoteBaseDir),
 			})
+			if (isCancelled()) {
+				return false
+			}
 
 			await webdav.createDirectory(this.remoteCacheDirPath, { recursive: true })
+			if (isCancelled()) {
+				return false
+			}
 			const uploaded = await webdav.putFileContents(
 				this.remoteCacheFilePath,
 				uint8ArrayToArrayBuffer(encodedStorage),

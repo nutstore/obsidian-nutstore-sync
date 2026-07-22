@@ -7,6 +7,7 @@ import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.
 import SkippedTask from '~/sync/tasks/skipped.task'
 import { BaseTask } from '~/sync/tasks/task.interface'
 import getTaskName from '~/utils/get-task-name'
+import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
 import {
 	emitCancelSync,
@@ -27,7 +28,9 @@ export default class SyncProgressModal extends Modal {
 	private progressText!: HTMLDivElement
 	private progressStats!: HTMLDivElement
 	private currentFile!: HTMLDivElement
+	private currentOperation!: HTMLDivElement
 	private filesList!: HTMLDivElement
+	private filesSection!: HTMLDivElement
 	private syncCancelled = false
 	private cancelSubscription: Subscription
 	private updateMtimeSubscription: Subscription
@@ -67,6 +70,28 @@ export default class SyncProgressModal extends Modal {
 		}
 
 		const progress = this.plugin.progressService.syncProgress
+		const preparation = this.plugin.progressService.preparationProgress
+
+		if (
+			preparation &&
+			!this.plugin.progressService.syncEnd &&
+			!this.plugin.progressService.syncFailed &&
+			!this.syncCancelled
+		) {
+			const text = getSyncPreparationText(preparation)
+			this.currentOperation.setText(text.operation)
+			this.currentFile.setText(preparation.traversal?.currentPath ?? '')
+			this.progressBar.addClass('nutstore-sync-progress-indeterminate')
+			this.progressBar.style.width = '40%'
+			this.progressText.setText('')
+			this.progressStats.setText(text.detail)
+			this.filesSection.hide()
+			return
+		}
+
+		this.currentOperation.setText(i18n.t('sync.syncingFiles'))
+		this.progressBar.removeClass('nutstore-sync-progress-indeterminate')
+		this.filesSection.show()
 
 		const percent =
 			Math.round((progress.completed.length / progress.total) * 100) || 0
@@ -88,11 +113,23 @@ export default class SyncProgressModal extends Modal {
 		if (this.plugin.progressService.syncEnd) {
 			this.stopButtonComponent.buttonEl.addClass('hidden')
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
-			this.currentFile.setText(i18n.t('sync.complete'))
+			const failedCount = this.plugin.progressService.syncFailedCount
+			this.currentOperation.setText(
+				failedCount > 0
+					? i18n.t('sync.completeWithFailed', { failedCount })
+					: i18n.t('sync.complete'),
+			)
+			this.currentFile.setText('')
 		} else if (this.syncCancelled) {
 			this.stopButtonComponent.buttonEl.addClass('hidden')
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
-			this.currentFile.setText(i18n.t('sync.cancelled'))
+			this.currentOperation.setText(i18n.t('sync.cancelled'))
+			this.currentFile.setText('')
+		} else if (this.plugin.progressService.syncFailed) {
+			this.stopButtonComponent.buttonEl.addClass('hidden')
+			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
+			this.currentOperation.setText(i18n.t('sync.failedStatus'))
+			this.currentFile.setText('')
 		} else {
 			if (progress.current) {
 				this.currentFile.setText(
@@ -270,7 +307,9 @@ export default class SyncProgressModal extends Modal {
 		this.progressText = progressText
 		this.progressStats = progressStats
 		this.currentFile = currentFile
+		this.currentOperation = currentOperation
 		this.filesList = filesList
+		this.filesSection = filesSection
 
 		const footerButtons = container.createDiv({
 			cls: 'border-t border-[var(--background-modifier-border)]',

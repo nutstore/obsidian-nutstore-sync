@@ -99,4 +99,21 @@ describe('CacheServiceV1 remote cache safety', () => {
 		expect(storage.setUploadMeta).not.toHaveBeenCalled()
 		expect(logger.error).toHaveBeenCalled()
 	})
+
+	it('skips remote cache work when already cancelled', async () => {
+		const webdav = {
+			exists: vi.fn(),
+			createDirectory: vi.fn(),
+			putFileContents: vi.fn(),
+		}
+
+		const saved = await createService(webdav).saveRemoteTraversalCache(
+			logger,
+			() => true,
+		)
+
+		expect(saved).toBe(false)
+		expect(storage.getTraversal).not.toHaveBeenCalled()
+		expect(webdav.exists).not.toHaveBeenCalled()
+	})
 })

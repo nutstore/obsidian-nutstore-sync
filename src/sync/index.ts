@@ -10,9 +10,12 @@ import {
 	CompletedTask,
 	emitEndSync,
 	emitPreparingSync,
+	emitSyncCancelled,
+	emitSyncPreparationProgress,
 	emitStartSync,
 	emitSyncError,
 	emitSyncProgress,
+	type SyncPreparationProgress,
 	onCancelSync,
 } from '~/events'
 import IFileSystem from '~/fs/fs.interface'
@@ -62,11 +65,22 @@ import SkippedTask from './tasks/skipped.task'
 import { BaseTask, TaskError, TaskResult } from './tasks/task.interface'
 import { mergeMkdirTasks } from './utils/merge-mkdir-tasks'
 import { mergeRemoveRemoteTasks } from './utils/merge-remove-remote-tasks'
-import { updateMtimeInRecord as updateMtimeInRecordUtil } from './utils/update-records'
+import {
+	countRecordUpdateOperations,
+	type UpdateMtimeProgress,
+	updateMtimeInRecord as updateMtimeInRecordUtil,
+} from './utils/update-records'
 
 export enum SyncStartMode {
 	MANUAL_SYNC = 'manual_sync',
 	AUTO_SYNC = 'auto_sync',
+}
+
+class SyncCancelledError extends Error {
+	constructor() {
+		super(i18n.t('sync.cancelled'))
+		this.name = 'SyncCancelledError'
+	}
 }
 
 export interface SyncStartResult {
@@ -79,6 +93,19 @@ export class NutstoreSync {
 	remoteFs: IFileSystem
 	localFS: IFileSystem
 	isCancelled: boolean = false
+	private preparationProgressEnabled = false
+
+	private emitPreparationProgress(progress: SyncPreparationProgress): void {
+		if (this.preparationProgressEnabled) {
+			emitSyncPreparationProgress(progress)
+		}
+	}
+
+	private throwIfCancelled(): void {
+		if (this.isCancelled) {
+			throw new SyncCancelledError()
+		}
+	}
 
 	private subscriptions: Subscription[] = []
 	private currentLogPrefix = '[[Sync]]'
@@ -99,6 +126,14 @@ export class NutstoreSync {
 			...this.options,
 			settings: plugin.settings,
 			filterRules,
+			onTraversalProgress: (traversal) => {
+				this.emitPreparationProgress({
+					phase:
+						traversal.phase === 'complete' ? 'analyzing' : 'traversingRemote',
+					traversal,
+				})
+			},
+			throwIfCancelled: () => this.throwIfCancelled(),
 		})
 		this.localFS = new LocalVaultFileSystem({
 			vault: this.options.vault,
@@ -130,6 +165,7 @@ export class NutstoreSync {
 		this.currentLogger = createSyncLogger(this.currentLogPrefix)
 		try {
 			const showNotice = mode === SyncStartMode.MANUAL_SYNC
+			this.preparationProgressEnabled = showNotice
 			let preparingEmitted = false
 			const emitPreparingOnce = () => {
 				if (preparingEmitted) {
@@ -157,6 +193,7 @@ export class NutstoreSync {
 			)
 			const cacheService = new CacheService(this.plugin)
 
+			this.emitPreparationProgress({ phase: 'checkingRemote' })
 			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 
 			if (!remoteBaseDirExits) {
@@ -165,7 +202,7 @@ export class NutstoreSync {
 
 			while (!remoteBaseDirExits) {
 				if (this.isCancelled) {
-					emitSyncError(new Error(i18n.t('sync.cancelled')))
+					emitSyncCancelled()
 					return {
 						ended: false,
 						ranTasks: false,
@@ -181,7 +218,7 @@ export class NutstoreSync {
 					if (is503Error(e as Error)) {
 						await this.handle503Error(60000)
 						if (this.isCancelled) {
-							emitSyncError(new Error(i18n.t('sync.cancelled')))
+							emitSyncCancelled()
 							return {
 								ended: false,
 								ranTasks: false,
@@ -195,6 +232,7 @@ export class NutstoreSync {
 				}
 			}
 
+			this.emitPreparationProgress({ phase: 'loadingState' })
 			await cacheService.restoreRemoteTraversalCacheIfMissing(this.logger)
 			const decider = (() => {
 				switch (syncPolicy) {
@@ -214,8 +252,16 @@ export class NutstoreSync {
 						return new TwoWaySyncDecider(this, syncRecord)
 				}
 			})()
+			this.emitPreparationProgress({ phase: 'analyzing' })
 			const tasks = await decider.decide()
-			await cacheService.saveRemoteTraversalCache(this.logger)
+			if (!this.isCancelled) {
+				this.emitPreparationProgress({ phase: 'savingCache' })
+				await cacheService.saveRemoteTraversalCache(
+					this.logger,
+					() => this.isCancelled,
+				)
+			}
+			this.throwIfCancelled()
 
 			this.logger.info('[Sync] Decision:', {
 				push: tasks.filter((t) => t instanceof PushTask).length,
@@ -259,7 +305,7 @@ export class NutstoreSync {
 			)
 
 			if (this.isCancelled) {
-				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				emitSyncCancelled()
 				return {
 					ended: false,
 					ranTasks: false,
@@ -272,6 +318,7 @@ export class NutstoreSync {
 				settings.confirmBeforeSync &&
 				firstTaskIdxNeedingConfirmation > -1
 			) {
+				this.plugin.progressService.closeProgressModal()
 				const confirmExec = await new TaskListConfirmModal(
 					this.app,
 					confirmedTasks,
@@ -279,7 +326,7 @@ export class NutstoreSync {
 				if (confirmExec.confirm) {
 					confirmedTasks = confirmExec.tasks
 				} else {
-					emitSyncError(new Error(i18n.t('sync.cancelled')))
+					emitSyncCancelled()
 					return {
 						ended: false,
 						ranTasks: false,
@@ -512,15 +559,6 @@ export class NutstoreSync {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
 			}
 
-			const hasSubstantialTask = optimizedTasks.some(
-				(task) =>
-					!(
-						task instanceof NoopTask ||
-						task instanceof CleanRecordTask ||
-						task instanceof SkippedTask
-					),
-			)
-
 			const totalDisplayableTasks = optimizedTasks.filter(
 				(t) => !(t instanceof NoopTask || t instanceof CleanRecordTask),
 			)
@@ -530,14 +568,14 @@ export class NutstoreSync {
 			if (totalDisplayableTasks.length > 0) {
 				emitSyncProgress(totalDisplayableTasks.length, [], null)
 			}
-			if (showNotice && hasSubstantialTask) {
-				this.plugin.progressService.showProgressModal()
-			}
-
 			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)
 			const allTasksResult: TaskResult[] = []
 			let shouldReloadSettings = false
+			const updateMtimeProgress: UpdateMtimeProgress = {
+				total: countRecordUpdateOperations(optimizedTasks),
+				completed: 0,
+			}
 
 			// Track all completed tasks across all chunks
 			const allCompletedTasks: CompletedTask[] = []
@@ -552,7 +590,11 @@ export class NutstoreSync {
 				shouldReloadSettings ||= taskChunk.some((task, index) =>
 					this.didTaskReloadPluginSettings(task, chunkResult[index]),
 				)
-				await this.updateMtimeInRecord(taskChunk, chunkResult)
+				await this.updateMtimeInRecord(
+					taskChunk,
+					chunkResult,
+					updateMtimeProgress,
+				)
 
 				if (this.isCancelled) {
 					break
@@ -560,7 +602,7 @@ export class NutstoreSync {
 			}
 
 			if (this.isCancelled) {
-				emitSyncError(new Error(i18n.t('sync.cancelled')))
+				emitSyncCancelled()
 				return {
 					ended: false,
 					ranTasks: false,
@@ -593,14 +635,20 @@ export class NutstoreSync {
 			emitEndSync({ failedCount, showNotice })
 			return { ended: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
-			emitSyncError(error as Error)
-			this.logger.error('Sync error:', error)
+			if (error instanceof SyncCancelledError) {
+				emitSyncCancelled()
+				this.logger.info('Sync cancelled')
+			} else {
+				emitSyncError(error as Error)
+				this.logger.error('Sync error:', error)
+			}
 			return {
 				ended: false,
 				ranTasks: false,
 				shouldReloadSettings: false,
 			}
 		} finally {
+			this.preparationProgressEnabled = false
 			this.currentLogPrefix = '[[Sync]]'
 			this.currentLogger = createSyncLogger(this.currentLogPrefix)
 			this.subscriptions.forEach((sub) => sub.unsubscribe())
@@ -659,7 +707,6 @@ export class NutstoreSync {
 		for (let i = 0; i < tasks.length; ++i) {
 			const task = tasks[i]
 			if (this.isCancelled) {
-				emitSyncError(new TaskError(i18n.t('sync.cancelled'), task))
 				break
 			}
 
@@ -739,7 +786,11 @@ export class NutstoreSync {
 		}
 	}
 
-	async updateMtimeInRecord(tasks: BaseTask[], results: TaskResult[]) {
+	async updateMtimeInRecord(
+		tasks: BaseTask[],
+		results: TaskResult[],
+		progress: UpdateMtimeProgress,
+	) {
 		return updateMtimeInRecordUtil(
 			this.plugin,
 			this.vault,
@@ -748,6 +799,7 @@ export class NutstoreSync {
 			results,
 			10,
 			this.logger,
+			progress,
 		)
 	}
 

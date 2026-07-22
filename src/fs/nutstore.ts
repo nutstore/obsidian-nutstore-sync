@@ -14,7 +14,10 @@ import GlobMatch, {
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { isSyncCacheLocalPath } from '~/utils/sync-cache-file'
-import { ResumableWebDAVTraversal } from '~/utils/traverse-webdav'
+import {
+	ResumableWebDAVTraversal,
+	type WebDAVTraversalProgress,
+} from '~/utils/traverse-webdav'
 import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
@@ -31,6 +34,8 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				configDir?: string
 				configDirSyncMode?: ConfigDirSyncMode
 			}
+			onTraversalProgress?: (progress: WebDAVTraversalProgress) => void
+			throwIfCancelled?: () => void
 		},
 	) {}
 
@@ -44,6 +49,8 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				this.options.remoteBaseDir,
 			),
 			saveInterval: 1,
+			onProgress: this.options.onTraversalProgress,
+			throwIfCancelled: this.options.throwIfCancelled,
 		})
 		const traversedStats = await traversal.traverse()
 

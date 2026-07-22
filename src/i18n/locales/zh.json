@@ -415,8 +415,24 @@
 		},
 		"requestsTooFrequent": "请求过于频繁，插件将在 {{time}} 后自动继续同步任务",
 		"preparing": "📋 准备同步",
+		"preparation": {
+			"checkingRemote": "正在检查远端目录…",
+			"loadingState": "正在读取同步状态…",
+			"scanningRemote": "正在扫描远端目录…",
+			"checkingChanges": "正在检查远端变化…",
+			"retryingRemote": "服务器繁忙，30 秒后重试…",
+			"analyzing": "正在分析文件差异…",
+			"savingCache": "正在保存远端遍历缓存…",
+			"traversalStats": "已扫描 {{processed}} 个目录，待扫描 {{queued}} 个目录，已发现 {{items}} 个项目",
+			"incrementalStats": "已处理 {{changes}} 项远端变化"
+		},
 		"start": "⌛️ 开始同步",
 		"complete": "✅ 同步完成",
+		"result": {
+			"title": "同步成功",
+			"success": "所有同步任务均已完成",
+			"noChanges": "当前没有需要同步的文件"
+		},
 		"completeWithFailed": "❌ 同步完成，但有 {{failedCount}} 个任务失败",
 		"failedWithError": "同步失败，错误信息: {{error}}",
 		"progress": "同步进度: {{percent}}%",

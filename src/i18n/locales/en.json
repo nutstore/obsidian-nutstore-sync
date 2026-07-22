@@ -415,8 +415,24 @@
 		},
 		"requestsTooFrequent": "Requests too frequent, plugin will resume sync at {{time}}",
 		"preparing": "📋 Preparing sync",
+		"preparation": {
+			"checkingRemote": "Checking the remote directory…",
+			"loadingState": "Reading sync state…",
+			"scanningRemote": "Scanning remote directories…",
+			"checkingChanges": "Checking remote changes…",
+			"retryingRemote": "The server is busy. Retrying in 30 seconds…",
+			"analyzing": "Analyzing file differences…",
+			"savingCache": "Saving the remote traversal cache…",
+			"traversalStats": "Scanned {{processed}} directories, {{queued}} queued, {{items}} items found",
+			"incrementalStats": "Processed {{changes}} remote changes"
+		},
 		"start": "⌛️ Starting sync",
 		"complete": "✅ Sync completed",
+		"result": {
+			"title": "Sync successful",
+			"success": "All synchronization tasks have been completed",
+			"noChanges": "There are currently no files to synchronize"
+		},
 		"completeWithFailed": "❌ Sync completed with {{failedCount}} failed tasks",
 		"failedWithError": "Sync failed with error: {{error}}",
 		"progress": "Sync progress: {{percent}}%",
