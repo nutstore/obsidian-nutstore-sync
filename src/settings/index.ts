@@ -106,7 +106,6 @@ export interface NutstoreSettings {
 	credential: string
 	nutstoreEnterpriseBaseUrl: string
 	remoteDir: string
-	useGitStyle: boolean
 	conflictStrategy: ConflictStrategy
 	oauthResponseText: string
 	loginMode: 'manual' | 'sso'
@@ -148,7 +147,6 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	credential: '',
 	nutstoreEnterpriseBaseUrl: '',
 	remoteDir: '',
-	useGitStyle: false,
 	conflictStrategy: ConflictStrategy.DiffMatchPatch,
 	oauthResponseText: '',
 	loginMode: 'sso',

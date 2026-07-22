@@ -11,7 +11,6 @@ import {
 	readLocalBinary,
 	writeLocalText,
 } from '~/utils/local-vault-io'
-import { mergeDigIn } from '~/utils/merge-dig-in'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import { resolveByIntelligentMerge } from '../core/merge-utils'
@@ -33,7 +32,6 @@ export default class ConflictResolveTask extends BaseTask {
 			strategy: ConflictStrategy
 			remoteStat?: StatModel
 			localStat?: StatModel
-			useGitStyle: boolean
 			mobileAppDownloadFileChunkSize?: string
 		},
 	) {
@@ -239,10 +237,12 @@ export default class ConflictResolveTask extends BaseTask {
 				localContentText: localText,
 				remoteContentText: remoteText,
 				baseContentText: baseText,
+				filePath: this.localPath,
+				hasBase: baseBlob !== null,
 			})
 
 			this.logger.info(
-				`[ConflictResolve/DiffMatchPatchOrSkip] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → skip'}`,
+				`[ConflictResolve/DiffMatchPatchOrSkip] ${this.localPath}: intelligent merge ${mergeResult.success ? 'ok' : 'failed → skip'}`,
 			)
 
 			if (!mergeResult.success) {
@@ -324,34 +324,16 @@ export default class ConflictResolveTask extends BaseTask {
 				localContentText: localText,
 				remoteContentText: remoteText,
 				baseContentText: baseText,
+				filePath: this.localPath,
+				hasBase: baseBlob !== null,
 			})
 
 			this.logger.info(
-				`[ConflictResolve/DiffMatchPatch] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → fallback to mergeDigIn'}`,
+				`[ConflictResolve/DiffMatchPatch] ${this.localPath}: intelligent merge ${mergeResult.success ? 'ok' : 'failed'}`,
 			)
 
 			if (!mergeResult.success) {
-				// If patch_apply fails to resolve all, use mergeDigIn as a further fallback
-				const mergeDigInResult = mergeDigIn(localText, baseText, remoteText, {
-					stringSeparator: '\n',
-					useGitStyle: this.options.useGitStyle,
-				})
-				// mergeDigIn itself might produce conflict markers if it can't fully resolve.
-				// The task should handle this merged text (which might contain markers).
-				const mergedDmpText = mergeDigInResult.result.join('\n')
-
-				const putResult = await this.webdav.putFileContents(
-					this.remotePath,
-					mergedDmpText,
-					{ overwrite: true },
-				)
-
-				if (putResult) {
-					await writeLocalText(this.vault, this.localPath, mergedDmpText)
-					return { success: true } as const
-				} else {
-					throw new Error(i18n.t('sync.error.failedToUploadMerged'))
-				}
+				throw new Error(i18n.t('sync.error.failedToAutoMerge'))
 			}
 
 			if (mergeResult.isIdentical) {

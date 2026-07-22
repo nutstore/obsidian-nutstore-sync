@@ -166,18 +166,6 @@ export default class CommonSettings extends BaseSettings {
 			)
 
 		new Setting(this.containerEl)
-			.setName(i18n.t('settings.useGitStyle.name'))
-			.setDesc(i18n.t('settings.useGitStyle.desc'))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.useGitStyle)
-					.onChange(async (value) => {
-						this.plugin.settings.useGitStyle = value
-						await this.plugin.settingsService.saveSettings()
-					}),
-			)
-
-		new Setting(this.containerEl)
 			.setName(i18n.t('settings.confirmBeforeSync.name'))
 			.setDesc(i18n.t('settings.confirmBeforeSync.desc'))
 			.addToggle((toggle) =>

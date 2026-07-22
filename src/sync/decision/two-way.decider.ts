@@ -188,7 +188,6 @@ export async function twoWayDecider(
 										),
 										localStat: local,
 										remoteStat: remote,
-										useGitStyle: settings.useGitStyle,
 										mobileAppDownloadFileChunkSize:
 											settings.mobileAppDownloadFileChunkSize,
 									}),
@@ -409,7 +408,6 @@ export async function twoWayDecider(
 								),
 								localStat: local,
 								remoteStat: remote,
-								useGitStyle: settings.useGitStyle,
 								mobileAppDownloadFileChunkSize:
 									settings.mobileAppDownloadFileChunkSize,
 							}),

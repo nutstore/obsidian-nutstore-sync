@@ -60,10 +60,6 @@
 			"logout": "Logout",
 			"logoutSuccess": "Logged out successfully"
 		},
-		"useGitStyle": {
-			"name": "Use git-style conflict markers",
-			"desc": "Use <<<<<<< and >>>>>>> markers for conflicts instead of HTML tags"
-		},
 		"backupWarning": {
 			"name": "Backup warning",
 			"desc": "⚠️ Note: Sync process will modify or delete local files. Please backup important files before syncing."

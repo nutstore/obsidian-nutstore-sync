@@ -13,21 +13,6 @@
 	animation: nutstore-sync-spin 2s linear infinite;
 }
 
-.conflict.ours,
-.conflict.theirs {
-	position: relative;
-	white-space: pre-wrap;
-	word-break: break-word;
-}
-
-.conflict.ours {
-	background-color: rgb(0, 255, 208);
-}
-
-.conflict.theirs {
-	background-color: rgb(0, 132, 255);
-}
-
 .connection-status {
 	padding: 6px 12px;
 	border-radius: 4px;
