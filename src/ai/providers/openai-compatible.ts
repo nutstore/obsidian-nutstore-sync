@@ -4,18 +4,17 @@ import {
 	createProviderSettings,
 	createResolvedLanguageModel,
 } from './common'
+import { getProviderDefaultBaseURL } from './defaults'
 import type { AIProviderResolver } from './types'
 import type { AIProviderConfig } from '~/ai/core/types'
 import i18n from '~/i18n'
-
-const OPENAI_BASE_URL = 'https://api.openai.com/v1'
 
 function getBaseURL(provider: AIProviderConfig) {
 	const configuredBaseURL = provider.api?.trim()
 	if (configuredBaseURL) {
 		return configuredBaseURL
 	}
-	return provider.npm === '@ai-sdk/openai' ? OPENAI_BASE_URL : undefined
+	return getProviderDefaultBaseURL(provider.npm)
 }
 
 function assertOpenAICompatibleProviderUsable(provider: AIProviderConfig) {

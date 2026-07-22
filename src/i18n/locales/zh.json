@@ -153,8 +153,8 @@
 				"presetModelsRefreshFailed": "更新失败，继续使用本地/内置模型列表",
 				"presetModelsRefreshFailedWithReason": "更新失败，继续使用本地/内置模型列表：{{reason}}",
 				"empty": "当前还没有配置模型提供商。",
-				"openaiDefault": "使用 OpenAI 默认端点",
-				"presetCustom": "自定义（OpenAI Compatible）",
+				"defaultEndpoint": "默认端点",
+				"presetCustom": "自定义",
 				"updateModels": "更新",
 				"updateModelsHint": "预设中还有 {{count}} 个模型可同步到当前提供商。",
 				"updateModelsSuccess": "已增加 {{count}} 个模型"
@@ -173,6 +173,13 @@
 				"allowBrowserCors": {
 					"name": "允许浏览器跨域请求",
 					"desc": "开启后将优先使用浏览器原生 fetch，可在支持的提供商上获得流式输出"
+				},
+				"apiFormat": {
+					"name": "API 格式",
+					"desc": "与该提供商通信使用的协议",
+					"openaiChatCompletions": "OpenAI Chat Completions",
+					"anthropic": "Anthropic Messages",
+					"other": "其他（{{npm}}）"
 				}
 			},
 			"models": {

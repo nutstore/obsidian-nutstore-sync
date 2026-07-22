@@ -11,6 +11,7 @@ import {
 	listProviders,
 } from '~/ai/catalog/config'
 import { AIProviderConfig } from '~/ai/core/types'
+import { getProviderDefaultBaseURL } from '~/ai/providers/defaults'
 import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
 import { onNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import i18n from '~/i18n'
@@ -201,7 +202,11 @@ export default class ProvidersManagerModal extends Modal {
 			const missingPresetModels = listMissingPresetModelsForProvider(provider)
 			new Setting(contentEl)
 				.setName(provider.name || i18n.t('settings.ai.unnamedProvider'))
-				.setDesc(provider.api || i18n.t('settings.ai.providers.openaiDefault'))
+				.setDesc(
+					provider.api ||
+						getProviderDefaultBaseURL(provider.npm) ||
+						i18n.t('settings.ai.providers.defaultEndpoint'),
+				)
 				.then((setting) => {
 					if (missingPresetModels.length > 0) {
 						setting.descEl.createDiv({

@@ -195,8 +195,8 @@
 				"presetModelsRefreshFailed": "Update failed. Continuing with local/built-in model list.",
 				"presetModelsRefreshFailedWithReason": "Update failed. Continuing with local/built-in model list: {{reason}}",
 				"empty": "No provider configured yet.",
-				"openaiDefault": "OpenAI default endpoint",
-				"presetCustom": "Custom (OpenAI Compatible)",
+				"defaultEndpoint": "Default endpoint",
+				"presetCustom": "Custom",
 				"updateModels": "Update models",
 				"updateModelsHint": "{{count}} preset model(s) can be added to this provider.",
 				"updateModelsSuccess": "{{count}} model(s) added"
@@ -215,6 +215,13 @@
 				"allowBrowserCors": {
 					"name": "Allow browser CORS requests",
 					"desc": "Prefer native browser fetch for providers that support CORS, enabling streaming output"
+				},
+				"apiFormat": {
+					"name": "API format",
+					"desc": "Protocol used to talk to this provider",
+					"openaiChatCompletions": "OpenAI Chat Completions",
+					"anthropic": "Anthropic Messages",
+					"other": "Other ({{npm}})"
 				}
 			},
 			"models": {

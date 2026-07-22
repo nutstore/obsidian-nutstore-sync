@@ -4,9 +4,8 @@ import {
 	createProviderSettings,
 	createResolvedLanguageModel,
 } from './common'
+import { XAI_DEFAULT_BASE_URL } from './defaults'
 import type { AIProviderResolver } from './types'
-
-const XAI_API_BASE_URL = 'https://api.x.ai/v1'
 
 export const xaiProviderResolver: AIProviderResolver = {
 	assertUsable: assertProviderApiKeyUsable,
@@ -15,7 +14,7 @@ export const xaiProviderResolver: AIProviderResolver = {
 		const settings = createProviderSettings(provider)
 		const factory = createOpenAICompatible({
 			...settings,
-			baseURL: settings.baseURL || XAI_API_BASE_URL,
+			baseURL: settings.baseURL || XAI_DEFAULT_BASE_URL,
 		})
 		return createResolvedLanguageModel(provider, factory.chatModel(modelId))
 	},

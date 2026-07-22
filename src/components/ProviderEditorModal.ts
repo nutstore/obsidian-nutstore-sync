@@ -16,6 +16,17 @@ import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
 import ProviderCorsConfirmModal from './ProviderCorsConfirmModal'
 
+const API_FORMAT_OPTIONS = [
+	{
+		value: '@ai-sdk/openai-compatible',
+		labelKey: 'settings.ai.provider.apiFormat.openaiChatCompletions',
+	},
+	{
+		value: '@ai-sdk/anthropic',
+		labelKey: 'settings.ai.provider.apiFormat.anthropic',
+	},
+] as const
+
 export default class ProviderEditorModal extends Modal {
 	private draft: AIProviderConfig
 	private cleanupModalMount?: () => void
@@ -60,6 +71,28 @@ export default class ProviderEditorModal extends Modal {
 					this.draft.name = value
 				}),
 			)
+
+		new Setting(bodyEl)
+			.setName(i18n.t('settings.ai.provider.apiFormat.name'))
+			.setDesc(i18n.t('settings.ai.provider.apiFormat.desc'))
+			.addDropdown((dropdown) => {
+				const knownValues = API_FORMAT_OPTIONS.map((o) => o.value)
+				for (const opt of API_FORMAT_OPTIONS) {
+					dropdown.addOption(opt.value, i18n.t(opt.labelKey))
+				}
+				if (!knownValues.includes(this.draft.npm as never)) {
+					dropdown.addOption(
+						this.draft.npm,
+						i18n.t('settings.ai.provider.apiFormat.other', {
+							npm: this.draft.npm,
+						}),
+					)
+				}
+				dropdown.setValue(this.draft.npm)
+				dropdown.onChange((value) => {
+					this.draft.npm = value
+				})
+			})
 
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.baseUrl.name'))
