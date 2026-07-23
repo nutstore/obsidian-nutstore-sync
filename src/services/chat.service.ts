@@ -447,6 +447,15 @@ export default class ChatService extends BaseService {
 		return session
 	}
 
+	async createDraftSession(text: string, userContext: UserContextItem[] = []) {
+		const session = await this.createSession()
+		for (const item of userContext) {
+			this.userContextManager.addUserContext(item)
+		}
+		this.userContextManager.updateInputDraft(text)
+		return session
+	}
+
 	async switchSession(sessionId: string) {
 		await this.initialize()
 		if (!this.state.sessionIndex.some((item) => item.id === sessionId)) {

@@ -83,6 +83,7 @@ export default class SettingsService extends BaseService {
 	async saveSettings() {
 		await this.plugin.saveData(this.plugin.settings)
 		await this.plugin.chatService.handleSettingsChanged()
+		await this.plugin.aiConflictResolverService.refresh()
 	}
 
 	async loadLocalSettings() {
@@ -128,6 +129,7 @@ export default class SettingsService extends BaseService {
 			await this.plugin.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
 			await this.plugin.i18nService.update()
 			await this.plugin.chatService.handleSettingsChanged()
+			await this.plugin.aiConflictResolverService.refresh()
 			await this.plugin.scheduledSyncService.updateInterval()
 			await this.plugin.settingTab?.rerenderIfVisible()
 		})()

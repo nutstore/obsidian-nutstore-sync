@@ -533,6 +533,13 @@
 		"sessionDeleted": "会话已删除",
 		"exportSaved": "会话已导出：{{fileName}}",
 		"exportFailed": "导出会话失败",
+		"conflictResolution": {
+			"action": "使用 AI 解决 {{count}} 处冲突",
+			"prompt": "请解决上下文文件中的所有版本冲突。逐个分析 <<<<<<<、=======、>>>>>>> 标记两侧的内容，保留双方不冲突且有价值的信息，对重复内容进行语义合并，保持原有 Markdown 结构、Frontmatter、内部链接和语言风格。不要臆造文件中不存在的信息。如果两侧内容相互矛盾、无法同时成立，并且文件中没有足够依据确定取舍，请先在对话中向我提出具体问题，等待我的回答，不要修改文件或自行添加折中方案；收到回答后再继续解决冲突。完成后删除所有冲突标记，并检查结果是否连贯完整。只修改这个文件。",
+			"alreadyResolved": "文件中的冲突已经解决",
+			"modelUnavailable": "请先配置默认 AI Provider 和 Model",
+			"failed": "无法创建 AI 冲突解决会话"
+		},
 		"exportDialog": {
 			"title": "导出会话",
 			"description": "导出为 Markdown 文件并保存到笔记库。",

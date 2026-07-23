@@ -533,6 +533,13 @@
 		"sessionDeleted": "Session deleted",
 		"exportSaved": "Session exported: {{fileName}}",
 		"exportFailed": "Failed to export session",
+		"conflictResolution": {
+			"action": "Resolve {{count}} conflict(s) with AI",
+			"prompt": "Resolve every merge conflict in the context file. Analyze both sides of each <<<<<<<, =======, and >>>>>>> block. Preserve useful, non-conflicting information from both sides, merge duplicate passages by meaning, and retain the existing Markdown structure, frontmatter, internal links, and writing style. Do not invent information that is not present in the file. If the two sides contradict each other, cannot both be true, and the file does not provide enough evidence to choose one, ask me a specific question in the chat and wait for my answer; do not modify the file or invent a compromise before I respond. Continue resolving the conflicts after receiving my answer. Remove every conflict marker when finished and verify that the result is coherent and complete. Modify only this file.",
+			"alreadyResolved": "The conflicts in this file are already resolved",
+			"modelUnavailable": "Configure a default AI provider and model first",
+			"failed": "Could not create an AI conflict-resolution session"
+		},
 		"exportDialog": {
 			"title": "Export session",
 			"description": "Export to a Markdown file in your vault.",

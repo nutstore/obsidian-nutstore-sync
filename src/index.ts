@@ -14,6 +14,7 @@ import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import i18n from './i18n'
 import ChatService from './services/chat.service'
+import AIConflictResolverService from './services/ai-conflict-resolver.service'
 import CommandService from './services/command.service'
 import EventsService from './services/events.service'
 import GcService from './services/gc.service'
@@ -60,6 +61,7 @@ export default class NutstorePlugin extends Plugin {
 	public syncExecutorService = new SyncExecutorService(this)
 	public gcService = new GcService(this)
 	public chatService = new ChatService(this)
+	public aiConflictResolverService = new AIConflictResolverService(this)
 	public realtimeSyncService = new RealtimeSyncService(
 		this,
 		this.syncExecutorService,
@@ -87,6 +89,7 @@ export default class NutstorePlugin extends Plugin {
 			this.protocolService,
 			this.realtimeSyncService,
 			this.chatService,
+			this.aiConflictResolverService,
 			this.scheduledSyncService,
 		]
 	}
@@ -134,16 +137,7 @@ export default class NutstorePlugin extends Plugin {
 										selectedText: editor.getSelection(),
 									}),
 								)
-								const existingLeaf =
-									this.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
-								const leaf =
-									existingLeaf || this.app.workspace.getRightLeaf(false)
-								if (!leaf) return
-								await leaf.setViewState({
-									type: CHATBOX_VIEW_TYPE,
-									active: true,
-								})
-								this.app.workspace.revealLeaf(leaf)
+								await this.commandService.openChatbox()
 							})
 					})
 				})
