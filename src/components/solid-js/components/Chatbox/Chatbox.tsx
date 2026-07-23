@@ -528,7 +528,7 @@ function Chatbox(props: ChatboxProps) {
 
 	createEffect(
 		on(
-			() => props.activeSessionId,
+			() => [props.activeSessionId, props.draft.text] as const,
 			() => {
 				setInput(props.draft.text)
 			},

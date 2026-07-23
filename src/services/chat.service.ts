@@ -453,6 +453,7 @@ export default class ChatService extends BaseService {
 			this.userContextManager.addUserContext(item)
 		}
 		this.userContextManager.updateInputDraft(text)
+		this.notify()
 		return session
 	}
 
