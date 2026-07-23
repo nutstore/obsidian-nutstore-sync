@@ -187,6 +187,13 @@ export default class NutstorePlugin extends Plugin {
 		return toBase64(token)
 	}
 
+	async getRemoteAccountId() {
+		if (this.settings.loginMode === 'sso') {
+			return (await this.getDecryptedOAuthInfo()).username.trim()
+		}
+		return this.settings.account.trim()
+	}
+
 	/**
 	 * 检查账号配置是否完整
 	 * @returns true 表示配置完整，false 表示未配置或配置不完整
