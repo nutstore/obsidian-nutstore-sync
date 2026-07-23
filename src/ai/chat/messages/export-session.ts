@@ -32,6 +32,8 @@ interface ExportSessionParams {
 	includeToolMessages: boolean
 }
 
+const MAX_EXPORT_TITLE_BYTES = 200
+
 function formatExportTimestamp(date: Date) {
 	const pad = (value: number) => String(value).padStart(2, '0')
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`
@@ -44,14 +46,31 @@ function formatAssetsDirectory(date: Date) {
 	)
 }
 
-function sanitizeExportFileName(input: string) {
+function truncateUtf8(input: string, maxBytes: number) {
+	const encoder = new TextEncoder()
+	let byteLength = 0
+	let result = ''
+	for (const character of input) {
+		const characterBytes = encoder.encode(character).byteLength
+		if (byteLength + characterBytes > maxBytes) break
+		result += character
+		byteLength += characterBytes
+	}
+	return result
+}
+
+export function sanitizeExportFileName(input: string) {
 	const normalized = input
 		.replace(/\s+/g, ' ')
 		.trim()
 		.replace(/[\\/:*?"<>|]/g, '-')
 		.replace(/^\.+/, '')
 		.replace(/[. ]+$/, '')
-	return normalized || 'chat-session'
+	const truncated = truncateUtf8(normalized, MAX_EXPORT_TITLE_BYTES).replace(
+		/[. ]+$/,
+		'',
+	)
+	return truncated || 'chat-session'
 }
 
 function toMarkdownHeadingText(value: string) {
