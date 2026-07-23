@@ -64,6 +64,7 @@ export async function updateMtimeInRecord(
 		settings: plugin.settings,
 		vault,
 		token,
+		remoteAccountId: await plugin.getRemoteAccountId(),
 		remoteBaseDir: stdRemotePath(remoteBaseDir),
 	})
 

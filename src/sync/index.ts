@@ -116,6 +116,7 @@ export class NutstoreSync {
 		private options: {
 			vault: Vault
 			token: string
+			remoteAccountId: string
 			remoteBaseDir: string
 			webdav: WebDAVClient
 		},
@@ -325,6 +326,7 @@ export class NutstoreSync {
 				).open()
 				if (confirmExec.confirm) {
 					confirmedTasks = confirmExec.tasks
+					this.plugin.progressService.showProgressModal()
 				} else {
 					emitSyncCancelled()
 					return {

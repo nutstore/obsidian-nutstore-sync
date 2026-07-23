@@ -14,6 +14,7 @@ import GlobMatch, {
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { isSyncCacheLocalPath } from '~/utils/sync-cache-file'
+import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
 import {
 	ResumableWebDAVTraversal,
 	type WebDAVTraversalProgress,
@@ -27,6 +28,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			vault: Vault
 			settings: NutstoreSettings
 			token: string
+			remoteAccountId: string
 			remoteBaseDir: string
 			filterRules?: {
 				exclusionRules: GlobMatchOptions[]
@@ -45,7 +47,8 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			token: this.options.token,
 			remoteBaseDir: this.options.remoteBaseDir,
 			kvKey: await getTraversalWebDAVDBKey(
-				this.options.token,
+				this.options.remoteAccountId,
+				getNutstoreDavEndpoint(this.options.settings),
 				this.options.remoteBaseDir,
 			),
 			saveInterval: 1,

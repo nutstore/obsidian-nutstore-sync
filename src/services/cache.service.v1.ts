@@ -11,6 +11,7 @@ import {
 import type { SyncLogger } from '~/sync/log'
 import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import globalLogger from '~/utils/logger'
+import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import {
 	getRemoteSyncCacheDirPath,
@@ -178,7 +179,8 @@ export default class CacheServiceV1 extends BaseService {
 
 	private async getKVKey() {
 		return getTraversalWebDAVDBKey(
-			await this.plugin.getToken(),
+			await this.plugin.getRemoteAccountId(),
+			getNutstoreDavEndpoint(this.plugin.settings),
 			this.plugin.remoteBaseDir,
 		)
 	}
