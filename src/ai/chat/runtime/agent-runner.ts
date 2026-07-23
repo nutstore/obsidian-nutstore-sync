@@ -119,7 +119,7 @@ export class AgentRunner {
 				...fileToolsContext,
 				scratch: stableContext.scratch,
 			},
-			edit_file: fileToolsContext,
+			apply_patch: fileToolsContext,
 			note_neighborhood: {
 				app: stableContext.app,
 				session,

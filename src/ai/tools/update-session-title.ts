@@ -5,8 +5,11 @@ import { textValue } from './shared'
 import { recordMetadataDep } from './tool-context'
 
 export const updateSessionTitleTool = tool({
-	description:
-		'Update the title of the current chat session. Call this once after the first user message to summarize the conversation topic as a concise title (at most 6 words, no surrounding quotes, no trailing punctuation). Do not call it again unless the user explicitly asks to rename the session.',
+	description: [
+		'Update the title of the current chat session.',
+		'Call this once after the first user message to summarize the conversation topic as a concise title (at most 6 words, no surrounding quotes, no trailing punctuation).',
+		'Do not call it again unless the user explicitly asks to rename the session.',
+	].join(' '),
 	inputSchema: z.object({
 		title: textValue('title').check(
 			z.maxLength(

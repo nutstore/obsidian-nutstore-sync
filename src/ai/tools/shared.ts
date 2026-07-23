@@ -47,50 +47,6 @@ export const integerValue = (field: string) =>
 		z.int(i18n.t('chatbox.errors.toolFieldRequired', { field })),
 	)
 
-interface ReplaceResult {
-	content: string
-	matchCount: number
-}
-
-export function replaceUniqueOccurrence(
-	content: string,
-	oldText: string,
-	newText: string,
-) {
-	if (oldText === '') {
-		if (content !== '') {
-			throw new Error(i18n.t('chatbox.errors.editMatchNotUnique'))
-		}
-		return {
-			content: newText,
-			matchCount: 1,
-		} satisfies ReplaceResult
-	}
-
-	let matchIndex = content.indexOf(oldText)
-	let matchCount = 0
-
-	while (matchIndex !== -1) {
-		matchCount += 1
-		if (matchCount > 1) {
-			break
-		}
-		matchIndex = content.indexOf(oldText, matchIndex + oldText.length)
-	}
-
-	if (matchCount === 0) {
-		throw new Error(i18n.t('chatbox.errors.editMatchNotFound'))
-	}
-	if (matchCount > 1) {
-		throw new Error(i18n.t('chatbox.errors.editMatchNotUnique'))
-	}
-
-	return {
-		content: content.replace(oldText, newText),
-		matchCount,
-	} satisfies ReplaceResult
-}
-
 export function resolveCurrentNotePath({
 	session,
 	agentId,

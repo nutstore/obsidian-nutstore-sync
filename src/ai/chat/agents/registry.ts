@@ -47,7 +47,7 @@ function createMasterAgentDefinition({
 		systemPrompt: MASTER_SYSTEM_PROMPT,
 		tools: [
 			'bash',
-			'edit_file',
+			'apply_patch',
 			'note_neighborhood',
 			'todowrite',
 			'update_session_title',

@@ -693,8 +693,6 @@
 			"fileNotFound": "未找到文件：{{path}}",
 			"notFile": "该路径不是文件：{{path}}",
 			"fileNotRead": "编辑失败，请至少先读取一次 {{path}} 再编辑。",
-			"editMatchNotFound": "文件中未找到要替换的精确文本。",
-			"editMatchNotUnique": "要替换的精确文本必须且只能匹配一次。",
 			"sessionNotFound": "目标会话已不存在",
 			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用"
 		}

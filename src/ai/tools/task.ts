@@ -37,7 +37,15 @@ export const taskTool = tool({
 		)
 			.map((definition) => `${definition.id}: ${definition.description}`)
 			.join('; ')
-		return `Dispatch work to a specialized subagent in an isolated context. Available subagent types: ${availableTypes}. Returns immediately with a task ID while the subagent continues asynchronously. The subagent receives only prompt, so include all necessary context. After dispatching, continue only with work that neither overlaps with this task nor depends on its result. Otherwise, stop and wait for the task-result-ready system notification. When the task settles, the notification provides the absolute result file path.`
+		return [
+			'Dispatch work to a specialized subagent in an isolated context.',
+			`Available subagent types: ${availableTypes}.`,
+			'Returns immediately with a task ID while the subagent continues asynchronously.',
+			'The subagent receives only prompt, so include all necessary context.',
+			'After dispatching, continue only with work that neither overlaps with this task nor depends on its result.',
+			'Otherwise, stop and wait for the task-result-ready system notification.',
+			'When the task settles, the notification provides the absolute result file path.',
+		].join(' ')
 	},
 	inputSchema: z.object({
 		subagent_type: z.string().check(

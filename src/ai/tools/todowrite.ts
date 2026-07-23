@@ -35,8 +35,16 @@ export async function executeTodoWrite(
 }
 
 export const todoWriteTool = tool({
-	description:
-		'Create, update, query, and maintain a structured todo list for the current coding session. Use it proactively when work has more than three steps, needs planning, or the user explicitly asks for task tracking. Call without todos to query the current list. Call with the complete current todos array to save the list. Each todo contains only content, status, and priority. Status values are pending, in_progress, completed, or cancelled. Priority values are high, medium, or low. Keep exactly one active todo in in_progress when possible, update progress in real time, and do not batch-complete multiple todos at the end.',
+	description: [
+		'Create, update, query, and maintain a structured todo list for the current coding session.',
+		'Use it proactively when work has more than three steps, needs planning, or the user explicitly asks for task tracking.',
+		'Call without todos to query the current list.',
+		'Call with the complete current todos array to save the list.',
+		'Each todo contains only content, status, and priority.',
+		'Status values are pending, in_progress, completed, or cancelled.',
+		'Priority values are high, medium, or low.',
+		'Keep exactly one active todo in in_progress when possible, update progress in real time, and do not batch-complete multiple todos at the end.',
+	].join(' '),
 	inputSchema: todoWriteInputSchema,
 	contextSchema: z.object({
 		session: sessionDep,

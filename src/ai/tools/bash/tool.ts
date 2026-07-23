@@ -33,8 +33,12 @@ function isAllowedBashCwd(pathValue: string) {
 }
 
 export const bashTool = tool({
-	description:
-		"Execute bash against a virtual filesystem where the Obsidian vault is mounted at /vault and built-in Skills are read-only under /.agents/skills. Use standard shell commands like ls, cat, rg, mkdir, mv, cp, and rm. Treat /vault as the user's personal knowledge base — only write there for content the user intends to keep; use /tmp for intermediate or scratch work.",
+	description: [
+		'Execute a browser-based bash subset against a virtual filesystem where the Obsidian vault is mounted at /vault and built-in Skills are read-only under /.agents/skills.',
+		'This is not the host shell: node, python, xxd, and some command flags are unavailable.',
+		'Prefer supported commands such as ls, cat, rg, sed, awk, od, mkdir, mv, cp, and rm.',
+		"Treat /vault as the user's personal knowledge base — only write there for content the user intends to keep; use /tmp for intermediate or scratch work.",
+	].join(' '),
 	inputSchema: z.object({
 		script: textValue('script'),
 		cwd: z._default(z.string(), VAULT_MOUNT_POINT),

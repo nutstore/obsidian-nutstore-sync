@@ -83,8 +83,13 @@ export function buildNoteNeighborhood(
 }
 
 export const noteNeighborhoodTool = tool({
-	description:
-		'Discover notes related to one existing note through Obsidian links. Use this tool when investigating backlinks, outgoing links, nearby graph context, related notes, or notes potentially affected by changes. Use the returned note paths as candidates for subsequent reading. Input one concrete note file or Obsidian link path plus a depth. Do not use it for full-text search, directory enumeration, or note content retrieval.',
+	description: [
+		'Discover notes related to one existing note through Obsidian links.',
+		'Use this tool when investigating backlinks, outgoing links, nearby graph context, related notes, or notes potentially affected by changes.',
+		'Use the returned note paths as candidates for subsequent reading.',
+		'Input one concrete note file or Obsidian link path plus a depth.',
+		'Do not use it for full-text search, directory enumeration, or note content retrieval.',
+	].join(' '),
 	inputSchema: z.object({
 		note: z
 			.string()

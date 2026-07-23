@@ -1,5 +1,5 @@
 import { bashTool } from './bash/tool'
-import { editFileTool } from './edit-file'
+import { applyPatchTool } from './apply-patch'
 import { noteNeighborhoodTool } from './note-neighborhood'
 import { todoWriteTool } from './todowrite'
 import { updateSessionTitleTool } from './update-session-title'
@@ -15,7 +15,7 @@ export function createAITools(options: CreateAIToolsOptions = {}) {
 		...(options.enableTodoWrite ? { todowrite: todoWriteTool } : {}),
 		update_session_title: updateSessionTitleTool,
 		note_neighborhood: noteNeighborhoodTool,
-		edit_file: editFileTool,
+		apply_patch: applyPatchTool,
 		bash: bashTool,
 		...(options.allowSpawn !== false ? { task: taskTool } : {}),
 	}

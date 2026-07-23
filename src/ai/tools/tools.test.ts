@@ -26,28 +26,7 @@ interface MockFile {
 }
 
 function createMockApp(files: MockFile[]) {
-	const store = new Map<string, string>()
-	for (const f of files) {
-		store.set(f.path, f.content)
-	}
-
-	const vault = {
-		getAbstractFileByPath(path: string) {
-			if (!store.has(path)) return null
-			return Object.assign(new TFile(), {
-				path,
-				name: path.split('/').pop() ?? path,
-				stat: { size: store.get(path)!.length, mtime: 0 },
-			})
-		},
-		async cachedRead(file: { path: string }) {
-			return store.get(file.path) ?? ''
-		},
-		async modify(file: { path: string }, content: string) {
-			store.set(file.path, content)
-		},
-	} as unknown as Vault
-
+	const { vault, store } = createMockVaultForExecutor(files)
 	return {
 		app: { vault } as unknown as App,
 		store,
@@ -109,6 +88,15 @@ function createMockVaultForExecutor(files: MockFile[]) {
 		},
 		async modify(file: { path: string }, content: string) {
 			store.set(file.path, content)
+		},
+		async delete(file: { path: string }) {
+			store.delete(file.path)
+		},
+		async rename(file: { path: string }, path: string) {
+			const content = store.get(file.path)
+			if (content === undefined) throw new Error(`missing: ${file.path}`)
+			store.delete(file.path)
+			store.set(path, content)
 		},
 		async createBinary(path: string, data: ArrayBuffer) {
 			store.set(path, new TextDecoder().decode(data))
@@ -180,12 +168,9 @@ function makeSession(fragment?: ChatFragment): ChatSession {
 	})
 }
 
-async function callEditFile(
-	params: { path: string; oldText: string; newText: string },
-	context: unknown,
-) {
-	const tool = findTool(createAITools(), 'edit_file')
-	return executeToolForTest(tool, params, context)
+async function callApplyPatch(patch: string, context: unknown) {
+	const tool = findTool(createAITools(), 'apply_patch')
+	return executeToolForTest(tool, { patch }, context)
 }
 
 async function executeToolForTest(
@@ -264,7 +249,7 @@ describe('tool registration', () => {
 	})
 })
 
-describe('edit_file read-gate', () => {
+describe('apply_patch read-gate', () => {
 	it('treats a vault/ prefix without a leading slash as a vault-relative folder', async () => {
 		const { app, store } = createMockApp([
 			{ path: 'vault/notes/x.md', content: 'nested target' },
@@ -280,18 +265,24 @@ describe('edit_file read-gate', () => {
 		const previousBatch = createFragmentReadTracker(fragment)
 		previousBatch.markRead('vault/notes/x.md')
 
-		const result = await callEditFile(
-			{
-				path: 'vault/notes/x.md',
-				oldText: 'nested',
-				newText: 'updated',
-			},
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: vault/notes/x.md',
+				'@@',
+				'-nested target',
+				'+updated target',
+				'*** End Patch',
+			].join('\n'),
 			makeContext(app, session, {
 				readTracker: createFragmentReadTracker(fragment),
 			}),
 		)
 
-		expect(result).toEqual({ replaced: true })
+		expect(result).toEqual({
+			applied: true,
+			files: ['vault/notes/x.md'],
+		})
 		expect(store.get('vault/notes/x.md')).toBe('updated target')
 		expect(store.get('notes/x.md')).toBe('root target')
 	})
@@ -311,8 +302,15 @@ describe('edit_file read-gate', () => {
 		const context = makeContext(app, session, { readTracker: tracker })
 
 		await expect(
-			callEditFile(
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
@@ -336,12 +334,19 @@ describe('edit_file read-gate', () => {
 		const batch2Tracker = createFragmentReadTracker(fragment)
 		const context = makeContext(app, session, { readTracker: batch2Tracker })
 
-		const result = await callEditFile(
-			{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/x.md',
+				'@@',
+				'-hello world',
+				'+hi world',
+				'*** End Patch',
+			].join('\n'),
 			context,
 		)
 
-		expect(result).toEqual({ replaced: true })
+		expect(result).toEqual({ applied: true, files: ['notes/x.md'] })
 		expect(store.get('notes/x.md')).toBe('hi world')
 	})
 
@@ -363,12 +368,19 @@ describe('edit_file read-gate', () => {
 		const batch2Tracker = createFragmentReadTracker(fragment)
 		const context = makeContext(app, session, { readTracker: batch2Tracker })
 
-		const result = await callEditFile(
-			{ path: '/vault/notes/x.md', oldText: 'hello', newText: 'hi' },
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: /vault/notes/x.md',
+				'@@',
+				'-hello world',
+				'+hi world',
+				'*** End Patch',
+			].join('\n'),
 			context,
 		)
 
-		expect(result).toEqual({ replaced: true })
+		expect(result).toEqual({ applied: true, files: ['notes/x.md'] })
 		expect(store.get('notes/x.md')).toBe('hi world')
 	})
 
@@ -400,8 +412,15 @@ describe('edit_file read-gate', () => {
 		const context = makeContext(app, session, { readTracker: tracker })
 
 		await expect(
-			callEditFile(
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
@@ -415,14 +434,21 @@ describe('edit_file read-gate', () => {
 		const context = makeContext(app, session)
 
 		await expect(
-			callEditFile(
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
 	})
 
-	it('blocks edit when bash cat and edit_file share the same batch tracker (race guard)', async () => {
+	it('blocks apply_patch when bash cat shares the same batch tracker', async () => {
 		const { app } = createMockApp([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -439,8 +465,15 @@ describe('edit_file read-gate', () => {
 		const context = makeContext(app, session, { readTracker: sharedTracker })
 
 		await expect(
-			callEditFile(
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
@@ -448,11 +481,219 @@ describe('edit_file read-gate', () => {
 		expect(fragment.readVaultPaths).toEqual(['notes/x.md'])
 
 		sharedTracker.resetSnapshot()
-		const result = await callEditFile(
-			{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/x.md',
+				'@@',
+				'-hello world',
+				'+hi world',
+				'*** End Patch',
+			].join('\n'),
 			context,
 		)
-		expect(result).toEqual({ replaced: true })
+		expect(result).toEqual({ applied: true, files: ['notes/x.md'] })
+	})
+})
+
+describe('apply_patch file operations', () => {
+	it('rejects a file header without the Codex colon syntax', async () => {
+		const { app } = createMockApp([
+			{
+				path: '示例/协作记录.md',
+				content:
+					'<<<<<<< 本地版本\n本地内容\n=======\n远端内容\n>>>>>>> 远端版本\n',
+			},
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('示例/协作记录.md')
+
+		await expect(
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File /vault/示例/协作记录.md',
+					'@@',
+					'-本地内容',
+					'+合并内容',
+					'*** End Patch',
+				].join('\n'),
+				makeContext(app, makeSession(fragment), {
+					readTracker: createFragmentReadTracker(fragment),
+				}),
+			),
+		).rejects.toThrow(
+			'Invalid patch: unexpected line "*** Update File /vault/示例/协作记录.md"',
+		)
+	})
+
+	it('accepts unified numeric hunk headers when resolving Chinese conflicts', async () => {
+		const { app, store } = createMockApp([
+			{
+				path: 'notes/conflict.md',
+				content: [
+					'# 协作记录',
+					'',
+					'## 安排',
+					'',
+					'<<<<<<< 本地版本',
+					'Local schedule',
+					'=======',
+					'远端安排',
+					'>>>>>>> 远端版本',
+					'',
+					'## 结论',
+					'',
+				].join('\n'),
+			},
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('notes/conflict.md')
+
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/conflict.md',
+				'@@ -20,9 +20,5 @@',
+				' ## 安排',
+				' ',
+				'-<<<<<<< 本地版本',
+				' Local schedule',
+				'-=======',
+				'-远端安排',
+				'->>>>>>> 远端版本',
+				' ',
+				' ## 结论',
+				'*** End Patch',
+			].join('\n'),
+			makeContext(app, makeSession(fragment), {
+				readTracker: createFragmentReadTracker(fragment),
+			}),
+		)
+
+		expect(result).toEqual({
+			applied: true,
+			files: ['notes/conflict.md'],
+		})
+		expect(store.get('notes/conflict.md')).toBe(
+			'# 协作记录\n\n## 安排\n\nLocal schedule\n\n## 结论\n',
+		)
+	})
+
+	it('applies bilingual multi-hunk updates, moves, additions, and deletions', async () => {
+		const { app, store } = createMockApp([
+			{
+				path: 'notes/source.md',
+				content: 'English line\n中性内容\n中文行\nEnding line\n',
+			},
+			{ path: 'notes/remove.md', content: 'Temporary note\n临时笔记\n' },
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('notes/source.md')
+		previousBatch.markRead('notes/remove.md')
+		const metadata: unknown[] = []
+
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/source.md',
+				'*** Move to: archive/source.md',
+				'@@',
+				'-English line',
+				'+Updated line',
+				' 中性内容',
+				'@@',
+				'-中文行',
+				'+更新行',
+				' Ending line',
+				'*** Add File: notes/new.md',
+				'+Sample note',
+				'+示例笔记',
+				'*** Delete File: notes/remove.md',
+				'*** End Patch',
+			].join('\n'),
+			makeContext(app, makeSession(fragment), {
+				readTracker: createFragmentReadTracker(fragment),
+				recordMetadata: (_toolCallId: string, value: unknown) => {
+					metadata.push(value)
+				},
+			}),
+		)
+
+		expect(result).toEqual({
+			applied: true,
+			files: [
+				'notes/source.md',
+				'archive/source.md',
+				'notes/new.md',
+				'notes/remove.md',
+			],
+		})
+		expect(store.has('notes/source.md')).toBe(false)
+		expect(store.get('archive/source.md')).toBe(
+			'Updated line\n中性内容\n更新行\nEnding line\n',
+		)
+		expect(store.get('notes/new.md')).toBe('Sample note\n示例笔记\n')
+		expect(store.has('notes/remove.md')).toBe(false)
+		expect(metadata).toHaveLength(1)
+	})
+
+	it('does not write any file when a later bilingual hunk fails validation', async () => {
+		const { app, store } = createMockApp([
+			{ path: 'notes/first.md', content: 'First line\n第一行\n' },
+			{ path: 'notes/second.md', content: 'Second line\n第二行\n' },
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('notes/first.md')
+		previousBatch.markRead('notes/second.md')
+
+		await expect(
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/first.md',
+					'@@',
+					'-First line',
+					'+Updated line',
+					' 第一行',
+					'*** Update File: notes/second.md',
+					'@@',
+					'-Missing line',
+					'+缺失行',
+					'*** End Patch',
+				].join('\n'),
+				makeContext(app, makeSession(fragment), {
+					readTracker: createFragmentReadTracker(fragment),
+				}),
+			),
+		).rejects.toThrow(/hunk context was not found/)
+
+		expect(store.get('notes/first.md')).toBe('First line\n第一行\n')
+		expect(store.get('notes/second.md')).toBe('Second line\n第二行\n')
 	})
 })
 
@@ -780,7 +1021,7 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 		)
 	}
 
-	it('blocks edit_file in the same SDK tool round as bash cat', async () => {
+	it('blocks apply_patch in the same SDK tool round as bash cat', async () => {
 		const { vault, store } = createMockVaultForExecutor([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -799,10 +1040,15 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 
 		const toolCalls: ToolCallPart[] = [
 			toolCall('bash', { script: 'cat /vault/notes/x.md' }),
-			toolCall('edit_file', {
-				path: 'notes/x.md',
-				oldText: 'hello',
-				newText: 'hi',
+			toolCall('apply_patch', {
+				patch: [
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 			}),
 		]
 
@@ -821,7 +1067,7 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 		expect(store.get('notes/x.md')).toBe('hello world')
 	})
 
-	it('allows edit_file in the SDK round after bash cat', async () => {
+	it('allows apply_patch in the SDK round after bash cat', async () => {
 		const { vault, store } = createMockVaultForExecutor([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -854,10 +1100,15 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 			app,
 			scratch,
 			[
-				toolCall('edit_file', {
-					path: 'notes/x.md',
-					oldText: 'hello',
-					newText: 'hi',
+				toolCall('apply_patch', {
+					patch: [
+						'*** Begin Patch',
+						'*** Update File: notes/x.md',
+						'@@',
+						'-hello world',
+						'+hi world',
+						'*** End Patch',
+					].join('\n'),
 				}),
 			],
 			tools,
@@ -935,14 +1186,14 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 })
 
 describe('filterToolsForAgent', () => {
-	it('excludes edit_file, todowrite, and update_session_title for the explorer subagent', () => {
+	it('excludes apply_patch, todowrite, and update_session_title for the explorer subagent', () => {
 		const tools = createAITools({ allowSpawn: true })
 		const definition = getAgentDefinition(EXPLORER_AGENT_ID)
 		if (!definition) throw new Error('Expected explorer agent definition')
 		const filtered = filterToolsForAgent(tools, definition)
 		const names = Object.keys(filtered)
 
-		expect(names).not.toContain('edit_file')
+		expect(names).not.toContain('apply_patch')
 		expect(names).not.toContain('todowrite')
 		expect(names).not.toContain('update_session_title')
 		expect(names).toContain('bash')
@@ -957,7 +1208,7 @@ describe('filterToolsForAgent', () => {
 		const filtered = filterToolsForAgent(tools, definition)
 		const names = Object.keys(filtered)
 
-		expect(names).toContain('edit_file')
+		expect(names).toContain('apply_patch')
 		expect(names).toContain('bash')
 		expect(names).toContain('note_neighborhood')
 		expect(names).toContain('todowrite')
