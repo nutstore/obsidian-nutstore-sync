@@ -13,6 +13,63 @@
 	animation: nutstore-sync-spin 2s linear infinite;
 }
 
+.modal.nutstore-sync-result-modal {
+	width: min(360px, calc(100vw - 2rem));
+}
+
+.modal-content.nutstore-sync-result-modal__content {
+	padding: 0;
+}
+
+.nutstore-sync-result {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 2rem 1.75rem 1.5rem;
+	text-align: center;
+}
+
+.nutstore-sync-result__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 3rem;
+	height: 3rem;
+	margin-bottom: 1rem;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--text-success) 14%, transparent);
+	color: var(--text-success);
+}
+
+.nutstore-sync-result__icon svg {
+	width: 1.75rem;
+	height: 1.75rem;
+}
+
+.nutstore-sync-result__title {
+	margin: 0;
+	font-size: var(--font-ui-large);
+	line-height: 1.3;
+}
+
+.nutstore-sync-result__message {
+	margin: 0.5rem 0 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+}
+
+.nutstore-sync-result__actions {
+	display: flex;
+	justify-content: center;
+	width: 100%;
+	margin-top: 1.5rem;
+}
+
+.nutstore-sync-result__actions button {
+	min-width: 6rem;
+}
+
 .connection-status {
 	padding: 6px 12px;
 	border-radius: 4px;

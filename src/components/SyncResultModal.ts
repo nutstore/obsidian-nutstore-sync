@@ -1,4 +1,4 @@
-import { App, Modal, Setting, setIcon } from 'obsidian'
+import { App, ButtonComponent, Modal, setIcon } from 'obsidian'
 import i18n from '~/i18n'
 
 export default class SyncResultModal extends Modal {
@@ -13,39 +13,41 @@ export default class SyncResultModal extends Modal {
 	onOpen(): void {
 		const { contentEl } = this
 		contentEl.empty()
+		this.modalEl.addClass('nutstore-sync-result-modal')
+		contentEl.addClass('nutstore-sync-result-modal__content')
 
 		const container = contentEl.createDiv({
-			cls: 'flex flex-col items-center gap-4 py-6 text-center',
+			cls: 'nutstore-sync-result',
 		})
 		const icon = container.createDiv({
-			cls: 'text-[var(--text-success)]',
+			cls: 'nutstore-sync-result__icon',
 		})
 		setIcon(icon, 'circle-check-big')
-		const svg = icon.querySelector('svg')
-		svg?.setAttribute('width', '64')
-		svg?.setAttribute('height', '64')
 
 		container.createEl('h2', {
-			cls: 'm-0',
+			cls: 'nutstore-sync-result__title',
 			text: i18n.t('sync.result.title'),
 		})
 		container.createEl('p', {
-			cls: 'm-0 text-[var(--text-muted)]',
+			cls: 'nutstore-sync-result__message',
 			text: i18n.t(
 				this.noChanges ? 'sync.result.noChanges' : 'sync.result.success',
 			),
 		})
 
-		new Setting(container).addButton((button) =>
-			button
-				.setButtonText(i18n.t('sync.closeButton'))
-				.setCta()
-				.onClick(() => this.close()),
-		)
+		const actions = container.createDiv({
+			cls: 'nutstore-sync-result__actions',
+		})
+		new ButtonComponent(actions)
+			.setButtonText(i18n.t('sync.closeButton'))
+			.setCta()
+			.onClick(() => this.close())
 	}
 
 	onClose(): void {
 		this.contentEl.empty()
+		this.contentEl.removeClass('nutstore-sync-result-modal__content')
+		this.modalEl.removeClass('nutstore-sync-result-modal')
 		this.closeCallback?.()
 	}
 }
