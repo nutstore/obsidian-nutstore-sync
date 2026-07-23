@@ -3,30 +3,19 @@ import { t } from '../../../i18n'
 import type { ChatDisplayBlock } from '~/ai/chat/types'
 import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
 import type { ChatAgentView } from '~/ai/chat/ui/types'
-import { formatTime, formatToolResult, formatUsage } from '../utils'
+import {
+	formatSystemNotificationMarkdown,
+	formatTime,
+	formatToolDetailsMarkdown,
+	formatToolResult,
+	formatUsage,
+} from '../utils'
 import { ContentBlock } from './ContentBlock'
 import { ContextArea } from './ContextArea'
 import { CopyButton } from './CopyButton'
 import { SystemNotificationBlock } from './SystemNotificationBlock'
 import { ToolCallBlock } from './ToolCallBlock'
 import { TodoListBlock } from './TodoListBlock'
-
-function fencedCode(language: string, value: string) {
-	const longestBacktickRun = Math.max(
-		0,
-		...Array.from(value.matchAll(/`+/g), (match) => match[0].length),
-	)
-	const fence = '`'.repeat(Math.max(3, longestBacktickRun + 1))
-	return `${fence}${language}\n${value}\n${fence}`
-}
-
-function stringifyToolInput(input: unknown) {
-	try {
-		return JSON.stringify(input ?? {}, null, 2)
-	} catch {
-		return String(input ?? {})
-	}
-}
 
 function copyTextForContentBlock(
 	block: Extract<ChatDisplayBlock, { kind: 'content' }>,
@@ -59,29 +48,20 @@ function copyTextForToolCallBlock(
 		return lines.join('\n')
 	}
 
-	const resultText = formatToolResult(block.toolCall).trim()
-	const lines = [
+	return [
 		`${t('chatbox.ui.labels.toolCall')}: ${block.toolCall.toolName}`,
 		'',
-		`${t('chatbox.ui.labels.params')}:`,
-		fencedCode('json', stringifyToolInput(block.toolCall.input)),
-	]
-
-	if (resultText) {
-		lines.push(
-			'',
-			`${t('chatbox.ui.labels.result')}:`,
-			fencedCode('text', resultText),
-		)
-	}
-
-	return lines.join('\n')
+		formatToolDetailsMarkdown(
+			block.toolCall.input,
+			formatToolResult(block.toolCall),
+		),
+	].join('\n')
 }
 
 function copyTextForSystemNotificationBlock(
 	block: Extract<ChatDisplayBlock, { kind: 'system-notification' }>,
 ) {
-	return `${t('chatbox.ui.labels.systemNotification')}:\n\n${fencedCode('json', JSON.stringify(block.notification, null, 2))}`
+	return `${t('chatbox.ui.labels.systemNotification')}:\n\n${formatSystemNotificationMarkdown(block.notification)}`
 }
 
 function MessageDisplayBlock(props: {
@@ -109,7 +89,12 @@ function MessageDisplayBlock(props: {
 					keyed
 					fallback={
 						<Show when={systemNotificationBlock()} keyed>
-							{(block) => <SystemNotificationBlock block={block} />}
+							{(block) => (
+								<SystemNotificationBlock
+									block={block}
+									renderMarkdown={props.renderMarkdown}
+								/>
+							)}
 						</Show>
 					}
 				>
@@ -123,6 +108,7 @@ function MessageDisplayBlock(props: {
 									getSubagent={props.getSubagent}
 									onOpenSubagent={props.onOpenSubagent}
 									onOpenFileChange={props.onOpenFileChange}
+									renderMarkdown={props.renderMarkdown}
 								/>
 							}
 						>

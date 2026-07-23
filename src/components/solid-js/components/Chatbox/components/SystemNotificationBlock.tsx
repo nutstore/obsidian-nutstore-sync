@@ -1,18 +1,25 @@
 import type { ChatDisplaySystemNotificationBlock } from '~/ai/chat/types'
+import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { t } from '../../../i18n'
+import { formatSystemNotificationMarkdown } from '../utils'
 import { TitledCollapsibleBlock } from './CollapsibleBlock'
+import { MarkdownContent } from './MarkdownContent'
 
 export function SystemNotificationBlock(props: {
 	block: ChatDisplaySystemNotificationBlock
+	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	return (
 		<TitledCollapsibleBlock
 			title={t('chatbox.ui.labels.systemNotification')}
 			iconClass="i-lucide-bell"
 		>
-			<pre class="m-0 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-primary)] p-2 text-xs leading-5">
-				{JSON.stringify(props.block.notification, null, 2)}
-			</pre>
+			<MarkdownContent
+				markdown={formatSystemNotificationMarkdown(props.block.notification)}
+				renderMarkdown={props.renderMarkdown}
+				compact
+				details
+			/>
 		</TitledCollapsibleBlock>
 	)
 }

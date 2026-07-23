@@ -2,9 +2,13 @@ import { Show } from 'solid-js'
 import type { JSX } from 'solid-js'
 
 import type { ChatDisplayToolCallBlock } from '~/ai/chat/types'
-import type { ChatAgentView } from '~/ai/chat/ui/types'
+import type { ChatAgentView, ChatboxProps } from '~/ai/chat/ui/types'
 import { t } from '../../../i18n'
-import { formatDuration, formatToolResult } from '../utils'
+import {
+	formatDuration,
+	formatToolDetailsMarkdown,
+	formatToolResult,
+} from '../utils'
 import {
 	cancelledVisual,
 	failedVisual,
@@ -16,6 +20,7 @@ import {
 } from '../tool-call-status'
 import { TitledCollapsibleBlock } from './CollapsibleBlock'
 import { FileChangesBlock } from './FileChangesBlock'
+import { MarkdownContent } from './MarkdownContent'
 
 function taskIdFromOutput(output: unknown) {
 	if (!output || typeof output !== 'object' || Array.isArray(output)) return
@@ -29,6 +34,7 @@ export function ToolCallBlock(props: {
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
+	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	return (
 		<Show
@@ -38,6 +44,7 @@ export function ToolCallBlock(props: {
 					block={props.block}
 					now={props.now}
 					onOpenFileChange={props.onOpenFileChange}
+					renderMarkdown={props.renderMarkdown}
 				/>
 			}
 		>
@@ -47,6 +54,7 @@ export function ToolCallBlock(props: {
 				getSubagent={props.getSubagent}
 				onOpenSubagent={props.onOpenSubagent}
 				onOpenFileChange={props.onOpenFileChange}
+				renderMarkdown={props.renderMarkdown}
 			/>
 		</Show>
 	)
@@ -61,6 +69,7 @@ function CollapsibleToolCallBlock(props: {
 	fileChanges?: ChatDisplayToolCallBlock['fileChanges']
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 	headerActions?: JSX.Element
+	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	return (
 		<>
@@ -70,20 +79,12 @@ function CollapsibleToolCallBlock(props: {
 				iconLabel={props.iconLabel}
 				headerActions={props.headerActions}
 			>
-				<div class="text-xs text-[var(--text-muted)]">
-					{t('chatbox.ui.labels.params')}
-				</div>
-				<pre class="m-0 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-primary)] p-2 text-xs leading-5">
-					{JSON.stringify(props.params ?? {}, null, 2)}
-				</pre>
-				<Show when={props.result?.trim()}>
-					<div class="mt-3 text-xs text-[var(--text-muted)]">
-						{t('chatbox.ui.labels.result')}
-					</div>
-					<pre class="m-0 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2 bg-[var(--background-primary)] p-2 text-xs leading-5">
-						{props.result}
-					</pre>
-				</Show>
+				<MarkdownContent
+					markdown={formatToolDetailsMarkdown(props.params, props.result)}
+					renderMarkdown={props.renderMarkdown}
+					compact
+					details
+				/>
 			</TitledCollapsibleBlock>
 			<FileChangesBlock
 				changes={props.fileChanges}
@@ -99,6 +100,7 @@ function TaskToolCallBlock(props: {
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
+	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	const toolCall = () => props.block.toolCall
 	const taskId = () =>
@@ -141,6 +143,7 @@ function TaskToolCallBlock(props: {
 			result={formatToolResult(toolCall())}
 			fileChanges={props.block.fileChanges}
 			onOpenFileChange={props.onOpenFileChange}
+			renderMarkdown={props.renderMarkdown}
 			headerActions={
 				<button
 					type="button"
@@ -166,6 +169,7 @@ function GenericToolCallBlock(props: {
 	block: ChatDisplayToolCallBlock
 	now: number
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
+	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	const visual = () => toolStatusVisual(props.block.toolCall)
 	return (
@@ -182,6 +186,7 @@ function GenericToolCallBlock(props: {
 			result={formatToolResult(props.block.toolCall)}
 			fileChanges={props.block.fileChanges}
 			onOpenFileChange={props.onOpenFileChange}
+			renderMarkdown={props.renderMarkdown}
 		/>
 	)
 }

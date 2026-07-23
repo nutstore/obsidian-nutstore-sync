@@ -235,6 +235,11 @@ input.success {
 	white-space: pre;
 }
 
+.ns-chatbox-markdown--details.markdown-rendered pre {
+	max-height: 12rem;
+	background: var(--background-primary);
+}
+
 .modal-container.ns-chatbox-contained-modal-container {
 	position: absolute;
 	inset: 0;

@@ -4,6 +4,8 @@ import type { ChatboxProps } from '~/ai/chat/ui/types'
 export function MarkdownContent(props: {
 	markdown: string
 	renderMarkdown?: ChatboxProps['renderMarkdown']
+	compact?: boolean
+	details?: boolean
 }) {
 	let el: HTMLDivElement | undefined
 	let cleanup: (() => void) | undefined
@@ -53,7 +55,9 @@ export function MarkdownContent(props: {
 	return (
 		<div
 			ref={el}
-			class="ns-chatbox-markdown markdown-rendered select-text text-sm leading-6 text-[var(--text-normal)]"
+			class={`ns-chatbox-markdown markdown-rendered select-text text-[var(--text-normal)] ${
+				props.compact ? 'text-xs leading-5' : 'text-sm leading-6'
+			} ${props.details ? 'ns-chatbox-markdown--details' : ''}`}
 		/>
 	)
 }

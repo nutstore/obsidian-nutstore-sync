@@ -44,8 +44,8 @@ function segmentHighlightClass(
 ): string | undefined {
 	if (!segment.changed) return undefined
 	return kind === 'add'
-		? 'inline-block h-5 align-top bg-[color-mix(in_srgb,var(--color-green)_35%,transparent)]'
-		: 'inline-block h-5 align-top bg-[color-mix(in_srgb,var(--color-red)_35%,transparent)]'
+		? 'py-1 bg-[color-mix(in_srgb,var(--color-green)_45%,var(--background-secondary))]'
+		: 'py-1 bg-[color-mix(in_srgb,var(--color-red)_45%,var(--background-secondary))]'
 }
 
 function DiffSegment(props: {
@@ -53,7 +53,13 @@ function DiffSegment(props: {
 	lineKind: FileDiffLine['kind']
 }) {
 	return (
-		<span class={segmentHighlightClass(props.segment, props.lineKind)}>
+		<span
+			class={segmentHighlightClass(props.segment, props.lineKind)}
+			style={{
+				'-webkit-box-decoration-break': 'clone',
+				'box-decoration-break': 'clone',
+			}}
+		>
 			{props.segment.text}
 		</span>
 	)
@@ -62,7 +68,7 @@ function DiffSegment(props: {
 function DiffLine(props: { line: FileDiffLine }) {
 	return (
 		<div
-			class={`grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] px-1 ${lineBackgroundClass(props.line.kind)}`}
+			class={`grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] overflow-hidden px-1 ${lineBackgroundClass(props.line.kind)}`}
 		>
 			<span class="select-none text-right text-[var(--text-faint)]">
 				{props.line.kind === 'remove'

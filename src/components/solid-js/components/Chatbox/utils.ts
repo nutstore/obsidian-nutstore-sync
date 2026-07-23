@@ -55,6 +55,47 @@ export function formatToolResult(
 		: (JSON.stringify(toolCall.output, null, 2) ?? String(toolCall.output))
 }
 
+export function fencedCode(language: string, value: string) {
+	const longestBacktickRun = Math.max(
+		0,
+		...Array.from(value.matchAll(/`+/g), (match) => match[0].length),
+	)
+	const fence = '`'.repeat(Math.max(3, longestBacktickRun + 1))
+	return `${fence}${language}\n${value}\n${fence}`
+}
+
+export function stringifyJsonValue(value: unknown) {
+	try {
+		return JSON.stringify(value ?? {}, null, 2)
+	} catch {
+		return String(value ?? {})
+	}
+}
+
+export function formatToolDetailsMarkdown(params: unknown, result?: string) {
+	const lines = [
+		`${t('chatbox.ui.labels.params')}:`,
+		'',
+		fencedCode('json', stringifyJsonValue(params)),
+	]
+	const resultText = result?.trim()
+
+	if (resultText) {
+		lines.push(
+			'',
+			`${t('chatbox.ui.labels.result')}:`,
+			'',
+			fencedCode('text', resultText),
+		)
+	}
+
+	return lines.join('\n')
+}
+
+export function formatSystemNotificationMarkdown(notification: unknown) {
+	return fencedCode('json', stringifyJsonValue(notification))
+}
+
 export function runStateLabel(runState: ChatRunState) {
 	switch (runState) {
 		case 'thinking':
