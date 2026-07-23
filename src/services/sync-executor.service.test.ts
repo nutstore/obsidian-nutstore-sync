@@ -33,6 +33,7 @@ function createPlugin(): any {
 		isSyncing: false,
 		isAccountConfigured: vi.fn(() => true),
 		getToken: vi.fn(async () => 'token'),
+		getRemoteAccountId: vi.fn(async () => 'neutral-account'),
 		remoteBaseDir: '/remote',
 		app: {
 			vault: {

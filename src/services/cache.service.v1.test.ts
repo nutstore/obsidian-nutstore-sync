@@ -39,7 +39,9 @@ function encodeStorage(value: ExportedStorage): Uint8Array<ArrayBuffer> {
 function createService(webdav: object, remoteBaseDir = '/vault/') {
 	const plugin = {
 		remoteBaseDir,
+		settings: { loginMode: 'manual' },
 		getToken: vi.fn(async () => 'token'),
+		getRemoteAccountId: vi.fn(async () => 'neutral-account'),
 		app: { vault: { configDir: '.obsidian' } },
 		webDAVService: {
 			createWebDAVClient: vi.fn(async () => webdav),

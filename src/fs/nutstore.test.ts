@@ -22,6 +22,7 @@ function createFileSystem(remoteBaseDir = '/vault/') {
 		vault: { configDir: '.obsidian' } as Vault,
 		settings: {} as NutstoreSettings,
 		token: 'token',
+		remoteAccountId: 'neutral-account',
 		remoteBaseDir,
 		filterRules: {
 			exclusionRules: [],
