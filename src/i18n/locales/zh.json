@@ -590,6 +590,8 @@
 				"stopRun": "终止",
 				"compressContext": "压缩上下文",
 				"copy": "复制",
+				"runHtmlCode": "运行",
+				"showHtmlCode": "代码",
 				"deleteMessage": "删除消息",
 				"regenerateMessage": "重新生成",
 				"recallMessage": "撤回",

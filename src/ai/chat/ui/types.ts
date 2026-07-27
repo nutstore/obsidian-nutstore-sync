@@ -112,6 +112,7 @@ export interface ChatboxProps extends ChatboxViewModel {
 	renderMarkdown?: (
 		el: HTMLElement,
 		markdown: string,
+		options?: { streaming?: boolean },
 	) => void | (() => void) | Promise<void | (() => void)>
 }
 

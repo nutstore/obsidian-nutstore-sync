@@ -590,6 +590,8 @@
 				"stopRun": "Stop",
 				"compressContext": "Compress Context",
 				"copy": "Copy",
+				"runHtmlCode": "Run",
+				"showHtmlCode": "Code",
 				"deleteMessage": "Delete message",
 				"regenerateMessage": "Regenerate",
 				"recallMessage": "Recall",

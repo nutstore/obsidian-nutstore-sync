@@ -68,6 +68,7 @@ function MessageDisplayBlock(props: {
 	block: ChatDisplayBlock
 	now: number
 	renderMarkdown?: ChatboxProps['renderMarkdown']
+	streaming?: boolean
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 	onOpenFileChange?: ChatboxProps['onOpenFileChange']
@@ -119,7 +120,11 @@ function MessageDisplayBlock(props: {
 			}
 		>
 			{(block) => (
-				<ContentBlock block={block} renderMarkdown={props.renderMarkdown} />
+				<ContentBlock
+					block={block}
+					renderMarkdown={props.renderMarkdown}
+					streaming={props.streaming}
+				/>
 			)}
 		</Show>
 	)
@@ -129,6 +134,7 @@ export function MessageCard(props: {
 	item: ChatTimelineMessageItem
 	now: number
 	renderMarkdown?: ChatboxProps['renderMarkdown']
+	streaming?: boolean
 	onDeleteMessage?: ChatboxProps['onDeleteMessage']
 	onRegenerateMessage?: ChatboxProps['onRegenerateMessage']
 	onRecallMessage?: ChatboxProps['onRecallMessage']
@@ -203,6 +209,7 @@ export function MessageCard(props: {
 							block={block}
 							now={props.now}
 							renderMarkdown={props.renderMarkdown}
+							streaming={props.streaming}
 							getSubagent={props.getSubagent}
 							onOpenSubagent={props.onOpenSubagent}
 							onOpenFileChange={props.onOpenFileChange}

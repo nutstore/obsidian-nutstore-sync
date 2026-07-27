@@ -3,6 +3,7 @@ import {
 	For,
 	Show,
 	createEffect,
+	createMemo,
 	createSignal,
 	on,
 	onCleanup,
@@ -184,6 +185,14 @@ function Chatbox(props: ChatboxProps) {
 	}
 
 	const isBusy = () => props.runState !== 'idle'
+	const streamingMessageId = createMemo(() => {
+		if (!isBusy()) return undefined
+		for (let index = props.timeline.length - 1; index >= 0; index -= 1) {
+			const message = props.timeline[index]?.message
+			if (message?.role === 'assistant') return message.id
+		}
+		return undefined
+	})
 
 	const contextUsedTokens = () => resolveUsedContextTokens(props.usage)
 	const contextUsageRatio = () => {
@@ -931,6 +940,7 @@ function Chatbox(props: ChatboxProps) {
 											item={item}
 											now={now()}
 											renderMarkdown={props.renderMarkdown}
+											streaming={item.message.id === streamingMessageId()}
 											onDeleteMessage={requestDeleteMessage}
 											onRegenerateMessage={requestRegenerateMessage}
 											onRecallMessage={requestRecallMessage}

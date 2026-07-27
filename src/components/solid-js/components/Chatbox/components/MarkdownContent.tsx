@@ -4,6 +4,7 @@ import type { ChatboxProps } from '~/ai/chat/ui/types'
 export function MarkdownContent(props: {
 	markdown: string
 	renderMarkdown?: ChatboxProps['renderMarkdown']
+	streaming?: boolean
 	compact?: boolean
 	details?: boolean
 }) {
@@ -13,6 +14,7 @@ export function MarkdownContent(props: {
 
 	createEffect(() => {
 		const markdown = props.markdown
+		const streaming = props.streaming
 		const renderMarkdown = props.renderMarkdown
 		const currentVersion = ++renderVersion
 
@@ -34,15 +36,17 @@ export function MarkdownContent(props: {
 			return
 		}
 
-		void Promise.resolve(renderMarkdown(el, markdown)).then((nextCleanup) => {
-			if (currentVersion !== renderVersion) {
-				if (typeof nextCleanup === 'function') {
-					nextCleanup()
+		void Promise.resolve(renderMarkdown(el, markdown, { streaming })).then(
+			(nextCleanup) => {
+				if (currentVersion !== renderVersion) {
+					if (typeof nextCleanup === 'function') {
+						nextCleanup()
+					}
+					return
 				}
-				return
-			}
-			cleanup = typeof nextCleanup === 'function' ? nextCleanup : undefined
-		})
+				cleanup = typeof nextCleanup === 'function' ? nextCleanup : undefined
+			},
+		)
 	})
 
 	onCleanup(() => {

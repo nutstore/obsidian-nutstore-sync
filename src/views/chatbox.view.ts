@@ -27,6 +27,7 @@ import {
 	hideChatboxSelectionHighlight,
 	showChatboxSelectionHighlight,
 } from './chatbox-selection-highlight'
+import { enhanceHtmlCodeBlocks } from './chatbox-code-preview'
 import {
 	resolveMarkdownLinkAction,
 	resolveMarkdownSourcePath,
@@ -68,7 +69,11 @@ export default class ChatboxView extends ItemView {
 	private highlightedEditorView?: EditorView
 	private preservingSelectionForChatFocus = false
 	private readonly renderMarkdown: NonNullable<ChatboxProps['renderMarkdown']> =
-		async (el: HTMLElement, markdown: string) => {
+		async (
+			el: HTMLElement,
+			markdown: string,
+			options?: { streaming?: boolean },
+		) => {
 			const app = this.app
 			const plugin = this.plugin
 			const component = new Component()
@@ -98,6 +103,10 @@ export default class ChatboxView extends ItemView {
 			el.replaceChildren(...Array.from(renderedEl.childNodes))
 			if (!el.childNodes.length) {
 				el.textContent = fallbackText
+			}
+
+			if (!options?.streaming) {
+				enhanceHtmlCodeBlocks(el)
 			}
 
 			const onLinkClick = (event: MouseEvent) => {

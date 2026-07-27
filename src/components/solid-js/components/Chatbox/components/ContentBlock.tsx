@@ -20,6 +20,7 @@ function isReasoningPart(part: ChatMessageContentPart): part is ReasoningPart {
 export function ContentBlock(props: {
 	block: ChatDisplayContentBlock
 	renderMarkdown?: ChatboxProps['renderMarkdown']
+	streaming?: boolean
 }) {
 	return (
 		<div class="rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
@@ -32,6 +33,7 @@ export function ContentBlock(props: {
 									<MarkdownContent
 										markdown={textPart().text ?? ''}
 										renderMarkdown={props.renderMarkdown}
+										streaming={props.streaming}
 									/>
 								)}
 							</Match>
