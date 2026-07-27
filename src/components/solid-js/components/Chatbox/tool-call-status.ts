@@ -35,28 +35,34 @@ export function runningVisual() {
 	return {
 		label: t('chatbox.ui.states.running'),
 		iconClass:
-			'i-lucide-loader-circle animate-spin text-[var(--interactive-accent)]',
+			':uno: i-lucide-loader-circle animate-spin text-[var(--interactive-accent)]',
 	}
 }
 
-export function waitingVisual(label: string, icon = 'i-lucide-hourglass') {
+export function waitingVisual(
+	label: string,
+	icon = ':uno: i-lucide-hourglass',
+) {
 	return { label, iconClass: `${icon} text-[var(--color-yellow)]` }
 }
 
 export function successVisual() {
 	return {
 		label: t('chatbox.ui.states.completed'),
-		iconClass: 'i-lucide-circle-check text-[var(--color-green)]',
+		iconClass: ':uno: i-lucide-circle-check text-[var(--color-green)]',
 	}
 }
 
 export function failedVisual() {
 	return {
 		label: t('chatbox.ui.states.failed'),
-		iconClass: 'i-lucide-circle-x text-[var(--text-error)]',
+		iconClass: ':uno: i-lucide-circle-x text-[var(--text-error)]',
 	}
 }
 
 export function cancelledVisual(label: string) {
-	return { label, iconClass: 'i-lucide-circle-slash text-[var(--text-muted)]' }
+	return {
+		label,
+		iconClass: ':uno: i-lucide-circle-slash text-[var(--text-muted)]',
+	}
 }

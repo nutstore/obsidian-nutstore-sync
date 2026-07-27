@@ -48,16 +48,16 @@ export default class AccountSettings extends BaseSettings {
 
 	private displayManualLoginSettings(): void {
 		const helper = new Setting(this.containerEl)
-		helper.descEl.addClass('settings-helper-links')
+		helper.descEl.addClass(':uno: flex items-center flex-wrap gap-2')
 		const anchor = helper.descEl.createEl('a', {
 			href: 'https://help.jianguoyun.com/?p=2064',
-			cls: 'settings-helper-badge no-underline',
+			cls: ':uno: settings-helper-badge no-underline',
 			text: i18n.t('settings.help.name'),
 		})
 		anchor.target = '_blank'
 		const enterpriseAnchor = helper.descEl.createEl('a', {
 			href: '#',
-			cls: 'settings-helper-badge no-underline',
+			cls: ':uno: settings-helper-badge no-underline',
 			text: i18n.t('settings.enterpriseBaseUrl.name'),
 		})
 		enterpriseAnchor.addEventListener('click', (event) => {
@@ -123,8 +123,8 @@ export default class AccountSettings extends BaseSettings {
 							}).open()
 						})
 				})
-			el.descEl.classList.add('max-w-full', 'truncate')
-			el.infoEl.classList.add('max-w-full')
+			el.descEl.classList.add(':uno: max-w-full', ':uno: truncate')
+			el.infoEl.classList.add(':uno: max-w-full')
 			this.displayCheckConnection()
 		} else {
 			new Setting(this.containerEl)
@@ -162,33 +162,46 @@ export default class AccountSettings extends BaseSettings {
 					.setButtonText(i18n.t('settings.checkConnection.name'))
 					.onClick(async (e) => {
 						const buttonEl = e.target as HTMLElement
-						buttonEl.classList.add('connection-button', 'loading')
-						buttonEl.classList.remove('success', 'error')
+						buttonEl.classList.add(
+							':uno: connection-button',
+							':uno: loading',
+							':uno: opacity-50',
+							':uno: pointer-events-none',
+						)
+						buttonEl.classList.remove(':uno: success', ':uno: error')
 						buttonEl.textContent = i18n.t('settings.checkConnection.name')
 						try {
 							const { success, error } =
 								await this.plugin.webDAVService.checkWebDAVConnection()
-							buttonEl.classList.remove('loading')
+							buttonEl.classList.remove(
+								':uno: loading',
+								':uno: opacity-50',
+								':uno: pointer-events-none',
+							)
 							if (success) {
-								buttonEl.classList.add('success')
+								buttonEl.classList.add(':uno: success')
 								buttonEl.textContent = i18n.t(
 									'settings.checkConnection.successButton',
 								)
 								new Notice(i18n.t('settings.checkConnection.success'))
 							} else if (error && is503Error(error)) {
-								buttonEl.classList.add('error')
+								buttonEl.classList.add(':uno: error')
 								buttonEl.textContent = i18n.t('sync.error.requestsTooFrequent')
 								new Notice(i18n.t('sync.error.requestsTooFrequent'))
 							} else {
-								buttonEl.classList.add('error')
+								buttonEl.classList.add(':uno: error')
 								buttonEl.textContent = i18n.t(
 									'settings.checkConnection.failureButton',
 								)
 								new Notice(i18n.t('settings.checkConnection.failure'))
 							}
 						} catch {
-							buttonEl.classList.remove('loading')
-							buttonEl.classList.add('error')
+							buttonEl.classList.remove(
+								':uno: loading',
+								':uno: opacity-50',
+								':uno: pointer-events-none',
+							)
+							buttonEl.classList.add(':uno: error')
 							buttonEl.textContent = i18n.t(
 								'settings.checkConnection.failureButton',
 							)

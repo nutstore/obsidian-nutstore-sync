@@ -30,10 +30,10 @@ function computeStats(diff: FileDiff): { added: number; removed: number } {
 
 function lineBackgroundClass(kind: FileDiffLine['kind']): string {
 	if (kind === 'add') {
-		return 'bg-[color-mix(in_srgb,var(--color-green)_15%,transparent)]'
+		return ':uno: bg-[color-mix(in_srgb,var(--color-green)_15%,transparent)]'
 	}
 	if (kind === 'remove') {
-		return 'bg-[color-mix(in_srgb,var(--color-red)_15%,transparent)]'
+		return ':uno: bg-[color-mix(in_srgb,var(--color-red)_15%,transparent)]'
 	}
 	return ''
 }
@@ -44,8 +44,8 @@ function segmentHighlightClass(
 ): string | undefined {
 	if (!segment.changed) return undefined
 	return kind === 'add'
-		? 'py-1 bg-[color-mix(in_srgb,var(--color-green)_45%,var(--background-secondary))]'
-		: 'py-1 bg-[color-mix(in_srgb,var(--color-red)_45%,var(--background-secondary))]'
+		? ':uno: py-1 bg-[color-mix(in_srgb,var(--color-green)_45%,var(--background-secondary))]'
+		: ':uno: py-1 bg-[color-mix(in_srgb,var(--color-red)_45%,var(--background-secondary))]'
 }
 
 function DiffSegment(props: {
@@ -68,14 +68,14 @@ function DiffSegment(props: {
 function DiffLine(props: { line: FileDiffLine }) {
 	return (
 		<div
-			class={`grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] overflow-hidden px-1 ${lineBackgroundClass(props.line.kind)}`}
+			class={`:uno: grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] overflow-hidden px-1 ${lineBackgroundClass(props.line.kind)}`}
 		>
-			<span class="select-none text-right text-[var(--text-faint)]">
+			<span class=":uno: select-none text-right text-[var(--text-faint)]">
 				{props.line.kind === 'remove'
 					? (props.line.oldLine ?? '')
 					: (props.line.newLine ?? '')}
 			</span>
-			<span class="min-w-0 select-text whitespace-pre-wrap break-words pr-2">
+			<span class=":uno: min-w-0 select-text whitespace-pre-wrap break-words pr-2">
 				{props.line.kind === 'add'
 					? '+'
 					: props.line.kind === 'remove'
@@ -95,8 +95,8 @@ function DiffLine(props: { line: FileDiffLine }) {
 
 function DiffHunk(props: { hunk: FileDiffHunk }) {
 	return (
-		<div class="font-mono text-xs leading-5">
-			<div class="bg-[var(--background-secondary-alt)] px-2 text-[var(--text-muted)]">
+		<div class=":uno: font-mono text-xs leading-5">
+			<div class=":uno: bg-[var(--background-secondary-alt)] px-2 text-[var(--text-muted)]">
 				@@ -{props.hunk.oldStart},{props.hunk.oldCount} +{props.hunk.newStart},
 				{props.hunk.newCount} @@
 			</div>
@@ -114,18 +114,21 @@ function FileChangeSummary(props: {
 		props.diff.hunks?.[0]?.lines.find((line) => line.kind === 'add')?.newLine ??
 		props.diff.hunks?.[0]?.newStart
 	return (
-		<div class="flex min-w-0 items-center gap-2">
+		<div class=":uno: flex min-w-0 items-center gap-2">
 			<span
-				class="flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
+				class=":uno: flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
 				title={operationLabel()}
 				aria-label={operationLabel()}
 				role="img"
 			>
-				<span class="i-lucide-file-diff size-5 shrink-0" aria-hidden="true" />
+				<span
+					class=":uno: i-lucide-file-diff size-5 shrink-0"
+					aria-hidden="true"
+				/>
 			</span>
 			<button
 				type="button"
-				class="min-w-0 flex-1 cursor-pointer truncate text-left text-[var(--link-color)] hover:underline !border-none !bg-transparent !p-0 !shadow-none"
+				class=":uno: min-w-0 flex-1 cursor-pointer truncate text-left text-[var(--link-color)] hover:underline !border-none !bg-transparent !p-0 !shadow-none"
 				onClick={(event) => {
 					event.stopPropagation()
 					props.onOpenFile?.(props.diff.vaultPath, openLine())
@@ -141,9 +144,9 @@ function FileChangeStats(props: { diff: FileDiff }) {
 	const stats = () => computeStats(props.diff)
 	return (
 		<Show when={props.diff.hunks}>
-			<span class="shrink-0 text-xs">
-				<span class="text-[var(--color-green)]">+{stats().added}</span>{' '}
-				<span class="text-[var(--color-red)]">-{stats().removed}</span>
+			<span class=":uno: shrink-0 text-xs">
+				<span class=":uno: text-[var(--color-green)]">+{stats().added}</span>{' '}
+				<span class=":uno: text-[var(--color-red)]">-{stats().removed}</span>
 			</span>
 		</Show>
 	)
@@ -167,11 +170,11 @@ function FileChange(props: {
 					onOpenChange={setOpen}
 				>
 					<Show when={value.binary}>
-						<div class="rounded-3 px-2 py-1.5 text-xs text-[var(--text-muted)]">
+						<div class=":uno: rounded-3 px-2 py-1.5 text-xs text-[var(--text-muted)]">
 							{t('chatbox.ui.fileChanges.binary')}
 						</div>
 					</Show>
-					<div class="overflow-hidden rounded-3">
+					<div class=":uno: overflow-hidden rounded-3">
 						<For each={value.hunks}>{(hunk) => <DiffHunk hunk={hunk} />}</For>
 					</div>
 				</CollapsibleBlock>
@@ -186,8 +189,8 @@ export function FileChangesBlock(props: {
 }) {
 	return (
 		<Show when={props.changes?.length}>
-			<div class="mt-2">
-				<div class="flex flex-col gap-2">
+			<div class=":uno: mt-2">
+				<div class=":uno: flex flex-col gap-2">
 					<For each={props.changes}>
 						{(change) => (
 							<FileChange change={change} onOpenFile={props.onOpenFile} />

@@ -32,7 +32,7 @@ export default class TaskListConfirmModal extends Modal {
 		instruction.setText(i18n.t('taskList.instruction'))
 
 		const listContainer = contentEl.createDiv({
-			cls: 'h-[50vh] max-h-[50vh] min-h-[16rem] w-full',
+			cls: ':uno: h-[50vh] max-h-[50vh] min-h-[16rem] w-full',
 		})
 		const onToggle = (index: number, checked: boolean) => {
 			this.selectedTasks[index] = checked

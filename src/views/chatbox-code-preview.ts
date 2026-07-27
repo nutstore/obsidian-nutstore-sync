@@ -58,8 +58,8 @@ export function enhanceHtmlCodeBlocks(container: HTMLElement): void {
 		let loaded = false
 		const syncToggle = () => {
 			toggleIcon.className = previewing
-				? 'i-lucide-code size-3.5'
-				: 'i-lucide-play size-3.5'
+				? ':uno: i-lucide-code size-3.5'
+				: ':uno: i-lucide-play size-3.5'
 			toggleText.textContent = toggleLabel(previewing)
 		}
 		syncToggle()

@@ -13,7 +13,7 @@ export default class TextAreaModal extends Modal {
 		const { contentEl } = this
 
 		const textarea = contentEl.createEl('textarea', {
-			cls: 'w-full h-50vh',
+			cls: ':uno: w-full h-50vh',
 			text: this.text,
 		})
 		textarea.disabled = true

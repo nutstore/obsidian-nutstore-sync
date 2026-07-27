@@ -56,7 +56,7 @@ export function ContextRing(props: ContextRingProps) {
 			width={size()}
 			height={size()}
 			viewBox={`0 0 ${size()} ${size()}`}
-			class="context-ring shrink-0"
+			class=":uno: context-ring shrink-0"
 			role="img"
 			aria-label={props.title}
 		>

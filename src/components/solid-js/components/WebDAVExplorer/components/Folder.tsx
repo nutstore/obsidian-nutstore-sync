@@ -7,11 +7,11 @@ export interface FolderProps {
 function Folder(props: FolderProps) {
 	return (
 		<div
-			class="flex gap-2 items-center max-w-full hover:bg-[var(--interactive-accent)] border-rounded px-1"
+			class=":uno: flex gap-2 items-center max-w-full hover:bg-[var(--interactive-accent)] border-rounded px-1"
 			onClick={() => props.onClick(props.path)}
 		>
-			<div class="i-custom:folder size-10" />
-			<span class="truncate flex-1">{props.name}</span>
+			<div class=":uno: i-custom:folder size-10" />
+			<span class=":uno: truncate flex-1">{props.name}</span>
 		</div>
 	)
 }

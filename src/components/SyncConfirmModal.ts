@@ -25,7 +25,7 @@ export default class SyncConfirmModal extends Modal {
 		const { contentEl } = this
 
 		contentEl.createEl('h2', { text: i18n.t('sync.confirmModal.title') })
-		const infoDiv = contentEl.createDiv({ cls: 'sync-info' })
+		const infoDiv = contentEl.createDiv({ cls: ':uno: sync-info' })
 		infoDiv.createEl('p', {
 			text: i18n.t('sync.confirmModal.remoteDir', {
 				dir: this.settings.remoteDir,
@@ -44,9 +44,11 @@ export default class SyncConfirmModal extends Modal {
 		})
 
 		const policySection = contentEl.createEl('section')
-		const policyOptions = policySection.createDiv({ cls: 'grid gap-1.5 my-3' })
+		const policyOptions = policySection.createDiv({
+			cls: ':uno: grid gap-1.5 my-3',
+		})
 		const policyDescription = policySection.createEl('pre', {
-			cls: 'mt-0',
+			cls: ':uno: mt-0',
 		})
 		policyDescription.style.whiteSpace = 'pre-wrap'
 		const updatePolicyDescription = () => {
@@ -57,7 +59,7 @@ export default class SyncConfirmModal extends Modal {
 
 		for (const policy of Object.values(SyncPolicy)) {
 			const option = policyOptions.createEl('label', {
-				cls: 'flex items-center gap-2 cursor-pointer',
+				cls: ':uno: flex items-center gap-2 cursor-pointer',
 			})
 			const radio = option.createEl('input', {
 				type: 'radio',

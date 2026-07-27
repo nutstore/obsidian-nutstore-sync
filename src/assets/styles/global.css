@@ -21,14 +21,6 @@
 	padding: 0;
 }
 
-.nutstore-sync-result {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	padding: 2rem 1.75rem 1.5rem;
-	text-align: center;
-}
-
 .nutstore-sync-result__icon {
 	display: flex;
 	align-items: center;
@@ -59,42 +51,6 @@
 	line-height: 1.5;
 }
 
-.nutstore-sync-result__actions {
-	display: flex;
-	justify-content: center;
-	width: 100%;
-	margin-top: 1.5rem;
-}
-
-.nutstore-sync-result__actions button {
-	min-width: 6rem;
-}
-
-.connection-status {
-	padding: 6px 12px;
-	border-radius: 4px;
-	margin-top: 8px;
-	transition: all 0.3s ease;
-	opacity: 0;
-}
-
-.connection-status.success {
-	background-color: var(--background-modifier-success);
-	color: var(--text-success);
-	opacity: 1;
-}
-
-.connection-status.error {
-	background-color: var(--background-modifier-error);
-	color: var(--text-error);
-	opacity: 1;
-}
-
-.connection-button.loading {
-	opacity: 0.5;
-	pointer-events: none;
-}
-
 .connection-button.success {
 	background-color: var(--background-modifier-success);
 	color: var(--background-primary);
@@ -105,13 +61,6 @@
 	background-color: var(--background-modifier-error);
 	color: var(--background-primary);
 	border-color: var(--background-modifier-error);
-}
-
-.settings-helper-links {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 0.5rem;
 }
 
 .settings-helper-badge {
@@ -140,16 +89,6 @@
 	border-color: var(--interactive-accent);
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
-}
-
-input.error {
-	border-color: var(--background-modifier-error) !important;
-	box-shadow: none !important;
-}
-
-input.success {
-	border-color: var(--background-modifier-success) !important;
-	box-shadow: none !important;
 }
 
 .task-list-table {
@@ -313,10 +252,6 @@ input.success {
 	background-color: var(--scrollbar-active-thumb-bg);
 }
 
-.ns-chatbox-runnable-code [hidden] {
-	display: none;
-}
-
 .ns-chatbox-runnable-code-preview {
 	box-sizing: border-box;
 	width: 100%;
@@ -357,11 +292,6 @@ input.success {
 	max-height: calc(100% - 2rem);
 }
 
-/* Keep Obsidian menus above the chatbox history sheet and contained modals. */
-.menu {
-	z-index: 230 !important;
-}
-
 .modal.provider-editor-modal {
 	width: min(720px, calc(100vw - 2rem));
 	max-width: 720px;
@@ -379,13 +309,6 @@ input.success {
 	min-height: 0;
 }
 
-.provider-editor-modal__body {
-	flex: 1 1 auto;
-	min-height: 0;
-	overflow-y: auto;
-	padding-right: 0.25rem;
-}
-
 .provider-editor-modal__footer {
 	flex: 0 0 auto;
 	padding-top: 0.75rem;
@@ -400,12 +323,6 @@ input.success {
 
 .provider-editor-modal__models {
 	padding-bottom: 0.5rem;
-}
-
-.model-editor-modality-tags {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5rem;
 }
 
 .model-editor-modality-tag {
@@ -442,13 +359,6 @@ input.success {
 	background: var(--interactive-accent);
 	border-color: var(--interactive-accent);
 	color: var(--text-on-accent);
-}
-
-.modality-badge-row {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.25rem;
-	margin-top: 0.2rem;
 }
 
 .modality-badge {
@@ -632,6 +542,10 @@ input.success {
 		max-height: clamp(2.5rem, 18vh, 6rem);
 	}
 }
+.menu {
+	z-index: 230 !important;
+}
+
 @keyframes nutstore-sync-progress-indeterminate {
 	from {
 		transform: translateX(-100%);

@@ -17,7 +17,7 @@ export default class SyncResultModal extends Modal {
 		contentEl.addClass('nutstore-sync-result-modal__content')
 
 		const container = contentEl.createDiv({
-			cls: 'nutstore-sync-result',
+			cls: ':uno: flex flex-col items-center text-center pt-8 pb-6 px-7',
 		})
 		const icon = container.createDiv({
 			cls: 'nutstore-sync-result__icon',
@@ -36,12 +36,13 @@ export default class SyncResultModal extends Modal {
 		})
 
 		const actions = container.createDiv({
-			cls: 'nutstore-sync-result__actions',
+			cls: ':uno: flex justify-center w-full mt-6',
 		})
-		new ButtonComponent(actions)
+		const btn = new ButtonComponent(actions)
 			.setButtonText(i18n.t('sync.closeButton'))
 			.setCta()
 			.onClick(() => this.close())
+		btn.buttonEl.classList.add(':uno: min-w-24')
 	}
 
 	onClose(): void {

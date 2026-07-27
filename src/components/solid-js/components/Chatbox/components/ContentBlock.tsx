@@ -23,8 +23,8 @@ export function ContentBlock(props: {
 	streaming?: boolean
 }) {
 	return (
-		<div class="rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
-			<div class="flex flex-col gap-3">
+		<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
+			<div class=":uno: flex flex-col gap-3">
 				<For each={props.block.parts}>
 					{(part) => (
 						<Switch>
@@ -39,11 +39,11 @@ export function ContentBlock(props: {
 							</Match>
 							<Match when={isReasoningPart(part) ? part : undefined}>
 								{(reasoningPart) => (
-									<details class="rounded-2 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
-										<summary class="cursor-pointer p-2 text-xs text-[var(--text-muted)] select-none">
+									<details class=":uno: rounded-2 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
+										<summary class=":uno: cursor-pointer p-2 text-xs text-[var(--text-muted)] select-none">
 											Reasoning
 										</summary>
-										<pre class="m-0 p-2 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
+										<pre class=":uno: m-0 p-2 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
 											{reasoningPart().text ?? ''}
 										</pre>
 									</details>
@@ -52,7 +52,7 @@ export function ContentBlock(props: {
 							<Match when={imageFilePartSrc(part)}>
 								{(src) => (
 									<img
-										class="max-h-80 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
+										class=":uno: max-h-80 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
 										src={src()}
 										alt=""
 									/>

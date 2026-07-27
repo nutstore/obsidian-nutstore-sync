@@ -62,7 +62,7 @@ export default class ModelEditorModal extends Modal {
 		new Setting(contentEl)
 			.setName(i18n.t('settings.ai.model.id'))
 			.setDesc(i18n.t('settings.ai.model.idDesc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => s.settingEl.addClass(':uno: setting-required'))
 			.addText((text) => {
 				text.setValue(this.draft.id).onChange((value) => {
 					this.draft.id = value
@@ -76,7 +76,7 @@ export default class ModelEditorModal extends Modal {
 			i18n.t('settings.ai.model.inputModalities'),
 		)
 		const tagContainer = modalitiesSetting.controlEl.createDiv({
-			cls: 'model-editor-modality-tags',
+			cls: ':uno: flex flex-wrap gap-2',
 		})
 		const updateTags = () => {
 			for (const child of Array.from(tagContainer.children)) {
@@ -84,14 +84,14 @@ export default class ModelEditorModal extends Modal {
 				const modality = button.dataset
 					.modality as AIModelConfig['modalities']['input'][number]
 				const selected = this.draft.modalities.input.includes(modality)
-				button.classList.toggle('is-active', selected)
+				button.classList.toggle(':uno: is-active', selected)
 			}
 		}
 		this.updateInputModalityTags = updateTags
 		for (const modality of INPUT_MODALITY_OPTIONS) {
 			const button = tagContainer.createEl('button', {
 				text: modality,
-				cls: 'model-editor-modality-tag',
+				cls: ':uno: model-editor-modality-tag',
 			})
 			button.type = 'button'
 			button.dataset.modality = modality

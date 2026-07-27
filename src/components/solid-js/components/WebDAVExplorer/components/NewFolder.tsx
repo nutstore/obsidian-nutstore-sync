@@ -10,14 +10,14 @@ interface NewFolderProps {
 function NewFolder(props: NewFolderProps) {
 	const [name, setName] = createSignal('')
 
-	const className = () => `flex items-center gap-2 px-1 ${props.class}`
+	const className = () => `:uno: flex items-center gap-2 px-1 ${props.class}`
 
 	return (
 		<div class={className()}>
-			<div class="i-custom:folder size-10" />
+			<div class=":uno: i-custom:folder size-10" />
 			<input
 				type="text"
-				class="flex-1"
+				class=":uno: flex-1"
 				autofocus
 				value={name()}
 				onInput={(e) => setName(e.target.value)}

@@ -13,11 +13,11 @@ export function RunStateCard(props: {
 
 	return (
 		<Show when={label()}>
-			<div class="rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
-				<div class="flex items-center justify-between gap-3 rounded-2 bg-[var(--background-secondary)] px-3 py-2 text-sm text-[var(--text-normal)]">
-					<div class="flex min-w-0 items-center gap-3">
+			<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
+				<div class=":uno: flex items-center justify-between gap-3 rounded-2 bg-[var(--background-secondary)] px-3 py-2 text-sm text-[var(--text-normal)]">
+					<div class=":uno: flex min-w-0 items-center gap-3">
 						<svg
-							class="h-4 w-4 shrink-0 animate-spin text-[var(--interactive-accent)]"
+							class=":uno: h-4 w-4 shrink-0 animate-spin text-[var(--interactive-accent)]"
 							viewBox="0 0 24 24"
 							fill="none"
 							aria-hidden="true"
@@ -32,11 +32,11 @@ export function RunStateCard(props: {
 								stroke-dasharray="42 16"
 							/>
 						</svg>
-						<div class="min-w-0 font-medium">{label()}</div>
+						<div class=":uno: min-w-0 font-medium">{label()}</div>
 					</div>
 					<Show when={canStop() && props.onStop}>
 						<button
-							class="shrink-0"
+							class=":uno: shrink-0"
 							type="button"
 							onClick={() => props.onStop?.()}
 						>

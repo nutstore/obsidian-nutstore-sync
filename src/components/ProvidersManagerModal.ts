@@ -70,19 +70,27 @@ export default class ProvidersManagerModal extends Modal {
 
 				const buttonEl = button.buttonEl
 				buttonEl.classList.toggle(
-					'connection-button',
+					':uno: connection-button',
 					this.presetModelsRefreshState !== 'idle',
 				)
 				buttonEl.classList.toggle(
-					'loading',
+					':uno: loading',
 					this.presetModelsRefreshState === 'loading',
 				)
 				buttonEl.classList.toggle(
-					'success',
+					':uno: opacity-50',
+					this.presetModelsRefreshState === 'loading',
+				)
+				buttonEl.classList.toggle(
+					':uno: pointer-events-none',
+					this.presetModelsRefreshState === 'loading',
+				)
+				buttonEl.classList.toggle(
+					':uno: success',
 					this.presetModelsRefreshState === 'success',
 				)
 				buttonEl.classList.toggle(
-					'mod-warning',
+					':uno: mod-warning',
 					this.presetModelsRefreshState === 'error',
 				)
 
@@ -139,7 +147,7 @@ export default class ProvidersManagerModal extends Modal {
 			.setName(i18n.t('settings.ai.providers.name'))
 			.setDesc(i18n.t('settings.ai.providers.desc'))
 			.addDropdown((dropdown) => {
-				dropdown.selectEl.classList.add('max-w-32!')
+				dropdown.selectEl.classList.add(':uno: max-w-32!')
 				dropdown.addOption(
 					CUSTOM_OPTION,
 					i18n.t('settings.ai.providers.presetCustom'),
@@ -192,7 +200,7 @@ export default class ProvidersManagerModal extends Modal {
 		)
 		if (providers.length === 0) {
 			contentEl.createDiv({
-				cls: 'setting-item-description',
+				cls: ':uno: setting-item-description',
 				text: i18n.t('settings.ai.providers.empty'),
 			})
 			return
@@ -210,7 +218,7 @@ export default class ProvidersManagerModal extends Modal {
 				.then((setting) => {
 					if (missingPresetModels.length > 0) {
 						setting.descEl.createDiv({
-							cls: 'setting-item-description',
+							cls: ':uno: setting-item-description',
 							text: i18n.t('settings.ai.providers.updateModelsHint', {
 								count: missingPresetModels.length,
 							}),
@@ -267,7 +275,7 @@ export default class ProvidersManagerModal extends Modal {
 						confirmDelete = false
 						button.buttonEl.empty()
 						setIcon(button.buttonEl, 'trash')
-						button.buttonEl.removeClass('mod-warning')
+						button.buttonEl.removeClass(':uno: mod-warning')
 					}
 
 					button.setIcon('trash').onClick(async () => {
@@ -277,7 +285,7 @@ export default class ProvidersManagerModal extends Modal {
 							button.buttonEl.createSpan({
 								text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 							})
-							button.buttonEl.addClass('mod-warning')
+							button.buttonEl.addClass(':uno: mod-warning')
 							return
 						}
 						await this.deleteProvider(provider)
@@ -348,7 +356,12 @@ export default class ProvidersManagerModal extends Modal {
 					)
 					.setDisabled(isAuthorizing)
 				if (isAuthorizing) {
-					button.buttonEl.classList.add('connection-button', 'loading')
+					button.buttonEl.classList.add(
+						':uno: connection-button',
+						':uno: loading',
+						':uno: opacity-50',
+						':uno: pointer-events-none',
+					)
 					return
 				}
 				button.onClick(() => {
@@ -438,7 +451,7 @@ export default class ProvidersManagerModal extends Modal {
 					confirmDisconnect = false
 					button.buttonEl.empty()
 					setIcon(button.buttonEl, 'trash')
-					button.buttonEl.removeClass('mod-warning')
+					button.buttonEl.removeClass(':uno: mod-warning')
 				}
 
 				button.setIcon('trash').onClick(async () => {
@@ -448,7 +461,7 @@ export default class ProvidersManagerModal extends Modal {
 						button.buttonEl.createSpan({
 							text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 						})
-						button.buttonEl.addClass('mod-warning')
+						button.buttonEl.addClass(':uno: mod-warning')
 						return
 					}
 					await this.plugin.nutstoreLlmGatewayService.disconnect()

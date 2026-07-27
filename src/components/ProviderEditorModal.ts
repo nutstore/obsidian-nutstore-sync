@@ -43,17 +43,19 @@ export default class ProviderEditorModal extends Modal {
 	}
 
 	onOpen() {
-		this.modalEl.addClass('provider-editor-modal')
-		this.contentEl.addClass('provider-editor-modal__content')
+		this.modalEl.addClass(':uno: provider-editor-modal')
+		this.contentEl.addClass(':uno: provider-editor-modal__content')
 		this.render()
 	}
 
 	private render() {
 		const { contentEl } = this
 		contentEl.empty()
-		const bodyEl = contentEl.createDiv({ cls: 'provider-editor-modal__body' })
+		const bodyEl = contentEl.createDiv({
+			cls: ':uno: flex-auto min-h-0 overflow-y-auto pr-1',
+		})
 		const footerEl = contentEl.createDiv({
-			cls: 'provider-editor-modal__footer',
+			cls: ':uno: provider-editor-modal__footer',
 		})
 
 		bodyEl.createEl('h2', {
@@ -65,7 +67,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.name'))
 			.setDesc(i18n.t('settings.ai.provider.desc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => s.settingEl.addClass(':uno: setting-required'))
 			.addText((text) =>
 				text.setValue(this.draft.name).onChange((value) => {
 					this.draft.name = value
@@ -97,7 +99,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.baseUrl.name'))
 			.setDesc(i18n.t('settings.ai.provider.baseUrl.desc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => s.settingEl.addClass(':uno: setting-required'))
 			.addText((text) =>
 				text
 					.setPlaceholder('https://api.openai.com/v1')
@@ -110,7 +112,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.apiKey.name'))
 			.setDesc(i18n.t('settings.ai.provider.apiKey.desc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => s.settingEl.addClass(':uno: setting-required'))
 			.addText((text) => {
 				text.setValue(this.draft.apiKey).onChange((value) => {
 					this.draft.apiKey = value
@@ -142,7 +144,7 @@ export default class ProviderEditorModal extends Modal {
 			)
 
 		const modelContainer = bodyEl.createDiv({
-			cls: 'provider-editor-modal__models',
+			cls: ':uno: provider-editor-modal__models',
 		})
 		new Setting(modelContainer)
 			.setName(i18n.t('settings.ai.models.name'))
@@ -177,7 +179,7 @@ export default class ProviderEditorModal extends Modal {
 		const models = listModels(this.draft)
 		if (models.length === 0) {
 			modelContainer.createDiv({
-				cls: 'setting-item-description',
+				cls: ':uno: setting-item-description',
 				text: i18n.t('settings.ai.models.empty'),
 			})
 		}
@@ -187,14 +189,17 @@ export default class ProviderEditorModal extends Modal {
 				.setName(model.name || i18n.t('settings.ai.unnamedModel'))
 				.then((s) => {
 					const inputModalities = model.modalities?.input ?? ['text']
-					s.descEl.createDiv({ cls: 'modality-badge-row' }, (row) => {
-						for (const modality of inputModalities) {
-							row.createSpan({
-								cls: `modality-badge modality-badge-${modality}`,
-								text: modality,
-							})
-						}
-					})
+					s.descEl.createDiv(
+						{ cls: ':uno: flex flex-wrap gap-1 mt-1' },
+						(row) => {
+							for (const modality of inputModalities) {
+								row.createSpan({
+									cls: `:uno: modality-badge modality-badge-${modality}`,
+									text: modality,
+								})
+							}
+						},
+					)
 				})
 				.addButton((button) =>
 					button
@@ -226,7 +231,7 @@ export default class ProviderEditorModal extends Modal {
 						confirmDelete = false
 						button.buttonEl.empty()
 						setIcon(button.buttonEl, 'trash')
-						button.buttonEl.removeClass('mod-warning')
+						button.buttonEl.removeClass(':uno: mod-warning')
 					}
 
 					button.setIcon('trash').onClick(() => {
@@ -236,7 +241,7 @@ export default class ProviderEditorModal extends Modal {
 							button.buttonEl.createSpan({
 								text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 							})
-							button.buttonEl.addClass('mod-warning')
+							button.buttonEl.addClass(':uno: mod-warning')
 							return
 						}
 						this.deleteModel(model)
@@ -295,8 +300,8 @@ export default class ProviderEditorModal extends Modal {
 	onClose() {
 		this.cleanupModalMount?.()
 		this.cleanupModalMount = undefined
-		this.modalEl.removeClass('provider-editor-modal')
-		this.contentEl.removeClass('provider-editor-modal__content')
+		this.modalEl.removeClass(':uno: provider-editor-modal')
+		this.contentEl.removeClass(':uno: provider-editor-modal__content')
 		this.contentEl.empty()
 	}
 }

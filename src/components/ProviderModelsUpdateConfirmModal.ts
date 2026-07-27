@@ -27,7 +27,7 @@ export default class ProviderModelsUpdateConfirmModal extends Modal {
 		})
 
 		const listEl = contentEl.createEl('ul', {
-			cls: 'max-h-50vh overflow-y-auto',
+			cls: ':uno: max-h-50vh overflow-y-auto',
 		})
 		for (const model of this.models) {
 			const itemEl = listEl.createEl('li')

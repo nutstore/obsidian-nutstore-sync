@@ -18,11 +18,12 @@ export function SessionHistoryItem(props: {
 		<div
 			role="button"
 			tabIndex={0}
-			class={`group relative w-full rounded-3 border px-3 py-3 text-left transition-colors overflow-hidden ${
+			class={[
+				':uno: group relative w-full rounded-3 border px-3 py-3 text-left transition-colors overflow-hidden',
 				props.isActive
-					? 'border-[var(--interactive-accent)] bg-[var(--background-secondary)]'
-					: 'border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] hover:bg-[var(--background-modifier-hover)] hover:cursor-pointer'
-			}`}
+					? ':uno: border-[var(--interactive-accent)] bg-[var(--background-secondary)]'
+					: ':uno: border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] hover:bg-[var(--background-modifier-hover)] hover:cursor-pointer',
+			].join(' ')}
 			onClick={activate}
 			onKeyDown={(event) => {
 				if (event.key === 'Enter' || event.key === ' ') {
@@ -32,25 +33,25 @@ export function SessionHistoryItem(props: {
 			}}
 		>
 			<Show when={props.isActive}>
-				<div class="absolute inset-y-3 left-0 w-1 rounded-r-full bg-[var(--interactive-accent)]" />
+				<div class=":uno: absolute inset-y-3 left-0 w-1 rounded-r-full bg-[var(--interactive-accent)]" />
 			</Show>
-			<div class="flex items-start justify-between gap-3">
-				<div class="min-w-0 flex-1">
-					<div class="truncate pr-1 text-sm font-medium text-[var(--text-normal)]">
+			<div class=":uno: flex items-start justify-between gap-3">
+				<div class=":uno: min-w-0 flex-1">
+					<div class=":uno: truncate pr-1 text-sm font-medium text-[var(--text-normal)]">
 						{props.session.title}
 					</div>
-					<div class="mt-2 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+					<div class=":uno: mt-2 flex items-center gap-1 text-xs text-[var(--text-muted)]">
 						{formatTime(props.session.createdAt)}
 						<Show when={props.isRunning}>
-							<span class="font-medium text-[var(--color-yellow)]">
+							<span class=":uno: font-medium text-[var(--color-yellow)]">
 								· {t('chatbox.ui.history.sessionRunning')}
 							</span>
 						</Show>
 					</div>
 				</div>
-				<div class="shrink-0">
+				<div class=":uno: shrink-0">
 					<div
-						class="i-lucide-ellipsis-vertical flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
+						class=":uno: i-lucide-ellipsis-vertical flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
 						aria-label={t('chatbox.ui.history.sessionActions')}
 						onClick={(event) => {
 							event.preventDefault()

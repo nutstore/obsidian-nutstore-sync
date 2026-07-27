@@ -62,7 +62,7 @@ export function PaneResizer(props: PaneResizerProps) {
 
 	return (
 		<div
-			class="chatbox-resizer px-3"
+			class=":uno: chatbox-resizer px-3"
 			classList={{ 'is-resizing': isResizing() }}
 			role="separator"
 			aria-orientation="horizontal"

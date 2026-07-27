@@ -824,7 +824,7 @@ function Chatbox(props: ChatboxProps) {
 	return (
 		<div
 			ref={chatboxRootEl}
-			class={`relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)] ${
+			class={`:uno: relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)] ${
 				isFileDragActive() ? 'chatbox-file-drag-active' : ''
 			}`}
 		>
@@ -832,7 +832,7 @@ function Chatbox(props: ChatboxProps) {
 				ref={fileInputEl}
 				type="file"
 				accept={PICKER_ACCEPT}
-				class="sr-only"
+				class=":uno: sr-only"
 				onChange={(event) => {
 					const files = Array.from(event.currentTarget.files ?? [])
 					if (!files.length) return
@@ -841,43 +841,43 @@ function Chatbox(props: ChatboxProps) {
 				}}
 			/>
 			<Show when={isFileDragActive()}>
-				<div class="chatbox-file-drop-overlay pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-3xl border-2 border-dashed">
-					<div class="rounded-full bg-[var(--background-primary)]/90 px-4 py-2 text-sm text-[var(--text-normal)] shadow-sm">
+				<div class=":uno: chatbox-file-drop-overlay pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-3xl border-2 border-dashed">
+					<div class=":uno: rounded-full bg-[var(--background-primary)]/90 px-4 py-2 text-sm text-[var(--text-normal)] shadow-sm">
 						{t('chatbox.ui.states.dragFilePrompt')}
 					</div>
 				</div>
 			</Show>
-			<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
+			<div class=":uno: flex min-w-0 flex-1 flex-col overflow-hidden">
 				{/* Header */}
-				<div class="relative flex shrink-0 items-center gap-2 border-b border-[var(--background-modifier-border)] px-3 py-3">
+				<div class=":uno: relative flex shrink-0 items-center gap-2 border-b border-[var(--background-modifier-border)] px-3 py-3">
 					<div
-						class="i-lucide-history flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
+						class=":uno: i-lucide-history flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
 						onClick={() => {
 							setHistoryOpen((value) => !value)
 							setModelPickerOpen(false)
 						}}
 					/>
-					<div class="min-w-0 flex-1 truncate text-sm font-semibold">
+					<div class=":uno: min-w-0 flex-1 truncate text-sm font-semibold">
 						{props.title || t('chatbox.newChat')}
 					</div>
-					<div class="relative" ref={modelPickerEl}>
+					<div class=":uno: relative" ref={modelPickerEl}>
 						<button
-							class="max-w-56 min-w-34 text-sm"
+							class=":uno: max-w-56 min-w-34 text-sm"
 							type="button"
 							onClick={() => {
 								setModelPickerOpen((value) => !value)
 								setHistoryOpen(false)
 							}}
 						>
-							<div class="truncate">{modelPickerLabel()}</div>
+							<div class=":uno: truncate">{modelPickerLabel()}</div>
 						</button>
 						<Show when={modelPickerOpen()}>
-							<div class="absolute right-0 top-12 z-10 w-72 rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] p-3 shadow-lg">
-								<div class="mb-2 text-xs text-[var(--text-muted)]">
+							<div class=":uno: absolute right-0 top-12 z-10 w-72 rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] p-3 shadow-lg">
+								<div class=":uno: mb-2 text-xs text-[var(--text-muted)]">
 									{t('chatbox.ui.labels.provider')}
 								</div>
 								<select
-									class="w-full"
+									class=":uno: w-full"
 									value={props.selectedProviderId || ''}
 									onChange={(event) =>
 										props.onSelectProvider(event.currentTarget.value)
@@ -890,11 +890,11 @@ function Chatbox(props: ChatboxProps) {
 										)}
 									</For>
 								</select>
-								<div class="mb-2 mt-3 text-xs text-[var(--text-muted)]">
+								<div class=":uno: mb-2 mt-3 text-xs text-[var(--text-muted)]">
 									{t('chatbox.ui.labels.model')}
 								</div>
 								<select
-									class="w-full"
+									class=":uno: w-full"
 									value={props.selectedModelId || ''}
 									disabled={!selectedProvider()?.models.length}
 									onChange={(event) => {
@@ -914,12 +914,12 @@ function Chatbox(props: ChatboxProps) {
 
 				<div
 					ref={splitLayoutEl}
-					class="flex min-h-0 flex-1 flex-col overflow-hidden"
+					class=":uno: flex min-h-0 flex-1 flex-col overflow-hidden"
 				>
 					{/* Messages */}
 					<div
 						ref={messagesEl}
-						class="min-h-0 flex-1 overflow-y-auto px-3 pb-3 scrollbar-default"
+						class=":uno: min-h-0 flex-1 overflow-y-auto px-3 pb-3 scrollbar-default"
 					>
 						<Show
 							when={
@@ -928,12 +928,12 @@ function Chatbox(props: ChatboxProps) {
 								isBusy()
 							}
 							fallback={
-								<div class="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
+								<div class=":uno: flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
 									{t('chatbox.ui.states.empty')}
 								</div>
 							}
 						>
-							<div class="flex flex-col gap-3">
+							<div class=":uno: flex flex-col gap-3">
 								<For each={props.timeline}>
 									{(item) => (
 										<MessageCard
@@ -969,7 +969,7 @@ function Chatbox(props: ChatboxProps) {
 					{/* Input */}
 					<div
 						ref={inputPaneEl}
-						class={`chatbox-input-pane shrink-0 px-2 pb-1 ${'chatbox-input-pane--resizable'}`}
+						class={`:uno: chatbox-input-pane shrink-0 px-2 pb-1 ${'chatbox-input-pane--resizable'}`}
 					>
 						<div class="chatbox-context-header">
 							<Show when={props.activeContextItems.length > 0}>
@@ -984,7 +984,7 @@ function Chatbox(props: ChatboxProps) {
 						</div>
 						<textarea
 							ref={inputTextareaEl}
-							class="chatbox-input flex-1 w-full rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"
+							class=":uno: chatbox-input flex-1 w-full rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"
 							style={(() => {
 								const height = getTextareaHeightStyle()
 								return height ? { height } : undefined
@@ -1024,30 +1024,30 @@ function Chatbox(props: ChatboxProps) {
 							}}
 						/>
 
-						<div class="mt-3 flex items-center justify-between gap-3">
-							<div class="flex flex-wrap items-center gap-2">
+						<div class=":uno: mt-3 flex items-center justify-between gap-3">
+							<div class=":uno: flex flex-wrap items-center gap-2">
 								<button
-									class="inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+									class=":uno: inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
 									type="button"
 									title={t('chatbox.ui.actions.selectFile')}
 									aria-label={t('chatbox.ui.actions.selectFile')}
 									onClick={openFilePicker}
 								>
-									<span class="i-lucide-paperclip size-4 shrink-0" />
+									<span class=":uno: i-lucide-paperclip size-4 shrink-0" />
 								</button>
 								<button
-									class="inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+									class=":uno: inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
 									type="button"
 									title={t('chatbox.ui.actions.compressContext')}
 									aria-label={t('chatbox.ui.actions.compressContext')}
 									disabled={!props.canCompress}
 									onClick={openCompressContextConfirm}
 								>
-									<span class="i-lucide-minimize-2 size-4 shrink-0" />
+									<span class=":uno: i-lucide-minimize-2 size-4 shrink-0" />
 								</button>
 							</div>
 							<button
-								class="mod-cta inline-flex items-center gap-1.5"
+								class=":uno: mod-cta inline-flex items-center gap-1.5"
 								type="button"
 								disabled={
 									(!input().trim() &&

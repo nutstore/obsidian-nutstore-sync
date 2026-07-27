@@ -12,7 +12,7 @@ export function SystemNotificationBlock(props: {
 	return (
 		<TitledCollapsibleBlock
 			title={t('chatbox.ui.labels.systemNotification')}
-			iconClass="i-lucide-bell"
+			iconClass=":uno: i-lucide-bell"
 		>
 			<MarkdownContent
 				markdown={formatSystemNotificationMarkdown(props.block.notification)}

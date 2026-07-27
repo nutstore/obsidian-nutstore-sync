@@ -6,14 +6,14 @@ import { timingDuration, toolStatusVisual } from '../tool-call-status'
 function statusIconClass(status: ChatTodoStatus) {
 	switch (status) {
 		case 'completed':
-			return 'i-lucide-circle-check-big text-[var(--color-green)]'
+			return ':uno: i-lucide-circle-check-big text-[var(--color-green)]'
 		case 'in_progress':
-			return 'i-lucide-loader-circle animate-spin text-[var(--text-muted)]'
+			return ':uno: i-lucide-loader-circle animate-spin text-[var(--text-muted)]'
 		case 'cancelled':
-			return 'i-lucide-circle-x text-[var(--text-faint)]'
+			return ':uno: i-lucide-circle-x text-[var(--text-faint)]'
 		case 'pending':
 		default:
-			return 'i-lucide-circle text-[var(--text-muted)]'
+			return ':uno: i-lucide-circle text-[var(--text-muted)]'
 	}
 }
 
@@ -26,26 +26,26 @@ export function TodoListBlock(props: {
 	const visual = () => toolStatusVisual(props.block.toolCall)
 
 	return (
-		<div class="rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
-			<div class="flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)]">
+		<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
+			<div class=":uno: flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)]">
 				<span
-					class="flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
+					class=":uno: flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
 					title={visual().label}
 					aria-label={visual().label}
 					role="img"
 				>
 					<span
-						class={`${visual().iconClass} size-5 shrink-0`}
+						class={`:uno: ${visual().iconClass} size-5 shrink-0`}
 						aria-hidden="true"
 					/>
 				</span>
-				<div class="truncate font-medium text-[var(--text-normal)]">
+				<div class=":uno: truncate font-medium text-[var(--text-normal)]">
 					{isEmpty()
 						? t('chatbox.ui.states.todoEmpty')
 						: t('chatbox.ui.labels.todoList')}
 					<Show when={timingDuration(props.block.timing, props.now)}>
 						{(duration) => (
-							<span class="font-normal text-[var(--text-muted)]">
+							<span class=":uno: font-normal text-[var(--text-muted)]">
 								{' '}
 								· {duration()}
 							</span>
@@ -53,23 +53,28 @@ export function TodoListBlock(props: {
 					</Show>
 				</div>
 				<Show when={!isEmpty()}>
-					<span class="ml-auto shrink-0 rounded-full bg-[var(--background-modifier-border)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--text-muted)]">
+					<span class=":uno: ml-auto shrink-0 rounded-full bg-[var(--background-modifier-border)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--text-muted)]">
 						{todos().length}
 					</span>
 				</Show>
 			</div>
 			<Show when={!isEmpty()}>
-				<div class="border-t border-[var(--background-modifier-border)] px-2 py-1.5">
-					<ul class="m-0 flex flex-col gap-0.5 list-none p-0">
+				<div class=":uno: border-t border-[var(--background-modifier-border)] px-2 py-1.5">
+					<ul class=":uno: m-0 flex flex-col gap-0.5 list-none p-0">
 						<For each={todos()}>
 							{(todo) => (
-								<li class="flex items-start gap-1.5 rounded-2 px-1.5 py-1 text-xs leading-5">
+								<li class=":uno: flex items-start gap-1.5 rounded-2 px-1.5 py-1 text-xs leading-5">
 									<span
-										class={`${statusIconClass(todo.status)} mt-0.5 size-4 shrink-0`}
+										class={`:uno: ${statusIconClass(todo.status)} mt-0.5 size-4 shrink-0`}
 										aria-hidden="true"
 									/>
 									<span
-										class={`min-w-0 flex-1 break-words ${todo.status === 'cancelled' ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-normal)]'}`}
+										class={[
+											':uno: min-w-0 flex-1 break-words',
+											todo.status === 'cancelled'
+												? ':uno: text-[var(--text-faint)] line-through'
+												: ':uno: text-[var(--text-normal)]',
+										].join(' ')}
 									>
 										{todo.content}
 									</span>

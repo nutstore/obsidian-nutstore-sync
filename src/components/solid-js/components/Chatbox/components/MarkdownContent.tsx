@@ -59,9 +59,11 @@ export function MarkdownContent(props: {
 	return (
 		<div
 			ref={el}
-			class={`ns-chatbox-markdown markdown-rendered select-text text-[var(--text-normal)] ${
-				props.compact ? 'text-xs leading-5' : 'text-sm leading-6'
-			} ${props.details ? 'ns-chatbox-markdown--details' : ''}`}
+			class={[
+				':uno: ns-chatbox-markdown markdown-rendered select-text text-[var(--text-normal)]',
+				props.compact ? ':uno: text-xs leading-5' : ':uno: text-sm leading-6',
+				props.details ? 'ns-chatbox-markdown--details' : '',
+			].join(' ')}
 		/>
 	)
 }

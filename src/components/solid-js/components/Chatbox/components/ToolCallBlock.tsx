@@ -147,7 +147,7 @@ function TaskToolCallBlock(props: {
 			headerActions={
 				<button
 					type="button"
-					class="flex size-6 items-center justify-center rounded-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--background-modifier-border)] hover:text-[var(--text-normal)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)]"
+					class=":uno: flex size-6 items-center justify-center rounded-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--background-modifier-border)] hover:text-[var(--text-normal)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)]"
 					disabled={!taskId()}
 					title={t('chatbox.ui.dialogs.subagentTimeline.title')}
 					aria-label={t('chatbox.ui.dialogs.subagentTimeline.title')}
@@ -158,7 +158,7 @@ function TaskToolCallBlock(props: {
 						if (id) props.onOpenSubagent?.(id)
 					}}
 				>
-					<span class="i-lucide-panel-top-open size-4 shrink-0" />
+					<span class=":uno: i-lucide-panel-top-open size-4 shrink-0" />
 				</button>
 			}
 		/>
@@ -196,7 +196,7 @@ function ToolTitle(props: { title: string; duration?: string }) {
 		<span>
 			{props.title}
 			<Show when={props.duration}>
-				<span class="font-normal text-[var(--text-muted)]">
+				<span class=":uno: font-normal text-[var(--text-muted)]">
 					{' '}
 					· {props.duration}
 				</span>
@@ -210,14 +210,14 @@ function agentStatusVisual(status: ChatAgentView['status']) {
 		case 'queued':
 			return waitingVisual(
 				t('chatbox.ui.states.taskQueued'),
-				'i-lucide-clock-3',
+				':uno: i-lucide-clock-3',
 			)
 		case 'running':
 			return runningVisual()
 		case 'idle':
 			return waitingVisual(
 				t('chatbox.ui.states.taskWaiting'),
-				'i-lucide-hourglass',
+				':uno: i-lucide-hourglass',
 			)
 		case 'completed':
 			return successVisual()

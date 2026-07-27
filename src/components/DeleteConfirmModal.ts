@@ -21,15 +21,17 @@ export default class DeleteConfirmModal extends Modal {
 		contentEl.empty()
 
 		const instruction = contentEl.createEl('p', {
-			cls: 'delete-confirm-instruction',
+			cls: ':uno: delete-confirm-instruction',
 		})
 		instruction.style.whiteSpace = 'pre-wrap'
 		instruction.setText(i18n.t('deleteConfirm.instruction'))
 
 		const tableContainer = contentEl.createDiv({
-			cls: 'max-h-50vh overflow-y-auto',
+			cls: ':uno: max-h-50vh overflow-y-auto',
 		})
-		const table = tableContainer.createEl('table', { cls: 'task-list-table' })
+		const table = tableContainer.createEl('table', {
+			cls: ':uno: task-list-table',
+		})
 
 		const thead = table.createEl('thead')
 		const headerRow = thead.createEl('tr')

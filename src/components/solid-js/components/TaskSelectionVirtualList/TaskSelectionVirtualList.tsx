@@ -34,7 +34,7 @@ export default function TaskSelectionVirtualList(
 		{
 			id: 'execute',
 			header: () => (
-				<div class="px-2 py-2 flex items-center justify-center">
+				<div class=":uno: px-2 py-2 flex items-center justify-center">
 					<input
 						type="checkbox"
 						checked={allChecked()}
@@ -49,7 +49,7 @@ export default function TaskSelectionVirtualList(
 				</div>
 			),
 			cell: (ctx) => (
-				<div class="px-2 py-2 flex items-start justify-center">
+				<div class=":uno: px-2 py-2 flex items-start justify-center">
 					<input
 						type="checkbox"
 						checked={ctx.row.original.checked}
@@ -66,7 +66,7 @@ export default function TaskSelectionVirtualList(
 			header: t('taskSelectionVirtualList.labels.action'),
 			accessorFn: (row) => row.action,
 			cell: (ctx) => (
-				<div class="px-2 py-2 text-sm text-[var(--text-normal)]">
+				<div class=":uno: px-2 py-2 text-sm text-[var(--text-normal)]">
 					{ctx.getValue<string>()}
 				</div>
 			),
@@ -76,7 +76,7 @@ export default function TaskSelectionVirtualList(
 			header: t('taskSelectionVirtualList.labels.localPath'),
 			accessorFn: (row) => row.localPath,
 			cell: (ctx) => (
-				<div class="px-2 py-2 text-sm break-all text-[var(--text-normal)]">
+				<div class=":uno: px-2 py-2 text-sm break-all text-[var(--text-normal)]">
 					{ctx.getValue<string>()}
 				</div>
 			),
@@ -86,7 +86,7 @@ export default function TaskSelectionVirtualList(
 			header: t('taskSelectionVirtualList.labels.remotePath'),
 			accessorFn: (row) => row.remotePath,
 			cell: (ctx) => (
-				<div class="px-2 py-2 text-sm break-all text-[var(--text-normal)]">
+				<div class=":uno: px-2 py-2 text-sm break-all text-[var(--text-normal)]">
 					{ctx.getValue<string>()}
 				</div>
 			),
@@ -145,9 +145,9 @@ export default function TaskSelectionVirtualList(
 	})
 
 	return (
-		<div class="w-full h-full border border-[var(--background-modifier-border)] rounded flex flex-col overflow-hidden">
-			<div class="flex-1 overflow-auto">
-				<table class="task-list-table m-0">
+		<div class=":uno: w-full h-full border border-[var(--background-modifier-border)] rounded flex flex-col overflow-hidden">
+			<div class=":uno: flex-1 overflow-auto">
+				<table class=":uno: task-list-table m-0">
 					<thead>
 						<For each={table.getHeaderGroups()}>
 							{(headerGroup) => (
@@ -193,10 +193,10 @@ export default function TaskSelectionVirtualList(
 				</table>
 			</div>
 
-			<div class="px-3 py-2 border-t border-[var(--background-modifier-border)] bg-[var(--background-secondary)] flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+			<div class=":uno: px-3 py-2 border-t border-[var(--background-modifier-border)] bg-[var(--background-secondary)] flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
 				<button
 					type="button"
-					class="px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
+					class=":uno: px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!canPreviousPage()}
 					onClick={() => setPagination((prev) => ({ ...prev, pageIndex: 0 }))}
 				>
@@ -204,7 +204,7 @@ export default function TaskSelectionVirtualList(
 				</button>
 				<button
 					type="button"
-					class="px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
+					class=":uno: px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!canPreviousPage()}
 					onClick={() =>
 						setPagination((prev) => ({
@@ -217,7 +217,7 @@ export default function TaskSelectionVirtualList(
 				</button>
 				<button
 					type="button"
-					class="px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
+					class=":uno: px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!canNextPage()}
 					onClick={() =>
 						setPagination((prev) => {
@@ -233,7 +233,7 @@ export default function TaskSelectionVirtualList(
 				</button>
 				<button
 					type="button"
-					class="px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
+					class=":uno: px-2 py-1 rounded border border-[var(--background-modifier-border)] bg-[var(--background-primary)] text-[var(--text-normal)] disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!canNextPage()}
 					onClick={() =>
 						setPagination((prev) => ({
@@ -244,9 +244,11 @@ export default function TaskSelectionVirtualList(
 				>
 					{t('taskSelectionVirtualList.pagination.last')}
 				</button>
-				<div class="flex-1" />
-				<span class="ml-1 text-[var(--text-normal)]">{pageInfoText()}</span>
-				<span class="ml-1">{totalItemsText()}</span>
+				<div class=":uno: flex-1" />
+				<span class=":uno: ml-1 text-[var(--text-normal)]">
+					{pageInfoText()}
+				</span>
+				<span class=":uno: ml-1">{totalItemsText()}</span>
 			</div>
 		</div>
 	)

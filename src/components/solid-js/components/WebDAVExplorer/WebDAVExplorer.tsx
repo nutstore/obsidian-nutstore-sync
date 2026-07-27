@@ -30,10 +30,10 @@ function App(props: WebDAVExplorerProps) {
 	const SingleCol = () => {
 		const list = createFileList()
 		return (
-			<div class="flex-1 flex flex-col overflow-y-auto scrollbar-hide">
+			<div class=":uno: flex-1 flex flex-col overflow-y-auto scrollbar-hide">
 				<Show when={showNewFolder()}>
 					<NewFolder
-						class="mt-1"
+						class=":uno: mt-1"
 						onCancel={() => setShowNewFolder(false)}
 						onConfirm={(name) => {
 							const target = path.join(cwd() ?? '/', name)
@@ -60,18 +60,18 @@ function App(props: WebDAVExplorerProps) {
 	}
 
 	return (
-		<div class="flex flex-col gap-4 h-50vh">
+		<div class=":uno: flex flex-col gap-4 h-50vh">
 			<SingleCol />
-			<div class="flex gap-2 text-xs">
+			<div class=":uno: flex gap-2 text-xs">
 				<span>{t('webdavExplorer.labels.currentPath')}:</span>
-				<span class="break-all">{cwd() ?? '/'}</span>
+				<span class=":uno: break-all">{cwd() ?? '/'}</span>
 			</div>
-			<div class="flex items-center gap-2">
+			<div class=":uno: flex items-center gap-2">
 				<button onClick={pop}>{t('webdavExplorer.actions.goBack')}</button>
-				<a class="no-underline" onClick={() => setShowNewFolder(true)}>
+				<a class=":uno: no-underline" onClick={() => setShowNewFolder(true)}>
 					{t('webdavExplorer.actions.newFolder')}
 				</a>
-				<div class="flex-1" />
+				<div class=":uno: flex-1" />
 				<button onClick={() => props.onClose()}>
 					{t('webdavExplorer.actions.cancel')}
 				</button>

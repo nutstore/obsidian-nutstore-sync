@@ -487,7 +487,7 @@ export default class ChatboxView extends ItemView {
 	async onOpen() {
 		this.contentEl.empty()
 		this.rootEl = this.contentEl.createDiv({
-			cls: 'nutstore-chatbox-view h-full',
+			cls: ':uno: nutstore-chatbox-view h-full',
 		})
 		this.captureActiveContextSnapshot(true)
 		this.plugin.chatService.setChatModalHost(this.rootEl)

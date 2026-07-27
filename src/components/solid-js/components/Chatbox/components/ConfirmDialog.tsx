@@ -19,11 +19,11 @@ export function ConfirmDialog(props: {
 }) {
 	const actionsClass = () =>
 		props.actionsLayout === 'vertical'
-			? 'mt-4 flex flex-col gap-2'
-			: 'mt-4 flex justify-end gap-2'
+			? ':uno: mt-4 flex flex-col gap-2'
+			: ':uno: mt-4 flex justify-end gap-2'
 	const cancelButton = () => (
 		<button
-			class={props.actionsLayout === 'vertical' ? 'w-full' : undefined}
+			class={props.actionsLayout === 'vertical' ? ':uno: w-full' : undefined}
 			type="button"
 			onClick={() => props.onCancel()}
 		>
@@ -31,18 +31,21 @@ export function ConfirmDialog(props: {
 		</button>
 	)
 	const actionButtonClass = (buttonClass?: string) =>
-		`${props.actionsLayout === 'vertical' ? 'w-full' : ''} ${buttonClass ?? ''}`.trim()
+		`${props.actionsLayout === 'vertical' ? ':uno: w-full' : ''} ${buttonClass ?? ''}`.trim()
 
 	return (
 		<Portal mount={props.mountEl ?? document.body}>
 			<div
-				class={`${props.contained ? 'absolute' : 'fixed'} inset-0 z-[220] flex items-center justify-center bg-black/40 px-4`}
+				class={[
+					':uno: inset-0 z-[220] flex items-center justify-center bg-black/40 px-4',
+					props.contained ? ':uno: absolute' : ':uno: fixed',
+				].join(' ')}
 			>
-				<div class="w-full max-w-sm rounded-4 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] p-4 shadow-xl">
-					<div class="text-base font-semibold text-[var(--text-normal)]">
+				<div class=":uno: w-full max-w-sm rounded-4 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] p-4 shadow-xl">
+					<div class=":uno: text-base font-semibold text-[var(--text-normal)]">
 						{props.title}
 					</div>
-					<div class="mt-3 text-sm leading-6 text-[var(--text-muted)]">
+					<div class=":uno: mt-3 text-sm leading-6 text-[var(--text-muted)]">
 						{props.message}
 					</div>
 					<div class={actionsClass()}>

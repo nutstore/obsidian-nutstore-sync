@@ -166,10 +166,10 @@ export function MessageCard(props: {
 
 	const roleIconClass = () => {
 		if (props.item.message.role === 'assistant') {
-			return 'i-lucide-bot'
+			return ':uno: i-lucide-bot'
 		}
 		if (props.item.message.role === 'user') {
-			return 'i-lucide-circle-user-round'
+			return ':uno: i-lucide-circle-user-round'
 		}
 	}
 
@@ -188,13 +188,17 @@ export function MessageCard(props: {
 
 	return (
 		<div
-			class={`${props.item.message.metadata?.status === 'error' ? 'text-[var(--text-error)]' : ''}`}
+			class={
+				props.item.message.metadata?.status === 'error'
+					? ':uno: text-[var(--text-error)]'
+					: undefined
+			}
 		>
 			<Show when={props.item.showHeader && !isSystemNotification()}>
-				<div class="mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
-					<div class="flex items-center gap-1 font-medium text-[var(--text-normal)]">
+				<div class=":uno: mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
+					<div class=":uno: flex items-center gap-1 font-medium text-[var(--text-normal)]">
 						<span
-							class={`${roleIconClass()} size-4 shrink-0`}
+							class={`:uno: ${roleIconClass()} size-4 shrink-0`}
 							aria-hidden="true"
 						/>
 						<span>{roleLabel()}</span>
@@ -202,7 +206,7 @@ export function MessageCard(props: {
 					<span>{formatTime(props.item.createdAt)}</span>
 				</div>
 			</Show>
-			<div class="flex flex-col gap-2">
+			<div class=":uno: flex flex-col gap-2">
 				<For each={props.item.displayBlocks}>
 					{(block) => (
 						<MessageDisplayBlock
@@ -225,7 +229,7 @@ export function MessageCard(props: {
 					)
 				}
 			>
-				<div class="mt-2">
+				<div class=":uno: mt-2">
 					<ContextArea
 						items={props.item.message.parts.flatMap((part) =>
 							part.type === 'data-user-context' ? part.data.items : [],
@@ -240,18 +244,18 @@ export function MessageCard(props: {
 						props.item.message.role === 'user')
 				}
 			>
-				<div class="mt-3 flex items-center justify-between gap-2 px-1">
-					<div class="flex items-center gap-0.5">
+				<div class=":uno: mt-3 flex items-center justify-between gap-2 px-1">
+					<div class=":uno: flex items-center gap-0.5">
 						<CopyButton getText={getText} />
 						<Show when={props.onDeleteMessage}>
 							<button
-								class="cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-error)] !border-none !bg-transparent !shadow-none"
+								class=":uno: cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-error)] !border-none !bg-transparent !shadow-none"
 								type="button"
 								title={t('chatbox.ui.actions.deleteMessage')}
 								onClick={() => props.onDeleteMessage?.(props.item.message.id)}
 							>
 								<span
-									class="i-lucide-trash-2 size-3.5 shrink-0"
+									class=":uno: i-lucide-trash-2 size-3.5 shrink-0"
 									aria-hidden="true"
 								/>
 							</button>
@@ -260,13 +264,13 @@ export function MessageCard(props: {
 							when={props.item.message.role === 'user' && props.onRecallMessage}
 						>
 							<button
-								class="cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
+								class=":uno: cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
 								type="button"
 								title={t('chatbox.ui.actions.recallMessage')}
 								onClick={() => props.onRecallMessage?.(props.item.message.id)}
 							>
 								<span
-									class="i-lucide-undo-2 size-3.5 shrink-0"
+									class=":uno: i-lucide-undo-2 size-3.5 shrink-0"
 									aria-hidden="true"
 								/>
 							</button>
@@ -278,7 +282,7 @@ export function MessageCard(props: {
 							}
 						>
 							<button
-								class="cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
+								class=":uno: cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
 								type="button"
 								title={t('chatbox.ui.actions.regenerateMessage')}
 								onClick={() =>
@@ -286,14 +290,14 @@ export function MessageCard(props: {
 								}
 							>
 								<span
-									class="i-lucide-refresh-cw size-3.5 shrink-0"
+									class=":uno: i-lucide-refresh-cw size-3.5 shrink-0"
 									aria-hidden="true"
 								/>
 							</button>
 						</Show>
 					</div>
 					<Show when={props.item.message.role === 'assistant' && usageText()}>
-						<div class="text-[10px] text-[var(--text-faint)]">
+						<div class=":uno: text-[10px] text-[var(--text-faint)]">
 							{usageText()}
 						</div>
 					</Show>

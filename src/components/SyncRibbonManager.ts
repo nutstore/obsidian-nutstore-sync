@@ -66,7 +66,7 @@ export class SyncRibbonManager extends BaseService {
 			i18n.t('sync.stopButton'),
 			() => emitCancelSync(),
 		)
-		this.stopRibbonEl.classList.add('hidden')
+		this.stopRibbonEl.classList.add(':uno: hidden')
 
 		this.plugin.addRibbonIcon(
 			'bot',
@@ -92,11 +92,11 @@ export class SyncRibbonManager extends BaseService {
 		if (this.plugin.isSyncing) {
 			this.startRibbonEl.setAttr('aria-disabled', 'true')
 			this.startRibbonEl.addClass('nutstore-sync-spinning')
-			this.stopRibbonEl.classList.remove('hidden')
+			this.stopRibbonEl.classList.remove(':uno: hidden')
 		} else {
 			this.startRibbonEl.removeAttribute('aria-disabled')
 			this.startRibbonEl.removeClass('nutstore-sync-spinning')
-			this.stopRibbonEl.classList.add('hidden')
+			this.stopRibbonEl.classList.add(':uno: hidden')
 		}
 	}
 }
