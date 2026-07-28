@@ -1,16 +1,15 @@
 import { generateText } from 'ai'
 import type { ChatSession } from '~/ai/chat/domain'
-import { resolveUsedContextTokens } from '~/ai/chat/domain'
+import { findLatestTodos, resolveUsedContextTokens } from '~/ai/chat/domain'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
+import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import {
 	selectContextTimeline,
 	uiMessagesToModelMessages,
 } from '~/ai/chat/messages/ui-message'
-import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { COMPRESSION_PROMPT } from '~/ai/chat/prompts'
 import type { SessionStore } from '~/ai/chat/session/session-store'
-import type { ChatAgentState } from '~/ai/chat/types'
-import type { AppUIMessage } from '~/ai/chat/types'
+import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
 import {
 	prepareMessagesForModel,
 	resolveLanguageModel,
@@ -166,6 +165,20 @@ export async function runContextCompression({
 	})
 	if (isCancelled?.()) return
 	const summary = response.text.trim() || COMPRESSION_PROMPT
+	const todos = findLatestTodos(session)
+	const todoLines = todos.map(
+		(todo) => `- [${todo.status}] ${todo.content} (${todo.priority})`,
+	)
+	const finalSummary =
+		todos.length > 0
+			? [
+					summary,
+					'',
+					'<CurrentTodoList>',
+					...todoLines,
+					'</CurrentTodoList>',
+				].join('\n')
+			: summary
 	const preservedTurnIndex = await findRecentTurnStartIndex(
 		contextTimeline,
 		resolveRecentTurnsTokenBudget(resolveContextWindow(model)),
@@ -177,7 +190,7 @@ export async function runContextCompression({
 		).length
 	messageFactory.appendContextBoundary(session, agent, {
 		mode: 'summary',
-		summary,
+		summary: finalSummary,
 		preservedTurnCount,
 	})
 	store.upsertSessionIndexItem(session, deriveTitle(session))
