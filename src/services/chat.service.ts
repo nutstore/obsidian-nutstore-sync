@@ -143,6 +143,7 @@ export default class ChatService extends BaseService {
 			this.store,
 			this.messageFactory,
 			() => this.notify(),
+			plugin.app,
 		)
 		this.taskManager = new TaskManager(
 			plugin.app,

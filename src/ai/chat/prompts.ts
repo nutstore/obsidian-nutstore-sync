@@ -39,16 +39,22 @@ function createTodoWriteGuidance() {
 export function createSystemPromptForAgent(
 	definition: AgentDefinition,
 	sessionSystemPrompt?: string,
+	vaultInstructions?: string,
 ) {
+	const wrappedVaultInstructions = vaultInstructions?.trim()
+		? `<vault-instructions>\n${vaultInstructions.trim()}\n</vault-instructions>`
+		: undefined
+
 	if (definition.id === MASTER_AGENT_ID) {
 		return [
 			sessionSystemPrompt,
 			definition.systemPrompt,
 			createVaultToolGuidance(),
 			createTodoWriteGuidance(),
+			wrappedVaultInstructions,
 		]
 			.filter(Boolean)
-			.join(' ')
+			.join('\n\n')
 	}
 
 	return [
@@ -57,5 +63,5 @@ export function createSystemPromptForAgent(
 		'When you finish, return a concise final answer. If the task fails, explain the failure clearly.',
 	]
 		.filter(Boolean)
-		.join(' ')
+		.join('\n\n')
 }

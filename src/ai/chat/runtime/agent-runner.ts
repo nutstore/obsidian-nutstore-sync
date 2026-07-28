@@ -8,6 +8,7 @@ import {
 	type ToolCallPart,
 	type ToolSet,
 } from 'ai'
+import type { App } from 'obsidian'
 import type {
 	AIModelConfig,
 	AIProviderConfig,
@@ -69,6 +70,7 @@ export class AgentRunner {
 		private store: SessionStore,
 		private messageFactory: MessageFactory,
 		private notify: () => void,
+		private app: App,
 	) {}
 
 	async runTurn(options: RunAgentTurnOptions): Promise<AgentRunResult> {
@@ -79,9 +81,11 @@ export class AgentRunner {
 			session,
 			definition,
 		)
+		const vaultInstructions = await this.readVaultInstructions()
 		const systemPrompt = createSystemPromptForAgent(
 			definition,
 			session.systemPrompt,
+			vaultInstructions,
 		)
 		const messages = options.buildMessages
 			? await options.buildMessages(agent, tools)
@@ -269,6 +273,15 @@ export class AgentRunner {
 			text:
 				messageToText(finalMessage).trim() ||
 				i18n.t('chatbox.task.emptyResult'),
+		}
+	}
+
+	private async readVaultInstructions(): Promise<string | undefined> {
+		try {
+			const content = await this.app.vault.adapter.read('AGENTS.md')
+			return content.trim() || undefined
+		} catch {
+			return undefined
 		}
 	}
 }

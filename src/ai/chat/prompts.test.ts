@@ -24,3 +24,36 @@ describe('main system prompt Skills guidance', () => {
 		expect(prompt).not.toContain('subagent_type')
 	})
 })
+
+describe('vault instructions', () => {
+	it('appends vault instructions wrapped in XML tags when provided', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const instructions = 'Always reply in a friendly tone.'
+		const prompt = createSystemPromptForAgent(
+			definition,
+			undefined,
+			instructions,
+		)
+
+		expect(prompt).toContain('<vault-instructions>')
+		expect(prompt).toContain(instructions)
+		expect(prompt).toContain('</vault-instructions>')
+	})
+
+	it('omits vault-instructions block when content is empty', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const prompt = createSystemPromptForAgent(definition, undefined, '')
+
+		expect(prompt).not.toContain('<vault-instructions>')
+	})
+
+	it('omits vault-instructions block when not provided', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(prompt).not.toContain('<vault-instructions>')
+	})
+})
