@@ -136,10 +136,6 @@
 			"none": "Not set",
 			"unnamedProvider": "Unnamed provider",
 			"unnamedModel": "Unnamed model",
-			"defaultProvider": {
-				"name": "Default provider",
-				"desc": "Optional provider selected for new chat sessions"
-			},
 			"defaultModel": {
 				"name": "Default model",
 				"desc": "Optional model selected for new chat sessions"

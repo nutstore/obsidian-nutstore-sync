@@ -94,10 +94,6 @@
 			"none": "未设置",
 			"unnamedProvider": "未命名模型提供商",
 			"unnamedModel": "未命名模型",
-			"defaultProvider": {
-				"name": "默认模型提供商",
-				"desc": "新建对话时可选的默认模型提供商"
-			},
 			"defaultModel": {
 				"name": "默认模型",
 				"desc": "新建对话时可选的默认模型"

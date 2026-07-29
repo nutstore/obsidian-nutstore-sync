@@ -40,8 +40,8 @@ export default class AISettings extends BaseSettings {
 			)
 
 		new Setting(this.containerEl)
-			.setName(i18n.t('settings.ai.defaultProvider.name'))
-			.setDesc(i18n.t('settings.ai.defaultProvider.desc'))
+			.setName(i18n.t('settings.ai.defaultModel.name'))
+			.setDesc(i18n.t('settings.ai.defaultModel.desc'))
 			.addDropdown((dropdown) => {
 				dropdown.addOption('', i18n.t('settings.ai.none'))
 				for (const provider of listProviders(
@@ -75,10 +75,6 @@ export default class AISettings extends BaseSettings {
 						this.display()
 					})
 			})
-
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.ai.defaultModel.name'))
-			.setDesc(i18n.t('settings.ai.defaultModel.desc'))
 			.addDropdown((dropdown) => {
 				const provider = getProviderById(
 					this.plugin.settings.ai.providers,
