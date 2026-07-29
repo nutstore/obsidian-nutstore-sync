@@ -9,14 +9,17 @@ importers:
   .:
     devDependencies:
       '@ai-sdk/anthropic':
-        specifier: ^4.0.1
-        version: 4.0.1(zod@4.3.6)
+        specifier: ^4.0.23
+        version: 4.0.23(zod@4.3.6)
       '@ai-sdk/google':
-        specifier: ^4.0.2
-        version: 4.0.2(zod@4.3.6)
+        specifier: ^4.0.26
+        version: 4.0.26(zod@4.3.6)
+      '@ai-sdk/openai':
+        specifier: ^4.0.22
+        version: 4.0.22(zod@4.3.6)
       '@ai-sdk/openai-compatible':
-        specifier: ^3.0.1
-        version: 3.0.1(zod@4.3.6)
+        specifier: ^3.0.16
+        version: 3.0.16(zod@4.3.6)
       '@codemirror/state':
         specifier: 6.5.2
         version: 6.5.2
@@ -87,8 +90,8 @@ importers:
         specifier: ^3.1.2
         version: 3.2.4(vitest@3.2.4(@types/debug@4.1.13)(@types/node@16.18.126)(jiti@2.7.0)(sass-embedded@1.86.0)(sass@1.86.0)(yaml@2.9.0))
       ai:
-        specifier: ^7.0.4
-        version: 7.0.4(zod@4.3.6)
+        specifier: ^7.0.40
+        version: 7.0.40(zod@4.3.6)
       assert:
         specifier: ^2.1.0
         version: 2.1.0
@@ -199,7 +202,7 @@ importers:
         version: 7.0.2
       obsidian:
         specifier: latest
-        version: 1.12.3(@codemirror/state@6.5.2)(@codemirror/view@6.36.4)
+        version: 1.13.1(@codemirror/state@6.5.2)(@codemirror/view@6.36.4)
       ohash:
         specifier: ^1.1.4
         version: 1.1.6
@@ -263,38 +266,44 @@ importers:
 
 packages:
 
-  '@ai-sdk/anthropic@4.0.1':
-    resolution: {integrity: sha512-q9PMy0r3LGzSTu6FtYhFj6EesVpSpsEoPLsRKFnaK4YJd7SdUJlYIUJ4EXd5LTWzeXxk4r02z3gymo24c9jyQA==}
+  '@ai-sdk/anthropic@4.0.23':
+    resolution: {integrity: sha512-9sky++sOcQ3V38XWqPpiLIe4knjWREOUEv3ZOZZ9mTQepb2Ho60NUFGR/0NxQlTHEW9G0zxciEecySNE/iHdVQ==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@4.0.4':
-    resolution: {integrity: sha512-xO0e9duft/uZlnDaIeBZmzTMjfdEz1kkDzWnhQNkJZZljsKWVi6IREZW9nAa+Dx6jYJssyxSUggaFYBAV1WZpw==}
+  '@ai-sdk/gateway@4.0.30':
+    resolution: {integrity: sha512-nhgR5U6N0wRg+32Mnd8YrOknWQhWfn3ZAKhEOEf6u3dWzhNxTAAPIB7nnz5gRf8Us8K45yIsTrk0OtH897z7Mw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/google@4.0.2':
-    resolution: {integrity: sha512-pabPdHf73DHhFFAYyKzT9ctrRtMTCB3H94aObgNd+I1sHJGf61msra5X2qaFUpW+YniQPHeNQ+RW3wgGOIfS2g==}
+  '@ai-sdk/google@4.0.26':
+    resolution: {integrity: sha512-59+LvUHmcvnUGunpfZuS6igLrIRnJ3vpGBafGPGopb6gZt4VD9kZjTQcBhhvZiR3GZRNSKlUUx6qmpI3pvrSaQ==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai-compatible@3.0.1':
-    resolution: {integrity: sha512-nUbQoGzdFZspb1cr6GUy+nR8Uvdi4/lCwTkdE9qKe+Qr2OVPsIKRIpyC9ewJ2uqUfl+1JlkWhPfR5l8bokNs4Q==}
+  '@ai-sdk/openai-compatible@3.0.16':
+    resolution: {integrity: sha512-beXoYtlCnI02BYZU6oGfOPI40xC8MJx+Ek0SM8XZ8RcBBP7SaQ0qIV5DO3Y1euHMLMD92zE7nNHM0WcnnnX58A==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@5.0.1':
-    resolution: {integrity: sha512-p9Ra+dN4jjHrssXvklNf4nFvWbj1KePMfUOs7nue0NuoIMbYFBULhX4Vu0+6DWLnw3+UsLL9+RCKLtzzU43Qpg==}
+  '@ai-sdk/openai@4.0.22':
+    resolution: {integrity: sha512-SjElnPn11HsOgkMJzM216NR3BQ3nyvkpJfAVe1C1+ZRpYNmYyLkFRMEs1JR/CUV4BSrxNb3YsPDPtBEfIQE7yQ==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider@4.0.0':
-    resolution: {integrity: sha512-fr9Gs89prDWiuox/T+kCA+i2cJkHpxU5S+tr4megjTzRC27ZsvFhwjU/+XrqqMbvBUlfmXxTOYWy8ng45dsjIg==}
+  '@ai-sdk/provider-utils@5.0.14':
+    resolution: {integrity: sha512-HW+Ys98cr2BRQzP6jTlp2bRKIqt+oAjYNLm9gqUUQkLz7QERtaPgDZOoXHz9IXSXoOtz175p4Q17qKQdEX0Hag==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider@4.0.4':
+    resolution: {integrity: sha512-tbHKNLirllUNF3ZlkCsXnwab2ZV1Sl4b1H/Cp9ruCce15IBmskE8Gwkk0yo9xDWY+jho2of7lVXtwSsyrq7cwQ==}
     engines: {node: '>=22'}
 
   '@ampproject/remapping@2.3.0':
@@ -1796,8 +1805,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  ai@7.0.4:
-    resolution: {integrity: sha512-mZub080RWRxpWg8OY56KVnI3AoMVniccSWG+dwVb3nH81+GiNMDYBIdP41RLUivLpmU49pB7ssD7tvfIUaSaCA==}
+  ai@7.0.40:
+    resolution: {integrity: sha512-Q113Nory1PNgWzo2X7x/bUnJhd95UPNEtWlv+nnM5bSuEkA9iy+VZ3WZFcOvGMZjNDQzD5sZnJgIKQjGh8lv9Q==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -2926,9 +2935,6 @@ packages:
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
 
-  immutable@5.0.3:
-    resolution: {integrity: sha512-P8IdPQHq3lA1xVeBRi5VPqUm5HDgKnx0Ru51wZz5mjxHr5n3RWhjIpOFU7ybkUxfB+5IToy+OLaHYDBIWsv+uw==}
-
   immutable@5.1.4:
     resolution: {integrity: sha512-p6u1bG3YSnINT5RQmx/yRZBpenIl30kVxkTLDyHLIMk0gict704Q9n+thfDI7lTRm9vXdDYutVzXhzcThxTnXA==}
 
@@ -3684,8 +3690,8 @@ packages:
     resolution: {integrity: sha512-gXah6aZrcUxjWg2zR2MwouP2eHlCBzdV4pygudehaKXSGW4v2AsRQUK+lwwXhii6KFZcunEnmSUoYp5CXibxtA==}
     engines: {node: '>= 0.4'}
 
-  obsidian@1.12.3:
-    resolution: {integrity: sha512-HxWqe763dOqzXjnNiHmAJTRERN8KILBSqxDSEqbeSr7W8R8Jxezzbca+nz1LiiqXnMpM8lV2jzAezw3CZ4xNUw==}
+  obsidian@1.13.1:
+    resolution: {integrity: sha512-qtTEA2pmhJzhuhJqzbBFRYhpIOqvW+krDYjtFynv66KbxBbumHBlsJfWw3I4jtnK/6fZwbQhCrmmDdRwXmX56w==}
     peerDependencies:
       '@codemirror/state': 6.5.0
       '@codemirror/view': 6.38.6
@@ -4807,40 +4813,46 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/anthropic@4.0.1(zod@4.3.6)':
+  '@ai-sdk/anthropic@4.0.23(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0
-      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.14(zod@4.3.6)
       zod: 4.3.6
 
-  '@ai-sdk/gateway@4.0.4(zod@4.3.6)':
+  '@ai-sdk/gateway@4.0.30(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0
-      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.14(zod@4.3.6)
       '@vercel/oidc': 3.2.0
       zod: 4.3.6
 
-  '@ai-sdk/google@4.0.2(zod@4.3.6)':
+  '@ai-sdk/google@4.0.26(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0
-      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.14(zod@4.3.6)
       zod: 4.3.6
 
-  '@ai-sdk/openai-compatible@3.0.1(zod@4.3.6)':
+  '@ai-sdk/openai-compatible@3.0.16(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0
-      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.14(zod@4.3.6)
       zod: 4.3.6
 
-  '@ai-sdk/provider-utils@5.0.1(zod@4.3.6)':
+  '@ai-sdk/openai@4.0.22(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.14(zod@4.3.6)
+      zod: 4.3.6
+
+  '@ai-sdk/provider-utils@5.0.14(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.4
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.0
       zod: 4.3.6
 
-  '@ai-sdk/provider@4.0.0':
+  '@ai-sdk/provider@4.0.4':
     dependencies:
       json-schema: 0.4.0
 
@@ -6331,11 +6343,11 @@ snapshots:
 
   acorn@8.16.0: {}
 
-  ai@7.0.4(zod@4.3.6):
+  ai@7.0.40(zod@4.3.6):
     dependencies:
-      '@ai-sdk/gateway': 4.0.4(zod@4.3.6)
-      '@ai-sdk/provider': 4.0.0
-      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.6)
+      '@ai-sdk/gateway': 4.0.30(zod@4.3.6)
+      '@ai-sdk/provider': 4.0.4
+      '@ai-sdk/provider-utils': 5.0.14(zod@4.3.6)
       zod: 4.3.6
 
   ajv@6.15.0:
@@ -7673,8 +7685,6 @@ snapshots:
 
   immediate@3.0.6: {}
 
-  immutable@5.0.3: {}
-
   immutable@5.1.4: {}
 
   imurmurhash@0.1.4: {}
@@ -8604,7 +8614,7 @@ snapshots:
       define-properties: 1.2.1
       es-object-atoms: 1.1.1
 
-  obsidian@1.12.3(@codemirror/state@6.5.2)(@codemirror/view@6.36.4):
+  obsidian@1.13.1(@codemirror/state@6.5.2)(@codemirror/view@6.36.4):
     dependencies:
       '@codemirror/state': 6.5.2
       '@codemirror/view': 6.36.4
@@ -9087,7 +9097,7 @@ snapshots:
   sass@1.86.0:
     dependencies:
       chokidar: 4.0.3
-      immutable: 5.0.3
+      immutable: 5.1.4
       source-map-js: 1.2.1
     optionalDependencies:
       '@parcel/watcher': 2.5.1

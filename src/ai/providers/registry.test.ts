@@ -26,7 +26,7 @@ describe('getProviderResolver', () => {
 		expect(model.constructor.name).toBe('_OpenAICompatibleChatLanguageModel')
 	})
 
-	it('uses the OpenAI-compatible resolver for official OpenAI providers', () => {
+	it('uses the OpenAI Responses resolver for official OpenAI providers', () => {
 		const provider = createProvider({
 			api: undefined,
 			npm: '@ai-sdk/openai',
@@ -35,7 +35,7 @@ describe('getProviderResolver', () => {
 		const resolver = getProviderResolver(provider)
 		const { model } = resolver.createLanguageModel(provider, 'model-1')
 
-		expect(model.constructor.name).toBe('_OpenAICompatibleChatLanguageModel')
+		expect(model.constructor.name).toBe('_OpenAIResponsesLanguageModel')
 	})
 
 	it('uses the OpenAI-compatible resolver and default endpoint for xAI', () => {

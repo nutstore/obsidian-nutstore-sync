@@ -215,6 +215,7 @@
 					"name": "API format",
 					"desc": "Protocol used to talk to this provider",
 					"openaiChatCompletions": "OpenAI Chat Completions",
+					"openaiResponses": "OpenAI Responses",
 					"anthropic": "Anthropic Messages",
 					"other": "Other ({{npm}})"
 				}

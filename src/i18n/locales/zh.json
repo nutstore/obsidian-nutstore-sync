@@ -173,6 +173,7 @@
 					"name": "API 格式",
 					"desc": "与该提供商通信使用的协议",
 					"openaiChatCompletions": "OpenAI Chat Completions",
+					"openaiResponses": "OpenAI Responses",
 					"anthropic": "Anthropic Messages",
 					"other": "其他（{{npm}}）"
 				}

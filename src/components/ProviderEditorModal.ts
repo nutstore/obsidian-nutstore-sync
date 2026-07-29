@@ -22,6 +22,10 @@ const API_FORMAT_OPTIONS = [
 		labelKey: 'settings.ai.provider.apiFormat.openaiChatCompletions',
 	},
 	{
+		value: '@ai-sdk/openai',
+		labelKey: 'settings.ai.provider.apiFormat.openaiResponses',
+	},
+	{
 		value: '@ai-sdk/anthropic',
 		labelKey: 'settings.ai.provider.apiFormat.anthropic',
 	},
