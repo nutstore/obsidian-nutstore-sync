@@ -131,6 +131,11 @@
 			"filters": "Filter rules",
 			"ai": "AI"
 		},
+		"tabs": {
+			"sync": "Sync",
+			"ai": "AI",
+			"troubleshooting": "Troubleshooting"
+		},
 		"ai": {
 			"saved": "AI settings saved",
 			"none": "Not set",
@@ -154,7 +159,6 @@
 				"disconnect": "Disconnect",
 				"disconnected": "Nutstore AI disconnected",
 				"refreshModels": "Refresh",
-				"modelsRefreshed": "Models refreshed",
 				"betaModal": {
 					"title": "Feature in Beta",
 					"message": "Nutstore AI is currently in beta and not yet available to all users. If you are not on the beta list, you may not be able to use the feature after authorizing. We are gradually opening access — please check back later.",
@@ -183,7 +187,6 @@
 				"refreshPresetModelsLoading": "Fetching...",
 				"refreshPresetModelsSuccess": "Fetched ✓ providers {{providers}} models {{models}}",
 				"refreshPresetModelsFailure": "Failed ×",
-				"presetModelsRefreshed": "Latest model list fetched",
 				"presetModelsRefreshFailed": "Update failed. Continuing with local/built-in model list.",
 				"presetModelsRefreshFailedWithReason": "Update failed. Continuing with local/built-in model list: {{reason}}",
 				"empty": "No provider configured yet.",

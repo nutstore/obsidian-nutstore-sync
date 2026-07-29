@@ -112,9 +112,7 @@ export default class ProvidersManagerModal extends Modal {
 							providersDelta: result.providersDelta,
 							modelsDelta: result.modelsDelta,
 						}
-						if (result.success) {
-							new Notice(i18n.t('settings.ai.providers.presetModelsRefreshed'))
-						} else {
+						if (!result.success) {
 							new Notice(
 								result.errorMessage
 									? i18n.t(
@@ -427,9 +425,6 @@ export default class ProvidersManagerModal extends Modal {
 								removeOnAuthError: true,
 							})
 							await this.plugin.settingsService.saveSettings()
-							new Notice(
-								i18n.t('settings.ai.nutstoreLlmGateway.modelsRefreshed'),
-							)
 							this.render()
 						} catch (error) {
 							logger.error(error)

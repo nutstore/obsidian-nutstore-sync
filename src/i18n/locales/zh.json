@@ -89,6 +89,11 @@
 			"filters": "过滤规则",
 			"ai": "AI 设置"
 		},
+		"tabs": {
+			"sync": "同步",
+			"ai": "AI",
+			"troubleshooting": "故障排查"
+		},
 		"ai": {
 			"saved": "AI 设置已保存",
 			"none": "未设置",
@@ -112,7 +117,6 @@
 				"disconnect": "断开",
 				"disconnected": "已断开坚果云 AI",
 				"refreshModels": "更新",
-				"modelsRefreshed": "模型列表已更新",
 				"betaModal": {
 					"title": "功能内测中",
 					"message": "坚果云 AI 目前处于内测阶段，尚未向所有用户开放。如果您不在内测名单中，授权后可能暂时无法使用相关功能，请继续等待，我们正在陆续开放中。",
@@ -141,7 +145,6 @@
 				"refreshPresetModelsLoading": "获取中...",
 				"refreshPresetModelsSuccess": "提供商 {{providers}}，模型 {{models}}",
 				"refreshPresetModelsFailure": "获取失败 ×",
-				"presetModelsRefreshed": "已获取最新模型列表",
 				"presetModelsRefreshFailed": "更新失败，继续使用本地/内置模型列表",
 				"presetModelsRefreshFailedWithReason": "更新失败，继续使用本地/内置模型列表：{{reason}}",
 				"empty": "当前还没有配置模型提供商。",
