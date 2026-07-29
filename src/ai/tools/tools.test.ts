@@ -906,6 +906,68 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 	})
 })
 
+describe('normalizeSession preserves disabledMcpServers (rehydration)', () => {
+	function makeStore() {
+		const state = {
+			loadedSessions: new Map(),
+			sessionIndex: [],
+			runtimeBySessionId: new Map(),
+			autoApproveRequestsBySessionId: new Map(),
+			deletedSessionIds: new Set(),
+			chatModalHostEl: null,
+		} as unknown as ChatState
+		const runtimeStates = new RuntimeStates(state)
+		const selection = {
+			sanitizeSessionSelection: () => false,
+		} as unknown as Selection
+		return new SessionStore(state, runtimeStates, selection)
+	}
+
+	it('preserves disabledMcpServers through normalizeSession', () => {
+		const store = makeStore()
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 's1',
+			createdAt: 0,
+			updatedAt: 0,
+			disabledMcpServers: ['notes-server', '翻译工具'],
+			subagents: { master: createEmptyMasterAgent(0) },
+		}
+
+		const normalized = store.normalizeSession(session)
+		expect(normalized.disabledMcpServers).toEqual(['notes-server', '翻译工具'])
+	})
+
+	it('drops invalid disabledMcpServers values through normalizeSession', () => {
+		const store = makeStore()
+		const session = {
+			schemaVersion: 2,
+			id: 's1',
+			createdAt: 0,
+			updatedAt: 0,
+			disabledMcpServers: ['valid-server', 42],
+			subagents: { master: createEmptyMasterAgent(0) },
+		} as unknown as ChatSession
+
+		const normalized = store.normalizeSession(session)
+		expect(normalized.disabledMcpServers).toEqual(['valid-server'])
+	})
+
+	it('preserves undefined disabledMcpServers through normalizeSession', () => {
+		const store = makeStore()
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 's1',
+			createdAt: 0,
+			updatedAt: 0,
+			subagents: { master: createEmptyMasterAgent(0) },
+		}
+
+		const normalized = store.normalizeSession(session)
+		expect(normalized.disabledMcpServers).toBeUndefined()
+	})
+})
+
 describe('bash tool UTF-8 handling', () => {
 	it('returns decoded UTF-8 text without project-level re-decoding', async () => {
 		const { vault, store } = createMockVaultForExecutor([
@@ -971,11 +1033,16 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 			chatModalHostEl: null,
 		} as unknown as ChatState
 		const runtimeStates = new RuntimeStates(state)
+		const mcpService = {
+			refreshIfChanged: async () => {},
+			getToolsForSession: () => ({}),
+		}
 		const executor = new ToolExecutor(
 			app,
 			() => ({ yolo: false }) as never,
 			state,
 			runtimeStates,
+			mcpService as never,
 		)
 		return { executor, runtimeStates, state }
 	}
@@ -1152,6 +1219,10 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 			() => plugin.settings.ai as never,
 			state,
 			new RuntimeStates(state),
+			{
+				refreshIfChanged: async () => {},
+				getToolsForSession: () => ({}),
+			} as never,
 		)
 		expect(executor.getAgentDefinition(MASTER_AGENT_ID).permissionMode).toBe(
 			'full',
@@ -1162,7 +1233,7 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 		)
 		plugin.settings.ai.yolo = true
 		const definition = executor.getAgentDefinition(EXPLORER_AGENT_ID)
-		const tools = executor.createTools(1, definition)
+		const tools = await executor.createTools(1, definition)
 		const bash = findTool(tools, 'bash')
 		const stable = executor.createStableToolsContext(session, definition)
 

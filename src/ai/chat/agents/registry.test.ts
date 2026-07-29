@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import type { ToolSet } from 'ai'
 import {
 	createAgentDefinitions,
 	EXPLORER_AGENT_ID,
+	filterToolsForAgent,
 	MASTER_AGENT_ID,
 } from './registry'
 
@@ -29,5 +31,27 @@ describe('createAgentDefinitions', () => {
 		expect(
 			findDefinition(fullDefinitions, EXPLORER_AGENT_ID).permissionMode,
 		).toBe('readonly')
+	})
+})
+
+describe('filterToolsForAgent', () => {
+	it('keeps mcp-prefixed tools while filtering unknown built-in tools', () => {
+		const tools = {
+			bash: {},
+			unknown_builtin: {},
+			'mcp__notes-search__find_notes': {},
+			mcp__翻译工具__translate: {},
+		} as unknown as ToolSet
+		const definition = findDefinition(
+			createAgentDefinitions({ fullAccess: false }),
+			MASTER_AGENT_ID,
+		)
+
+		const filtered = filterToolsForAgent(tools, definition)
+		expect(Object.keys(filtered).sort()).toEqual([
+			'bash',
+			'mcp__notes-search__find_notes',
+			'mcp__翻译工具__translate',
+		])
 	})
 })

@@ -22,6 +22,7 @@ import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { ContextRing } from './components/ContextRing'
 import { MessageCard } from './components/MessageCard'
+import { McpServersPopover } from './components/McpServersPopover'
 import { PaneResizer } from './components/PaneResizer'
 import { PendingList } from './components/PendingList'
 import { RunStateCard } from './components/RunStateCard'
@@ -1045,6 +1046,10 @@ function Chatbox(props: ChatboxProps) {
 								>
 									<span class=":uno: i-lucide-minimize-2 size-4 shrink-0" />
 								</button>
+								<McpServersPopover
+									servers={props.mcpServers}
+									onToggle={props.onToggleSessionMcpServer}
+								/>
 							</div>
 							<button
 								class=":uno: mod-cta inline-flex items-center gap-1.5"

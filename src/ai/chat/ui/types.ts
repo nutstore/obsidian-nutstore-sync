@@ -27,6 +27,14 @@ interface ChatSessionHistoryItem {
 	updatedAt: number
 }
 
+export interface ChatMcpServerOption {
+	name: string
+	connected: boolean
+	toolCount: number
+	/** Whether this MCP server is disabled for the active session. */
+	disabled: boolean
+}
+
 export interface ChatTimelineMessageItem {
 	createdAt: number
 	message: AppUIMessage
@@ -60,6 +68,8 @@ interface ChatboxViewModel {
 	pending: ChatSubmission[]
 	canSend: boolean
 	canCompress: boolean
+	/** Globally enabled MCP servers with per-session state, for the session MCP popover. */
+	mcpServers: ChatMcpServerOption[]
 	/**
 	 * Most recent assistant token usage record in the active agent context, or
 	 * undefined when no usage data is available yet. Carries inputTokens,
@@ -108,6 +118,7 @@ export interface ChatboxProps extends ChatboxViewModel {
 		options?: { restoreFiles?: boolean },
 	) => Promise<RecallMessageResult | void> | void
 	onRecallHasReversibleOps?: (messageId: string) => boolean
+	onToggleSessionMcpServer?: (serverName: string) => void
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 	renderMarkdown?: (
 		el: HTMLElement,

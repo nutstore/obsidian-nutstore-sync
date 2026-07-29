@@ -79,6 +79,7 @@ type ChatboxActionHandlers = Pick<
 	| 'onRegenerateMessage'
 	| 'onRecallMessage'
 	| 'onRecallHasReversibleOps'
+	| 'onToggleSessionMcpServer'
 >
 
 type ChatboxViewRuntime = Pick<
@@ -124,6 +125,7 @@ export default class ChatService extends BaseService {
 			() => plugin.settings.ai,
 			this.state,
 			this.runtimeStates,
+			plugin.mcpService,
 		)
 		this.userContextManager = new UserContextManager(
 			this.state,
@@ -303,10 +305,24 @@ export default class ChatService extends BaseService {
 				!!activeSession &&
 				activeRuntime.runState === 'idle' &&
 				this.messageFactory.getActiveAgent(activeSession).timeline.length > 0,
+			mcpServers: this.buildMcpServerOptions(activeSession),
 			usage,
 			contextWindow,
 			...this.bindViewActions(),
 		}
+	}
+
+	private buildMcpServerOptions(activeSession?: ChatSession) {
+		const disabled = new Set(activeSession?.disabledMcpServers ?? [])
+		return this.plugin.mcpService
+			.getServerRuntimes()
+			.filter((runtime) => runtime.enabled)
+			.map((runtime) => ({
+				name: runtime.name,
+				connected: runtime.status === 'connected',
+				toolCount: runtime.tools.length,
+				disabled: disabled.has(runtime.name),
+			}))
 	}
 
 	/**
@@ -424,7 +440,28 @@ export default class ChatService extends BaseService {
 			) => this.recallMessage(messageId, options),
 			onRecallHasReversibleOps: (messageId: string) =>
 				this.messageOps.recallMessageHasReversibleOps(messageId),
+			onToggleSessionMcpServer: (serverName: string) =>
+				void this.toggleSessionMcpServer(serverName),
 		}
+	}
+
+	async toggleSessionMcpServer(serverName: string) {
+		await this.initialize()
+		const session = this.getLoadedActiveSession()
+		if (!session) {
+			return
+		}
+		const disabled = new Set(session.disabledMcpServers ?? [])
+		if (disabled.has(serverName)) {
+			disabled.delete(serverName)
+		} else {
+			disabled.add(serverName)
+		}
+		session.disabledMcpServers = disabled.size > 0 ? [...disabled] : undefined
+		this.notify()
+		void this.store.persistSession(session).catch((error) => {
+			logger.error('Failed to persist session MCP server toggles', error)
+		})
 	}
 
 	async ensureSession() {

@@ -1,4 +1,5 @@
 import type { ToolSet } from 'ai'
+import { isMcpToolName } from '~/ai/mcp/types'
 
 export type AgentPermissionMode = 'ask' | 'readonly' | 'full'
 
@@ -23,6 +24,7 @@ const MASTER_SYSTEM_PROMPT = [
 	'You are an Obsidian chat assistant with access to vault tools.',
 	'Use vault tools directly for focused file operations.',
 	'Write temporary, scratch, debug, and log files to /tmp, never under /vault. The bash default cwd is /vault, so relative paths land in the vault — use absolute /tmp paths for transient files.',
+	'MCP servers are configured in /vault/.agents/nutstore-sync/mcp.json: a JSON object with a top-level "mcpServers" key mapping server names to {"type":"http","url":"...","headers":{},"enabled":true}. When the user asks to add, edit, or remove MCP servers, update that file; changes take effect on the next turn.',
 	'You may receive workspace context in <AdditionalContext> XML blocks prepended to user messages. Each block contains only the workspace fields that changed since the previous message (a delta). For changed fields, the value is the complete current state — for example, if openFiles shrinks, files no longer in the list have been closed. Silently update your understanding of the workspace; do not mention or quote the XML structure itself.',
 	'When workspace context includes skills, each entry contains a skill name, description, and path. If the current task matches one, use bash to read the complete SKILL.md at that path before following its instructions. An explicit user request for a named available skill must also load it first.',
 	'Treat every Skill path as an opaque absolute path: copy it exactly from workspace context and never construct, normalize, or substitute a different path from the Skill name. Paths under /vault/.agents/skills are user-defined Vault Skills; paths under /.agents/skills are bundled built-in Skills. These namespaces are distinct and are not interchangeable.',
@@ -102,6 +104,8 @@ export function filterToolsForAgent<T extends ToolSet>(
 ): T {
 	const allowed = new Set(definition.tools)
 	return Object.fromEntries(
-		Object.entries(tools).filter(([name]) => allowed.has(name)),
+		Object.entries(tools).filter(
+			([name]) => allowed.has(name) || isMcpToolName(name),
+		),
 	) as T
 }

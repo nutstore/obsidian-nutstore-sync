@@ -256,6 +256,46 @@
 					"deleted": "Model deleted"
 				}
 			},
+			"mcp": {
+				"name": "MCP servers",
+				"summary": "{{count}} server(s) configured",
+				"manage": "Manage MCP servers",
+				"manager": {
+					"title": "MCP servers",
+					"add": "Add server",
+					"empty": "No MCP server configured yet.",
+					"configFileHint": "Stored in {{path}}. You can also ask the AI in chat to edit this file.",
+					"parseError": "Failed to parse {{path}}: {{reason}}",
+					"statusDisabled": "disabled",
+					"statusConnected": "{{count}} tool(s)",
+					"statusError": "connection failed: {{reason}}",
+					"test": "Test",
+					"testSuccess": "Connected: {{count}} tool(s) available",
+					"testFailed": "Connection failed: {{reason}}"
+				},
+				"editor": {
+					"createTitle": "Add MCP server",
+					"editTitle": "Edit MCP server",
+					"serverName": "Server name",
+					"serverNameDesc": "Letters, numbers, hyphens and underscores only",
+					"url": "URL",
+					"urlDesc": "Streamable HTTP endpoint of the MCP server",
+					"headers": "Headers",
+					"headersDesc": "Custom HTTP headers, e.g. Authorization",
+					"headerKeyPlaceholder": "Header name",
+					"headerValuePlaceholder": "Header value",
+					"addHeader": "Add header",
+					"removeHeader": "Remove header",
+					"enabled": "Enabled"
+				},
+				"errors": {
+					"emptyName": "Server name cannot be empty",
+					"invalidName": "Server name may only contain letters, numbers, hyphens and underscores",
+					"duplicateName": "A server with this name already exists",
+					"emptyUrl": "URL cannot be empty",
+					"invalidUrl": "Invalid URL"
+				}
+			},
 			"yolo": {
 				"name": "Full access",
 				"desc": "⚠️ When enabled, AI can read and write vault files directly without user confirmation"
@@ -680,6 +720,13 @@
 					"restoreConfirm": "Recall and restore files",
 					"onlyConfirm": "Recall only"
 				}
+			},
+			"mcp": {
+				"button": "MCP servers",
+				"title": "MCP servers for this session",
+				"empty": "No MCP servers configured",
+				"toolCount": "{{count}} tools",
+				"notConnected": "not connected"
 			}
 		},
 		"requestFailed": "Request failed",

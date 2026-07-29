@@ -227,6 +227,11 @@ export class SessionStore {
 			inferenceParams: session.inferenceParams
 				? { ...session.inferenceParams }
 				: undefined,
+			disabledMcpServers: Array.isArray(session.disabledMcpServers)
+				? session.disabledMcpServers.filter(
+						(name): name is string => typeof name === 'string',
+					)
+				: undefined,
 			subagents: { master },
 		}
 	}

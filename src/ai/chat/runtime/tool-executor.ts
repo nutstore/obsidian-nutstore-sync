@@ -26,6 +26,8 @@ import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { DispatchTaskFn } from '~/ai/tools/task'
+import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
+import type McpService from '~/services/mcp.service'
 import type { NutstoreSettings } from '~/settings'
 
 export interface StableToolsContext {
@@ -46,6 +48,7 @@ export class ToolExecutor {
 		private getSettings: () => NutstoreSettings['ai'],
 		private state: ChatState,
 		private runtimeStates: RuntimeStates,
+		private mcpService: McpService,
 	) {}
 
 	setDispatchTaskHandler(handler: DispatchTaskFn) {
@@ -70,12 +73,23 @@ export class ToolExecutor {
 		return definition
 	}
 
-	createTools(depth: number, definition: AgentDefinition) {
+	async createTools(
+		depth: number,
+		definition: AgentDefinition,
+		session?: ChatSession,
+	) {
 		const allowSpawn = depth < MAX_TASK_DEPTH
 		const tools = createAITools({
 			allowSpawn,
 			enableTodoWrite: depth === 0,
 		})
+		if (definition.id === MASTER_AGENT_ID) {
+			await this.mcpService.refreshIfChanged()
+			Object.assign(
+				tools,
+				this.mcpService.getToolsForSession(session?.disabledMcpServers),
+			)
+		}
 		return filterToolsForAgent(tools, definition)
 	}
 

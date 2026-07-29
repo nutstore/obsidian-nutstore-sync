@@ -13,13 +13,14 @@ import { createSelectedTextContextItem } from './ai/chat/context/user-context'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import i18n from './i18n'
-import ChatService from './services/chat.service'
 import AIConflictResolverService from './services/ai-conflict-resolver.service'
+import ChatService from './services/chat.service'
 import CommandService from './services/command.service'
 import EventsService from './services/events.service'
 import GcService from './services/gc.service'
 import I18nService from './services/i18n.service'
 import LoggerService from './services/logger.service'
+import McpService from './services/mcp.service'
 import ModelsPresetService from './services/models-preset.service'
 import NutstoreLlmGatewayService from './services/nutstore-llm-gateway.service'
 import { ProgressService } from './services/progress.service'
@@ -41,8 +42,9 @@ import { stdRemotePath } from './utils/std-remote-path'
 import ChatboxView, { CHATBOX_VIEW_TYPE } from './views/chatbox.view'
 
 export default class NutstorePlugin extends Plugin {
+	declare public settings: NutstoreSettings
+
 	public isSyncing: boolean = false
-	public settings!: NutstoreSettings
 	public localSettings!: NutstoreLocalSettings
 	public settingTab!: NutstoreSettingTab
 
@@ -50,6 +52,7 @@ export default class NutstorePlugin extends Plugin {
 	public eventsService = new EventsService(this)
 	public i18nService = new I18nService(this)
 	public loggerService = new LoggerService(this)
+	public mcpService = new McpService(this)
 	public modelsPresetService = new ModelsPresetService(this)
 	public nutstoreLlmGatewayService = new NutstoreLlmGatewayService(this)
 	public protocolService = new ProtocolService(this)
@@ -88,6 +91,7 @@ export default class NutstorePlugin extends Plugin {
 			this.ribbonService,
 			this.protocolService,
 			this.realtimeSyncService,
+			this.mcpService,
 			this.chatService,
 			this.aiConflictResolverService,
 			this.scheduledSyncService,

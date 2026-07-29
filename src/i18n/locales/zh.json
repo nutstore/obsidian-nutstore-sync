@@ -214,6 +214,46 @@
 					"deleted": "模型已删除"
 				}
 			},
+			"mcp": {
+				"name": "MCP 服务",
+				"summary": "已配置 {{count}} 个服务",
+				"manage": "管理 MCP 服务",
+				"manager": {
+					"title": "MCP 服务",
+					"add": "添加服务",
+					"empty": "尚未配置 MCP 服务。",
+					"configFileHint": "配置保存在 {{path}}，也可以在聊天中让 AI 帮你编辑该文件。",
+					"parseError": "解析 {{path}} 失败：{{reason}}",
+					"statusDisabled": "已停用",
+					"statusConnected": "{{count}} 个工具",
+					"statusError": "连接失败：{{reason}}",
+					"test": "测试",
+					"testSuccess": "连接成功：共 {{count}} 个可用工具",
+					"testFailed": "连接失败：{{reason}}"
+				},
+				"editor": {
+					"createTitle": "添加 MCP 服务",
+					"editTitle": "编辑 MCP 服务",
+					"serverName": "服务名称",
+					"serverNameDesc": "仅限字母、数字、连字符和下划线",
+					"url": "URL",
+					"urlDesc": "MCP 服务的 Streamable HTTP 端点",
+					"headers": "请求头",
+					"headersDesc": "自定义 HTTP 请求头，例如 Authorization",
+					"headerKeyPlaceholder": "请求头名称",
+					"headerValuePlaceholder": "请求头值",
+					"addHeader": "添加请求头",
+					"removeHeader": "删除请求头",
+					"enabled": "启用"
+				},
+				"errors": {
+					"emptyName": "服务名称不能为空",
+					"invalidName": "服务名称只能包含字母、数字、连字符和下划线",
+					"duplicateName": "已存在同名服务",
+					"emptyUrl": "URL 不能为空",
+					"invalidUrl": "URL 格式不正确"
+				}
+			},
 			"yolo": {
 				"name": "完全访问权限",
 				"desc": "⚠️ 开启后，AI 可直接读写笔记库中的文件，无需用户确认"
@@ -680,6 +720,13 @@
 					"restoreConfirm": "撤回并还原修改",
 					"onlyConfirm": "仅撤回"
 				}
+			},
+			"mcp": {
+				"button": "MCP 服务",
+				"title": "本会话的 MCP 服务",
+				"empty": "尚未配置 MCP 服务",
+				"toolCount": "{{count}} 个工具",
+				"notConnected": "未连接"
 			}
 		},
 		"requestFailed": "请求失败",

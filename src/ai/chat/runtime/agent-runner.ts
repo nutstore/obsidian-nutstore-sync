@@ -76,7 +76,11 @@ export class AgentRunner {
 	async runTurn(options: RunAgentTurnOptions): Promise<AgentRunResult> {
 		const { session, agent } = options
 		const definition = this.toolExecutor.getAgentDefinition(agent.type)
-		const tools = this.toolExecutor.createTools(options.depth, definition)
+		const tools = await this.toolExecutor.createTools(
+			options.depth,
+			definition,
+			session,
+		)
 		const stableContext = this.toolExecutor.createStableToolsContext(
 			session,
 			definition,

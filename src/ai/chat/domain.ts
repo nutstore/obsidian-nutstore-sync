@@ -22,6 +22,8 @@ interface ChatSessionBase {
 	model?: { providerId: string; modelId: string }
 	systemPrompt?: string
 	inferenceParams?: { temperature?: number; maxTokens?: number }
+	/** MCP server names disabled for this session; undefined/empty means all enabled. */
+	disabledMcpServers?: string[]
 }
 
 export interface LegacyChatSession extends ChatSessionBase {
