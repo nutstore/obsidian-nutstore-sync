@@ -325,6 +325,14 @@ export default class ChatboxView extends ItemView {
 			this.persistSelectionHighlight(true)
 			return
 		}
+		const root = leaf?.getRoot()
+		if (
+			leaf &&
+			(root === this.app.workspace.leftSplit ||
+				root === this.app.workspace.rightSplit)
+		) {
+			return
+		}
 		this.preservingSelectionForChatFocus = false
 		this.clearActiveContextSnapshot()
 	}
