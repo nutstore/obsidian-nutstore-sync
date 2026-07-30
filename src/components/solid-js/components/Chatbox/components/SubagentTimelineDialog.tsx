@@ -8,8 +8,8 @@ import { MessageCard } from './MessageCard'
 export function SubagentTimelineDialog(props: {
 	agent: ChatAgentView | undefined
 	now: number
-	mountEl?: HTMLElement
-	contained?: boolean
+	mountEl: HTMLElement
+	contained: boolean
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onSelectAgent: (agentId: string) => void
@@ -19,7 +19,7 @@ export function SubagentTimelineDialog(props: {
 	return (
 		<Show when={props.agent}>
 			{(agent) => (
-				<Portal mount={props.mountEl ?? document.body}>
+				<Portal mount={props.mountEl}>
 					<div
 						class={[
 							':uno: inset-0 z-[220] flex items-center justify-center bg-black/40 p-4',

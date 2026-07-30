@@ -10,8 +10,8 @@ export function SessionHistorySheet(props: {
 	activeSessionId: string | undefined
 	activeSessionIsRunning: boolean
 	otherBusySessionIds: ChatboxProps['otherBusySessionIds']
-	mountEl: HTMLElement | undefined
-	contained?: boolean
+	mountEl: HTMLElement
+	contained: boolean
 	onClose: () => void
 	onNewSession: () => void
 	onSwitchSession: (sessionId: string) => void
@@ -27,7 +27,7 @@ export function SessionHistorySheet(props: {
 		])
 
 	return (
-		<Portal mount={props.mountEl ?? document.body}>
+		<Portal mount={props.mountEl}>
 			<div
 				class={[
 					':uno: inset-0 z-[200] bg-black/40 transition-opacity duration-300',

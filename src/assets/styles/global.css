@@ -1,5 +1,11 @@
 @unocss;
 
+.workspace-leaf-content[data-type='nutstore-sync-chatbox'] .view-content {
+	padding-right: 0;
+	padding-left: 0;
+	padding-top: 0;
+}
+
 @keyframes nutstore-sync-spin {
 	from {
 		transform: rotate(0deg);

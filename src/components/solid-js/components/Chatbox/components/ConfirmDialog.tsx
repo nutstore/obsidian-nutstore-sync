@@ -9,8 +9,8 @@ export function ConfirmDialog(props: {
 	confirmClass?: string
 	secondaryConfirmLabel?: string | undefined
 	secondaryConfirmClass?: string
-	mountEl?: HTMLElement
-	contained?: boolean
+	mountEl: HTMLElement
+	contained: boolean
 	actionsLayout?: 'horizontal' | 'vertical'
 	cancelPlacement?: 'start' | 'end'
 	onCancel: () => void
@@ -34,7 +34,7 @@ export function ConfirmDialog(props: {
 		`${props.actionsLayout === 'vertical' ? ':uno: w-full' : ''} ${buttonClass ?? ''}`.trim()
 
 	return (
-		<Portal mount={props.mountEl ?? document.body}>
+		<Portal mount={props.mountEl}>
 			<div
 				class={[
 					':uno: inset-0 z-[220] flex items-center justify-center bg-black/40 px-4',

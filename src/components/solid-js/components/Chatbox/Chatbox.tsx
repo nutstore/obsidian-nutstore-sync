@@ -21,8 +21,9 @@ import { t } from '../../i18n'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { ContextRing } from './components/ContextRing'
+import { McpServersDialog } from './components/McpServersDialog'
 import { MessageCard } from './components/MessageCard'
-import { McpServersPopover } from './components/McpServersPopover'
+import { ModelPickerDialog } from './components/ModelPickerDialog'
 import { PaneResizer } from './components/PaneResizer'
 import { PendingList } from './components/PendingList'
 import { RunStateCard } from './components/RunStateCard'
@@ -45,6 +46,7 @@ const RESIZER_HITBOX_HEIGHT = 10
 const INPUT_MAX_VIEWPORT_RATIO = 0.6
 const COMPACT_INPUT_MAX_VIEWPORT_RATIO = 0.45
 const COMPACT_LAYOUT_MAX_WIDTH = 768
+const SM_MAX_WIDTH = 640
 const PICKER_ACCEPT = 'image/*,.txt,.md,.markdown'
 const TEXT_FILE_EXTENSIONS = new Set(['txt', 'md', 'markdown'])
 
@@ -93,7 +95,6 @@ function Chatbox(props: ChatboxProps) {
 	let messagesEl: HTMLDivElement | undefined
 	let splitLayoutEl: HTMLDivElement | undefined
 	let inputPaneEl: HTMLDivElement | undefined
-	let modelPickerEl: HTMLDivElement | undefined
 	let fileInputEl: HTMLInputElement | undefined
 	let inputTextareaEl: HTMLTextAreaElement | undefined
 	let previousActiveSessionId: string | undefined
@@ -142,6 +143,14 @@ function Chatbox(props: ChatboxProps) {
 			return width <= COMPACT_LAYOUT_MAX_WIDTH
 		}
 		return getViewWindow().innerWidth <= COMPACT_LAYOUT_MAX_WIDTH
+	}
+
+	function isSmallChatbox() {
+		const width = chatboxContainerWidth() || chatboxRootEl?.clientWidth || 0
+		if (width > 0) {
+			return width < SM_MAX_WIDTH
+		}
+		return getViewWindow().innerWidth < SM_MAX_WIDTH
 	}
 
 	function getDefaultInputPaneHeight() {
@@ -244,17 +253,18 @@ function Chatbox(props: ChatboxProps) {
 
 	const selectedProvider = () =>
 		props.providers.find((provider) => provider.id === props.selectedProviderId)
-	const dialogMountTarget = () => ({
-		mountEl:
+	const dialogMountTarget = () => {
+		const contained =
 			chatboxContainerWidth() >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH &&
-			chatboxRootEl
-				? chatboxRootEl
-				: (chatboxRootEl?.ownerDocument?.body ?? document.body),
-		contained:
-			chatboxContainerWidth() >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH &&
-			!!chatboxRootEl,
-		hostEl: chatboxRootEl,
-	})
+			!!chatboxRootEl
+		return {
+			mountEl: contained
+				? chatboxRootEl!
+				: (chatboxRootEl?.ownerDocument?.body ?? getViewDocument().body),
+			contained,
+			hostEl: chatboxRootEl,
+		}
+	}
 	const selectedAgent = () => {
 		const agentId = selectedAgentId()
 		return agentId ? props.agentsById[agentId] : undefined
@@ -546,28 +556,6 @@ function Chatbox(props: ChatboxProps) {
 	)
 
 	createEffect(() => {
-		if (!modelPickerOpen()) {
-			return
-		}
-
-		const onPointerDown = (event: PointerEvent) => {
-			const target = event.target
-			if (!target || typeof target !== 'object' || !('nodeType' in target)) {
-				return
-			}
-			const node = target as Node
-			if (modelPickerEl?.contains(node)) {
-				return
-			}
-			setModelPickerOpen(false)
-		}
-
-		const viewDoc = getViewDocument()
-		viewDoc.addEventListener('pointerdown', onPointerDown)
-		onCleanup(() => viewDoc.removeEventListener('pointerdown', onPointerDown))
-	})
-
-	createEffect(() => {
 		if (!inputTextareaEl) {
 			return
 		}
@@ -850,7 +838,7 @@ function Chatbox(props: ChatboxProps) {
 			</Show>
 			<div class=":uno: flex min-w-0 flex-1 flex-col overflow-hidden">
 				{/* Header */}
-				<div class=":uno: relative flex shrink-0 items-center gap-2 border-b border-[var(--background-modifier-border)] px-3 py-3">
+				<div class=":uno: relative flex shrink-0 items-center gap-2 border-b border-[var(--background-modifier-border)] px-2 py-2">
 					<div
 						class=":uno: i-lucide-history flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
 						onClick={() => {
@@ -861,56 +849,34 @@ function Chatbox(props: ChatboxProps) {
 					<div class=":uno: min-w-0 flex-1 truncate text-sm font-semibold">
 						{props.title || t('chatbox.newChat')}
 					</div>
-					<div class=":uno: relative" ref={modelPickerEl}>
+					<Show
+						when={isSmallChatbox()}
+						fallback={
+							<button
+								class=":uno: max-w-56 min-w-34 text-sm"
+								type="button"
+								onClick={() => {
+									setModelPickerOpen(true)
+									setHistoryOpen(false)
+								}}
+							>
+								<div class=":uno: truncate">{modelPickerLabel()}</div>
+							</button>
+						}
+					>
 						<button
-							class=":uno: max-w-56 min-w-34 text-sm"
+							class=":uno: inline-flex size-6 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
 							type="button"
+							aria-label={`${t('chatbox.ui.labels.provider')} / ${t('chatbox.ui.labels.model')}`}
+							title={`${t('chatbox.ui.labels.provider')} / ${t('chatbox.ui.labels.model')}`}
 							onClick={() => {
-								setModelPickerOpen((value) => !value)
+								setModelPickerOpen(true)
 								setHistoryOpen(false)
 							}}
 						>
-							<div class=":uno: truncate">{modelPickerLabel()}</div>
+							<span class=":uno: i-lucide-sliders-horizontal size-3 shrink-0" />
 						</button>
-						<Show when={modelPickerOpen()}>
-							<div class=":uno: absolute right-0 top-12 z-10 w-72 rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary)] p-3 shadow-lg">
-								<div class=":uno: mb-2 text-xs text-[var(--text-muted)]">
-									{t('chatbox.ui.labels.provider')}
-								</div>
-								<select
-									class=":uno: w-full"
-									value={props.selectedProviderId || ''}
-									onChange={(event) =>
-										props.onSelectProvider(event.currentTarget.value)
-									}
-								>
-									<option value="">{t('chatbox.ui.states.noProvider')}</option>
-									<For each={props.providers}>
-										{(provider) => (
-											<option value={provider.id}>{provider.name}</option>
-										)}
-									</For>
-								</select>
-								<div class=":uno: mb-2 mt-3 text-xs text-[var(--text-muted)]">
-									{t('chatbox.ui.labels.model')}
-								</div>
-								<select
-									class=":uno: w-full"
-									value={props.selectedModelId || ''}
-									disabled={!selectedProvider()?.models.length}
-									onChange={(event) => {
-										props.onSelectModel(event.currentTarget.value)
-										setModelPickerOpen(false)
-									}}
-								>
-									<option value="">{t('chatbox.ui.states.noModel')}</option>
-									<For each={selectedProvider()?.models || []}>
-										{(model) => <option value={model.id}>{model.name}</option>}
-									</For>
-								</select>
-							</div>
-						</Show>
-					</div>
+					</Show>
 				</div>
 
 				<div
@@ -1049,8 +1015,10 @@ function Chatbox(props: ChatboxProps) {
 								>
 									<span class=":uno: i-lucide-minimize-2 size-4 shrink-0" />
 								</button>
-								<McpServersPopover
+								<McpServersDialog
 									servers={props.mcpServers}
+									mountEl={dialogMountTarget().mountEl}
+									contained={dialogMountTarget().contained}
 									onToggle={props.onToggleSessionMcpServer}
 								/>
 							</div>
@@ -1104,6 +1072,19 @@ function Chatbox(props: ChatboxProps) {
 				}
 				onDelete={(sessionId) => setSessionPendingDeleteId(sessionId)}
 			/>
+
+			<Show when={modelPickerOpen()}>
+				<ModelPickerDialog
+					providers={props.providers}
+					selectedProviderId={props.selectedProviderId}
+					selectedModelId={props.selectedModelId}
+					mountEl={dialogMountTarget().mountEl}
+					contained={dialogMountTarget().contained}
+					onSelectProvider={props.onSelectProvider}
+					onSelectModel={props.onSelectModel}
+					onClose={() => setModelPickerOpen(false)}
+				/>
+			</Show>
 
 			<SubagentTimelineDialog
 				agent={selectedAgent()}
