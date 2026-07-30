@@ -428,6 +428,13 @@ export default class ChatboxView extends ItemView {
 				this.plugin.chatService.setChatModalHost(rootEl),
 			onOpenFileChange: (vaultPath, line) =>
 				this.openFileChange(vaultPath, line),
+			onResolveVaultResourcePath: (vaultPath) => {
+				const path = vaultPath.replace(/^\/vault\//, '')
+				const file = this.app.vault.getAbstractFileByPath(path)
+				return file instanceof TFile
+					? this.app.vault.getResourcePath(file)
+					: undefined
+			},
 			onSendMessage: (text: string, contextItems?: UserContextItem[]) =>
 				this.plugin.chatService.sendMessage(text, contextItems ?? []),
 			onCaptureActiveContext: () => {

@@ -948,6 +948,9 @@ function Chatbox(props: ChatboxProps) {
 											getSubagent={(agentId) => props.agentsById[agentId]}
 											onOpenSubagent={setSelectedAgentId}
 											onOpenFileChange={props.onOpenFileChange}
+											onResolveVaultResourcePath={
+												props.onResolveVaultResourcePath
+											}
 										/>
 									)}
 								</For>

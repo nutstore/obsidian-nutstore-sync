@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import { createAITools } from '~/ai/tools/tools'
+import {
+	createViewImageAttachmentMessage,
+	InMemoryViewImageAttachmentRegistry,
+} from '~/ai/tools/view-image-attachments'
 import i18n from '~/i18n'
 import { createFragmentReadTracker } from '~/ai/tools/file-operation'
 import type { ChatFragment, ChatSession } from '~/ai/chat/domain'
@@ -189,6 +193,122 @@ async function executeToolForTest(
 describe('tool registration', () => {
 	it('does not register a dedicated use_skill tool', () => {
 		expect('use_skill' in createAITools()).toBe(false)
+	})
+
+	it('does not register view_image when image input is unavailable', () => {
+		expect('view_image' in createAITools()).toBe(false)
+	})
+
+	it('registers view_image as a tool result with an in-memory model attachment', async () => {
+		const { app } = createMockApp([
+			{ path: '媒体/示例.png', content: 'abc' },
+			{ path: 'images/example.png', content: 'def' },
+		])
+		const tool = findTool(
+			createAITools({ enableViewImage: true }),
+			'view_image',
+		)
+		const attachments = new InMemoryViewImageAttachmentRegistry()
+		const output = await executeToolForTest(
+			tool,
+			{ path: '媒体/示例.png' },
+			makeContext(app, makeSession(), {
+				scratch: new InMemoryFs(),
+				viewImageAttachments: attachments,
+			}),
+		)
+
+		expect(output).toEqual({
+			path: '/vault/媒体/示例.png',
+			filename: '示例.png',
+			mediaType: 'image/png',
+		})
+		expect(
+			await tool.toModelOutput?.({
+				toolCallId: 'view-image-call',
+				input: { path: '/vault/媒体/示例.png' },
+				output,
+			}),
+		).toEqual({
+			type: 'text',
+			value: 'Loaded image 示例.png from /vault/媒体/示例.png.',
+		})
+		expect(
+			attachments.takeUninjected([
+				{
+					type: 'tool-call',
+					toolCallId: 'test-tool-call',
+					toolName: 'view_image',
+					input: { path: '媒体/示例.png' },
+				},
+			]),
+		).toEqual([
+			{
+				type: 'file',
+				filename: '示例.png',
+				mediaType: 'image/png',
+				data: { type: 'data', data: new Uint8Array([97, 98, 99]) },
+			},
+		])
+		expect(
+			await executeToolForTest(
+				tool,
+				{ path: '/vault/images/example.png' },
+				makeContext(app, makeSession(), {
+					scratch: new InMemoryFs(),
+					viewImageAttachments: attachments,
+				}),
+			),
+		).toMatchObject({
+			path: '/vault/images/example.png',
+			filename: 'example.png',
+		})
+	})
+
+	it('keeps image attachments in tool-call order and injects each once', () => {
+		const attachments = new InMemoryViewImageAttachmentRegistry()
+		attachments.register('second-call', {
+			type: 'file',
+			data: { type: 'data', data: new Uint8Array([2]) },
+			filename: '第二张.png',
+			mediaType: 'image/png',
+		})
+		attachments.register('first-call', {
+			type: 'file',
+			data: { type: 'data', data: new Uint8Array([1]) },
+			filename: 'first.png',
+			mediaType: 'image/png',
+		})
+		const toolCalls = [
+			{
+				type: 'tool-call' as const,
+				toolCallId: 'first-call',
+				toolName: 'view_image',
+				input: {},
+			},
+			{
+				type: 'tool-call' as const,
+				toolCallId: 'second-call',
+				toolName: 'view_image',
+				input: {},
+			},
+		]
+		const files = attachments.takeUninjected(toolCalls)
+
+		expect(files.map((file) => file.filename)).toEqual([
+			'first.png',
+			'第二张.png',
+		])
+		expect(attachments.takeUninjected(toolCalls)).toEqual([])
+		expect(createViewImageAttachmentMessage(files)).toMatchObject({
+			role: 'user',
+			content: [
+				{ type: 'text' },
+				{ type: 'file', filename: 'first.png' },
+				{ type: 'text' },
+				{ type: 'file', filename: '第二张.png' },
+			],
+		})
 	})
 
 	it('registers only the asynchronous task dispatch tool for subagents', async () => {
@@ -1234,8 +1354,13 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 		plugin.settings.ai.yolo = true
 		const definition = executor.getAgentDefinition(EXPLORER_AGENT_ID)
 		const tools = await executor.createTools(1, definition)
+		const imageTools = await executor.createTools(1, definition, undefined, {
+			modalities: { input: ['text', 'image'] },
+		} as never)
 		const bash = findTool(tools, 'bash')
 		const stable = executor.createStableToolsContext(session, definition)
+		expect('view_image' in tools).toBe(false)
+		expect('view_image' in imageTools).toBe(true)
 
 		await expect(
 			executeToolForTest(
@@ -1258,7 +1383,7 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 
 describe('filterToolsForAgent', () => {
 	it('excludes apply_patch, todowrite, and update_session_title for the explorer subagent', () => {
-		const tools = createAITools({ allowSpawn: true })
+		const tools = createAITools({ allowSpawn: true, enableViewImage: true })
 		const definition = getAgentDefinition(EXPLORER_AGENT_ID)
 		if (!definition) throw new Error('Expected explorer agent definition')
 		const filtered = filterToolsForAgent(tools, definition)
@@ -1269,11 +1394,16 @@ describe('filterToolsForAgent', () => {
 		expect(names).not.toContain('update_session_title')
 		expect(names).toContain('bash')
 		expect(names).toContain('note_neighborhood')
+		expect(names).toContain('view_image')
 		expect(names).toContain('task')
 	})
 
 	it('returns all tools for the master agent type', () => {
-		const tools = createAITools({ enableTodoWrite: true, allowSpawn: true })
+		const tools = createAITools({
+			enableTodoWrite: true,
+			allowSpawn: true,
+			enableViewImage: true,
+		})
 		const definition = getAgentDefinition('master')
 		if (!definition) throw new Error('Expected master agent definition')
 		const filtered = filterToolsForAgent(tools, definition)
@@ -1282,6 +1412,7 @@ describe('filterToolsForAgent', () => {
 		expect(names).toContain('apply_patch')
 		expect(names).toContain('bash')
 		expect(names).toContain('note_neighborhood')
+		expect(names).toContain('view_image')
 		expect(names).toContain('todowrite')
 		expect(names).toContain('update_session_title')
 		expect(names).toContain('task')

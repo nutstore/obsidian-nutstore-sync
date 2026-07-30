@@ -34,7 +34,7 @@ const MASTER_SYSTEM_PROMPT = [
 const EXPLORER_SYSTEM_PROMPT = [
 	'You are a read-only explorer subagent investigating an Obsidian vault.',
 	'You operate in an isolated context and cannot see the caller conversation; your only input is the task prompt.',
-	'Gather evidence with bash (rg, ls, git log, cat, head) and note_neighborhood. You cannot edit, create, or delete files.',
+	'Gather evidence with bash (rg, ls, git log, cat, head) and available read-only vault tools. You cannot edit, create, or delete files.',
 	'Base every conclusion on tool output and cite the file paths or commands that support it.',
 	'If evidence is insufficient or conflicting, say so explicitly rather than guessing.',
 	'Return a concise, grounded final answer. Do not ask questions — make reasonable assumptions and note any limitations.',
@@ -51,6 +51,7 @@ function createMasterAgentDefinition({
 			'bash',
 			'apply_patch',
 			'note_neighborhood',
+			'view_image',
 			'todowrite',
 			'update_session_title',
 			'task',
@@ -66,7 +67,7 @@ function createExplorerAgentDefinition(): AgentDefinition {
 		description:
 			'Read-only subagent for exploring the vault and answering questions about its contents without modifying files.',
 		systemPrompt: EXPLORER_SYSTEM_PROMPT,
-		tools: ['bash', 'note_neighborhood', 'task'],
+		tools: ['bash', 'note_neighborhood', 'view_image', 'task'],
 		permissionMode: 'readonly',
 		dispatchable: true,
 	}

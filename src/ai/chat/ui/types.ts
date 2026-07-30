@@ -120,6 +120,7 @@ export interface ChatboxProps extends ChatboxViewModel {
 	onRecallHasReversibleOps?: (messageId: string) => boolean
 	onToggleSessionMcpServer?: (serverName: string) => void
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
+	onResolveVaultResourcePath?: (vaultPath: string) => string | undefined
 	renderMarkdown?: (
 		el: HTMLElement,
 		markdown: string,

@@ -72,6 +72,7 @@ function MessageDisplayBlock(props: {
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 	onOpenFileChange?: ChatboxProps['onOpenFileChange']
+	onResolveVaultResourcePath?: ChatboxProps['onResolveVaultResourcePath']
 }) {
 	const contentBlock = () =>
 		props.block.kind === 'content' ? props.block : undefined
@@ -109,6 +110,7 @@ function MessageDisplayBlock(props: {
 									getSubagent={props.getSubagent}
 									onOpenSubagent={props.onOpenSubagent}
 									onOpenFileChange={props.onOpenFileChange}
+									onResolveVaultResourcePath={props.onResolveVaultResourcePath}
 									renderMarkdown={props.renderMarkdown}
 								/>
 							}
@@ -141,6 +143,7 @@ export function MessageCard(props: {
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 	onOpenFileChange?: ChatboxProps['onOpenFileChange']
+	onResolveVaultResourcePath?: ChatboxProps['onResolveVaultResourcePath']
 }) {
 	const usageText = () =>
 		formatUsage(
@@ -217,6 +220,7 @@ export function MessageCard(props: {
 							getSubagent={props.getSubagent}
 							onOpenSubagent={props.onOpenSubagent}
 							onOpenFileChange={props.onOpenFileChange}
+							onResolveVaultResourcePath={props.onResolveVaultResourcePath}
 						/>
 					)}
 				</For>

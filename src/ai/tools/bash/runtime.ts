@@ -1,17 +1,9 @@
-import { Bash, MountableFs } from 'just-bash/browser'
+import { Bash } from 'just-bash/browser'
 import type { IFileSystem } from 'just-bash/browser'
 import type { App } from 'obsidian'
-import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
-import { ObsidianAdapterFs } from './adapter-fs'
-import { BASH_TMP_MOUNT_POINT, createBashTmpFs } from './tmp-fs'
-import {
-	BUILTIN_SKILLS_MOUNT_POINT,
-	listVaultPaths,
-	ObsidianVaultFs,
-	ReversibleOpRecorder,
-	VAULT_MOUNT_POINT,
-} from './fs'
+import { ReversibleOpRecorder } from './fs'
+import { createVaultFileSystem, VAULT_MOUNT_POINT } from '../vault-filesystem'
 
 export interface VaultBashExecOptions {
 	cwd?: string
@@ -29,44 +21,13 @@ export async function createVaultBash(
 	onRead?: (vaultPath: string) => void,
 	scratch?: IFileSystem,
 ) {
-	const initialPaths = await listVaultPaths(app)
-	const vaultFs = new ObsidianVaultFs(
-		app.vault,
-		initialPaths,
+	const fs = await createVaultFileSystem(app, {
 		permissionGuard,
 		recorder,
 		onRead,
-	)
-	const agentsFs = await ObsidianAdapterFs.create(
-		app.vault.adapter,
-		'.agents',
-		permissionGuard,
-		recorder,
-		onRead,
-	)
-	const vaultNamespace = new MountableFs({
-		base: vaultFs,
-		mounts: [{ mountPoint: '/.agents', filesystem: agentsFs }],
+		scratch,
 	})
-	const fs = new MountableFs({
-		base: scratch,
-		mounts: [
-			{
-				mountPoint: BASH_TMP_MOUNT_POINT,
-				filesystem: await createBashTmpFs(app),
-			},
-			{ mountPoint: VAULT_MOUNT_POINT, filesystem: vaultNamespace },
-			{
-				mountPoint: BUILTIN_SKILLS_MOUNT_POINT,
-				filesystem: await createBuiltinSkillsFs(),
-			},
-		],
-	})
-
-	return new Bash({
-		fs,
-		cwd: VAULT_MOUNT_POINT,
-	})
+	return new Bash({ fs, cwd: VAULT_MOUNT_POINT })
 }
 
 export async function execVaultBash(
@@ -93,4 +54,7 @@ export async function execVaultBash(
 	}
 }
 
-export { BUILTIN_SKILLS_MOUNT_POINT, VAULT_MOUNT_POINT }
+export {
+	BUILTIN_SKILLS_MOUNT_POINT,
+	VAULT_MOUNT_POINT,
+} from '../vault-filesystem'

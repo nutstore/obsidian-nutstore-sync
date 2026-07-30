@@ -1,4 +1,4 @@
-import { Show } from 'solid-js'
+import { Show, createSignal } from 'solid-js'
 import type { JSX } from 'solid-js'
 
 import type { ChatDisplayToolCallBlock } from '~/ai/chat/types'
@@ -34,29 +34,106 @@ export function ToolCallBlock(props: {
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
+	onResolveVaultResourcePath?: ChatboxProps['onResolveVaultResourcePath']
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
+	const viewImageOutput = () => {
+		const toolCall = props.block.toolCall
+		if (
+			toolCall.toolName !== 'view_image' ||
+			toolCall.state !== 'output-available'
+		) {
+			return undefined
+		}
+		const output = toolCall.output
+		if (!output || typeof output !== 'object' || Array.isArray(output)) return
+		const path = (output as { path?: unknown }).path
+		return typeof path === 'string' ? { path } : undefined
+	}
+
 	return (
 		<Show
-			when={props.block.toolCall.toolName === 'task'}
+			when={viewImageOutput()}
+			keyed
 			fallback={
-				<GenericToolCallBlock
-					block={props.block}
-					now={props.now}
-					onOpenFileChange={props.onOpenFileChange}
-					renderMarkdown={props.renderMarkdown}
-				/>
+				<Show
+					when={props.block.toolCall.toolName === 'task'}
+					fallback={
+						<GenericToolCallBlock
+							block={props.block}
+							now={props.now}
+							onOpenFileChange={props.onOpenFileChange}
+							renderMarkdown={props.renderMarkdown}
+						/>
+					}
+				>
+					<TaskToolCallBlock
+						block={props.block}
+						now={props.now}
+						getSubagent={props.getSubagent}
+						onOpenSubagent={props.onOpenSubagent}
+						onOpenFileChange={props.onOpenFileChange}
+						renderMarkdown={props.renderMarkdown}
+					/>
+				</Show>
 			}
 		>
-			<TaskToolCallBlock
-				block={props.block}
-				now={props.now}
-				getSubagent={props.getSubagent}
-				onOpenSubagent={props.onOpenSubagent}
-				onOpenFileChange={props.onOpenFileChange}
-				renderMarkdown={props.renderMarkdown}
-			/>
+			{(output) => (
+				<ViewImageToolCallBlock
+					path={output.path}
+					src={props.onResolveVaultResourcePath?.(output.path)}
+					visual={toolStatusVisual(props.block.toolCall)}
+				/>
+			)}
 		</Show>
+	)
+}
+
+function ViewImageToolCallBlock(props: {
+	path: string
+	src?: string
+	visual: ReturnType<typeof toolStatusVisual>
+}) {
+	const [dimensions, setDimensions] = createSignal<string>()
+
+	return (
+		<TitledCollapsibleBlock
+			title={
+				<span>
+					Image ({props.path})
+					<Show when={dimensions()}>
+						<span class=":uno: font-normal text-[var(--text-muted)]">
+							{'('}
+							{dimensions()}
+							{')'}
+						</span>
+					</Show>
+				</span>
+			}
+			iconClass={props.visual.iconClass}
+			iconLabel={props.visual.label}
+		>
+			<Show
+				when={props.src}
+				fallback={
+					<div class=":uno: text-xs text-[var(--text-muted)]">
+						Image preview unavailable.
+					</div>
+				}
+			>
+				{(src) => (
+					<img
+						class=":uno: max-h-100 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
+						src={src()}
+						alt={props.path}
+						onLoad={(event) => {
+							const image = event.currentTarget
+							setDimensions(`${image.naturalWidth}x${image.naturalHeight}`)
+						}}
+					/>
+				)}
+			</Show>
+		</TitledCollapsibleBlock>
 	)
 }
 

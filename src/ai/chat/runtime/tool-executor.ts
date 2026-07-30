@@ -29,6 +29,7 @@ import type { DispatchTaskFn } from '~/ai/tools/task'
 import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
 import type McpService from '~/services/mcp.service'
 import type { NutstoreSettings } from '~/settings'
+import type { AIModelConfig } from '~/ai/core/types'
 
 export interface StableToolsContext {
 	app: App
@@ -77,11 +78,13 @@ export class ToolExecutor {
 		depth: number,
 		definition: AgentDefinition,
 		session?: ChatSession,
+		model?: AIModelConfig,
 	) {
 		const allowSpawn = depth < MAX_TASK_DEPTH
 		const tools = createAITools({
 			allowSpawn,
 			enableTodoWrite: depth === 0,
+			enableViewImage: model?.modalities.input.includes('image') ?? false,
 		})
 		if (definition.id === MASTER_AGENT_ID) {
 			await this.mcpService.refreshIfChanged()

@@ -38,6 +38,10 @@ import {
 	uiMessagesToModelMessages,
 } from '~/ai/chat/messages/ui-message'
 import i18n from '~/i18n'
+import {
+	createViewImageAttachmentMessage,
+	InMemoryViewImageAttachmentRegistry,
+} from '~/ai/tools/view-image-attachments'
 
 export type AgentRunResult =
 	| { status: 'completed'; text: string }
@@ -80,6 +84,7 @@ export class AgentRunner {
 			options.depth,
 			definition,
 			session,
+			options.model,
 		)
 		const stableContext = this.toolExecutor.createStableToolsContext(
 			session,
@@ -116,6 +121,12 @@ export class AgentRunner {
 			metadata.set(toolCallId, value)
 
 		const readTracker = this.toolExecutor.prepareReadTracker(session, agent.id)
+		const viewImageAttachments =
+			options.runtime?.viewImageAttachments ??
+			new InMemoryViewImageAttachmentRegistry()
+		if (options.runtime) {
+			options.runtime.viewImageAttachments = viewImageAttachments
+		}
 		const fileToolsContext = {
 			app: stableContext.app,
 			permissionGuard: stableContext.permissionGuard,
@@ -132,6 +143,12 @@ export class AgentRunner {
 				app: stableContext.app,
 				session,
 				agentId: agent.id,
+			},
+			view_image: {
+				app: stableContext.app,
+				scratch: stableContext.scratch,
+				readTracker,
+				viewImageAttachments,
 			},
 			update_session_title: { recordMetadata },
 			...(tools.todowrite ? { todowrite: { session, recordMetadata } } : {}),
@@ -177,10 +194,17 @@ export class AgentRunner {
 			stopWhen: [isLoopFinished(), repeatedToolCalls, suspendAtStepBoundary],
 			temperature: session.inferenceParams?.temperature,
 			maxOutputTokens: session.inferenceParams?.maxTokens,
-			prepareStep: async () => {
+			prepareStep: async ({ messages, steps }) => {
 				readTracker.resetSnapshot()
 				await projector.project({ type: 'step-start' })
-				return {}
+				const attachments = viewImageAttachments.takeUninjected(
+					(steps.at(-1)?.toolCalls ?? []) as ToolCallPart[],
+				)
+				const attachmentMessage = createViewImageAttachmentMessage(attachments)
+				if (!attachmentMessage) return {}
+				return {
+					messages: [...messages, attachmentMessage],
+				}
 			},
 		})
 		const result = await toolLoop.stream({
