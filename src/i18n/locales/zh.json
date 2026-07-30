@@ -743,6 +743,7 @@
 			"notFile": "该路径不是文件：{{path}}",
 			"fileNotRead": "编辑失败，请至少先读取一次 {{path}} 再编辑。",
 			"sessionNotFound": "目标会话已不存在",
+			"agentNotDispatchable": "该 Agent 类型不可派发：{{agentType}}",
 			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用"
 		}
 	},

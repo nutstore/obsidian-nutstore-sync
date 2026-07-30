@@ -160,7 +160,7 @@ export class TaskManager {
 		})
 	}
 
-	dispatchTask(params: DispatchTaskParams): Promise<DispatchTaskResult> {
+	async dispatchTask(params: DispatchTaskParams): Promise<DispatchTaskResult> {
 		const session = this.state.loadedSessions.get(params.sessionId)
 		if (!session) throw new Error(i18n.t('chatbox.errors.sessionNotFound'))
 		const parent = findAgent(getMasterAgent(session), params.callerAgentId)
@@ -168,6 +168,13 @@ export class TaskManager {
 			throw new Error(`Caller agent not found: ${params.callerAgentId}`)
 		}
 		const definition = this.toolExecutor.getAgentDefinition(params.subagentType)
+		if (!definition.dispatchable) {
+			throw new Error(
+				i18n.t('chatbox.errors.agentNotDispatchable', {
+					agentType: params.subagentType,
+				}),
+			)
+		}
 
 		const shouldQueue =
 			this.countRunningAgentsForSession(session) >=
@@ -202,11 +209,11 @@ export class TaskManager {
 		if (shouldQueue) this.startQueuedAgentsForSession(session)
 		else void this.runAgent(session, agent)
 
-		return Promise.resolve({
+		return {
 			taskId: agent.id,
 			subagentType: definition.id,
 			status: 'dispatched',
-		})
+		}
 	}
 
 	private createAgentId(session: ChatSession, agentType: string) {

@@ -1,28 +1,28 @@
 import type { ToolCallPart, ToolSet } from 'ai'
-import { describe, expect, it } from 'vitest'
-import { TFile, TFolder, type App, type Vault } from 'obsidian'
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
-import { createAITools } from '~/ai/tools/tools'
-import {
-	createViewImageAttachmentMessage,
-	InMemoryViewImageAttachmentRegistry,
-} from '~/ai/tools/view-image-attachments'
-import i18n from '~/i18n'
-import { createFragmentReadTracker } from '~/ai/tools/file-operation'
-import type { ChatFragment, ChatSession } from '~/ai/chat/domain'
-import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
-import type { ChatState } from '~/ai/chat/runtime/chat-state'
-import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
-import type { Selection } from '~/ai/chat/runtime/selection'
-import { SessionStore } from '~/ai/chat/session/session-store'
-import { migrateLegacySession } from '~/ai/chat/session/session-migration'
-import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
+import { TFile, TFolder, type App, type Vault } from 'obsidian'
+import { describe, expect, it } from 'vitest'
 import {
 	EXPLORER_AGENT_ID,
 	filterToolsForAgent,
 	getAgentDefinition,
 	MASTER_AGENT_ID,
 } from '~/ai/chat/agents/registry'
+import type { ChatFragment, ChatSession } from '~/ai/chat/domain'
+import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
+import type { ChatState } from '~/ai/chat/runtime/chat-state'
+import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
+import type { Selection } from '~/ai/chat/runtime/selection'
+import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
+import { migrateLegacySession } from '~/ai/chat/session/session-migration'
+import { SessionStore } from '~/ai/chat/session/session-store'
+import { createFragmentReadTracker } from '~/ai/tools/file-operation'
+import { createAITools } from '~/ai/tools/tools'
+import {
+	createViewImageAttachmentMessage,
+	InMemoryViewImageAttachmentRegistry,
+} from '~/ai/tools/view-image-attachments'
+import i18n from '~/i18n'
 
 interface MockFile {
 	path: string
@@ -1359,6 +1359,9 @@ describe('ToolExecutor SDK tool-round read-gate wiring', () => {
 		} as never)
 		const bash = findTool(tools, 'bash')
 		const stable = executor.createStableToolsContext(session, definition)
+		expect(stable.dispatchableDefinitions?.map(({ id }) => id)).toEqual([
+			EXPLORER_AGENT_ID,
+		])
 		expect('view_image' in tools).toBe(false)
 		expect('view_image' in imageTools).toBe(true)
 

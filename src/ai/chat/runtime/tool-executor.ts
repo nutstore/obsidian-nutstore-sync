@@ -2,34 +2,35 @@ import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import type { App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 
-import {
-	createPermissionGuard,
-	createReadonlyPermissionGuard,
-	createFullAccessPermissionGuard,
-	type PermissionGuard,
-} from '~/ai/tools/permission-guard'
-import { createAITools } from '~/ai/tools/tools'
-import type { ChatState } from '~/ai/chat/runtime/chat-state'
-import { getMasterAgent } from '~/ai/chat/domain'
 import { findAgent } from '~/ai/chat/agents/agent-tree'
+import {
+	createAgentDefinitions,
+	filterToolsForAgent,
+	listDispatchableDefinitions,
+	MASTER_AGENT_ID,
+	type AgentDefinition,
+} from '~/ai/chat/agents/registry'
+import { getMasterAgent } from '~/ai/chat/domain'
+import { deriveTitle } from '~/ai/chat/messages/message-utils'
+import { MAX_TASK_DEPTH } from '~/ai/chat/prompts'
+import type { ChatState } from '~/ai/chat/runtime/chat-state'
+import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
+import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
+import type { AIModelConfig } from '~/ai/core/types'
 import {
 	createFragmentReadTracker,
 	type ReadTracker,
 } from '~/ai/tools/file-operation'
 import {
-	createAgentDefinitions,
-	filterToolsForAgent,
-	type AgentDefinition,
-} from '~/ai/chat/agents/registry'
-import { MAX_TASK_DEPTH } from '~/ai/chat/prompts'
-import { deriveTitle } from '~/ai/chat/messages/message-utils'
-import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
-import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
+	createFullAccessPermissionGuard,
+	createPermissionGuard,
+	createReadonlyPermissionGuard,
+	type PermissionGuard,
+} from '~/ai/tools/permission-guard'
 import type { DispatchTaskFn } from '~/ai/tools/task'
-import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
+import { createAITools } from '~/ai/tools/tools'
 import type McpService from '~/services/mcp.service'
 import type { NutstoreSettings } from '~/settings'
-import type { AIModelConfig } from '~/ai/core/types'
 
 export interface StableToolsContext {
 	app: App
@@ -133,7 +134,9 @@ export class ToolExecutor {
 			permissionGuard,
 			scratch: bashScratch,
 			dispatchTask: (params) => this.dispatchTaskHandler(params),
-			dispatchableDefinitions: this.getAgentDefinitions(),
+			dispatchableDefinitions: listDispatchableDefinitions({
+				fullAccess: Boolean(this.getSettings().yolo),
+			}),
 		}
 	}
 

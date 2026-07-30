@@ -743,6 +743,7 @@
 			"notFile": "Path is not a file: {{path}}",
 			"fileNotRead": "Editing failed — read {{path}} at least once before editing it.",
 			"sessionNotFound": "The target session no longer exists",
+			"agentNotDispatchable": "Agent type cannot be dispatched: {{agentType}}",
 			"taskSessionUnavailable": "The task session or model configuration is no longer available"
 		}
 	},

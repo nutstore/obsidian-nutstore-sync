@@ -6,6 +6,7 @@ import { TaskManager } from '~/ai/chat/runtime/task-manager'
 import {
 	EXPLORER_AGENT_ID,
 	getAgentDefinition,
+	MASTER_AGENT_ID,
 } from '~/ai/chat/agents/registry'
 import type { ChatAgentState } from '~/ai/chat/types'
 
@@ -177,6 +178,50 @@ describe('TaskManager parent notifications', () => {
 			subagentType: EXPLORER_AGENT_ID,
 			status: 'dispatched',
 		})
+	})
+
+	it('rejects non-dispatchable agent types', async () => {
+		const master = createEmptyMasterAgent(1)
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'session',
+			createdAt: 1,
+			updatedAt: 1,
+			model: { providerId: 'provider', modelId: 'model' },
+			subagents: { master },
+		}
+		const state = {
+			loadedSessions: new Map([['session', session]]),
+			deletedSessionIds: new Set<string>(),
+			taskModelSelection: new Map(),
+		} as never
+		const manager = new TaskManager(
+			{} as never,
+			vi.fn(),
+			state,
+			{} as never,
+			{ persistSession: vi.fn(async () => undefined) } as never,
+			vi.fn(),
+			{
+				getAgentDefinition: (agentType: string) => {
+					const definition = getAgentDefinition(agentType)
+					if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
+					return definition
+				},
+			} as never,
+			{} as never,
+			{} as never,
+		)
+
+		await expect(
+			manager.dispatchTask({
+				prompt: 'Inspect the vault',
+				subagentType: MASTER_AGENT_ID,
+				callerAgentId: MASTER_AGENT_ID,
+				sessionId: session.id,
+			}),
+		).rejects.toThrow('cannot be dispatched')
+		expect(master.subagents).toEqual({})
 	})
 
 	it('suspends a cancelled background agent after its current tool step', async () => {
