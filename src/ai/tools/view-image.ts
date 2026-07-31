@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod/mini'
 import i18n from '~/i18n'
+import { BASH_TMP_MOUNT_POINT } from './bash/tmp-fs'
 import { createVaultFileSystem, VAULT_MOUNT_POINT } from './vault-filesystem'
 import {
 	appDep,
@@ -31,11 +32,13 @@ function imageFilename(path: string) {
 	return path.split('/').pop() || path
 }
 
-function isVaultImagePath(path: string) {
-	return path.startsWith(`${VAULT_MOUNT_POINT}/`)
+function isViewableImagePath(path: string) {
+	return [VAULT_MOUNT_POINT, BASH_TMP_MOUNT_POINT].some((mountPoint) =>
+		path.startsWith(`${mountPoint}/`),
+	)
 }
 
-function resolveVaultImagePath(path: string) {
+function resolveImagePath(path: string) {
 	return path.startsWith('/')
 		? pathPosix.normalize(path)
 		: pathPosix.resolve(VAULT_MOUNT_POINT, path)
@@ -49,16 +52,16 @@ const viewImageOutputSchema = z.object({
 
 export const viewImageTool = tool({
 	description: [
-		'View an image stored in the Obsidian vault.',
+		'View an image stored in the Obsidian vault or temporary filesystem.',
 		'Use this tool when you need to inspect an image file visually.',
-		'Input an image file path under /vault, either absolute or relative to /vault, with a supported extension: avif, bmp, gif, ico, jpeg, jpg, png, svg, or webp.',
+		'Input an absolute image path under /vault or /tmp, or a path relative to /vault, with a supported extension: avif, bmp, gif, ico, jpeg, jpg, png, svg, or webp.',
 	].join(' '),
 	inputSchema: z.object({
 		path: z
 			.string()
 			.check(
 				z.describe(
-					'The image file path to view, absolute or relative to /vault.',
+					'The image path under /vault or /tmp; relative paths resolve from /vault.',
 				),
 				z.trim(),
 				z.minLength(
@@ -75,9 +78,11 @@ export const viewImageTool = tool({
 	}),
 	outputSchema: viewImageOutputSchema,
 	execute: async ({ path }, { context, toolCallId }) => {
-		const normalizedPath = resolveVaultImagePath(path)
-		if (!isVaultImagePath(normalizedPath)) {
-			throw new Error(`Image path must be under ${VAULT_MOUNT_POINT}: ${path}`)
+		const normalizedPath = resolveImagePath(path)
+		if (!isViewableImagePath(normalizedPath)) {
+			throw new Error(
+				`Image path must be under ${VAULT_MOUNT_POINT} or ${BASH_TMP_MOUNT_POINT}: ${path}`,
+			)
 		}
 
 		const mediaType = imageMediaType(normalizedPath)

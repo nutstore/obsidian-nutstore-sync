@@ -89,10 +89,15 @@ export class ToolExecutor {
 		})
 		if (definition.id === MASTER_AGENT_ID) {
 			await this.mcpService.refreshIfChanged()
-			Object.assign(
-				tools,
-				this.mcpService.getToolsForSession(session?.disabledMcpServers),
-			)
+			if (session) {
+				Object.assign(
+					tools,
+					this.mcpService.getToolsForSession(
+						session.id,
+						session.disabledMcpServers,
+					),
+				)
+			}
 		}
 		return filterToolsForAgent(tools, definition)
 	}

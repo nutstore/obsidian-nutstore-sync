@@ -1,4 +1,4 @@
-import type { ToolCallPart, ToolSet } from 'ai'
+import { asSchema, type ToolCallPart, type ToolSet } from 'ai'
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
 import { describe, expect, it } from 'vitest'
@@ -191,6 +191,20 @@ async function executeToolForTest(
 }
 
 describe('tool registration', () => {
+	it('converts every registered tool schema to JSON Schema', async () => {
+		const tools = createAITools({
+			allowSpawn: true,
+			enableTodoWrite: true,
+			enableViewImage: true,
+		})
+		for (const [name, registeredTool] of Object.entries(tools)) {
+			expect(
+				await asSchema(registeredTool.inputSchema).jsonSchema,
+				name,
+			).toBeDefined()
+		}
+	})
+
 	it('does not register a dedicated use_skill tool', () => {
 		expect('use_skill' in createAITools()).toBe(false)
 	})
@@ -203,6 +217,10 @@ describe('tool registration', () => {
 		const { app } = createMockApp([
 			{ path: '媒体/示例.png', content: 'abc' },
 			{ path: 'images/example.png', content: 'def' },
+			{
+				path: '.obsidian/plugins/nutstore-sync/cache/fs/tmp/mcp/example/image.png',
+				content: 'ghi',
+			},
 		])
 		const tool = findTool(
 			createAITools({ enableViewImage: true }),
@@ -262,6 +280,19 @@ describe('tool registration', () => {
 		).toMatchObject({
 			path: '/vault/images/example.png',
 			filename: 'example.png',
+		})
+		expect(
+			await executeToolForTest(
+				tool,
+				{ path: '/tmp/mcp/example/image.png' },
+				makeContext(app, makeSession(), {
+					scratch: new InMemoryFs(),
+					viewImageAttachments: attachments,
+				}),
+			),
+		).toMatchObject({
+			path: '/tmp/mcp/example/image.png',
+			filename: 'image.png',
 		})
 	})
 

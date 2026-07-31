@@ -17,6 +17,10 @@ export async function createBashTmpFs(app: App) {
 	return ObsidianAdapterFs.create(app.vault.adapter, getBashTmpAdapterRoot(app))
 }
 
+export async function existsBashTmpPath(app: App, absolutePath: string) {
+	return app.vault.adapter.exists(resolveBashTmpAdapterPath(app, absolutePath))
+}
+
 function resolveBashTmpAdapterPath(app: App, absolutePath: string) {
 	const normalized = pathPosix.normalize(absolutePath)
 	if (
@@ -43,4 +47,17 @@ export async function writeBashTmpText(
 	const adapterPath = resolveBashTmpAdapterPath(app, absolutePath)
 	await mkdirsVault(app.vault, pathPosix.dirname(adapterPath))
 	await app.vault.adapter.write(adapterPath, content)
+}
+
+export async function writeBashTmpBinary(
+	app: App,
+	absolutePath: string,
+	content: Uint8Array,
+) {
+	const adapterPath = resolveBashTmpAdapterPath(app, absolutePath)
+	await mkdirsVault(app.vault, pathPosix.dirname(adapterPath))
+	await app.vault.adapter.writeBinary(
+		adapterPath,
+		Uint8Array.from(content).buffer,
+	)
 }

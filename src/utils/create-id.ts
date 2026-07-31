@@ -5,14 +5,14 @@ export default function createId(prefix: string) {
 	return `${prefix}-${uuid()}`
 }
 
-export function createUniqueWordId(
+export async function createUniqueWordId(
 	prefix: string,
-	exists: (id: string) => boolean,
-): string {
+	exists: (id: string) => boolean | Promise<boolean>,
+): Promise<string> {
 	for (let words = 3; ; words += 1) {
 		for (let attempt = 0; attempt < 3; attempt += 1) {
 			const id = idAgent({ prefix, words })
-			if (!exists(id)) return id
+			if (!(await exists(id))) return id
 		}
 	}
 }

@@ -214,7 +214,7 @@ export default class ChatService extends BaseService {
 		await this.store.loadSessionIndex()
 
 		if (this.state.sessionIndex.length === 0) {
-			const session = this.createEmptySession()
+			const session = await this.createEmptySession()
 			this.state.activeSessionId = session.id
 			this.state.loadedSessions.set(session.id, session)
 			this.store.upsertSessionIndexItem(session)
@@ -470,7 +470,7 @@ export default class ChatService extends BaseService {
 
 	async createSession() {
 		await this.initialize()
-		const session = this.createEmptySession()
+		const session = await this.createEmptySession()
 		this.state.loadedSessions.set(session.id, session)
 		this.state.activeSessionId = session.id
 		this.store.upsertSessionIndexItem(session, i18n.t('chatbox.newChat'), true)
@@ -835,13 +835,13 @@ export default class ChatService extends BaseService {
 			: undefined
 	}
 
-	private createEmptySession(): ChatSession {
+	private async createEmptySession(): Promise<ChatSession> {
 		const { providerId, modelId } =
 			this.selection.getInitialSelectionForNewSession()
 		const now = Date.now()
 		return {
 			schemaVersion: 2,
-			id: createUniqueWordId('session', (id) =>
+			id: await createUniqueWordId('session', (id) =>
 				this.state.sessionIndex.some((item) => item.id === id),
 			),
 			createdAt: now,

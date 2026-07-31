@@ -180,7 +180,7 @@ export class TaskManager {
 			this.countRunningAgentsForSession(session) >=
 			MAX_CONCURRENT_TASKS_PER_SESSION
 		const now = Date.now()
-		const agentId = this.createAgentId(session, definition.id)
+		const agentId = await this.createAgentId(session, definition.id)
 		const agent: ChatAgentState = {
 			id: agentId,
 			type: definition.id,
@@ -216,7 +216,7 @@ export class TaskManager {
 		}
 	}
 
-	private createAgentId(session: ChatSession, agentType: string) {
+	private async createAgentId(session: ChatSession, agentType: string) {
 		return createUniqueWordId(agentType, (id) =>
 			Boolean(findAgent(getMasterAgent(session), id)),
 		)

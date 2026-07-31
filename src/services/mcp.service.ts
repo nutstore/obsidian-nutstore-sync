@@ -15,6 +15,7 @@ import {
 	parseMcpServersFile,
 	serializeMcpServersFile,
 } from '~/ai/mcp/types'
+import { formatMcpToolResult } from '~/ai/mcp/result-artifact'
 import { obsidianFetch } from '~/ai/transport/obsidian-fetch'
 import logger from '~/utils/logger'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
@@ -69,7 +70,9 @@ export default class McpService extends BaseService {
 	}
 
 	override async onload() {
-		await this.reload()
+		void this.reload().catch((error) => {
+			logger.warn('Failed to initialize MCP servers', error)
+		})
 	}
 
 	override onunload() {
@@ -279,7 +282,10 @@ export default class McpService extends BaseService {
 	 * for the given session. Tool names are namespaced as
 	 * `mcp__<serverName>__<toolName>`.
 	 */
-	getToolsForSession(disabledServers: readonly string[] = []): ToolSet {
+	getToolsForSession(
+		sessionId: string,
+		disabledServers: readonly string[] = [],
+	): ToolSet {
 		const disabled = new Set(disabledServers)
 		const result: ToolSet = {}
 		for (const [name, connected] of this.clients) {
@@ -290,13 +296,20 @@ export default class McpService extends BaseService {
 				result[getMcpToolName(name, toolInfo.name)] = this.createTool(
 					connected.client,
 					toolInfo,
+					name,
+					sessionId,
 				)
 			}
 		}
 		return result
 	}
 
-	private createTool(client: Client, toolInfo: McpToolInfo) {
+	private createTool(
+		client: Client,
+		toolInfo: McpToolInfo,
+		serverName: string,
+		sessionId: string,
+	) {
 		return dynamicTool({
 			description: toolInfo.description ?? `MCP tool: ${toolInfo.name}`,
 			inputSchema: jsonSchema(toolInfo.inputSchema),
@@ -305,28 +318,13 @@ export default class McpService extends BaseService {
 					name: toolInfo.name,
 					arguments: (input ?? {}) as Record<string, unknown>,
 				})
-				return formatToolResult(result)
+				return formatMcpToolResult(this.plugin.app, {
+					sessionId,
+					serverName,
+					toolName: toolInfo.name,
+					result,
+				})
 			},
 		})
 	}
-}
-
-function formatToolResult(result: unknown): string {
-	if (
-		result &&
-		typeof result === 'object' &&
-		'content' in result &&
-		Array.isArray((result as { content: unknown[] }).content)
-	) {
-		const content = (
-			result as { content: Array<{ type?: string; text?: string }> }
-		).content
-		const texts = content
-			.filter((part) => part?.type === 'text' && typeof part.text === 'string')
-			.map((part) => part.text as string)
-		if (texts.length > 0) {
-			return texts.join('\n')
-		}
-	}
-	return JSON.stringify(result)
 }

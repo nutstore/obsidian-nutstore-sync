@@ -214,8 +214,7 @@ export default class McpServersManagerModal extends Modal {
 			delete servers[currentName]
 		}
 		servers[draft.name] = draft.config
-		await this.saveServers(servers)
-		return true
+		return this.saveServers(servers)
 	}
 
 	private async saveServers(servers: McpServerConfigs) {
@@ -223,6 +222,7 @@ export default class McpServersManagerModal extends Modal {
 			await this.plugin.mcpService.saveServers(servers)
 			await this.onChanged()
 			this.render()
+			return true
 		} catch (error) {
 			logger.error(error)
 			new Notice(
@@ -231,6 +231,7 @@ export default class McpServersManagerModal extends Modal {
 					: i18n.t('settings.ai.errors.saveFailed'),
 				10000,
 			)
+			return false
 		}
 	}
 
