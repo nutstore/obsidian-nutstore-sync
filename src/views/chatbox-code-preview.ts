@@ -49,7 +49,7 @@ export function enhanceHtmlCodeBlocks(container: HTMLElement): void {
 		const iframe = doc.createElement('iframe')
 		iframe.setAttribute(
 			'sandbox',
-			'allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-downloads allow-pointer-lock',
+			'allow-scripts allow-modals allow-forms allow-popups allow-downloads allow-pointer-lock',
 		)
 		preview.appendChild(iframe)
 		wrapper.appendChild(preview)

@@ -153,9 +153,13 @@ export class MessageOps {
 		const messagesAfter = agent.timeline.slice(idx + 1)
 		agent.timeline = agent.timeline.slice(0, idx)
 
-		const lastUserIdx = agent.timeline.findLastIndex(
-			(message) => message.role === 'user',
-		)
+		let lastUserIdx = -1
+		for (let index = agent.timeline.length - 1; index >= 0; index -= 1) {
+			if (agent.timeline[index].role === 'user') {
+				lastUserIdx = index
+				break
+			}
+		}
 		if (lastUserIdx !== -1) {
 			await this.skillRepository?.refresh()
 			const prevMessages = agent.timeline.slice(0, lastUserIdx)
