@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js'
 import type { ChatDisplayToolCallBlock, ChatTodoStatus } from '~/ai/chat/types'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 import { timingDuration, toolStatusVisual } from '../tool-call-status'
 
 function statusIconClass(status: ChatTodoStatus) {

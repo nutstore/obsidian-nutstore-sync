@@ -7,7 +7,7 @@ import {
 	type FileDiffSegment,
 } from '~/ai/chat/messages/file-diff'
 import type { ReversibleToolOp } from '~/ai/chat/types'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 import { CollapsibleBlock } from './CollapsibleBlock'
 
 const OPERATION_LABEL = {

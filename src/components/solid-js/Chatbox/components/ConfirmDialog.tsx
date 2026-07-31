@@ -1,6 +1,6 @@
 import { Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 
 export function ConfirmDialog(props: {
 	title: string | undefined

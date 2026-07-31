@@ -1,7 +1,7 @@
 import { Menu } from 'obsidian'
 import { Show } from 'solid-js'
-import { t } from '../../../i18n'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
+import { t } from '../../i18n'
 import { formatTime } from '../utils'
 
 export function SessionHistoryItem(props: {

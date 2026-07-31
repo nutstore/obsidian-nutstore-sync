@@ -1,6 +1,6 @@
 import { Show } from 'solid-js'
-import { t } from '../../../i18n'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
+import { t } from '../../i18n'
 import { runStateLabel } from '../utils'
 
 export function RunStateCard(props: {

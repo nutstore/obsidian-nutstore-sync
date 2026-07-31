@@ -17,7 +17,7 @@ import {
 import { resolveUsedContextTokens } from '~/ai/chat/domain'
 import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/ai/chat/ui/modal-mount'
 import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
-import { t } from '../../i18n'
+import { t } from '../i18n'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { ContextRing } from './components/ContextRing'

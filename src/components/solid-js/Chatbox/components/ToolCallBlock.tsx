@@ -1,14 +1,9 @@
-import { Show, createSignal } from 'solid-js'
 import type { JSX } from 'solid-js'
+import { Show, createSignal } from 'solid-js'
 
 import type { ChatDisplayToolCallBlock } from '~/ai/chat/types'
 import type { ChatAgentView, ChatboxProps } from '~/ai/chat/ui/types'
-import { t } from '../../../i18n'
-import {
-	formatDuration,
-	formatToolDetailsMarkdown,
-	formatToolResult,
-} from '../utils'
+import { t } from '../../i18n'
 import {
 	cancelledVisual,
 	failedVisual,
@@ -18,6 +13,11 @@ import {
 	toolStatusVisual,
 	waitingVisual,
 } from '../tool-call-status'
+import {
+	formatDuration,
+	formatToolDetailsMarkdown,
+	formatToolResult,
+} from '../utils'
 import { TitledCollapsibleBlock } from './CollapsibleBlock'
 import { FileChangesBlock } from './FileChangesBlock'
 import { MarkdownContent } from './MarkdownContent'

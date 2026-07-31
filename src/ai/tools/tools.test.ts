@@ -1,4 +1,9 @@
-import { asSchema, type ToolCallPart, type ToolSet } from 'ai'
+import {
+	asSchema,
+	type FlexibleSchema,
+	type ToolCallPart,
+	type ToolSet,
+} from 'ai'
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
 import { TFile, TFolder, type App, type Vault } from 'obsidian'
 import { describe, expect, it } from 'vitest'
@@ -199,7 +204,8 @@ describe('tool registration', () => {
 		})
 		for (const [name, registeredTool] of Object.entries(tools)) {
 			expect(
-				await asSchema(registeredTool.inputSchema).jsonSchema,
+				await asSchema(registeredTool.inputSchema as FlexibleSchema<unknown>)
+					.jsonSchema,
 				name,
 			).toBeDefined()
 		}

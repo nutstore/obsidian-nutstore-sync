@@ -2,7 +2,7 @@ import { For } from 'solid-js'
 import { Portal } from 'solid-js/web'
 
 import type { ChatboxProps } from '~/ai/chat/ui/types'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 
 export function ModelPickerDialog(props: {
 	providers: ChatboxProps['providers']

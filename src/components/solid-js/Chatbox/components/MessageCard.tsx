@@ -1,8 +1,11 @@
 import { For, Show } from 'solid-js'
-import { t } from '../../../i18n'
 import type { ChatDisplayBlock } from '~/ai/chat/types'
-import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
-import type { ChatAgentView } from '~/ai/chat/ui/types'
+import type {
+	ChatAgentView,
+	ChatTimelineMessageItem,
+	ChatboxProps,
+} from '~/ai/chat/ui/types'
+import { t } from '../../i18n'
 import {
 	formatSystemNotificationMarkdown,
 	formatTime,
@@ -14,8 +17,8 @@ import { ContentBlock } from './ContentBlock'
 import { ContextArea } from './ContextArea'
 import { CopyButton } from './CopyButton'
 import { SystemNotificationBlock } from './SystemNotificationBlock'
-import { ToolCallBlock } from './ToolCallBlock'
 import { TodoListBlock } from './TodoListBlock'
+import { ToolCallBlock } from './ToolCallBlock'
 
 function copyTextForContentBlock(
 	block: Extract<ChatDisplayBlock, { kind: 'content' }>,

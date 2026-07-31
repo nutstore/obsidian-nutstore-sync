@@ -1,6 +1,6 @@
 import type { ChatDisplaySystemNotificationBlock } from '~/ai/chat/types'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 import { formatSystemNotificationMarkdown } from '../utils'
 import { TitledCollapsibleBlock } from './CollapsibleBlock'
 import { MarkdownContent } from './MarkdownContent'

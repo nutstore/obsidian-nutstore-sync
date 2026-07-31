@@ -1,5 +1,5 @@
 import type { ChatDisplayToolCallBlock, ChatRunState } from '~/ai/chat/types'
-import { t } from '../../i18n'
+import { t } from '../i18n'
 
 export function formatTime(timestamp: number) {
 	return new Intl.DateTimeFormat(undefined, {

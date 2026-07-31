@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 
 function basename(path: string): string {
 	return path.split('/').pop() ?? path

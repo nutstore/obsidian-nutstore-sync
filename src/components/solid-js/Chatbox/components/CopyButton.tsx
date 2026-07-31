@@ -1,5 +1,5 @@
 import { Show, createSignal, onCleanup } from 'solid-js'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 
 export function CopyButton(props: { getText: () => string }) {
 	const [copied, setCopied] = createSignal(false)

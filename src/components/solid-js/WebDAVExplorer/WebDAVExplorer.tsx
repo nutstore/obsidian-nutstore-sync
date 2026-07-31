@@ -1,10 +1,10 @@
 import { Notice } from 'obsidian'
 import path from 'path-browserify'
 import { createSignal, Show } from 'solid-js'
+import { t } from '../i18n'
 import { createFileList } from './components/FileList'
 import NewFolder from './components/NewFolder'
 import { fs } from './fs'
-import { t } from '../../i18n'
 
 export interface WebDAVExplorerProps {
 	fs: fs

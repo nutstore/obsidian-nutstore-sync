@@ -1,7 +1,7 @@
 import { For, Show, createSignal } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import type { ChatMcpServerOption } from '~/ai/chat/ui/types'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 
 interface McpServersDialogProps {
 	servers: ChatMcpServerOption[]

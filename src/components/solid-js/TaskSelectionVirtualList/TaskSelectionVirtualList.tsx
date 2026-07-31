@@ -6,7 +6,7 @@ import {
 	getPaginationRowModel,
 } from '@tanstack/solid-table'
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js'
-import { t } from '../../i18n'
+import { t } from '../i18n'
 
 export interface TaskSelectionItem {
 	id: string

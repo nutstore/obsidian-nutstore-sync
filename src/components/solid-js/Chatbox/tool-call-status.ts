@@ -1,5 +1,5 @@
 import type { ChatDisplayToolCallBlock } from '~/ai/chat/types'
-import { t } from '../../i18n'
+import { t } from '../i18n'
 import { formatDuration } from './utils'
 
 export function timingDuration(

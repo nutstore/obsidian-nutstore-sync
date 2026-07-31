@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js'
-import { t } from '../../../i18n'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
+import { t } from '../../i18n'
 import { ContextArea } from './ContextArea'
 
 export function PendingList(props: { pending: ChatboxProps['pending'] }) {

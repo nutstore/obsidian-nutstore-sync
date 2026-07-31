@@ -2,7 +2,7 @@ import { For, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 
 import type { ChatAgentView, ChatboxProps } from '~/ai/chat/ui/types'
-import { t } from '../../../i18n'
+import { t } from '../../i18n'
 import { MessageCard } from './MessageCard'
 
 export function SubagentTimelineDialog(props: {
