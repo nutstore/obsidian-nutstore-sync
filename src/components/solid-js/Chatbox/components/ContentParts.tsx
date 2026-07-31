@@ -38,10 +38,10 @@ export function ContentParts(props: {
 							<Match when={isReasoningPart(part) ? part : undefined}>
 								{(reasoningPart) => (
 									<details class=":uno: rounded-2 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
-										<summary class=":uno: cursor-pointer p-2 text-xs text-[var(--text-muted)] select-none">
+										<summary class=":uno: cursor-pointer text-xs text-[var(--text-muted)] select-none">
 											Reasoning
 										</summary>
-										<pre class=":uno: m-0 p-2 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
+										<pre class=":uno: m-0 px-3 py-2.5 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
 											{reasoningPart().text ?? ''}
 										</pre>
 									</details>
