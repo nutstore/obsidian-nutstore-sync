@@ -9,7 +9,7 @@ export function CollapsibleBlock(props: {
 }) {
 	return (
 		<details
-			class=":uno: group rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]"
+			class=":uno: group rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)]"
 			open={props.open}
 			onToggle={(event) => props.onOpenChange?.(event.currentTarget.open)}
 		>
@@ -17,7 +17,7 @@ export function CollapsibleBlock(props: {
 				{props.summary}
 				<div class=":uno: flex shrink-0 items-center gap-1">
 					{props.headerActions}
-					<span class=":uno: i-lucide-chevron-down size-4 shrink-0 transition-transform group-open:rotate-180" />
+					<span class=":uno: i-lucide-chevron-down size-4 shrink-0 transition-transform group-open:[transform:rotate(180deg)]" />
 				</div>
 			</summary>
 			{props.children}

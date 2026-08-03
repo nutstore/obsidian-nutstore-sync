@@ -11,6 +11,7 @@ import {
 	type ChatModalMountTarget,
 } from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
@@ -47,8 +48,8 @@ export default class ProviderEditorModal extends Modal {
 	}
 
 	onOpen() {
-		this.modalEl.addClass(':uno: provider-editor-modal')
-		this.contentEl.addClass(':uno: provider-editor-modal__content')
+		addClassTokens(this.modalEl, ':uno: provider-editor-modal')
+		addClassTokens(this.contentEl, ':uno: provider-editor-modal__content')
 		this.render()
 	}
 
@@ -71,7 +72,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.name'))
 			.setDesc(i18n.t('settings.ai.provider.desc'))
-			.then((s) => s.settingEl.addClass(':uno: setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text.setValue(this.draft.name).onChange((value) => {
 					this.draft.name = value
@@ -103,7 +104,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.baseUrl.name'))
 			.setDesc(i18n.t('settings.ai.provider.baseUrl.desc'))
-			.then((s) => s.settingEl.addClass(':uno: setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text
 					.setPlaceholder('https://api.openai.com/v1')
@@ -116,7 +117,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.apiKey.name'))
 			.setDesc(i18n.t('settings.ai.provider.apiKey.desc'))
-			.then((s) => s.settingEl.addClass(':uno: setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) => {
 				text.setValue(this.draft.apiKey).onChange((value) => {
 					this.draft.apiKey = value
@@ -235,7 +236,7 @@ export default class ProviderEditorModal extends Modal {
 						confirmDelete = false
 						button.buttonEl.empty()
 						setIcon(button.buttonEl, 'trash')
-						button.buttonEl.removeClass(':uno: mod-warning')
+						removeClassTokens(button.buttonEl, ':uno: mod-warning')
 					}
 
 					button.setIcon('trash').onClick(() => {
@@ -245,7 +246,7 @@ export default class ProviderEditorModal extends Modal {
 							button.buttonEl.createSpan({
 								text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 							})
-							button.buttonEl.addClass(':uno: mod-warning')
+							addClassTokens(button.buttonEl, ':uno: mod-warning')
 							return
 						}
 						this.deleteModel(model)
@@ -304,8 +305,8 @@ export default class ProviderEditorModal extends Modal {
 	onClose() {
 		this.cleanupModalMount?.()
 		this.cleanupModalMount = undefined
-		this.modalEl.removeClass(':uno: provider-editor-modal')
-		this.contentEl.removeClass(':uno: provider-editor-modal__content')
+		removeClassTokens(this.modalEl, ':uno: provider-editor-modal')
+		removeClassTokens(this.contentEl, ':uno: provider-editor-modal__content')
 		this.contentEl.empty()
 	}
 }

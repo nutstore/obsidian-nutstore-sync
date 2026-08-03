@@ -15,6 +15,11 @@ import { getProviderDefaultBaseURL } from '~/ai/providers/defaults'
 import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
 import { onNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import i18n from '~/i18n'
+import {
+	addClassTokens,
+	removeClassTokens,
+	toggleClassTokens,
+} from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import NutstoreLlmGatewayBetaConfirmModal from './NutstoreLlmGatewayBetaConfirmModal'
@@ -69,27 +74,33 @@ export default class ProvidersManagerModal extends Modal {
 					.setDisabled(this.presetModelsRefreshState === 'loading')
 
 				const buttonEl = button.buttonEl
-				buttonEl.classList.toggle(
+				toggleClassTokens(
+					buttonEl,
 					':uno: connection-button',
 					this.presetModelsRefreshState !== 'idle',
 				)
-				buttonEl.classList.toggle(
+				toggleClassTokens(
+					buttonEl,
 					':uno: loading',
 					this.presetModelsRefreshState === 'loading',
 				)
-				buttonEl.classList.toggle(
+				toggleClassTokens(
+					buttonEl,
 					':uno: opacity-50',
 					this.presetModelsRefreshState === 'loading',
 				)
-				buttonEl.classList.toggle(
+				toggleClassTokens(
+					buttonEl,
 					':uno: pointer-events-none',
 					this.presetModelsRefreshState === 'loading',
 				)
-				buttonEl.classList.toggle(
+				toggleClassTokens(
+					buttonEl,
 					':uno: success',
 					this.presetModelsRefreshState === 'success',
 				)
-				buttonEl.classList.toggle(
+				toggleClassTokens(
+					buttonEl,
 					':uno: mod-warning',
 					this.presetModelsRefreshState === 'error',
 				)
@@ -145,7 +156,7 @@ export default class ProvidersManagerModal extends Modal {
 			.setName(i18n.t('settings.ai.providers.name'))
 			.setDesc(i18n.t('settings.ai.providers.desc'))
 			.addDropdown((dropdown) => {
-				dropdown.selectEl.classList.add(':uno: max-w-32!')
+				addClassTokens(dropdown.selectEl, ':uno: max-w-32!')
 				dropdown.addOption(
 					CUSTOM_OPTION,
 					i18n.t('settings.ai.providers.presetCustom'),
@@ -273,7 +284,7 @@ export default class ProvidersManagerModal extends Modal {
 						confirmDelete = false
 						button.buttonEl.empty()
 						setIcon(button.buttonEl, 'trash')
-						button.buttonEl.removeClass(':uno: mod-warning')
+						removeClassTokens(button.buttonEl, ':uno: mod-warning')
 					}
 
 					button.setIcon('trash').onClick(async () => {
@@ -283,7 +294,7 @@ export default class ProvidersManagerModal extends Modal {
 							button.buttonEl.createSpan({
 								text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 							})
-							button.buttonEl.addClass(':uno: mod-warning')
+							addClassTokens(button.buttonEl, ':uno: mod-warning')
 							return
 						}
 						await this.deleteProvider(provider)
@@ -354,7 +365,8 @@ export default class ProvidersManagerModal extends Modal {
 					)
 					.setDisabled(isAuthorizing)
 				if (isAuthorizing) {
-					button.buttonEl.classList.add(
+					addClassTokens(
+						button.buttonEl,
 						':uno: connection-button',
 						':uno: loading',
 						':uno: opacity-50',
@@ -446,7 +458,7 @@ export default class ProvidersManagerModal extends Modal {
 					confirmDisconnect = false
 					button.buttonEl.empty()
 					setIcon(button.buttonEl, 'trash')
-					button.buttonEl.removeClass(':uno: mod-warning')
+					removeClassTokens(button.buttonEl, ':uno: mod-warning')
 				}
 
 				button.setIcon('trash').onClick(async () => {
@@ -456,7 +468,7 @@ export default class ProvidersManagerModal extends Modal {
 						button.buttonEl.createSpan({
 							text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 						})
-						button.buttonEl.addClass(':uno: mod-warning')
+						addClassTokens(button.buttonEl, ':uno: mod-warning')
 						return
 					}
 					await this.plugin.nutstoreLlmGatewayService.disconnect()

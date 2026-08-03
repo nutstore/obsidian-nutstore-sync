@@ -46,6 +46,7 @@ export function applyObsidianModalMountTarget(
 	if (!containerEl) return
 
 	const modalEl = modalWithElements.modalEl
+	const hadDimClass = containerEl.classList.contains('mod-dim')
 	const hostEl =
 		target.hostEl ?? (target.contained ? target.mountEl : undefined)
 	const fallbackEl = hostEl?.ownerDocument?.body ?? target.mountEl
@@ -61,6 +62,9 @@ export function applyObsidianModalMountTarget(
 			'ns-chatbox-contained-modal-container',
 			contained,
 		)
+		if (hadDimClass) {
+			containerEl.classList.toggle('mod-dim', !contained)
+		}
 		modalEl?.classList.toggle('ns-chatbox-contained-modal', contained)
 	}
 
@@ -74,5 +78,10 @@ export function applyObsidianModalMountTarget(
 	const observer = new ResizeObserverConstructor(updateMount)
 	observer.observe(hostEl)
 
-	return () => observer.disconnect()
+	return () => {
+		observer.disconnect()
+		if (hadDimClass) {
+			containerEl.classList.add('mod-dim')
+		}
+	}
 }

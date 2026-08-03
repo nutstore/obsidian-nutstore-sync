@@ -6,6 +6,7 @@ import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
 import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
 import SkippedTask from '~/sync/tasks/skipped.task'
 import { BaseTask } from '~/sync/tasks/task.interface'
+import { addClassTokens } from '~/utils/class-tokens'
 import getTaskName from '~/utils/get-task-name'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
@@ -111,7 +112,7 @@ export default class SyncProgressModal extends Modal {
 		)
 
 		if (this.plugin.progressService.syncEnd) {
-			this.stopButtonComponent.buttonEl.addClass(':uno: hidden')
+			addClassTokens(this.stopButtonComponent.buttonEl, ':uno: hidden')
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
 			const failedCount = this.plugin.progressService.syncFailedCount
 			this.currentOperation.setText(
@@ -121,12 +122,12 @@ export default class SyncProgressModal extends Modal {
 			)
 			this.currentFile.setText('')
 		} else if (this.syncCancelled) {
-			this.stopButtonComponent.buttonEl.addClass(':uno: hidden')
+			addClassTokens(this.stopButtonComponent.buttonEl, ':uno: hidden')
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
 			this.currentOperation.setText(i18n.t('sync.cancelled'))
 			this.currentFile.setText('')
 		} else if (this.plugin.progressService.syncFailed) {
-			this.stopButtonComponent.buttonEl.addClass(':uno: hidden')
+			addClassTokens(this.stopButtonComponent.buttonEl, ':uno: hidden')
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
 			this.currentOperation.setText(i18n.t('sync.failedStatus'))
 			this.currentFile.setText('')

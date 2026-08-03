@@ -28,8 +28,13 @@ function buildMessageDisplayBlocks(
 	}
 
 	for (const part of message.parts) {
-		if (part.type === 'text' || part.type === 'reasoning') {
+		if (part.type === 'text') {
 			if (part.text.trim()) content.push(part)
+			continue
+		}
+		if (part.type === 'reasoning') {
+			flush()
+			if (part.text.trim()) blocks.push({ kind: 'reasoning', part })
 			continue
 		}
 		if (part.type === 'data-model-file') {

@@ -3,6 +3,7 @@ import { Notice, Setting } from 'obsidian'
 import LogoutConfirmModal from '~/components/LogoutConfirmModal'
 import NutstoreEnterpriseBaseUrlModal from '~/components/NutstoreEnterpriseBaseUrlModal'
 import i18n from '~/i18n'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import { OAuthResponse } from '~/utils/decrypt-ticket-response'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
@@ -48,7 +49,7 @@ export default class AccountSettings extends BaseSettings {
 
 	private displayManualLoginSettings(): void {
 		const helper = new Setting(this.containerEl)
-		helper.descEl.addClass(':uno: flex items-center flex-wrap gap-2')
+		addClassTokens(helper.descEl, ':uno: flex items-center flex-wrap gap-2')
 		const anchor = helper.descEl.createEl('a', {
 			href: 'https://help.jianguoyun.com/?p=2064',
 			cls: ':uno: settings-helper-badge no-underline',
@@ -123,8 +124,8 @@ export default class AccountSettings extends BaseSettings {
 							}).open()
 						})
 				})
-			el.descEl.classList.add(':uno: max-w-full', ':uno: truncate')
-			el.infoEl.classList.add(':uno: max-w-full')
+			addClassTokens(el.descEl, ':uno: max-w-full', ':uno: truncate')
+			addClassTokens(el.infoEl, ':uno: max-w-full')
 			this.displayCheckConnection()
 		} else {
 			new Setting(this.containerEl)
@@ -162,46 +163,49 @@ export default class AccountSettings extends BaseSettings {
 					.setButtonText(i18n.t('settings.checkConnection.name'))
 					.onClick(async (e) => {
 						const buttonEl = e.target as HTMLElement
-						buttonEl.classList.add(
+						addClassTokens(
+							buttonEl,
 							':uno: connection-button',
 							':uno: loading',
 							':uno: opacity-50',
 							':uno: pointer-events-none',
 						)
-						buttonEl.classList.remove(':uno: success', ':uno: error')
+						removeClassTokens(buttonEl, ':uno: success', ':uno: error')
 						buttonEl.textContent = i18n.t('settings.checkConnection.name')
 						try {
 							const { success, error } =
 								await this.plugin.webDAVService.checkWebDAVConnection()
-							buttonEl.classList.remove(
+							removeClassTokens(
+								buttonEl,
 								':uno: loading',
 								':uno: opacity-50',
 								':uno: pointer-events-none',
 							)
 							if (success) {
-								buttonEl.classList.add(':uno: success')
+								addClassTokens(buttonEl, ':uno: success')
 								buttonEl.textContent = i18n.t(
 									'settings.checkConnection.successButton',
 								)
 								new Notice(i18n.t('settings.checkConnection.success'))
 							} else if (error && is503Error(error)) {
-								buttonEl.classList.add(':uno: error')
+								addClassTokens(buttonEl, ':uno: error')
 								buttonEl.textContent = i18n.t('sync.error.requestsTooFrequent')
 								new Notice(i18n.t('sync.error.requestsTooFrequent'))
 							} else {
-								buttonEl.classList.add(':uno: error')
+								addClassTokens(buttonEl, ':uno: error')
 								buttonEl.textContent = i18n.t(
 									'settings.checkConnection.failureButton',
 								)
 								new Notice(i18n.t('settings.checkConnection.failure'))
 							}
 						} catch {
-							buttonEl.classList.remove(
+							removeClassTokens(
+								buttonEl,
 								':uno: loading',
 								':uno: opacity-50',
 								':uno: pointer-events-none',
 							)
-							buttonEl.classList.add(':uno: error')
+							addClassTokens(buttonEl, ':uno: error')
 							buttonEl.textContent = i18n.t(
 								'settings.checkConnection.failureButton',
 							)

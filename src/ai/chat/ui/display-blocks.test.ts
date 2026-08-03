@@ -2,6 +2,34 @@ import { describe, expect, it } from 'vitest'
 import { projectTimelineMessageGroups } from './display-blocks'
 
 describe('projectTimelineMessageGroups', () => {
+	it('projects English and Chinese reasoning as separate display blocks', () => {
+		const groups = projectTimelineMessageGroups([
+			{
+				id: 'message',
+				role: 'assistant',
+				parts: [
+					{ type: 'text', text: 'First response.' },
+					{ type: 'reasoning', text: 'Check the next step.' },
+					{ type: 'text', text: '后续内容。' },
+					{ type: 'reasoning', text: '确认下一步。' },
+				],
+			},
+		])
+
+		expect(groups[0]?.blocks).toEqual([
+			{ kind: 'content', parts: [{ type: 'text', text: 'First response.' }] },
+			{
+				kind: 'reasoning',
+				part: { type: 'reasoning', text: 'Check the next step.' },
+			},
+			{ kind: 'content', parts: [{ type: 'text', text: '后续内容。' }] },
+			{
+				kind: 'reasoning',
+				part: { type: 'reasoning', text: '确认下一步。' },
+			},
+		])
+	})
+
 	it('keeps user messages that only contain user context', () => {
 		const groups = projectTimelineMessageGroups([
 			{

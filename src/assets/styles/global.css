@@ -360,6 +360,7 @@
 .ns-chatbox-contained-modal-container .modal-bg {
 	position: absolute;
 	inset: 0;
+	opacity: var(--modal-background-opacity, 0.85);
 }
 
 .modal.ns-chatbox-contained-modal {

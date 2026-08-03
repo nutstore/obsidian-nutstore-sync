@@ -6,6 +6,7 @@ import {
 } from '~/ai/mcp/types'
 import i18n from '~/i18n'
 import type { McpServerRuntimeInfo } from '~/services/mcp.service'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import McpServerEditorModal, {
@@ -183,7 +184,7 @@ export default class McpServersManagerModal extends Modal {
 					confirmDelete = false
 					button.buttonEl.empty()
 					setIcon(button.buttonEl, 'trash')
-					button.buttonEl.removeClass(':uno: mod-warning')
+					removeClassTokens(button.buttonEl, ':uno: mod-warning')
 				}
 
 				button.setIcon('trash').onClick(async () => {
@@ -193,7 +194,7 @@ export default class McpServersManagerModal extends Modal {
 						button.buttonEl.createSpan({
 							text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 						})
-						button.buttonEl.addClass(':uno: mod-warning')
+						addClassTokens(button.buttonEl, ':uno: mod-warning')
 						return
 					}
 					const servers = { ...this.servers }

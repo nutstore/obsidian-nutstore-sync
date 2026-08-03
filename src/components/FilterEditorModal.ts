@@ -1,6 +1,7 @@
 import { cloneDeep } from 'lodash-es'
 import { Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import { getUserOptions, GlobMatchOptions } from '~/utils/glob-match'
 import NutstorePlugin from '..'
 
@@ -76,11 +77,11 @@ export default class FilterEditorModal extends Modal {
 						'hover:bg-[--interactive-normal]!',
 					]
 					if (opt.caseSensitive) {
-						forceCaseBtn.classList.add(...activeCls)
-						forceCaseBtn.classList.remove(...inactiveCls)
+						addClassTokens(forceCaseBtn, ...activeCls)
+						removeClassTokens(forceCaseBtn, ...inactiveCls)
 					} else {
-						forceCaseBtn.classList.remove(...activeCls)
-						forceCaseBtn.classList.add(...inactiveCls)
+						removeClassTokens(forceCaseBtn, ...activeCls)
+						addClassTokens(forceCaseBtn, ...inactiveCls)
 					}
 				}
 				updateButtonStatus()
@@ -96,7 +97,7 @@ export default class FilterEditorModal extends Modal {
 					if (!confirmDelete) {
 						confirmDelete = true
 						trash.setText(i18n.t('settings.filters.confirmRemove'))
-						trash.addClass(':uno: mod-warning')
+						addClassTokens(trash, ':uno: mod-warning')
 					} else {
 						this.filters.splice(index, 1)
 						updateList()
@@ -105,7 +106,7 @@ export default class FilterEditorModal extends Modal {
 				trash.addEventListener('blur', () => {
 					confirmDelete = false
 					trash.setText(i18n.t('settings.filters.remove'))
-					trash.removeClass(':uno: mod-warning')
+					removeClassTokens(trash, ':uno: mod-warning')
 				})
 				itemContainer.appendChild(input)
 				itemContainer.appendChild(forceCaseBtn)

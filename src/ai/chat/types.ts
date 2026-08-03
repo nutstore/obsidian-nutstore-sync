@@ -68,9 +68,12 @@ export type AppUIMessagePart = UIMessagePart<ChatDataParts, UITools>
 
 export interface ChatDisplayContentBlock {
 	kind: 'content'
-	parts: Array<
-		Extract<AppUIMessagePart, { type: 'text' | 'reasoning' }> | FilePart
-	>
+	parts: Array<Extract<AppUIMessagePart, { type: 'text' }> | FilePart>
+}
+
+export interface ChatDisplayReasoningBlock {
+	kind: 'reasoning'
+	part: Extract<AppUIMessagePart, { type: 'reasoning' }>
 }
 
 export interface ChatDisplayToolCallBlock {
@@ -88,6 +91,7 @@ export interface ChatDisplaySystemNotificationBlock {
 
 export type ChatDisplayBlock =
 	| ChatDisplayContentBlock
+	| ChatDisplayReasoningBlock
 	| ChatDisplayToolCallBlock
 	| ChatDisplaySystemNotificationBlock
 

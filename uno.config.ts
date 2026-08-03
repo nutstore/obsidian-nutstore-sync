@@ -5,6 +5,8 @@ import {
 	transformerCompileClass,
 } from 'unocss'
 
+const isDevelopment = process.env.NODE_ENV === 'development'
+
 export default defineConfig({
 	content: {
 		filesystem: ['src/**/*.{html,js,ts,jsx,tsx,vue,svelte,astro}'],
@@ -32,11 +34,13 @@ export default defineConfig({
 			],
 		],
 	],
-	transformers: [
-		transformerCompileClass({
-			classPrefix: 'ns-',
-		}),
-	],
+	transformers: isDevelopment
+		? []
+		: [
+				transformerCompileClass({
+					classPrefix: 'ns-',
+				}),
+			],
 	presets: [
 		presetIcons({
 			collections: {

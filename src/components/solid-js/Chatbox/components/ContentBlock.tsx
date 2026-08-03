@@ -1,20 +1,14 @@
 import type { TextPart } from 'ai'
 import { For, Match, Switch } from 'solid-js'
 import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
-import type {
-	ChatDisplayContentBlock,
-	ChatMessageContentPart,
-	ReasoningPart,
-} from '~/ai/chat/types'
+import type { ChatDisplayContentBlock } from '~/ai/chat/types'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
 import { MarkdownContent } from './MarkdownContent'
 
-function isTextPart(part: ChatMessageContentPart): part is TextPart {
+function isTextPart(
+	part: ChatDisplayContentBlock['parts'][number],
+): part is TextPart {
 	return part.type === 'text'
-}
-
-function isReasoningPart(part: ChatMessageContentPart): part is ReasoningPart {
-	return part.type === 'reasoning'
 }
 
 export function ContentBlock(props: {
@@ -35,18 +29,6 @@ export function ContentBlock(props: {
 										renderMarkdown={props.renderMarkdown}
 										streaming={props.streaming}
 									/>
-								)}
-							</Match>
-							<Match when={isReasoningPart(part) ? part : undefined}>
-								{(reasoningPart) => (
-									<details class=":uno: rounded-2 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
-										<summary class=":uno: cursor-pointer text-xs text-[var(--text-muted)] select-none">
-											Reasoning
-										</summary>
-										<pre class=":uno: m-0 px-3 py-2.5 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
-											{reasoningPart().text ?? ''}
-										</pre>
-									</details>
 								)}
 							</Match>
 							<Match when={imageFilePartSrc(part)}>

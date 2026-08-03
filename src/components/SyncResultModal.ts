@@ -1,5 +1,6 @@
 import { App, ButtonComponent, Modal, setIcon } from 'obsidian'
 import i18n from '~/i18n'
+import { addClassTokens } from '~/utils/class-tokens'
 
 export default class SyncResultModal extends Modal {
 	constructor(
@@ -42,7 +43,7 @@ export default class SyncResultModal extends Modal {
 			.setButtonText(i18n.t('sync.closeButton'))
 			.setCta()
 			.onClick(() => this.close())
-		btn.buttonEl.classList.add(':uno: min-w-24')
+		addClassTokens(btn.buttonEl, ':uno: min-w-24')
 	}
 
 	onClose(): void {

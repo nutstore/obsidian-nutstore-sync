@@ -214,11 +214,6 @@ async function buildMessageContentMarkdown(
 			if (text) lines.push(text)
 			continue
 		}
-		if (part.type === 'reasoning') {
-			const text = part.text.trim()
-			if (text) lines.push(`> ${text.replace(/\n/g, '\n> ')}`)
-			continue
-		}
 		if (!isImageFilePart(part)) continue
 		const imageRef = await saveExportImage(
 			vault,
@@ -337,6 +332,10 @@ async function buildDisplayBlockMarkdown(
 			assetsDirPath,
 			assetsMarkdownPrefix,
 		)
+	}
+	if (block.kind === 'reasoning') {
+		const text = block.part.text.trim()
+		return text ? [`> ${text.replace(/\n/g, '\n> ')}`] : []
 	}
 	if (block.kind === 'system-notification') {
 		return ['```json', JSON.stringify(block.notification, null, 2), '```']

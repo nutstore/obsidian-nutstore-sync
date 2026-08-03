@@ -242,6 +242,7 @@ function Chatbox(props: ChatboxProps) {
 		const blockFingerprint = item.displayBlocks
 			.map((block) => {
 				if (block.kind === 'content') return `c:${block.parts.length}`
+				if (block.kind === 'reasoning') return `r:${block.part.text.length}`
 				if (block.kind === 'tool-call') {
 					return `tc:${block.toolCall.toolCallId}:${block.toolCall.state}`
 				}

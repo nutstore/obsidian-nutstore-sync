@@ -1,5 +1,5 @@
 import type { JSX } from 'solid-js'
-import { Show, createSignal } from 'solid-js'
+import { Match, Show, Switch, createSignal } from 'solid-js'
 
 import type { ChatDisplayToolCallBlock } from '~/ai/chat/types'
 import type { ChatAgentView, ChatboxProps } from '~/ai/chat/ui/types'
@@ -21,6 +21,7 @@ import {
 import { TitledCollapsibleBlock } from './CollapsibleBlock'
 import { FileChangesBlock } from './FileChangesBlock'
 import { MarkdownContent } from './MarkdownContent'
+import { TodoListBlock } from './TodoListBlock'
 
 function taskIdFromOutput(output: unknown) {
 	if (!output || typeof output !== 'object' || Array.isArray(output)) return
@@ -52,40 +53,43 @@ export function ToolCallBlock(props: {
 	}
 
 	return (
-		<Show
-			when={viewImageOutput()}
-			keyed
+		<Switch
 			fallback={
-				<Show
-					when={props.block.toolCall.toolName === 'task'}
-					fallback={
-						<GenericToolCallBlock
-							block={props.block}
-							now={props.now}
-							onOpenFileChange={props.onOpenFileChange}
-							renderMarkdown={props.renderMarkdown}
-						/>
-					}
-				>
-					<TaskToolCallBlock
-						block={props.block}
-						now={props.now}
-						getSubagent={props.getSubagent}
-						onOpenSubagent={props.onOpenSubagent}
-						onOpenFileChange={props.onOpenFileChange}
-						renderMarkdown={props.renderMarkdown}
-					/>
-				</Show>
+				<GenericToolCallBlock
+					block={props.block}
+					now={props.now}
+					onOpenFileChange={props.onOpenFileChange}
+					renderMarkdown={props.renderMarkdown}
+				/>
 			}
 		>
-			{(output) => (
-				<ViewImageToolCallBlock
-					path={output.path}
-					src={props.onResolveVaultResourcePath?.(output.path)}
-					visual={toolStatusVisual(props.block.toolCall)}
+			<Match
+				when={
+					props.block.toolCall.toolName === 'todowrite' && props.block.todos
+				}
+			>
+				<TodoListBlock block={props.block} now={props.now} />
+			</Match>
+			<Match when={viewImageOutput()}>
+				{(output) => (
+					<ViewImageToolCallBlock
+						path={output().path}
+						src={props.onResolveVaultResourcePath?.(output().path)}
+						visual={toolStatusVisual(props.block.toolCall)}
+					/>
+				)}
+			</Match>
+			<Match when={props.block.toolCall.toolName === 'task'}>
+				<TaskToolCallBlock
+					block={props.block}
+					now={props.now}
+					getSubagent={props.getSubagent}
+					onOpenSubagent={props.onOpenSubagent}
+					onOpenFileChange={props.onOpenFileChange}
+					renderMarkdown={props.renderMarkdown}
 				/>
-			)}
-		</Show>
+			</Match>
+		</Switch>
 	)
 }
 

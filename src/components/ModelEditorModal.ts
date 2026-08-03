@@ -7,6 +7,7 @@ import {
 	type ChatModalMountTarget,
 } from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
+import { addClassTokens, toggleClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
@@ -62,7 +63,7 @@ export default class ModelEditorModal extends Modal {
 		new Setting(contentEl)
 			.setName(i18n.t('settings.ai.model.id'))
 			.setDesc(i18n.t('settings.ai.model.idDesc'))
-			.then((s) => s.settingEl.addClass(':uno: setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) => {
 				text.setValue(this.draft.id).onChange((value) => {
 					this.draft.id = value
@@ -84,7 +85,7 @@ export default class ModelEditorModal extends Modal {
 				const modality = button.dataset
 					.modality as AIModelConfig['modalities']['input'][number]
 				const selected = this.draft.modalities.input.includes(modality)
-				button.classList.toggle(':uno: is-active', selected)
+				toggleClassTokens(button, ':uno: is-active', selected)
 			}
 		}
 		this.updateInputModalityTags = updateTags

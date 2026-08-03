@@ -6,13 +6,14 @@ import path from 'path'
 import postcss from 'postcss'
 import postcssMergeRules from 'postcss-merge-rules'
 import process from 'process'
-import solid from 'unplugin-solid/esbuild'
 import { createGenerator } from 'unocss'
+import solid from 'unplugin-solid/esbuild'
 
 const pkgJson = JSON.parse(readFileSync('./package.json', 'utf-8'))
 dotenv.config()
 
 const prod = process.argv[2] === 'production'
+process.env.NODE_ENV = prod ? 'production' : 'development'
 const loadConfig = jiti(import.meta.url, { moduleCache: false })
 
 class TransformableSource {
@@ -130,7 +131,7 @@ const finalizeUnoPlugin = {
 				fs.promises.readFile(cssPath, 'utf8'),
 			])
 			const transformedJs = await transformUnoClasses(js, uno, tokens)
-			const generatedCss = (await uno.generate(tokens)).css
+			const generatedCss = (await uno.generate(prod ? tokens : js)).css
 			const transformedCss = await postcss([postcssMergeRules()]).process(
 				css.replace('@unocss;', generatedCss),
 				{ from: cssPath },

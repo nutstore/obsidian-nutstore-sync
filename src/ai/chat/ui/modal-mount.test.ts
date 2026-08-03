@@ -86,6 +86,7 @@ describe('chat modal mount target', () => {
 			getBoundingClientRect: () => ({ width }),
 		})
 		const containerEl = createElement(0)
+		containerEl.classList.add('mod-dim')
 		const modalEl = createElement(0)
 		const cleanup = applyObsidianModalMountTarget(
 			{ containerEl, modalEl } as unknown as Modal,
@@ -99,6 +100,7 @@ describe('chat modal mount target', () => {
 		expect(
 			containerEl.classList.contains('ns-chatbox-contained-modal-container'),
 		).toBe(false)
+		expect(containerEl.classList.contains('mod-dim')).toBe(true)
 
 		width = CHATBOX_DIALOG_CONTAINED_MIN_WIDTH
 		resizeCallback()
@@ -106,9 +108,11 @@ describe('chat modal mount target', () => {
 		expect(
 			containerEl.classList.contains('ns-chatbox-contained-modal-container'),
 		).toBe(true)
+		expect(containerEl.classList.contains('mod-dim')).toBe(false)
 
 		cleanup?.()
 		expect(disconnected).toBe(true)
+		expect(containerEl.classList.contains('mod-dim')).toBe(true)
 	})
 
 	it('uses clientWidth when the bounding box is temporarily empty', () => {
@@ -125,6 +129,7 @@ describe('chat modal mount target', () => {
 	it('reparents and marks an Obsidian modal for contained positioning', () => {
 		const root = createElement(800)
 		const containerEl = createElement(0)
+		containerEl.classList.add('mod-dim')
 		const modalEl = createElement(0)
 		const modal = { containerEl, modalEl } as unknown as Modal
 
@@ -137,6 +142,7 @@ describe('chat modal mount target', () => {
 		expect(
 			containerEl.classList.contains('ns-chatbox-contained-modal-container'),
 		).toBe(true)
+		expect(containerEl.classList.contains('mod-dim')).toBe(false)
 		expect(modalEl.classList.contains('ns-chatbox-contained-modal')).toBe(true)
 	})
 })

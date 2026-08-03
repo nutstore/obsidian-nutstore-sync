@@ -2,6 +2,7 @@ import { cloneDeep } from 'lodash-es'
 import { Modal, Notice, Setting } from 'obsidian'
 import { type HttpMcpServerConfig, isValidMcpServerName } from '~/ai/mcp/types'
 import i18n from '~/i18n'
+import { addClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
@@ -44,7 +45,7 @@ export default class McpServerEditorModal extends Modal {
 		new Setting(contentEl)
 			.setName(i18n.t('settings.ai.mcp.editor.serverName'))
 			.setDesc(i18n.t('settings.ai.mcp.editor.serverNameDesc'))
-			.then((s) => s.settingEl.addClass(':uno: setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) => {
 				text.setValue(this.draft.name).onChange((value) => {
 					this.draft.name = value.trim()
@@ -57,7 +58,7 @@ export default class McpServerEditorModal extends Modal {
 		new Setting(contentEl)
 			.setName(i18n.t('settings.ai.mcp.editor.url'))
 			.setDesc(i18n.t('settings.ai.mcp.editor.urlDesc'))
-			.then((s) => s.settingEl.addClass(':uno: setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text
 					.setPlaceholder('https://example.com/mcp')

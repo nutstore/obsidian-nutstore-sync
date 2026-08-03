@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js'
+import { For, Match, Show, Switch } from 'solid-js'
 import type { ChatDisplayBlock } from '~/ai/chat/types'
 import type {
 	ChatAgentView,
@@ -16,8 +16,8 @@ import {
 import { ContentBlock } from './ContentBlock'
 import { ContextArea } from './ContextArea'
 import { CopyButton } from './CopyButton'
+import { ReasoningBlock } from './ReasoningBlock'
 import { SystemNotificationBlock } from './SystemNotificationBlock'
-import { TodoListBlock } from './TodoListBlock'
 import { ToolCallBlock } from './ToolCallBlock'
 
 function copyTextForContentBlock(
@@ -79,59 +79,49 @@ function MessageDisplayBlock(props: {
 }) {
 	const contentBlock = () =>
 		props.block.kind === 'content' ? props.block : undefined
+	const reasoningBlock = () =>
+		props.block.kind === 'reasoning' ? props.block : undefined
 	const toolBlock = () =>
 		props.block.kind === 'tool-call' ? props.block : undefined
 	const systemNotificationBlock = () =>
 		props.block.kind === 'system-notification' ? props.block : undefined
 
 	return (
-		<Show
-			when={contentBlock()}
-			keyed
-			fallback={
-				<Show
-					when={toolBlock()}
-					keyed
-					fallback={
-						<Show when={systemNotificationBlock()} keyed>
-							{(block) => (
-								<SystemNotificationBlock
-									block={block}
-									renderMarkdown={props.renderMarkdown}
-								/>
-							)}
-						</Show>
-					}
-				>
-					{(block) => (
-						<Show
-							when={block.toolCall.toolName === 'todowrite' && block.todos}
-							fallback={
-								<ToolCallBlock
-									block={block}
-									now={props.now}
-									getSubagent={props.getSubagent}
-									onOpenSubagent={props.onOpenSubagent}
-									onOpenFileChange={props.onOpenFileChange}
-									onResolveVaultResourcePath={props.onResolveVaultResourcePath}
-									renderMarkdown={props.renderMarkdown}
-								/>
-							}
-						>
-							<TodoListBlock block={block} now={props.now} />
-						</Show>
-					)}
-				</Show>
-			}
-		>
-			{(block) => (
-				<ContentBlock
-					block={block}
-					renderMarkdown={props.renderMarkdown}
-					streaming={props.streaming}
-				/>
-			)}
-		</Show>
+		<Switch>
+			<Match when={contentBlock()}>
+				{(block) => (
+					<ContentBlock
+						block={block()}
+						renderMarkdown={props.renderMarkdown}
+						streaming={props.streaming}
+					/>
+				)}
+			</Match>
+			<Match when={reasoningBlock()}>
+				{(block) => <ReasoningBlock part={block().part} />}
+			</Match>
+			<Match when={toolBlock()}>
+				{(block) => (
+					<ToolCallBlock
+						block={block()}
+						now={props.now}
+						getSubagent={props.getSubagent}
+						onOpenSubagent={props.onOpenSubagent}
+						onOpenFileChange={props.onOpenFileChange}
+						onResolveVaultResourcePath={props.onResolveVaultResourcePath}
+						renderMarkdown={props.renderMarkdown}
+					/>
+				)}
+			</Match>
+			<Match when={systemNotificationBlock()}>
+				{(block) => (
+					<SystemNotificationBlock
+						block={block()}
+						renderMarkdown={props.renderMarkdown}
+					/>
+				)}
+			</Match>
+		</Switch>
 	)
 }
 
