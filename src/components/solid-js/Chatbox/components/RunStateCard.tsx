@@ -14,7 +14,7 @@ export function RunStateCard(props: {
 	return (
 		<Show when={label()}>
 			<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
-				<div class=":uno: flex items-center justify-between gap-3 rounded-2 bg-[var(--background-secondary)] px-3 py-2 text-sm text-[var(--text-normal)]">
+				<div class=":uno: flex items-center justify-between gap-3 text-sm text-[var(--text-normal)]">
 					<div class=":uno: flex min-w-0 items-center gap-3">
 						<svg
 							class=":uno: h-4 w-4 shrink-0 animate-spin text-[var(--interactive-accent)]"
