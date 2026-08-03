@@ -9,6 +9,7 @@ import {
 	type TraverseWebDAVCache,
 } from '~/storage'
 import type { SyncLogger } from '~/sync/log'
+import { shouldUseRemoteTraversalCache } from '~/utils/config-dir-rules'
 import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import globalLogger from '~/utils/logger'
 import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
@@ -37,6 +38,10 @@ export default class CacheServiceV1 extends BaseService {
 	async restoreRemoteTraversalCacheIfMissing(
 		logger: SyncLogger = globalLogger,
 	): Promise<boolean> {
+		if (!this.remoteTraversalCacheEnabled) {
+			return false
+		}
+
 		try {
 			const kvKey = await this.getKVKey()
 			const localCache = await traverseWebDAVKV.get(kvKey)
@@ -86,6 +91,10 @@ export default class CacheServiceV1 extends BaseService {
 		logger: SyncLogger = globalLogger,
 		isCancelled: () => boolean = () => false,
 	): Promise<boolean> {
+		if (!this.remoteTraversalCacheEnabled) {
+			return false
+		}
+
 		try {
 			if (isCancelled()) {
 				return false
@@ -212,6 +221,14 @@ export default class CacheServiceV1 extends BaseService {
 		return getRemoteSyncCacheFilePath(
 			this.plugin.remoteBaseDir,
 			this.plugin.app.vault.configDir,
+		)
+	}
+
+	private get remoteTraversalCacheEnabled() {
+		return shouldUseRemoteTraversalCache(
+			this.plugin.app.vault.configDir,
+			this.plugin.settings.configDirSyncMode ?? 'none',
+			this.plugin.settings.filterRules,
 		)
 	}
 

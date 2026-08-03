@@ -3,6 +3,7 @@ import {
 	computeEffectiveFilterRules,
 	getConfigDirSystemFilterRules,
 	getConfigDirSystemTraversalRules,
+	shouldUseRemoteTraversalCache,
 } from './config-dir-rules'
 import GlobMatch, { needIncludeFromGlobRules } from './glob-match'
 
@@ -255,6 +256,41 @@ describe('computeEffectiveFilterRules', () => {
 			).toBe(false)
 		},
 	)
+
+	it.each([
+		{ label: 'English', configDir: '.obsidian', mode: 'none' as const },
+		{ label: '中文', configDir: '.配置', mode: 'bookmarks' as const },
+	])(
+		'$label: disables the remote traversal cache outside all config synchronization',
+		({ configDir, mode }) => {
+			expect(
+				shouldUseRemoteTraversalCache(configDir, mode, {
+					exclusionRules: [],
+					inclusionRules: [],
+				}),
+			).toBe(false)
+		},
+	)
+
+	it('disables the remote traversal cache for a user config directory exclusion', () => {
+		expect(
+			shouldUseRemoteTraversalCache('.obsidian', 'all', {
+				exclusionRules: [
+					{ expr: '.obsidian/**', options: { caseSensitive: false } },
+				],
+				inclusionRules: [],
+			}),
+		).toBe(false)
+	})
+
+	it('allows the remote traversal cache when all config synchronization is enabled', () => {
+		expect(
+			shouldUseRemoteTraversalCache('.obsidian', 'all', {
+				exclusionRules: [],
+				inclusionRules: [],
+			}),
+		).toBe(true)
+	})
 
 	it('uses mode-derived rules as normal glob rules', () => {
 		const inclusion = [new GlobMatch('**/*.json', { caseSensitive: false })]

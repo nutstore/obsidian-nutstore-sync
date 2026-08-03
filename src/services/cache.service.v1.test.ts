@@ -36,10 +36,19 @@ function encodeStorage(value: ExportedStorage): Uint8Array<ArrayBuffer> {
 	}) as Uint8Array<ArrayBuffer>
 }
 
-function createService(webdav: object, remoteBaseDir = '/vault/') {
+function createService(
+	webdav: object,
+	remoteBaseDir = '/vault/',
+	settings: Record<string, unknown> = {},
+) {
 	const plugin = {
 		remoteBaseDir,
-		settings: { loginMode: 'manual' },
+		settings: {
+			loginMode: 'manual',
+			configDirSyncMode: 'all',
+			filterRules: { exclusionRules: [], inclusionRules: [] },
+			...settings,
+		},
 		getToken: vi.fn(async () => 'token'),
 		getRemoteAccountId: vi.fn(async () => 'neutral-account'),
 		app: { vault: { configDir: '.obsidian' } },
@@ -117,5 +126,57 @@ describe('CacheServiceV1 remote cache safety', () => {
 		expect(saved).toBe(false)
 		expect(storage.getTraversal).not.toHaveBeenCalled()
 		expect(webdav.exists).not.toHaveBeenCalled()
+	})
+
+	it('does not access remote cache when config directory sync is disabled', async () => {
+		const webdav = {
+			exists: vi.fn(),
+			getFileContents: vi.fn(),
+			createDirectory: vi.fn(),
+			putFileContents: vi.fn(),
+		}
+		storage.getTraversal.mockResolvedValue({
+			rootCursor: 'cursor',
+			queue: [],
+			nodes: { '/vault': [] },
+		})
+
+		const service = createService(webdav, '/vault/', {
+			configDirSyncMode: 'none',
+		})
+		await service.restoreRemoteTraversalCacheIfMissing(logger)
+		await service.saveRemoteTraversalCache(logger)
+
+		expect(storage.getTraversal).not.toHaveBeenCalled()
+		expect(webdav.exists).not.toHaveBeenCalled()
+		expect(webdav.getFileContents).not.toHaveBeenCalled()
+		expect(webdav.createDirectory).not.toHaveBeenCalled()
+		expect(webdav.putFileContents).not.toHaveBeenCalled()
+	})
+
+	it('does not access remote cache when user rules exclude the config directory', async () => {
+		const webdav = {
+			exists: vi.fn(),
+			getFileContents: vi.fn(),
+			createDirectory: vi.fn(),
+			putFileContents: vi.fn(),
+		}
+		const service = createService(webdav, '/vault/', {
+			filterRules: {
+				exclusionRules: [
+					{ expr: '.obsidian/**', options: { caseSensitive: false } },
+				],
+				inclusionRules: [],
+			},
+		})
+
+		await service.restoreRemoteTraversalCacheIfMissing(logger)
+		await service.saveRemoteTraversalCache(logger)
+
+		expect(storage.getTraversal).not.toHaveBeenCalled()
+		expect(webdav.exists).not.toHaveBeenCalled()
+		expect(webdav.getFileContents).not.toHaveBeenCalled()
+		expect(webdav.createDirectory).not.toHaveBeenCalled()
+		expect(webdav.putFileContents).not.toHaveBeenCalled()
 	})
 })
