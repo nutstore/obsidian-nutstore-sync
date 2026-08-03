@@ -35,7 +35,7 @@ export function ToolCallBlock(props: {
 	getSubagent?: (agentId: string) => ChatAgentView | undefined
 	onOpenSubagent?: (agentId: string) => void
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
-	onResolveVaultResourcePath?: ChatboxProps['onResolveVaultResourcePath']
+	onResolveResourceDataUrl?: ChatboxProps['onResolveResourceDataUrl']
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	const viewImageOutput = () => {
@@ -49,7 +49,10 @@ export function ToolCallBlock(props: {
 		const output = toolCall.output
 		if (!output || typeof output !== 'object' || Array.isArray(output)) return
 		const path = (output as { path?: unknown }).path
-		return typeof path === 'string' ? { path } : undefined
+		const mediaType = (output as { mediaType?: unknown }).mediaType
+		return typeof path === 'string' && typeof mediaType === 'string'
+			? { path, mediaType }
+			: undefined
 	}
 
 	return (
@@ -74,7 +77,8 @@ export function ToolCallBlock(props: {
 				{(output) => (
 					<ViewImageToolCallBlock
 						path={output().path}
-						src={props.onResolveVaultResourcePath?.(output().path)}
+						mediaType={output().mediaType}
+						onResolveDataUrl={props.onResolveResourceDataUrl}
 						visual={toolStatusVisual(props.block.toolCall)}
 					/>
 				)}
@@ -95,10 +99,34 @@ export function ToolCallBlock(props: {
 
 function ViewImageToolCallBlock(props: {
 	path: string
-	src?: string
+	mediaType: string
+	onResolveDataUrl?: ChatboxProps['onResolveResourceDataUrl']
 	visual: ReturnType<typeof toolStatusVisual>
 }) {
 	const [dimensions, setDimensions] = createSignal<string>()
+	const [open, setOpen] = createSignal(false)
+	const [src, setSrc] = createSignal<string>()
+	const [loading, setLoading] = createSignal(false)
+	const [loaded, setLoaded] = createSignal(false)
+
+	async function loadImage() {
+		if (loaded()) return
+		setLoaded(true)
+		if (!props.onResolveDataUrl) return
+		setLoading(true)
+		try {
+			setSrc(await props.onResolveDataUrl(props.path, props.mediaType))
+		} catch {
+			setSrc(undefined)
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	function handleOpenChange(value: boolean) {
+		setOpen(value)
+		if (value) void loadImage()
+	}
 
 	return (
 		<TitledCollapsibleBlock
@@ -116,13 +144,26 @@ function ViewImageToolCallBlock(props: {
 			}
 			iconClass={props.visual.iconClass}
 			iconLabel={props.visual.label}
+			open={open()}
+			onOpenChange={handleOpenChange}
 		>
 			<Show
-				when={props.src}
+				when={src()}
 				fallback={
-					<div class=":uno: text-xs text-[var(--text-muted)]">
-						Image preview unavailable.
-					</div>
+					<Show
+						when={loading()}
+						fallback={
+							<div class=":uno: text-xs text-[var(--text-muted)]">
+								Image preview unavailable.
+							</div>
+						}
+					>
+						<div
+							class=":uno: h-40 animate-pulse rounded-2 bg-[var(--background-modifier-hover)]"
+							aria-label="Loading image preview"
+							role="status"
+						/>
+					</Show>
 				}
 			>
 				{(src) => (

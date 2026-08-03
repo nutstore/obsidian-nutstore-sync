@@ -21,7 +21,7 @@ export async function existsBashTmpPath(app: App, absolutePath: string) {
 	return app.vault.adapter.exists(resolveBashTmpAdapterPath(app, absolutePath))
 }
 
-function resolveBashTmpAdapterPath(app: App, absolutePath: string) {
+export function resolveBashTmpAdapterPath(app: App, absolutePath: string) {
 	const normalized = pathPosix.normalize(absolutePath)
 	if (
 		normalized !== BASH_TMP_MOUNT_POINT &&
