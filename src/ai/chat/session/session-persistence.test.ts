@@ -6,7 +6,6 @@ import {
 	normalizeLegacySession,
 } from '~/ai/chat/session/session-migration'
 import {
-	convertPersistedChatSessionToBase64,
 	decodeChatSessionFromStorage,
 	encodeChatSessionForStorage,
 	type PersistedChatSession,
@@ -126,39 +125,6 @@ describe('chat session persistence', () => {
 		expect(new Uint8Array(decoded.modelFile.data)).toEqual(
 			new Uint8Array([104, 105]),
 		)
-	})
-
-	it('converts legacy stored records to JSON-safe base64url form', async () => {
-		const legacyRecord = {
-			schemaVersion: 2,
-			id: 'legacy',
-			createdAt: 1,
-			updatedAt: 1,
-			blob: {
-				__nutstore_chat_blob_v1: true,
-				type: 'image/png',
-				data: new Uint8Array([1, 2, 3]).buffer,
-			},
-			rawBuffer: new Uint8Array([4, 5]).buffer,
-			rawView: new Uint8Array([6, 7]),
-		}
-		const converted = convertPersistedChatSessionToBase64(
-			legacyRecord as unknown as PersistedChatSession,
-		)
-		expect(() => JSON.stringify(converted)).not.toThrow()
-
-		const decoded = decodeChatSessionFromStorage(converted) as unknown as {
-			blob: Blob
-			rawBuffer: ArrayBuffer
-			rawView: Uint8Array
-		}
-		expect(decoded.blob).toBeInstanceOf(Blob)
-		expect(new Uint8Array(await decoded.blob.arrayBuffer())).toEqual(
-			new Uint8Array([1, 2, 3]),
-		)
-		expect(new Uint8Array(decoded.rawBuffer)).toEqual(new Uint8Array([4, 5]))
-		expect(decoded.rawView).toBeInstanceOf(Uint8Array)
-		expect(new Uint8Array(decoded.rawView)).toEqual(new Uint8Array([6, 7]))
 	})
 
 	it('migrates V1 fragments losslessly and is idempotent', () => {

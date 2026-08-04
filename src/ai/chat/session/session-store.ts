@@ -15,7 +15,6 @@ import {
 } from '~/ai/chat/session/session-files'
 import i18n from '~/i18n'
 import {
-	convertPersistedChatSessionToBase64,
 	decodeChatSessionFromStorage,
 	encodeChatSessionForStorage,
 	type PersistedChatSession,
@@ -104,12 +103,14 @@ export class SessionStore {
 				continue
 			}
 			try {
-				const session = convertPersistedChatSessionToBase64(
+				const decoded = decodeChatSessionFromStorage(
 					stored as PersistedChatSession,
 				)
+				const { session } = this.rehydrateSession(decoded)
+				const snapshot = await encodeChatSessionForStorage(session)
 				const item = meta.index.find((entry) => entry.id === key)
 				await this.backend.writeSessionFile(key, {
-					session,
+					session: snapshot,
 					title: item?.title,
 				})
 				migrated = true

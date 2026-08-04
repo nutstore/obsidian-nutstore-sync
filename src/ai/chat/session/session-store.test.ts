@@ -75,6 +75,42 @@ function legacyV1PersistedRecord(id = 'legacy1'): PersistedChatSession {
 	} as unknown as PersistedChatSession
 }
 
+function legacyTimelinePersistedRecord(id = 'legacy1'): PersistedChatSession {
+	return {
+		id,
+		createdAt: 1,
+		updatedAt: 2,
+		activeFragmentId: 'fragment1',
+		fragments: [
+			{
+				id: 'fragment1',
+				createdAt: 1,
+				updatedAt: 2,
+				messages: [
+					{
+						id: 'message1',
+						createdAt: 1,
+						message: { role: 'user', content: 'Hello / 你好' },
+						userContext: [
+							{
+								type: 'image',
+								hash: 'image1',
+								mimeType: 'image/png',
+								size: 5,
+								blob: {
+									__nutstore_chat_blob_v1: true,
+									type: 'image/png',
+									data: new Uint8Array([1, 2, 3, 4, 5]).buffer,
+								},
+							},
+						],
+					},
+				],
+			},
+		],
+	} as unknown as PersistedChatSession
+}
+
 describe('SessionStore (vault file persistence)', () => {
 	it('migrates legacy IndexedDB sessions into vault files', async () => {
 		const { vault, files } = createMemoryVault()
@@ -82,7 +118,7 @@ describe('SessionStore (vault file persistence)', () => {
 		const state = createState()
 		const legacy = {
 			listSessionKeys: async () => ['legacy1'],
-			getSession: async () => legacyV1PersistedRecord(),
+			getSession: async () => legacyTimelinePersistedRecord(),
 			unsetSession: async () => undefined,
 			getMeta: async () => ({ meta: null, index: [] }),
 		} as SessionLegacyStore
@@ -99,10 +135,20 @@ describe('SessionStore (vault file persistence)', () => {
 		expect([...files.keys()]).toContain(`${CHAT_SESSIONS_DIR}/legacy1.json`)
 		expect(state.sessionIndex.map((item) => item.id)).toEqual(['legacy1'])
 		expect(state.activeSessionId).toBe('legacy1')
+		const payload = await backend.readSessionFile('legacy1')
+		expect(payload.session).toMatchObject({
+			schemaVersion: 2,
+			id: 'legacy1',
+		})
+		expect(payload.session).not.toHaveProperty('fragments')
+		expect(JSON.stringify(payload)).not.toContain('__nutstore_chat_blob_v1')
 
 		const session = await store.loadSessionById('legacy1')
 		expect(session.id).toBe('legacy1')
-		const item = session.subagents.master.timeline[0].parts[0]
+		const item = session.subagents.master.timeline[0].parts.find(
+			(part) => part.type === 'data-user-context',
+		)
+		if (!item) throw new Error('expected context')
 		if (item.type !== 'data-user-context') throw new Error('expected context')
 		const blob = (item.data as { items: Array<{ blob: Blob }> }).items[0].blob
 		expect(blob).toBeInstanceOf(Blob)

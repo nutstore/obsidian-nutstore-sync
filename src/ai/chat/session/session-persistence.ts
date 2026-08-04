@@ -5,7 +5,8 @@ import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 // numeric-indexed objects). V2 encodes every binary payload as a base64url
 // string so whole sessions can be persisted as plain JSON files. V1 marker
 // records AND bare ArrayBuffer/ArrayBufferView values are still accepted on
-// decode so legacy IndexedDB records migrate losslessly.
+// decode so legacy IndexedDB records can be decoded, migrated to the current
+// session schema, and encoded directly as final JSON snapshots.
 const BLOB_RECORD_MARKER_V1 = '__nutstore_chat_blob_v1'
 const BLOB_RECORD_MARKER_V2 = '__nutstore_chat_blob_v2'
 const URL_RECORD_MARKER = '__nutstore_chat_url_v1'
@@ -231,40 +232,6 @@ function decodeBlobs(value: unknown): unknown {
 	return Object.fromEntries(
 		Object.entries(value).map(([key, entry]) => [key, decodeBlobs(entry)]),
 	)
-}
-
-/**
- * Structural migration of a stored (already-encoded) chat session record to the
- * file-safe base64url form WITHOUT decoding/rebuilding the session object:
- *  - V1 blob records (ArrayBuffer payloads) → V2 base64url blob records
- *  - bare ArrayBuffer / ArrayBufferView values (IndexedDB era) → binary records
- * Used when migrating legacy IndexedDB snapshots into vault JSON files.
- */
-export function convertPersistedChatSessionToBase64(
-	record: PersistedChatSession,
-): PersistedChatSession {
-	function walk(value: unknown): unknown {
-		if (isLegacyPersistedBlobRecord(value)) {
-			return {
-				[BLOB_RECORD_MARKER_V2]: true,
-				type: value.type,
-				data: arrayBufferToBase64Url(value.data),
-			} satisfies PersistedBlobRecord
-		}
-		if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-			return createBinaryRecord(value)
-		}
-		if (Array.isArray(value)) {
-			return value.map(walk)
-		}
-		if (!value || typeof value !== 'object') {
-			return value
-		}
-		return Object.fromEntries(
-			Object.entries(value).map(([key, entry]) => [key, walk(entry)]),
-		)
-	}
-	return walk(record) as PersistedChatSession
 }
 
 /**
