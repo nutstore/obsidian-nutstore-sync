@@ -20,7 +20,11 @@ import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import { migrateLegacySession } from '~/ai/chat/session/session-migration'
-import { SessionStore } from '~/ai/chat/session/session-store'
+import { SessionsFileBackend } from '~/ai/chat/session/session-files'
+import {
+	SessionStore,
+	type SessionLegacyStore,
+} from '~/ai/chat/session/session-store'
 import { createFragmentReadTracker } from '~/ai/tools/file-operation'
 import { createAITools } from '~/ai/tools/tools'
 import {
@@ -1002,6 +1006,31 @@ describe('note_neighborhood path resolution', () => {
 	})
 })
 
+function buildTestSessionStore(
+	state: ChatState,
+	runtimeStates: RuntimeStates,
+	selection: Selection,
+) {
+	const backend = {
+		hasAnySessionFiles: async () => false,
+		listSessionIds: async () => [],
+		readSessionFile: async () => {
+			throw new Error('unused backend')
+		},
+		writeSessionFile: async () => undefined,
+		deleteSessionFile: async () => undefined,
+		readMetaFile: async () => null,
+		writeMetaFile: async () => undefined,
+	} as unknown as SessionsFileBackend
+	const legacy = {
+		listSessionKeys: async () => [],
+		getSession: async () => undefined,
+		unsetSession: async () => undefined,
+		getMeta: async () => ({ meta: null, index: [] }),
+	} as unknown as SessionLegacyStore
+	return new SessionStore(state, runtimeStates, selection, backend, legacy)
+}
+
 describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 	it('preserves readVaultPaths through normalizeSession', () => {
 		const state = {
@@ -1016,7 +1045,7 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 		const selection = {
 			sanitizeSessionSelection: () => false,
 		} as unknown as Selection
-		const store = new SessionStore(state, runtimeStates, selection)
+		const store = buildTestSessionStore(state, runtimeStates, selection)
 
 		const master = createEmptyMasterAgent(0)
 		master.readVaultPaths = ['notes/a.md', 'notes/b.md']
@@ -1048,7 +1077,7 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 		const selection = {
 			sanitizeSessionSelection: () => false,
 		} as unknown as Selection
-		const store = new SessionStore(state, runtimeStates, selection)
+		const store = buildTestSessionStore(state, runtimeStates, selection)
 
 		const session: ChatSession = {
 			schemaVersion: 2,
@@ -1077,7 +1106,7 @@ describe('normalizeSession preserves disabledMcpServers (rehydration)', () => {
 		const selection = {
 			sanitizeSessionSelection: () => false,
 		} as unknown as Selection
-		return new SessionStore(state, runtimeStates, selection)
+		return buildTestSessionStore(state, runtimeStates, selection)
 	}
 
 	it('preserves disabledMcpServers through normalizeSession', () => {

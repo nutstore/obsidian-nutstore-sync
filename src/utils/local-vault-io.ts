@@ -83,6 +83,39 @@ export async function writeLocalText(vault: Vault, path: string, data: string) {
 	await vault.create(normalizedPath, data)
 }
 
+export async function readLocalText(vault: Vault, path: string) {
+	const normalizedPath = normalizePath(path)
+	if (isAdapterPathNormalized(vault, normalizedPath)) {
+		return await vault.adapter.read(normalizedPath)
+	}
+	const file = vault.getAbstractFileByPath(normalizedPath)
+	if (!file) {
+		throw new Error('cannot find file in local fs: ' + normalizedPath)
+	}
+	if (!(file instanceof TFile)) {
+		throw new Error('local path is not a file: ' + normalizedPath)
+	}
+	return await vault.read(file)
+}
+
+/**
+ * Atomic write for whole-file JSON payloads (e.g. chat sessions).
+ *
+ * Obsidian's DataAdapter.rename refuses to overwrite an existing destination
+ * ("Destination file already exists!"), so a tmp-file + rename dance is NOT a
+ * valid strategy here. Instead we rely on `adapter.write`, which on
+ * FileSystemAdapter (desktop) is already atomic internally (writes a temp
+ * sibling then renames over the target) and auto-creates parent folders.
+ * Visible vault files fall through to the standard vault write path.
+ */
+export async function writeLocalTextAtomic(
+	vault: Vault,
+	path: string,
+	data: string,
+) {
+	await writeLocalText(vault, normalizePath(path), data)
+}
+
 export async function removeLocalPath(
 	vault: Vault,
 	path: string,

@@ -9,7 +9,7 @@ import {
 } from '~/ai/catalog/config'
 import { type UserContextItem } from '~/ai/chat/context/user-context'
 import { UserContextManager } from '~/ai/chat/context/user-context-manager'
-import type { ChatSession } from '~/ai/chat/domain'
+import type { ChatSession, ChatSessionIndexItem } from '~/ai/chat/domain'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
 import { exportSessionToMarkdownFile } from '~/ai/chat/messages/export-session'
 import { MessageFactory } from '~/ai/chat/messages/message-factory'
@@ -36,7 +36,12 @@ import { Selection } from '~/ai/chat/runtime/selection'
 import { SessionProcessor } from '~/ai/chat/runtime/session-processor'
 import { TaskManager } from '~/ai/chat/runtime/task-manager'
 import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
-import { SessionStore } from '~/ai/chat/session/session-store'
+import { CHAT_INDEX_KEY, CHAT_META_KEY } from '~/ai/chat/prompts'
+import { SessionsFileBackend } from '~/ai/chat/session/session-files'
+import {
+	SessionStore,
+	type SessionLegacyStore,
+} from '~/ai/chat/session/session-store'
 import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import type {
 	ChatboxProps,
@@ -53,7 +58,7 @@ import { SkillRepository } from '~/ai/skills/repository'
 import { isAbortError } from '~/ai/transport/abort'
 import SessionExportModal from '~/components/SessionExportModal'
 import i18n from '~/i18n'
-import { chatSessionKV } from '~/storage'
+import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
 import { createUniqueWordId } from '~/utils/create-id'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
@@ -115,10 +120,13 @@ export default class ChatService extends BaseService {
 			() => this.notify(),
 			(session) => this.store.persistSession(session),
 		)
+		const legacyStore = this.createLegacySessionStore()
 		this.store = new SessionStore(
 			this.state,
 			this.runtimeStates,
 			this.selection,
+			new SessionsFileBackend(plugin.app.vault),
+			legacyStore,
 		)
 		this.toolExecutor = new ToolExecutor(
 			plugin.app,
@@ -534,7 +542,7 @@ export default class ChatService extends BaseService {
 		this.state.loadedSessions.delete(sessionId)
 		this.state.runtimeBySessionId.delete(sessionId)
 		this.state.autoApproveRequestsBySessionId.delete(sessionId)
-		await chatSessionKV.unset(sessionId)
+		await this.store.deleteSession(sessionId)
 		await this.store.persistMetaAndIndex()
 		this.notify()
 		new Notice(i18n.t('chatbox.sessionDeleted'))
@@ -586,6 +594,41 @@ export default class ChatService extends BaseService {
 
 	getChatModalMountTarget() {
 		return this.toolExecutor.getChatModalMountTarget()
+	}
+
+	private createLegacySessionStore(): SessionLegacyStore {
+		return {
+			listSessionKeys: async () => {
+				try {
+					return await chatSessionKV.keys()
+				} catch {
+					return []
+				}
+			},
+			getSession: async (id) => {
+				try {
+					return await chatSessionKV.get(id)
+				} catch {
+					return undefined
+				}
+			},
+			unsetSession: (id) => chatSessionKV.unset(id),
+			getMeta: async () => {
+				try {
+					const [metaRaw, indexRaw] = await Promise.all([
+						chatMetaKV.get(CHAT_META_KEY),
+						chatMetaKV.get(CHAT_INDEX_KEY),
+					])
+					const meta = isChatMetaRecord(metaRaw) ? metaRaw : null
+					const index = Array.isArray(indexRaw)
+						? indexRaw.filter(isChatSessionIndexItem)
+						: []
+					return { meta, index }
+				} catch {
+					return { meta: null, index: [] }
+				}
+			},
+		}
 	}
 
 	selectProvider(providerId: string) {
@@ -850,4 +893,23 @@ export default class ChatService extends BaseService {
 			subagents: { master: createEmptyMasterAgent(now) },
 		}
 	}
+}
+
+function isChatMetaRecord(value: unknown): value is ChatMetaRecord {
+	return (
+		!!value &&
+		typeof value === 'object' &&
+		Array.isArray((value as ChatMetaRecord).orderedSessionIds)
+	)
+}
+
+function isChatSessionIndexItem(value: unknown): value is ChatSessionIndexItem {
+	return (
+		!!value &&
+		typeof value === 'object' &&
+		typeof (value as ChatSessionIndexItem).id === 'string' &&
+		typeof (value as ChatSessionIndexItem).title === 'string' &&
+		typeof (value as ChatSessionIndexItem).createdAt === 'number' &&
+		typeof (value as ChatSessionIndexItem).updatedAt === 'number'
+	)
 }
