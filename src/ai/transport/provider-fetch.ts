@@ -6,6 +6,14 @@ function isBrowserCorsFailure(error: unknown) {
 	return error instanceof TypeError
 }
 
+function isNetworkDisconnected(error: unknown) {
+	return (
+		(typeof navigator !== 'undefined' && navigator.onLine === false) ||
+		(error instanceof Error &&
+			error.message.includes('ERR_INTERNET_DISCONNECTED'))
+	)
+}
+
 function buildDisableCorsLink(providerId: string) {
 	return `obsidian://nutstore-sync/modal/provider-edit?providerId=${encodeURIComponent(providerId)}`
 }
@@ -23,6 +31,11 @@ export function createProviderFetch(provider: AIProviderConfig): typeof fetch {
 		try {
 			return await baseFetch(input, init)
 		} catch (error) {
+			if (isNetworkDisconnected(error)) {
+				throw new Error(i18n.t('settings.ai.errors.networkDisconnected'), {
+					cause: error,
+				})
+			}
 			if (!isBrowserCorsFailure(error)) {
 				throw error
 			}

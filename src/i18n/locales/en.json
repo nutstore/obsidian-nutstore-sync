@@ -310,6 +310,7 @@
 				"duplicateProviderId": "A provider with this name already exists",
 				"reservedProviderId": "This provider name is reserved by Nutstore AI. Use another name.",
 				"providerNotFoundForProtocolOpen": "Provider not found. It may have been deleted or renamed: {{providerId}}",
+				"networkDisconnected": "Network connection unavailable. Check your connection and try again.",
 				"browserCorsFallbackToBuiltinTransport": "Browser CORS request failed. Temporarily fell back to the built-in request transport.",
 				"browserCorsFailedWithDisableLink": "Browser CORS request failed. [Open this provider and disable CORS]({{link}})."
 			}
