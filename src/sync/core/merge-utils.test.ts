@@ -2,6 +2,7 @@ import { Buffer } from 'buffer' // Import Buffer for explicit Buffer testing
 import { describe, expect, it } from 'vitest'
 import {
 	LatestTimestampResolution,
+	resolveByDiff3Merge,
 	resolveByIntelligentMerge,
 	resolveByLatestTimestamp,
 	type IntelligentMergeParams,
@@ -13,6 +14,59 @@ function expectAutoMerged(result: { success: boolean; mergedText?: string }) {
 	expect(typeof result.mergedText).toBe('string')
 	expect(result.mergedText).not.toContain('<<<<<<<')
 }
+
+describe('resolveByDiff3Merge', () => {
+	it('merges independent English edits without conflict markers', () => {
+		const result = resolveByDiff3Merge({
+			baseContentText: 'Title\nShared line\nSummary',
+			localContentText: 'Updated title\nShared line\nSummary',
+			remoteContentText: 'Title\nShared line\nUpdated summary',
+		})
+
+		expect(result.mergedText).toBe(
+			'Updated title\nShared line\nUpdated summary',
+		)
+	})
+
+	it('为中文冲突生成 Git diff3 风格标记', () => {
+		const result = resolveByDiff3Merge({
+			baseContentText: '标题\n原始内容\n结尾',
+			localContentText: '标题\n本地内容\n结尾',
+			remoteContentText: '标题\n服务器内容\n结尾',
+		})
+
+		expect(result.mergedText).toContain('<<<<<<< LOCAL\n本地内容')
+		expect(result.mergedText).toContain('||||||| BASE\n原始内容')
+		expect(result.mergedText).toContain('=======\n服务器内容')
+		expect(result.mergedText).toContain('>>>>>>> REMOTE')
+	})
+
+	it('base 缺失时保留两侧内容而非静默丢弃本地', () => {
+		const result = resolveByDiff3Merge({
+			baseContentText: '',
+			localContentText: '本地内容\n第二行',
+			remoteContentText: '远程内容\n第二行',
+		})
+
+		expect(result.success).toBe(true)
+		expect(result.mergedText).toContain('<<<<<<< LOCAL\n本地内容')
+		expect(result.mergedText).toContain('||||||| BASE')
+		expect(result.mergedText).toContain('=======\n远程内容')
+		expect(result.mergedText).toContain('>>>>>>> REMOTE')
+	})
+
+	it('base 缺失且本地已删除全部内容时不含冲突标记', () => {
+		const result = resolveByDiff3Merge({
+			baseContentText: '',
+			localContentText: '',
+			remoteContentText: '远程内容\n第二行',
+		})
+
+		expect(result.success).toBe(true)
+		expect(result.mergedText).toBe('远程内容\n第二行')
+		expect(result.mergedText).not.toContain('<<<<<<<')
+	})
+})
 
 describe('resolveByLatestTimestamp', () => {
 	// --- 无更改 ---
@@ -1126,6 +1180,20 @@ ${longParagraph}
 		const result = await resolveByIntelligentMerge(params)
 		expect(result.success).toBe(true)
 		expect(result.isIdentical).toBe(true)
+	})
+
+	it('情况 5.4: base 缺失时智能合并保留两侧内容', async () => {
+		const params: IntelligentMergeParams = {
+			baseContentText: '',
+			localContentText: '本地独有的段落\n共享段落',
+			remoteContentText: '远程独有的段落\n共享段落',
+			hasBase: false,
+		}
+		const result = await resolveByIntelligentMerge(params)
+		expectAutoMerged(result)
+		expect(result.mergedText).toContain('本地独有的段落')
+		expect(result.mergedText).toContain('远程独有的段落')
+		expect(result.mergedText).toContain('共享段落')
 	})
 })
 

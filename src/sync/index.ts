@@ -668,9 +668,8 @@ export class NutstoreSync {
 
 		if (task instanceof ConflictResolveTask) {
 			return [
-				ConflictStrategy.DiffMatchPatch,
-				ConflictStrategy.DiffMatchPatchOrSkip,
-				ConflictStrategy.LatestTimeStamp,
+				ConflictStrategy.NoConflictMerge,
+				ConflictStrategy.Diff3,
 				ConflictStrategy.ServerPriority,
 			].includes(task.options.strategy)
 		}

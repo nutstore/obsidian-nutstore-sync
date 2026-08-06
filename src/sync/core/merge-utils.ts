@@ -1,6 +1,9 @@
 import { diff_match_patch } from 'diff-match-patch'
 import { isEqual } from 'lodash-es'
-import { diff3Merge as nodeDiff3Merge } from 'node-diff3'
+import {
+	diff3Merge as nodeDiff3Merge,
+	mergeDiff3 as nodeMergeDiff3,
+} from 'node-diff3'
 import { BufferLike } from 'webdav'
 import * as Y from 'yjs'
 
@@ -74,6 +77,12 @@ export interface IntelligentMergeResult {
 	isIdentical?: boolean // Flag if contents were already identical
 }
 
+export interface Diff3MergeParams {
+	localContentText: string
+	remoteContentText: string
+	baseContentText: string
+}
+
 // Helper for diff3Merge logic, adapted from the original class method
 function diff3MergeStrings(
 	base: string | string[],
@@ -95,6 +104,29 @@ function diff3MergeStrings(
 		}
 	}
 	return result.flat().join('\n')
+}
+
+export function resolveByDiff3Merge({
+	localContentText,
+	remoteContentText,
+	baseContentText,
+}: Diff3MergeParams): IntelligentMergeResult {
+	if (localContentText === remoteContentText) {
+		return { success: true, isIdentical: true }
+	}
+
+	const { result } = nodeMergeDiff3(
+		localContentText,
+		baseContentText,
+		remoteContentText,
+		{
+			excludeFalseConflicts: true,
+			stringSeparator: '\n',
+			label: { a: 'LOCAL', o: 'BASE', b: 'REMOTE' },
+		},
+	)
+
+	return { success: true, mergedText: result.join('\n') }
 }
 
 const MISSING_JSON_VALUE = Symbol('missing-json-value')

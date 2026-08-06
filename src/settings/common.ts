@@ -135,20 +135,12 @@ export default class CommonSettings extends BaseSettings {
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption(
-						ConflictStrategy.DiffMatchPatch,
-						i18n.t('settings.conflictStrategy.diffMatchPatch'),
+						ConflictStrategy.NoConflictMerge,
+						i18n.t('settings.conflictStrategy.noConflictMerge'),
 					)
 					.addOption(
-						ConflictStrategy.LatestTimeStamp,
-						i18n.t('settings.conflictStrategy.latestTimestamp'),
-					)
-					.addOption(
-						ConflictStrategy.Skip,
-						i18n.t('settings.conflictStrategy.skip'),
-					)
-					.addOption(
-						ConflictStrategy.DiffMatchPatchOrSkip,
-						i18n.t('settings.conflictStrategy.diffMatchPatchOrSkip'),
+						ConflictStrategy.Diff3,
+						i18n.t('settings.conflictStrategy.diff3'),
 					)
 					.addOption(
 						ConflictStrategy.LocalPriority,

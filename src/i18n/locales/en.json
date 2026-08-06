@@ -67,10 +67,8 @@
 		"conflictStrategy": {
 			"name": "Conflict resolution strategy",
 			"desc": "Choose how to resolve file conflicts. \nNote: We recommend backing up important files before using auto-merge to prevent data loss.",
-			"diffMatchPatch": "Smart merge (recommended)",
-			"latestTimestamp": "Use latest version",
-			"skip": "Skip conflicts",
-			"diffMatchPatchOrSkip": "Smart merge, skip if unresolvable",
+			"noConflictMerge": "Conflict-free merge",
+			"diff3": "Diff3 merge (with Git-style conflict markers)",
 			"localPriority": "Local priority (overwrite server)",
 			"serverPriority": "Server priority (overwrite local)"
 		},

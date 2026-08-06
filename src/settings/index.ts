@@ -51,6 +51,28 @@ export type SyncPolicyDescI18nKey =
 	| 'settings.syncPolicy.modal.receiveOnlyDesc'
 	| 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
 
+export type ConflictStrategyI18nKey =
+	| 'noConflictMerge'
+	| 'diff3'
+	| 'localPriority'
+	| 'serverPriority'
+
+export function getConflictStrategyI18nKey(
+	strategy: ConflictStrategy,
+): ConflictStrategyI18nKey {
+	switch (strategy) {
+		case ConflictStrategy.NoConflictMerge:
+			return 'noConflictMerge'
+		case ConflictStrategy.LocalPriority:
+			return 'localPriority'
+		case ConflictStrategy.ServerPriority:
+			return 'serverPriority'
+		case ConflictStrategy.Diff3:
+		default:
+			return 'diff3'
+	}
+}
+
 export function getSyncPolicyI18nKey(policy: SyncPolicy): SyncPolicyI18nKey {
 	switch (policy) {
 		case SyncPolicy.SendOnly:
@@ -149,7 +171,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	credential: '',
 	nutstoreEnterpriseBaseUrl: '',
 	remoteDir: '',
-	conflictStrategy: ConflictStrategy.DiffMatchPatch,
+	conflictStrategy: ConflictStrategy.NoConflictMerge,
 	oauthResponseText: '',
 	loginMode: 'sso',
 	confirmBeforeSync: true,
