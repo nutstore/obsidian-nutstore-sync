@@ -2,6 +2,29 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 增强坚果云同步指南与内置技能结构 | Enhanced Nutstore Sync guide and built-in skills structure.
+- 优化插件路径管理，改进临时文件处理逻辑 | Optimized path management and refactored temporary file handling.
+- 引入 Yjs 与 diff3 算法实现无冲突合并，移除 Git 风格冲突标记 | Integrated Yjs and diff3 for no-conflict merging, removing Git-style markers.
+- 增加网络断开连接的处理机制 | Added handling for network disconnections.
+- 实现具有旧版迁移功能和文件持久化的会话存储方案 | Implemented session store with legacy migration and file persistence.
+- 引入基于配置目录同步模式和用户过滤规则的远程遍历缓存控制 | Added remote traversal cache control based on sync mode and filter rules.
+- 修复 HTML 预览隔离问题并支持旧版运行环境 | Fixed HTML preview isolation and added support for older runtimes.
+- 改进推理详情、工具执行状态及系统通知的 UI 布局与样式 | Improved UI layout and styling for reasoning details, tool status, and system notifications.
+- 增强 MCP 工具支持，增加 Artifacts 格式化、非阻塞初始化及独立管理弹窗 | Enhanced MCP support with artifact formatting, non-blocking init, and modal-based management.
+- 新增 `view_image` 查看工具与 `apply_patch` 文件修补工具 | Added `view_image` tool and `apply_patch` tool for file modifications.
+- 新增 OpenAI Responses API 提供商支持 | Added support for OpenAI Responses API provider.
+- 重构设置面板：增加标签页导航，合并模型与服务商选择器，优化同步设置 | Redesigned settings: added tab navigation, consolidated AI providers, and improved sync options.
+- 支持自动加载库中 `AGENTS.md` 作为聊天机器人的系统提示词补充 | Support auto-loading `AGENTS.md` from vault as system prompt suffix.
+- 在上下文压缩摘要中包含最新的待办事项 (TODOs) | Included latest TODOs in context compression summary.
+- 迁移至 UnoCSS 编译转换器并使用 `:uno:` 前缀 | Migrated to UnoCSS compile transformer with `:uno:` prefix.
+- 新增 AI 驱动的合并冲突解决功能 | Added AI-powered merge conflict resolution.
+- 在聊天界面中显示文件差异对比（Diff）与工具执行时长 | Added inline file diffs and real-time tool execution timing in chat UI.
+- 导出 Markdown 文件时包含插件版本信息 | Included plugin version in exported markdown files.
+- 修复了侧边栏焦点切换时的上下文保留问题及路径处理等稳定性问题 | Fixed context preservation on sidebar focus and other stability issues.
+
+
 ## [1.3.1] - 2026-07-10
 
 - 将超大 Bash 输出重定向至临时文件，并共享临时文件系统 | Redirect oversized bash output to temp file and share scratch FS
