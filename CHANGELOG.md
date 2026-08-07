@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.4.0] - 2026-08-07
 
 - 增强坚果云同步指南与内置技能结构 | Enhanced Nutstore Sync guide and built-in skills structure.
 - 优化插件路径管理，改进临时文件处理逻辑 | Optimized path management and refactored temporary file handling.
