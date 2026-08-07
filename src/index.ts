@@ -13,12 +13,14 @@ import { createSelectedTextContextItem } from './ai/chat/context/user-context'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import i18n from './i18n'
+import AIConflictResolverService from './services/ai-conflict-resolver.service'
 import ChatService from './services/chat.service'
 import CommandService from './services/command.service'
 import EventsService from './services/events.service'
 import GcService from './services/gc.service'
 import I18nService from './services/i18n.service'
 import LoggerService from './services/logger.service'
+import McpService from './services/mcp.service'
 import ModelsPresetService from './services/models-preset.service'
 import NutstoreLlmGatewayService from './services/nutstore-llm-gateway.service'
 import { ProgressService } from './services/progress.service'
@@ -40,8 +42,9 @@ import { stdRemotePath } from './utils/std-remote-path'
 import ChatboxView, { CHATBOX_VIEW_TYPE } from './views/chatbox.view'
 
 export default class NutstorePlugin extends Plugin {
+	declare public settings: NutstoreSettings
+
 	public isSyncing: boolean = false
-	public settings!: NutstoreSettings
 	public localSettings!: NutstoreLocalSettings
 	public settingTab!: NutstoreSettingTab
 
@@ -49,6 +52,7 @@ export default class NutstorePlugin extends Plugin {
 	public eventsService = new EventsService(this)
 	public i18nService = new I18nService(this)
 	public loggerService = new LoggerService(this)
+	public mcpService = new McpService(this)
 	public modelsPresetService = new ModelsPresetService(this)
 	public nutstoreLlmGatewayService = new NutstoreLlmGatewayService(this)
 	public protocolService = new ProtocolService(this)
@@ -60,6 +64,7 @@ export default class NutstorePlugin extends Plugin {
 	public syncExecutorService = new SyncExecutorService(this)
 	public gcService = new GcService(this)
 	public chatService = new ChatService(this)
+	public aiConflictResolverService = new AIConflictResolverService(this)
 	public realtimeSyncService = new RealtimeSyncService(
 		this,
 		this.syncExecutorService,
@@ -86,7 +91,9 @@ export default class NutstorePlugin extends Plugin {
 			this.ribbonService,
 			this.protocolService,
 			this.realtimeSyncService,
+			this.mcpService,
 			this.chatService,
+			this.aiConflictResolverService,
 			this.scheduledSyncService,
 		]
 	}
@@ -134,16 +141,7 @@ export default class NutstorePlugin extends Plugin {
 										selectedText: editor.getSelection(),
 									}),
 								)
-								const existingLeaf =
-									this.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
-								const leaf =
-									existingLeaf || this.app.workspace.getRightLeaf(false)
-								if (!leaf) return
-								await leaf.setViewState({
-									type: CHATBOX_VIEW_TYPE,
-									active: true,
-								})
-								this.app.workspace.revealLeaf(leaf)
+								await this.commandService.openChatbox()
 							})
 					})
 				})
@@ -185,6 +183,13 @@ export default class NutstorePlugin extends Plugin {
 			token = `${this.settings.account}:${this.settings.credential}`
 		}
 		return toBase64(token)
+	}
+
+	async getRemoteAccountId() {
+		if (this.settings.loginMode === 'sso') {
+			return (await this.getDecryptedOAuthInfo()).username.trim()
+		}
+		return this.settings.account.trim()
 	}
 
 	/**

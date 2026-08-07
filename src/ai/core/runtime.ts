@@ -1,39 +1,10 @@
-import type {
-	AssistantModelMessage,
-	FilePart,
-	TextPart,
-	UserModelMessage,
-} from 'ai'
-import { tool as aiTool, stepCountIs, streamText } from 'ai'
+import type { FilePart, ModelMessage, TextPart, UserModelMessage } from 'ai'
 import { getProviderResolver } from '../providers/registry'
 import {
-	AIMessage,
-	AIMessageMeta,
 	AIModelConfig,
 	AIModelProviderOverride,
 	AIProviderConfig,
-	AIToolDefinition,
 } from './types'
-
-export interface GenerateAssistantTurnRequest {
-	provider: AIProviderConfig
-	model: string
-	messages: AIMessage[]
-	systemPrompt?: string
-	tools: AIToolDefinition[]
-	temperature?: number
-	maxTokens?: number
-	abortSignal?: AbortSignal
-}
-
-export interface GenerateAssistantTurnResult {
-	message: AIMessage
-	meta: AIMessageMeta
-}
-
-export interface GenerateAssistantTurnCallbacks {
-	onTextDelta?: (delta: string) => void | Promise<void>
-}
 
 function resolveEffectiveProviderConfig(
 	provider: AIProviderConfig,
@@ -47,6 +18,19 @@ function resolveEffectiveProviderConfig(
 		npm: override.npm?.trim() || provider.npm,
 		api: override.api?.trim() || provider.api,
 	}
+}
+
+export function resolveLanguageModel(
+	provider: AIProviderConfig,
+	modelId: string,
+) {
+	const modelConfig = provider.models[modelId]
+	const effectiveProvider = resolveEffectiveProviderConfig(
+		provider,
+		modelConfig?.provider,
+	)
+	const resolver = getProviderResolver(effectiveProvider)
+	return resolver.createLanguageModel(effectiveProvider, modelId)
 }
 
 function inferFilePartModality(
@@ -118,9 +102,9 @@ function adaptUserContentByModalities(
 }
 
 function adaptMessagesByInputModalities(
-	messages: AIMessage[],
+	messages: ModelMessage[],
 	inputModalities: AIModelConfig['modalities']['input'],
-): AIMessage[] {
+): ModelMessage[] {
 	return messages.map((message) =>
 		message.role === 'user'
 			? {
@@ -131,11 +115,11 @@ function adaptMessagesByInputModalities(
 					),
 				}
 			: message,
-	) as AIMessage[]
+	) as ModelMessage[]
 }
 
-function mergeAdjacentUserMessages(messages: AIMessage[]): AIMessage[] {
-	const merged: AIMessage[] = []
+function mergeAdjacentUserMessages(messages: ModelMessage[]): ModelMessage[] {
+	const merged: ModelMessage[] = []
 	for (const message of messages) {
 		const previous = merged[merged.length - 1]
 		if (
@@ -156,94 +140,19 @@ function mergeAdjacentUserMessages(messages: AIMessage[]): AIMessage[] {
 	return merged
 }
 
-function toAISDKTools(tools: AIToolDefinition[]) {
-	return Object.fromEntries(
-		tools.map((toolDefinition) => [
-			toolDefinition.name,
-			aiTool({
-				description: toolDefinition.description,
-				inputSchema: toolDefinition.inputSchema,
-			}),
-		]),
-	)
+export function prepareMessagesForModel(
+	provider: AIProviderConfig,
+	modelId: string,
+	messages: ModelMessage[],
+) {
+	const inputModalities = provider.models[modelId]?.modalities?.input || [
+		'text',
+	]
+	return mergeAdjacentUserMessages(
+		adaptMessagesByInputModalities(messages, inputModalities),
+	).filter((message) => message.role !== 'system')
 }
 
 export function assertProviderUsable(provider: AIProviderConfig) {
 	getProviderResolver(provider).assertUsable(provider)
-}
-
-export async function generateAssistantTurn(
-	request: GenerateAssistantTurnRequest,
-	callbacks?: GenerateAssistantTurnCallbacks,
-): Promise<GenerateAssistantTurnResult> {
-	const modelConfig = request.provider.models[request.model]
-	const provider = resolveEffectiveProviderConfig(
-		request.provider,
-		modelConfig?.provider,
-	)
-	const resolver = getProviderResolver(provider)
-	const modelName = modelConfig?.name?.trim() || request.model
-	const inputModalities = modelConfig?.modalities.input || ['text']
-	const messages = mergeAdjacentUserMessages(
-		adaptMessagesByInputModalities(request.messages, inputModalities),
-	).filter((message) => message.role !== 'system')
-	const { model, providerName } = resolver.createLanguageModel(
-		provider,
-		request.model,
-	)
-	let streamError: unknown
-	const result = streamText({
-		model,
-		messages: messages,
-		instructions: request.systemPrompt,
-		tools: toAISDKTools(request.tools),
-		stopWhen: stepCountIs(1),
-		abortSignal: request.abortSignal,
-		temperature: request.temperature,
-		maxOutputTokens: request.maxTokens,
-		onError: ({ error }) => {
-			streamError = error
-		},
-		onChunk: async ({ chunk }) => {
-			if (chunk.type === 'text-delta' && chunk.text) {
-				await callbacks?.onTextDelta?.(chunk.text)
-			}
-		},
-	})
-	await result.consumeStream()
-	if (streamError) {
-		throw streamError
-	}
-
-	const text = await result.text
-	const finalStep = await result.finalStep
-	const reasoning = finalStep.reasoning
-	const toolCalls = await result.toolCalls
-	const usage = await result.usage
-	const finishReason = await result.finishReason
-	const response = finalStep.response
-
-	const content: AssistantModelMessage['content'] = [
-		...reasoning
-			.filter(
-				(r): r is { type: 'reasoning'; text: string } => r.type === 'reasoning',
-			)
-			.map((r) => ({ type: 'reasoning' as const, text: r.text })),
-		...(text ? [{ type: 'text' as const, text }] : []),
-		...toolCalls,
-	]
-	const message: AssistantModelMessage = { role: 'assistant', content }
-
-	return {
-		message,
-		meta: {
-			providerId: request.provider.id,
-			providerName: request.provider.name || providerName,
-			modelId: response.modelId,
-			modelName,
-			usage,
-			finishReason,
-			responseId: response.id,
-		},
-	}
 }

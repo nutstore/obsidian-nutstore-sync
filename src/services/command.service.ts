@@ -2,6 +2,7 @@ import { Notice } from 'obsidian'
 import SyncConfirmModal from '~/components/SyncConfirmModal'
 import { emitCancelSync } from '~/events'
 import i18n from '~/i18n'
+import { type SyncPolicy } from '~/settings'
 import { SyncStartMode } from '~/sync'
 import logger from '~/utils/logger'
 import { CHATBOX_VIEW_TYPE } from '~/views/chatbox.view'
@@ -42,9 +43,10 @@ export default class CommandService extends BaseService {
 					return
 				}
 
-				const startSync = async () => {
+				const startSync = async (syncPolicy?: SyncPolicy) => {
 					await this.plugin.syncExecutorService.executeSync({
 						mode: SyncStartMode.MANUAL_SYNC,
+						syncPolicy,
 					})
 				}
 				if (this.plugin.settings.confirmBeforeSync) {
@@ -64,20 +66,7 @@ export default class CommandService extends BaseService {
 			id: 'open-chatbox',
 			name: i18n.t('chatbox.openCommand'),
 			icon: 'bot',
-			callback: async () => {
-				const existingLeaf =
-					this.plugin.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
-				const leaf =
-					existingLeaf || this.plugin.app.workspace.getRightLeaf(false)
-				if (!leaf) {
-					return
-				}
-				await leaf.setViewState({
-					type: CHATBOX_VIEW_TYPE,
-					active: true,
-				})
-				this.plugin.app.workspace.revealLeaf(leaf)
-			},
+			callback: () => this.openChatbox(),
 		})
 
 		this.plugin.addCommand({
@@ -103,5 +92,17 @@ export default class CommandService extends BaseService {
 				this.plugin.progressService.showProgressModal()
 			},
 		})
+	}
+
+	async openChatbox() {
+		const existingLeaf =
+			this.plugin.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
+		const leaf = existingLeaf || this.plugin.app.workspace.getRightLeaf(false)
+		if (!leaf) return
+		await leaf.setViewState({
+			type: CHATBOX_VIEW_TYPE,
+			active: true,
+		})
+		this.plugin.app.workspace.revealLeaf(leaf)
 	}
 }

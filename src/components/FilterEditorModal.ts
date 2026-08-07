@@ -1,6 +1,7 @@
 import { cloneDeep } from 'lodash-es'
 import { Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import { getUserOptions, GlobMatchOptions } from '~/utils/glob-match'
 import NutstorePlugin from '..'
 
@@ -40,22 +41,22 @@ export default class FilterEditorModal extends Modal {
 		contentEl.createEl('h2', { text: i18n.t(titleKey) })
 		contentEl.createEl('p', {
 			text: i18n.t(descKey),
-			cls: 'setting-item-description',
+			cls: ':uno: setting-item-description',
 		})
 
 		const listContainer = contentEl.createDiv({
-			cls: 'flex flex-col gap-2 pb-2',
+			cls: ':uno: flex flex-col gap-2 pb-2',
 		})
 
 		const updateList = () => {
 			listContainer.empty()
 			this.filters.forEach((filter, index) => {
 				const itemContainer = listContainer.createDiv({
-					cls: 'flex gap-2',
+					cls: ':uno: flex gap-2',
 				})
 				const input = listContainer.createEl('input', {
 					type: 'text',
-					cls: 'flex-1',
+					cls: ':uno: flex-1',
 					placeholder: i18n.t('settings.filters.placeholder'),
 					value: filter.expr,
 				})
@@ -66,21 +67,21 @@ export default class FilterEditorModal extends Modal {
 				})
 				const forceCaseBtn = listContainer.createEl('button', {
 					text: 'Aa',
-					cls: 'shadow-none!',
+					cls: ':uno: shadow-none!',
 				})
 				function updateButtonStatus() {
 					const opt = getUserOptions(filter)
-					const activeCls = ['bg-[var(--interactive-accent)]!']
+					const activeCls = [':uno: bg-[var(--interactive-accent)]!']
 					const inactiveCls = [
 						'background-none!',
 						'hover:bg-[--interactive-normal]!',
 					]
 					if (opt.caseSensitive) {
-						forceCaseBtn.classList.add(...activeCls)
-						forceCaseBtn.classList.remove(...inactiveCls)
+						addClassTokens(forceCaseBtn, ...activeCls)
+						removeClassTokens(forceCaseBtn, ...inactiveCls)
 					} else {
-						forceCaseBtn.classList.remove(...activeCls)
-						forceCaseBtn.classList.add(...inactiveCls)
+						removeClassTokens(forceCaseBtn, ...activeCls)
+						addClassTokens(forceCaseBtn, ...inactiveCls)
 					}
 				}
 				updateButtonStatus()
@@ -96,7 +97,7 @@ export default class FilterEditorModal extends Modal {
 					if (!confirmDelete) {
 						confirmDelete = true
 						trash.setText(i18n.t('settings.filters.confirmRemove'))
-						trash.addClass('mod-warning')
+						addClassTokens(trash, ':uno: mod-warning')
 					} else {
 						this.filters.splice(index, 1)
 						updateList()
@@ -105,7 +106,7 @@ export default class FilterEditorModal extends Modal {
 				trash.addEventListener('blur', () => {
 					confirmDelete = false
 					trash.setText(i18n.t('settings.filters.remove'))
-					trash.removeClass('mod-warning')
+					removeClassTokens(trash, ':uno: mod-warning')
 				})
 				itemContainer.appendChild(input)
 				itemContainer.appendChild(forceCaseBtn)

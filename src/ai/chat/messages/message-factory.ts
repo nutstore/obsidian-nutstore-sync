@@ -1,179 +1,202 @@
-import type { AIMessage, AIMessageRecord, AISession } from '~/ai/core/types'
-import type { AssistantModelMessage, TextPart, ToolCallPart } from 'ai'
-import type { ChatFragment } from '~/ai/chat/domain'
+import type { DynamicToolUIPart, ModelMessage } from 'ai'
+import type { ChatSession } from '~/ai/chat/domain'
+import { getMasterAgent } from '~/ai/chat/domain'
+import type {
+	AppUIMessage,
+	ChatAgentState,
+	ChatMessageMeta,
+	ChatTodoItem,
+	ReversibleToolOp,
+} from '~/ai/chat/types'
 import {
-	cloneUserContextItems,
+	copyUserContextItems,
 	type UserContextItem,
 } from '~/ai/chat/context/user-context'
 import {
 	captureWorkspaceContexts,
 	computeChangedContexts,
 } from '~/ai/chat/context/workspace-context'
-import { messageToText, toTextParts } from '~/ai/chat/messages/message-utils'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import createId from '~/utils/create-id'
 import logger from '~/utils/logger'
-import type NutstorePlugin from '../../..'
+import type { SkillRepository } from '~/ai/skills/repository'
+import type { App } from 'obsidian'
+import {
+	getMessageText,
+	modelMessageToUIMessage,
+} from '~/ai/chat/messages/ui-message'
 
 export class MessageFactory {
 	constructor(
-		private plugin: NutstorePlugin,
+		private app: App,
 		private runtimeStates: RuntimeStates,
 		private notify: () => void,
+		private skillRepository?: SkillRepository,
 	) {}
 
-	createFragment(session: AISession): ChatFragment {
-		const now = Date.now()
-		const fragment: ChatFragment = {
-			id: createId('fragment'),
-			createdAt: now,
-			updatedAt: now,
-			messages: [],
-		}
-		session.fragments = [...session.fragments, fragment]
-		session.activeFragmentId = fragment.id
-		return fragment
+	getActiveAgent(session: ChatSession) {
+		return getMasterAgent(session)
 	}
 
-	getActiveFragment(session: AISession) {
-		return (
-			session.fragments.find((item) => item.id === session.activeFragmentId) ||
-			session.fragments[session.fragments.length - 1]
-		)
-	}
-
-	createMessageRecord(
-		message: AIMessage,
-		options?: {
-			meta?: AIMessageRecord['meta']
-			isError?: boolean
-			reversibleOps?: AIMessageRecord['reversibleOps']
-			todos?: AIMessageRecord['todos']
+	appendContextBoundary(
+		session: ChatSession,
+		agent: ChatAgentState,
+		checkpoint: {
+			mode: 'summary' | 'reset'
+			summary?: string
+			preservedTurnCount?: number
 		},
-	): AIMessageRecord {
-		return {
-			id: createId('message'),
-			createdAt: Date.now(),
-			message,
-			meta: options?.meta,
-			isError: options?.isError,
-			reversibleOps: options?.reversibleOps
-				?.map(normalizeReversibleToolOpRecord)
-				.filter(
-					(op): op is NonNullable<AIMessageRecord['reversibleOps']>[number] =>
-						!!op,
-				),
-			todos: options?.todos?.map((todo) => ({ ...todo })),
-		}
-	}
-
-	appendUserMessage(
-		fragment: ChatFragment,
-		text: string,
-		session?: AISession,
-		userContext?: UserContextItem[],
 	) {
 		const now = Date.now()
-		fragment.updatedAt = now
-		if (session) {
-			session.updatedAt = now
-		}
-		const current = captureWorkspaceContexts(this.plugin.app)
-		const changed = computeChangedContexts(fragment.messages, current)
-		const content: TextPart[] = []
-		if (text) {
-			content.push(...toTextParts(text))
-		}
-		const record = this.createMessageRecord({
+		agent.timeline.push({
+			id: createId('checkpoint'),
 			role: 'user',
-			content,
+			metadata: {
+				createdAt: now,
+			},
+			parts: [
+				{
+					type: 'data-context-checkpoint',
+					data: checkpoint,
+				},
+			],
 		})
-		if (changed.length > 0) {
-			record.workspaceContextDelta = changed
-		}
-		if (userContext && userContext.length > 0) {
-			record.userContext = cloneUserContextItems(userContext)
-		}
-		fragment.messages.push(record)
+		agent.readVaultPaths = []
+		session.updatedAt = now
+		return agent
 	}
 
-	removeUnmatchedToolCalls(fragment: ChatFragment) {
-		const resolvedToolCallIds = new Set(
-			fragment.messages.flatMap((item) => {
-				if (
-					item.message.role !== 'tool' ||
-					!Array.isArray(item.message.content)
-				) {
-					return []
-				}
-				const part = (
-					item.message.content as Array<{ type: string; toolCallId?: string }>
-				)[0]
-				return part?.type === 'tool-result' && part.toolCallId
-					? [part.toolCallId]
-					: []
-			}),
-		)
+	createMessage(
+		message: ModelMessage,
+		options?: {
+			meta?: ChatMessageMeta
+			isError?: boolean
+			reversibleOps?: ReversibleToolOp[]
+			todos?: ChatTodoItem[]
+		},
+	): AppUIMessage {
+		return modelMessageToUIMessage(message, {
+			id: createId('message'),
+			createdAt: Date.now(),
+			meta: options?.meta,
+			isError: options?.isError,
+			todos: options?.todos,
+		})
+	}
 
-		fragment.messages = fragment.messages.filter((record) => {
+	setMessageOperations(
+		agent: ChatAgentState,
+		messageId: string,
+		operations?: ReversibleToolOp[],
+	) {
+		const normalized = operations
+			?.map(normalizeReversibleToolOpRecord)
+			.filter((op): op is ReversibleToolOp => !!op)
+		if (normalized?.length) {
+			agent.operations[messageId] = [
+				...(agent.operations[messageId] ?? []),
+				...normalized,
+			]
+		}
+	}
+
+	async appendUserMessage(
+		agent: ChatAgentState,
+		text: string,
+		session?: ChatSession,
+		userContext?: UserContextItem[],
+	) {
+		await this.skillRepository?.refresh()
+		const now = Date.now()
+		if (session) session.updatedAt = now
+		const current = captureWorkspaceContexts(this.app, this.skillRepository)
+		const changed = computeChangedContexts(agent.timeline, current)
+		const message: AppUIMessage = {
+			id: createId('message'),
+			role: 'user',
+			metadata: {
+				createdAt: now,
+			},
+			parts: [],
+		}
+		if (changed.length) {
+			message.parts.push({
+				type: 'data-workspace-context',
+				data: { deltas: changed },
+			})
+		}
+		if (userContext?.length) {
+			message.parts.push({
+				type: 'data-user-context',
+				data: { items: copyUserContextItems(userContext) },
+			})
+		}
+		if (text) message.parts.push({ type: 'text', text })
+		agent.timeline.push(message)
+	}
+
+	removeIncompleteToolCalls(agent: ChatAgentState) {
+		let changed = false
+		agent.timeline = agent.timeline.filter((message) => {
+			if (message.role !== 'assistant') return true
+			const nextParts = message.parts.filter((part) => {
+				if (part.type !== 'dynamic-tool') return true
+				const complete =
+					part.state === 'output-available' ||
+					part.state === 'output-error' ||
+					part.state === 'output-denied'
+				if (!complete) changed = true
+				return complete
+			})
+			if (nextParts.length !== message.parts.length) message.parts = nextParts
 			if (
-				record.message.role !== 'assistant' ||
-				!Array.isArray(record.message.content)
+				!message.parts.length ||
+				(!getMessageText(message).trim() &&
+					message.parts.every((part) => part.type === 'step-start'))
 			) {
-				return true
-			}
-			const content = record.message.content as Array<
-				{ type: string } & Partial<ToolCallPart>
-			>
-			const toolCalls = content.filter(
-				(p): p is ToolCallPart => p.type === 'tool-call',
-			)
-			if (toolCalls.length === 0) {
-				return true
-			}
-
-			const nextToolCalls = toolCalls.filter((tc) =>
-				resolvedToolCallIds.has(tc.toolCallId),
-			)
-			const nonToolParts = content.filter((p) => p.type !== 'tool-call')
-			const hasText = !!messageToText(record.message).trim()
-			if (!hasText && nextToolCalls.length === 0) {
+				changed = true
 				return false
 			}
-
-			record.message = {
-				...record.message,
-				content: [...nonToolParts, ...nextToolCalls],
-			} as AssistantModelMessage
 			return true
 		})
+		return changed
 	}
 
-	finishStoppedSessionRun(session: AISession, fragment: ChatFragment) {
+	finishStoppedSessionRun(session: ChatSession, agent: ChatAgentState) {
 		const runtime = this.runtimeStates.get(session.id)
-		this.removeUnmatchedToolCalls(fragment)
+		this.removeIncompleteToolCalls(agent)
 		runtime.stopRequested = false
 		runtime.runState = 'idle'
 		this.notify()
 	}
 
 	reportFatalError(
-		session: AISession,
+		session: ChatSession,
 		message: string,
-		meta?: AIMessageRecord['meta'],
-		fragment: ChatFragment = this.getActiveFragment(session),
+		meta?: ChatMessageMeta,
+		agent: ChatAgentState = this.getActiveAgent(session),
 	) {
 		logger.error(message)
-		fragment.messages.push(
-			this.createMessageRecord(
-				{
-					role: 'assistant',
-					content: toTextParts(message),
-				},
+		agent.timeline.push(
+			this.createMessage(
+				{ role: 'assistant', content: [{ type: 'text', text: message }] },
 				{ meta, isError: true },
 			),
 		)
 		this.notify()
+	}
+
+	findToolPart(agent: ChatAgentState, toolCallId: string) {
+		for (let index = agent.timeline.length - 1; index >= 0; index -= 1) {
+			const message = agent.timeline[index]
+			const part = message.parts.find(
+				(candidate): candidate is DynamicToolUIPart =>
+					candidate.type === 'dynamic-tool' &&
+					candidate.toolCallId === toolCallId,
+			)
+			if (part) return { message, part }
+		}
+		return undefined
 	}
 }

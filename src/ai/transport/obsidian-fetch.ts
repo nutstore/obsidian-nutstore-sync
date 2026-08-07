@@ -1,5 +1,4 @@
 import { getReasonPhrase } from 'http-status-codes'
-import type { FetchFunction } from './provider-fetch'
 import { raceWithAbort } from './abortable'
 import { throwIfAborted } from './abort'
 import requestUrl from '~/utils/request-url'
@@ -44,7 +43,7 @@ async function toRequestParts(input: RequestInfo | URL, init?: RequestInit) {
 	}
 }
 
-export const obsidianFetch: FetchFunction = async (
+export const obsidianFetch: typeof fetch = async (
 	input: RequestInfo | URL,
 	init?: RequestInit,
 ) => {

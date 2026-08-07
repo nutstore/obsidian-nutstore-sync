@@ -1,3 +1,3 @@
-export * from './components/Chatbox'
-export * from './components/TaskSelectionVirtualList'
-export * from './components/WebDAVExplorer'
+export * from './Chatbox'
+export * from './TaskSelectionVirtualList'
+export * from './WebDAVExplorer'

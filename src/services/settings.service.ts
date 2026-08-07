@@ -11,6 +11,7 @@ import {
 	type NutstoreLocalSettings,
 	type NutstoreSettings,
 } from '~/settings'
+import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from '~/utils/download-chunk-size'
 import logger from '~/utils/logger'
 import { BaseService } from './service.interface'
@@ -38,11 +39,18 @@ export default class SettingsService extends BaseService {
 	}
 
 	async loadSettings() {
+		const storedSettings = await this.plugin.loadData()
 		this.plugin.settings = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			await this.plugin.loadData(),
+			storedSettings,
 		) as NutstoreSettings
+		if (
+			storedSettings?.conflictStrategy !== undefined &&
+			!Object.values(ConflictStrategy).includes(storedSettings.conflictStrategy)
+		) {
+			this.plugin.settings.conflictStrategy = DEFAULT_SETTINGS.conflictStrategy
+		}
 		this.plugin.settings.mobileAppDownloadFileChunkSize ||=
 			(this.plugin.settings as { downloadChunkSize?: string })
 				.downloadChunkSize || DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE
@@ -83,6 +91,7 @@ export default class SettingsService extends BaseService {
 	async saveSettings() {
 		await this.plugin.saveData(this.plugin.settings)
 		await this.plugin.chatService.handleSettingsChanged()
+		await this.plugin.aiConflictResolverService.refresh()
 	}
 
 	async loadLocalSettings() {
@@ -128,6 +137,7 @@ export default class SettingsService extends BaseService {
 			await this.plugin.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
 			await this.plugin.i18nService.update()
 			await this.plugin.chatService.handleSettingsChanged()
+			await this.plugin.aiConflictResolverService.refresh()
 			await this.plugin.scheduledSyncService.updateInterval()
 			await this.plugin.settingTab?.rerenderIfVisible()
 		})()

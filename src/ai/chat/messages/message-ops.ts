@@ -1,8 +1,11 @@
-import { Notice } from 'obsidian'
-import type { AIMessageRecord, AISession } from '~/ai/core/types'
-import type { AssistantModelMessage, ToolCallPart } from 'ai'
+import type { ChatSession } from '~/ai/chat/domain'
+import type { ReversibleToolOp } from '~/ai/chat/types'
+import { Notice, type App } from 'obsidian'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
-import { messageToText } from '~/ai/chat/messages/message-utils'
+import {
+	getMessageText,
+	getUserContextItems,
+} from '~/ai/chat/messages/ui-message'
 import {
 	getParentVaultPaths,
 	getPathDepth,
@@ -11,7 +14,7 @@ import {
 	normalizeReversibleToolOpRecord,
 } from '~/ai/chat/messages/reversible-op-utils'
 import { decodeReversibleFileSnapshot } from '~/ai/chat/messages/reversible-content'
-import { cloneUserContextItems } from '~/ai/chat/context/user-context'
+import { copyUserContextItems } from '~/ai/chat/context/user-context'
 import {
 	captureWorkspaceContexts,
 	computeChangedContexts,
@@ -21,18 +24,19 @@ import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { RecallMessageResult } from '~/ai/chat/ui/types'
 import logger from '~/utils/logger'
-import type NutstorePlugin from '../../..'
+import type { SkillRepository } from '~/ai/skills/repository'
 
 export class MessageOps {
 	constructor(
-		private plugin: NutstorePlugin,
+		private app: App,
 		private state: ChatState,
 		private runtimeStates: RuntimeStates,
 		private store: SessionStore,
 		private notify: () => void,
 		private messageFactory: MessageFactory,
-		private validateSelection: (session: AISession) => boolean,
+		private validateSelection: (session: ChatSession) => boolean,
 		private requestRun: (sessionId: string) => Promise<void> | void,
+		private skillRepository?: SkillRepository,
 	) {}
 
 	deleteMessage(messageId: string) {
@@ -44,60 +48,26 @@ export class MessageOps {
 		if (runtime.runState !== 'idle') {
 			return
 		}
-		const fragment = this.messageFactory.getActiveFragment(session)
-		const idx = fragment.messages.findIndex((record) => record.id === messageId)
+		const agent = this.messageFactory.getActiveAgent(session)
+		const idx = agent.timeline.findIndex((message) => message.id === messageId)
 		if (idx === -1) {
 			return
 		}
-		const target = fragment.messages[idx]
-		if (target.message.role === 'user') {
+		const target = agent.timeline[idx]
+		if (target.role === 'user') {
 			let endIdx = idx + 1
 			while (
-				endIdx < fragment.messages.length &&
-				fragment.messages[endIdx].message.role !== 'user'
+				endIdx < agent.timeline.length &&
+				agent.timeline[endIdx].role !== 'user'
 			) {
 				endIdx++
 			}
-			fragment.messages.splice(idx, endIdx - idx)
-		} else if (target.message.role === 'tool') {
-			const firstPart = Array.isArray(target.message.content)
-				? (
-						target.message.content as Array<{
-							type: string
-							toolCallId?: string
-						}>
-					)[0]
-				: undefined
-			const toolCallId =
-				firstPart?.type === 'tool-result' ? firstPart.toolCallId : undefined
-			for (let i = idx - 1; i >= 0; i--) {
-				const record = fragment.messages[i]
-				if (record.message.role === 'user') break
-				if (
-					record.message.role === 'assistant' &&
-					Array.isArray(record.message.content)
-				) {
-					const content = record.message.content as Array<
-						{ type: string } & Partial<ToolCallPart>
-					>
-					if (
-						content.some(
-							(p) => p.type === 'tool-call' && p.toolCallId === toolCallId,
-						)
-					) {
-						record.message = {
-							...record.message,
-							content: content.filter(
-								(p) => !(p.type === 'tool-call' && p.toolCallId === toolCallId),
-							),
-						} as AssistantModelMessage
-						break
-					}
-				}
+			for (const removed of agent.timeline.splice(idx, endIdx - idx)) {
+				delete agent.operations[removed.id]
 			}
-			fragment.messages.splice(idx, 1)
 		} else {
-			fragment.messages.splice(idx, 1)
+			agent.timeline.splice(idx, 1)
+			delete agent.operations[target.id]
 		}
 		void this.store.persistSession(session)
 		this.notify()
@@ -115,35 +85,35 @@ export class MessageOps {
 		if (runtime.runState !== 'idle') {
 			return
 		}
-		const fragment = this.messageFactory.getActiveFragment(session)
-		const idx = fragment.messages.findIndex((record) => record.id === messageId)
+		const agent = this.messageFactory.getActiveAgent(session)
+		const idx = agent.timeline.findIndex((message) => message.id === messageId)
 		if (idx === -1) {
 			return
 		}
-		const recalledMessage = fragment.messages[idx]
+		const recalledMessage = agent.timeline[idx]
 		const recalledText =
-			recalledMessage.message.role === 'user'
-				? messageToText(recalledMessage.message)
-				: ''
-		const recalledUserContext = cloneUserContextItems(
-			recalledMessage.userContext ?? [],
+			recalledMessage.role === 'user' ? getMessageText(recalledMessage) : ''
+		const recalledUserContext = copyUserContextItems(
+			getUserContextItems(recalledMessage),
 		)
-		const recallRange = fragment.messages.slice(idx)
+		const recallRange = agent.timeline.slice(idx)
 		const reversibleOps = recallRange.flatMap(
-			(record) => record.reversibleOps ?? [],
+			(message) => agent.operations[message.id] ?? [],
 		)
 		try {
 			if (options?.restoreFiles) {
 				await this.restoreFilesForRecall(reversibleOps)
 			}
-			fragment.messages.splice(idx)
+			for (const removed of agent.timeline.splice(idx)) {
+				delete agent.operations[removed.id]
+			}
 			runtime.draft.userContext = recalledUserContext
 			runtime.draft.text = recalledText
 			await this.store.persistSession(session)
 			this.notify()
 			return {
 				text: recalledText,
-				userContext: cloneUserContextItems(recalledUserContext),
+				userContext: copyUserContextItems(recalledUserContext),
 			}
 		} catch (error) {
 			logger.error(error)
@@ -156,14 +126,14 @@ export class MessageOps {
 		if (!session) {
 			return false
 		}
-		const fragment = this.messageFactory.getActiveFragment(session)
-		const idx = fragment.messages.findIndex((record) => record.id === messageId)
+		const agent = this.messageFactory.getActiveAgent(session)
+		const idx = agent.timeline.findIndex((message) => message.id === messageId)
 		if (idx === -1) {
 			return false
 		}
-		return fragment.messages
+		return agent.timeline
 			.slice(idx)
-			.some((record) => Boolean(record.reversibleOps?.length))
+			.some((message) => Boolean(agent.operations[message.id]?.length))
 	}
 
 	async regenerateMessage(messageId: string) {
@@ -175,23 +145,36 @@ export class MessageOps {
 		if (runtime.runState !== 'idle' || runtime.processing) {
 			return
 		}
-		const fragment = this.messageFactory.getActiveFragment(session)
-		const idx = fragment.messages.findIndex((record) => record.id === messageId)
+		const agent = this.messageFactory.getActiveAgent(session)
+		const idx = agent.timeline.findIndex((message) => message.id === messageId)
 		if (idx === -1) {
 			return
 		}
-		const messagesAfter = fragment.messages.slice(idx + 1)
-		fragment.messages = fragment.messages.slice(0, idx)
+		const messagesAfter = agent.timeline.slice(idx + 1)
+		agent.timeline = agent.timeline.slice(0, idx)
 
-		const lastUserIdx = fragment.messages.findLastIndex(
-			(r) => r.message.role === 'user',
-		)
+		let lastUserIdx = -1
+		for (let index = agent.timeline.length - 1; index >= 0; index -= 1) {
+			if (agent.timeline[index].role === 'user') {
+				lastUserIdx = index
+				break
+			}
+		}
 		if (lastUserIdx !== -1) {
-			const prevMessages = fragment.messages.slice(0, lastUserIdx)
-			const current = captureWorkspaceContexts(this.plugin.app)
+			await this.skillRepository?.refresh()
+			const prevMessages = agent.timeline.slice(0, lastUserIdx)
+			const current = captureWorkspaceContexts(this.app, this.skillRepository)
 			const changed = computeChangedContexts(prevMessages, current)
-			fragment.messages[lastUserIdx].workspaceContextDelta =
-				changed.length > 0 ? changed : undefined
+			const message = agent.timeline[lastUserIdx]
+			message.parts = message.parts.filter(
+				(part) => part.type !== 'data-workspace-context',
+			)
+			if (changed.length) {
+				message.parts.unshift({
+					type: 'data-workspace-context',
+					data: { deltas: changed },
+				})
+			}
 		}
 
 		runtime.runState = 'thinking'
@@ -199,22 +182,17 @@ export class MessageOps {
 		this.notify()
 		await this.requestRun(session.id)
 		if (messagesAfter.length > 0) {
-			const updatedFragment = this.messageFactory.getActiveFragment(session)
-			updatedFragment.messages = [...updatedFragment.messages, ...messagesAfter]
+			const updatedAgent = this.messageFactory.getActiveAgent(session)
+			updatedAgent.timeline = [...updatedAgent.timeline, ...messagesAfter]
 			await this.store.persistSession(session)
 			this.notify()
 		}
 	}
 
-	async restoreFilesForRecall(
-		operations: NonNullable<AIMessageRecord['reversibleOps']>,
-	) {
+	async restoreFilesForRecall(operations: ReversibleToolOp[]) {
 		const normalizedOperations = operations
 			.map(normalizeReversibleToolOpRecord)
-			.filter(
-				(op): op is NonNullable<AIMessageRecord['reversibleOps']>[number] =>
-					!!op,
-			)
+			.filter((op): op is ReversibleToolOp => !!op)
 		if (normalizedOperations.length === 0) {
 			return
 		}
@@ -233,10 +211,7 @@ export class MessageOps {
 		const restoreDirs = new Set<string>()
 		const restoreFiles = new Map<
 			string,
-			Extract<
-				NonNullable<AIMessageRecord['reversibleOps']>[number],
-				{ operation: 'update' }
-			>['before']
+			Extract<ReversibleToolOp, { operation: 'update' }>['before']
 		>()
 
 		for (const operation of earliestByPath.values()) {
@@ -295,7 +270,7 @@ export class MessageOps {
 	}
 
 	private async deleteVaultPathIfExists(path: string) {
-		const target = this.plugin.app.vault.getAbstractFileByPath(path)
+		const target = this.app.vault.getAbstractFileByPath(path)
 		if (!target) {
 			return
 		}
@@ -304,12 +279,12 @@ export class MessageOps {
 			return
 		}
 		logger.info(`Recall restore delete: ${path}`)
-		if (typeof this.plugin.app.vault.delete === 'function') {
-			await this.plugin.app.vault.delete(target, true)
+		if (typeof this.app.vault.delete === 'function') {
+			await this.app.vault.delete(target, true)
 			return
 		}
-		if (typeof this.plugin.app.vault.trash === 'function') {
-			await this.plugin.app.vault.trash(target, false)
+		if (typeof this.app.vault.trash === 'function') {
+			await this.app.vault.trash(target, false)
 			return
 		}
 		throw new Error(`Unable to delete ${path}: vault delete is unavailable.`)
@@ -319,7 +294,7 @@ export class MessageOps {
 		if (!path) {
 			return
 		}
-		const target = this.plugin.app.vault.getAbstractFileByPath(path)
+		const target = this.app.vault.getAbstractFileByPath(path)
 		if (target) {
 			if (isVaultFolder(target)) {
 				return
@@ -327,18 +302,15 @@ export class MessageOps {
 			throw new Error(`Unable to restore ${path}: a file already exists there.`)
 		}
 		logger.info(`Recall restore mkdir: ${path}`)
-		await this.plugin.app.vault.createFolder(path)
+		await this.app.vault.createFolder(path)
 	}
 
 	private async writeVaultFile(
 		path: string,
-		content: Extract<
-			NonNullable<AIMessageRecord['reversibleOps']>[number],
-			{ operation: 'update' }
-		>['before'],
+		content: Extract<ReversibleToolOp, { operation: 'update' }>['before'],
 	) {
 		const data = await decodeReversibleFileSnapshot(content)
-		const existing = this.plugin.app.vault.getAbstractFileByPath(path)
+		const existing = this.app.vault.getAbstractFileByPath(path)
 		if (existing && isVaultFolder(existing)) {
 			throw new Error(
 				`Unable to restore ${path}: a directory already exists there.`,
@@ -346,11 +318,11 @@ export class MessageOps {
 		}
 		if (existing && isVaultFile(existing)) {
 			logger.info(`Recall restore write: ${path} (overwrite)`)
-			await this.plugin.app.vault.modifyBinary(existing as never, data)
+			await this.app.vault.modifyBinary(existing as never, data)
 			return
 		}
 		logger.info(`Recall restore write: ${path} (create)`)
-		await this.plugin.app.vault.createBinary(path, data)
+		await this.app.vault.createBinary(path, data)
 	}
 
 	private getLoadedActiveSession() {

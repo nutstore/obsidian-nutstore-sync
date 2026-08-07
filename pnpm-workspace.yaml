@@ -1,2 +1,11 @@
 packages:
   - packages/*
+allowBuilds:
+  '@mongodb-js/zstd': true
+  '@parcel/watcher': true
+  '@swc/core': true
+  core-js: true
+  electron: true
+  esbuild: true
+  lefthook: true
+  node-liblzma: true

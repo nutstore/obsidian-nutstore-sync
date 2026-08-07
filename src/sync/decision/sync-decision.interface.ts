@@ -10,7 +10,6 @@ export interface SyncDecisionSettings {
 	skipLargeFiles: { maxSize: string }
 	mobileAppDownloadFileChunkSize: string
 	conflictStrategy: ConflictStrategy
-	useGitStyle: boolean
 	syncMode: SyncMode
 	configDir: string
 }
@@ -33,7 +32,6 @@ export interface ConflictTaskOptions extends TaskOptions {
 	strategy: ConflictStrategy
 	localStat: StatModel
 	remoteStat: StatModel
-	useGitStyle: boolean
 	mobileAppDownloadFileChunkSize?: string
 }
 

@@ -101,7 +101,6 @@ export default abstract class BaseSyncDecider {
 				mobileAppDownloadFileChunkSize:
 					this.settings.mobileAppDownloadFileChunkSize,
 				conflictStrategy: this.settings.conflictStrategy,
-				useGitStyle: this.settings.useGitStyle,
 				syncMode: this.settings.syncMode,
 				configDir: this.vault.configDir,
 			},

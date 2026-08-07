@@ -1,6 +1,5 @@
 import { Vault } from 'obsidian'
-import { isAbsolute } from 'path-browserify'
-import { isNotNil } from 'ramda'
+import { isAbsolute, join, normalize } from 'path-browserify'
 import type { NutstoreSettings } from '~/settings'
 import {
 	ConfigDirSyncMode,
@@ -15,7 +14,11 @@ import GlobMatch, {
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { isSyncCacheLocalPath } from '~/utils/sync-cache-file'
-import { ResumableWebDAVTraversal } from '~/utils/traverse-webdav'
+import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
+import {
+	ResumableWebDAVTraversal,
+	type WebDAVTraversalProgress,
+} from '~/utils/traverse-webdav'
 import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
@@ -25,6 +28,7 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			vault: Vault
 			settings: NutstoreSettings
 			token: string
+			remoteAccountId: string
 			remoteBaseDir: string
 			filterRules?: {
 				exclusionRules: GlobMatchOptions[]
@@ -32,6 +36,8 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				configDir?: string
 				configDirSyncMode?: ConfigDirSyncMode
 			}
+			onTraversalProgress?: (progress: WebDAVTraversalProgress) => void
+			throwIfCancelled?: () => void
 		},
 	) {}
 
@@ -41,41 +47,38 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			token: this.options.token,
 			remoteBaseDir: this.options.remoteBaseDir,
 			kvKey: await getTraversalWebDAVDBKey(
-				this.options.token,
+				this.options.remoteAccountId,
+				getNutstoreDavEndpoint(this.options.settings),
 				this.options.remoteBaseDir,
 			),
 			saveInterval: 1,
+			onProgress: this.options.onTraversalProgress,
+			throwIfCancelled: this.options.throwIfCancelled,
 		})
-		let stats = await traversal.traverse()
+		const traversedStats = await traversal.traverse()
 
-		if (stats.length === 0) {
+		if (traversedStats.length === 0) {
 			return []
 		}
 
-		const base = stdRemotePath(this.options.remoteBaseDir)
-		const subPath = new Set<string>()
-		for (let { path } of stats) {
-			if (path.endsWith('/')) {
-				path = path.slice(0, path.length - 1)
+		const base = normalizeRemotePath(stdRemotePath(this.options.remoteBaseDir))
+		const statsByLocalPath = new Map<string, (typeof traversedStats)[number]>()
+		for (const stat of traversedStats) {
+			const absolutePath = normalizeRemotePath(
+				isAbsolute(stat.path) ? stat.path : join(base, stat.path),
+			)
+			if (!isSub(base, absolutePath)) {
+				continue
 			}
-			if (!path.startsWith('/')) {
-				path = `/${path}`
-			}
-			if (isSub(base, path)) {
-				subPath.add(path)
-			}
-		}
 
-		const statsMap = new Map(stats.map((s) => [s.path, s]))
-		stats = [...subPath].map((path) => statsMap.get(path)).filter(isNotNil)
-		for (const item of stats) {
-			if (isAbsolute(item.path)) {
-				item.path = item.path.replace(this.options.remoteBaseDir, '')
-				if (item.path.startsWith('/')) {
-					item.path = item.path.slice(1)
-				}
+			const localPath = absolutePath
+				.slice(base === '/' ? 1 : base.length)
+				.replace(/^\/+/, '')
+			if (!statsByLocalPath.has(localPath)) {
+				statsByLocalPath.set(localPath, { ...stat, path: localPath })
 			}
 		}
+		const stats = [...statsByLocalPath.values()]
 
 		const settings = this.options.filterRules
 			? undefined
@@ -111,4 +114,11 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			.filter((opt) => !isVoidGlobMatchOptions(opt))
 			.map(({ expr, options }) => new GlobMatch(expr, options))
 	}
+}
+
+function normalizeRemotePath(path: string): string {
+	const normalized = normalize(path)
+	return normalized.length > 1 && normalized.endsWith('/')
+		? normalized.slice(0, -1)
+		: normalized
 }

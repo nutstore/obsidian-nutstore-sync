@@ -1,8 +1,12 @@
 import type NutstorePlugin from '~/index'
-import type { GlobMatchOptions } from './glob-match'
+import GlobMatch, {
+	type GlobMatchOptions,
+	needIncludeFromGlobRules,
+} from './glob-match'
 import {
 	REMOTE_SYNC_CACHE_DIR,
 	REMOTE_SYNC_CACHE_FILENAME,
+	getSyncCacheLocalPath,
 } from './sync-cache-file'
 
 export type ConfigDirSyncMode = 'none' | 'bookmarks' | 'all'
@@ -48,6 +52,37 @@ export function getConfigDirSystemFilterRules(
 		makeCaseSensitiveRule(rule.expr),
 		makeCaseSensitiveRule(`${rule.expr}/**`),
 	])
+}
+
+/**
+ * The remote traversal cache is implementation state, but its current remote
+ * location is inside the vault config directory. Respect the config-directory
+ * sync mode and the user's own filter rules before accessing it.
+ *
+ * System filter rules are intentionally not considered here: they prevent the
+ * cache file from being synchronized as user content, while this check decides
+ * whether the cache service may access its dedicated remote storage.
+ */
+export function shouldUseRemoteTraversalCache(
+	configDir: string,
+	mode: ConfigDirSyncMode,
+	filterRules: ConfigDirFilterRuleInput,
+): boolean {
+	if (mode !== 'all') {
+		return false
+	}
+
+	const inclusions = filterRules.inclusionRules.map(
+		({ expr, options }) => new GlobMatch(expr, options),
+	)
+	const exclusions = filterRules.exclusionRules.map(
+		({ expr, options }) => new GlobMatch(expr, options),
+	)
+	return needIncludeFromGlobRules(
+		getSyncCacheLocalPath(configDir),
+		inclusions,
+		exclusions,
+	)
 }
 
 export function computeEffectiveFilterRulesFromParts(

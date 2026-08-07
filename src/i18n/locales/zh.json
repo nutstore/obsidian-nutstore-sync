@@ -36,10 +36,6 @@
 			"success": "登录成功",
 			"failure": "登录失败，请重试"
 		},
-		"useGitStyle": {
-			"name": "使用 Git 样式的冲突标记",
-			"desc": "启用后将使用 <<<<<<< 和 >>>>>>> 等标记来显示冲突，而不是 HTML 标记"
-		},
 		"backupWarning": {
 			"name": "备份提醒",
 			"desc": "⚠️ 请注意：同步过程会修改或删除本地文件，建议在同步前备份重要文件。"
@@ -47,10 +43,8 @@
 		"conflictStrategy": {
 			"name": "冲突解决策略",
 			"desc": "选择解决文件冲突的方式。\n注意：建议在使用自动合并功能前，先手动备份重要文件，以防数据丢失。",
-			"diffMatchPatch": "智能合并（推荐）",
-			"latestTimestamp": "使用最新版本",
-			"skip": "跳过冲突",
-			"diffMatchPatchOrSkip": "智能合并，无法合并时跳过",
+			"noConflictMerge": "无冲突合并",
+			"diff3": "Diff3 合并（生成 Git 风格冲突标记）",
 			"localPriority": "本地优先（覆盖服务器）",
 			"serverPriority": "服务器优先（覆盖本地）"
 		},
@@ -93,15 +87,16 @@
 			"filters": "过滤规则",
 			"ai": "AI 设置"
 		},
+		"tabs": {
+			"sync": "同步",
+			"ai": "AI",
+			"troubleshooting": "故障排查"
+		},
 		"ai": {
 			"saved": "AI 设置已保存",
 			"none": "未设置",
 			"unnamedProvider": "未命名模型提供商",
 			"unnamedModel": "未命名模型",
-			"defaultProvider": {
-				"name": "默认模型提供商",
-				"desc": "新建对话时可选的默认模型提供商"
-			},
 			"defaultModel": {
 				"name": "默认模型",
 				"desc": "新建对话时可选的默认模型"
@@ -120,7 +115,6 @@
 				"disconnect": "断开",
 				"disconnected": "已断开坚果云 AI",
 				"refreshModels": "更新",
-				"modelsRefreshed": "模型列表已更新",
 				"betaModal": {
 					"title": "功能内测中",
 					"message": "坚果云 AI 目前处于内测阶段，尚未向所有用户开放。如果您不在内测名单中，授权后可能暂时无法使用相关功能，请继续等待，我们正在陆续开放中。",
@@ -149,12 +143,11 @@
 				"refreshPresetModelsLoading": "获取中...",
 				"refreshPresetModelsSuccess": "提供商 {{providers}}，模型 {{models}}",
 				"refreshPresetModelsFailure": "获取失败 ×",
-				"presetModelsRefreshed": "已获取最新模型列表",
 				"presetModelsRefreshFailed": "更新失败，继续使用本地/内置模型列表",
 				"presetModelsRefreshFailedWithReason": "更新失败，继续使用本地/内置模型列表：{{reason}}",
 				"empty": "当前还没有配置模型提供商。",
-				"openaiDefault": "使用 OpenAI 默认端点",
-				"presetCustom": "自定义（OpenAI Compatible）",
+				"defaultEndpoint": "默认端点",
+				"presetCustom": "自定义",
 				"updateModels": "更新",
 				"updateModelsHint": "预设中还有 {{count}} 个模型可同步到当前提供商。",
 				"updateModelsSuccess": "已增加 {{count}} 个模型"
@@ -173,6 +166,14 @@
 				"allowBrowserCors": {
 					"name": "允许浏览器跨域请求",
 					"desc": "开启后将优先使用浏览器原生 fetch，可在支持的提供商上获得流式输出"
+				},
+				"apiFormat": {
+					"name": "API 格式",
+					"desc": "与该提供商通信使用的协议",
+					"openaiChatCompletions": "OpenAI Chat Completions",
+					"openaiResponses": "OpenAI Responses",
+					"anthropic": "Anthropic Messages",
+					"other": "其他（{{npm}}）"
 				}
 			},
 			"models": {
@@ -211,6 +212,46 @@
 					"deleted": "模型已删除"
 				}
 			},
+			"mcp": {
+				"name": "MCP 服务",
+				"summary": "已配置 {{count}} 个服务",
+				"manage": "管理 MCP 服务",
+				"manager": {
+					"title": "MCP 服务",
+					"add": "添加服务",
+					"empty": "尚未配置 MCP 服务。",
+					"configFileHint": "配置保存在 {{path}}，也可以在聊天中让 AI 帮你编辑该文件。",
+					"parseError": "解析 {{path}} 失败：{{reason}}",
+					"statusDisabled": "已停用",
+					"statusConnected": "{{count}} 个工具",
+					"statusError": "连接失败：{{reason}}",
+					"test": "测试",
+					"testSuccess": "连接成功：共 {{count}} 个可用工具",
+					"testFailed": "连接失败：{{reason}}"
+				},
+				"editor": {
+					"createTitle": "添加 MCP 服务",
+					"editTitle": "编辑 MCP 服务",
+					"serverName": "服务名称",
+					"serverNameDesc": "仅限字母、数字、连字符和下划线",
+					"url": "URL",
+					"urlDesc": "MCP 服务的 Streamable HTTP 端点",
+					"headers": "请求头",
+					"headersDesc": "自定义 HTTP 请求头，例如 Authorization",
+					"headerKeyPlaceholder": "请求头名称",
+					"headerValuePlaceholder": "请求头值",
+					"addHeader": "添加请求头",
+					"removeHeader": "删除请求头",
+					"enabled": "启用"
+				},
+				"errors": {
+					"emptyName": "服务名称不能为空",
+					"invalidName": "服务名称只能包含字母、数字、连字符和下划线",
+					"duplicateName": "已存在同名服务",
+					"emptyUrl": "URL 不能为空",
+					"invalidUrl": "URL 格式不正确"
+				}
+			},
 			"yolo": {
 				"name": "完全访问权限",
 				"desc": "⚠️ 开启后，AI 可直接读写笔记库中的文件，无需用户确认"
@@ -225,6 +266,7 @@
 				"duplicateProviderId": "已存在相同名称的模型提供商",
 				"reservedProviderId": "该模型提供商名称由坚果云 AI 保留，请使用其他名称",
 				"providerNotFoundForProtocolOpen": "未找到对应的模型提供商，可能已被删除或重命名：{{providerId}}",
+				"networkDisconnected": "网络连接不可用，请检查网络后重试。",
 				"browserCorsFallbackToBuiltinTransport": "浏览器跨域请求失败，已临时回退到内置请求方式。",
 				"browserCorsFailedWithDisableLink": "浏览器跨域请求失败。[打开此提供商并关闭 CORS]({{link}})。"
 			}
@@ -387,6 +429,7 @@
 		"alwaysAllow": "自动同意该操作",
 		"deny": "拒绝",
 		"denied": "操作已拒绝：{{summary}}",
+		"readonly": "该 agent 是只读的，不能修改文件。尝试的操作：{{summary}}",
 		"source": "源路径",
 		"destination": "目标路径",
 		"operations": {
@@ -411,8 +454,24 @@
 		},
 		"requestsTooFrequent": "请求过于频繁，插件将在 {{time}} 后自动继续同步任务",
 		"preparing": "📋 准备同步",
+		"preparation": {
+			"checkingRemote": "正在检查远端目录…",
+			"loadingState": "正在读取同步状态…",
+			"scanningRemote": "正在扫描远端目录…",
+			"checkingChanges": "正在检查远端变化…",
+			"retryingRemote": "服务器繁忙，30 秒后重试…",
+			"analyzing": "正在分析文件差异…",
+			"savingCache": "正在保存远端遍历缓存…",
+			"traversalStats": "已扫描 {{processed}} 个目录，待扫描 {{queued}} 个目录，已发现 {{items}} 个项目",
+			"incrementalStats": "已处理 {{changes}} 项远端变化"
+		},
 		"start": "⌛️ 开始同步",
 		"complete": "✅ 同步完成",
+		"result": {
+			"title": "同步成功",
+			"success": "所有同步任务均已完成",
+			"noChanges": "当前没有需要同步的文件"
+		},
 		"completeWithFailed": "❌ 同步完成，但有 {{failedCount}} 个任务失败",
 		"failedWithError": "同步失败，错误信息: {{error}}",
 		"progress": "同步进度: {{percent}}%",
@@ -462,12 +521,12 @@
 		},
 		"confirmModal": {
 			"title": "同步确认",
+			"policyTitle": "本次同步策略",
 			"message": "⚠️ 请注意：\n\n1. 同步操作可能会修改或删除本地文件\n2. 建议在同步前手动备份重要文件\n3. 如果出现文件冲突，可能需要手动解决\n4. 首次同步需要处理所有文件，可能会比较慢，请耐心等待\n\n确定要开始同步吗？",
 			"confirm": "确认同步",
 			"cancel": "取消",
 			"remoteDir": "远程目录：{{dir}}",
-			"strategy": "同步策略：{{strategy}}",
-			"policy": "同步策略：{{policy}}"
+			"strategy": "冲突处理策略：{{strategy}}"
 		}
 	},
 	"taskList": {
@@ -513,6 +572,13 @@
 		"sessionDeleted": "会话已删除",
 		"exportSaved": "会话已导出：{{fileName}}",
 		"exportFailed": "导出会话失败",
+		"conflictResolution": {
+			"action": "使用 AI 解决 {{count}} 处冲突",
+			"prompt": "请解决上下文文件中的所有版本冲突。逐个分析 <<<<<<<、=======、>>>>>>> 标记两侧的内容，保留双方不冲突且有价值的信息，对重复内容进行语义合并，保持原有 Markdown 结构、Frontmatter、内部链接和语言风格。不要臆造文件中不存在的信息。如果两侧内容相互矛盾、无法同时成立，并且文件中没有足够依据确定取舍，请先在对话中向我提出具体问题，等待我的回答，不要修改文件或自行添加折中方案；收到回答后再继续解决冲突。完成后删除所有冲突标记，并检查结果是否连贯完整。只修改这个文件。",
+			"alreadyResolved": "文件中的冲突已经解决",
+			"modelUnavailable": "请先配置默认 AI Provider 和 Model",
+			"failed": "无法创建 AI 冲突解决会话"
+		},
 		"exportDialog": {
 			"title": "导出会话",
 			"description": "导出为 Markdown 文件并保存到笔记库。",
@@ -522,7 +588,8 @@
 		},
 		"exportRole": {
 			"user": "用户",
-			"tool": "工具"
+			"tool": "工具",
+			"systemNotification": "系统通知"
 		},
 		"exportFrontmatter": {
 			"title": "标题",
@@ -531,7 +598,8 @@
 			"createdAt": "创建时间",
 			"updatedAt": "更新时间",
 			"model": "模型",
-			"includeToolMessages": "包含工具消息"
+			"includeToolMessages": "包含工具消息",
+			"pluginVersion": "插件版本"
 		},
 		"exportMeta": {
 			"messageTime": "时间",
@@ -555,14 +623,14 @@
 				"exportAsMarkdown": "导出为 Markdown",
 				"deleteSession": "删除",
 				"cancel": "取消",
+				"close": "关闭",
 				"selectFile": "选择文件",
 				"send": "发送",
 				"stopRun": "终止",
-				"newFragment": "新建段",
 				"compressContext": "压缩上下文",
-				"closeTasks": "关闭",
-				"cancelTask": "取消",
 				"copy": "复制",
+				"runHtmlCode": "运行",
+				"showHtmlCode": "代码",
 				"deleteMessage": "删除消息",
 				"regenerateMessage": "重新生成",
 				"recallMessage": "撤回",
@@ -578,14 +646,17 @@
 				"toolCall": "工具调用",
 				"params": "参数",
 				"result": "结果",
-				"tasks": "任务",
-				"currentSession": "当前会话",
-				"otherSessions": "其他会话",
 				"queuedSubmissions": "排队内容",
-				"depth": "深度",
-				"sources": "来源",
 				"contextArea": "上下文",
-				"todoList": "待办列表"
+				"reasoning": "推理",
+				"todoList": "待办列表",
+				"systemNotification": "系统通知"
+			},
+			"fileChanges": {
+				"create": "新增",
+				"update": "修改",
+				"delete": "删除",
+				"binary": "二进制文件，无法显示文本差异"
 			},
 			"states": {
 				"empty": "开始发送一条消息",
@@ -595,20 +666,27 @@
 				"processingTools": "工具处理中",
 				"noProvider": "未选择 Provider",
 				"noModel": "未选择 Model",
-				"noTasks": "还没有任务",
+				"taskDispatching": "正在派发…",
+				"running": "运行中",
+				"completed": "已完成",
+				"failed": "失败",
+				"cancelled": "已取消",
+				"taskQueued": "排队中",
+				"taskWaiting": "等待子任务",
+				"toolDenied": "已拒绝",
+				"toolWaitingApproval": "等待批准",
+				"noSubagentMessages": "该子 Agent 尚未产生消息。",
 				"copied": "已复制",
 				"loadingContextItem": "加载中…",
-				"taskQueued": "排队中",
-				"taskRunning": "运行中",
-				"taskCompleted": "已完成",
-				"taskFailed": "失败",
-				"taskCancelled": "已取消",
 				"todoEmpty": "暂无待办"
 			},
 			"placeholders": {
 				"input": "输入消息，Enter 发送，Shift+Enter 换行"
 			},
 			"dialogs": {
+				"subagentTimeline": {
+					"title": "子 Agent 时间线"
+				},
 				"deleteSession": {
 					"title": "删除会话",
 					"message": "确认删除这个会话吗？删除后不可恢复。",
@@ -621,11 +699,6 @@
 					"toolConfirm": "此操作将删除该工具调用结果，并从对应的 AI 消息中移除该工具调用记录，无法恢复。",
 					"toolRestoreWarning": "删除后将无法通过撤回消息恢复这些文件修改。",
 					"confirm": "确认删除"
-				},
-				"newFragment": {
-					"title": "新建段",
-					"message": "这会清除 AI 的记忆，但界面上仍然保留之前的对话记录。",
-					"confirm": "新建段"
 				},
 				"compressContext": {
 					"title": "压缩上下文",
@@ -647,6 +720,13 @@
 					"restoreConfirm": "撤回并还原修改",
 					"onlyConfirm": "仅撤回"
 				}
+			},
+			"mcp": {
+				"button": "MCP 服务",
+				"title": "本会话的 MCP 服务",
+				"empty": "尚未配置 MCP 服务",
+				"toolCount": "{{count}} 个工具",
+				"notConnected": "未连接"
 			}
 		},
 		"requestFailed": "请求失败",
@@ -658,13 +738,13 @@
 			"unsupportedAttachmentType": "暂不支持该文件类型：{{name}}",
 			"unknownTool": "未知工具：{{name}}",
 			"toolFieldRequired": "{{field}} 为必填项",
+			"toolFieldTooLong": "{{field}} 过长",
 			"fileNotFound": "未找到文件：{{path}}",
 			"notFile": "该路径不是文件：{{path}}",
 			"fileNotRead": "编辑失败，请至少先读取一次 {{path}} 再编辑。",
-			"editMatchNotFound": "文件中未找到要替换的精确文本。",
-			"editMatchNotUnique": "要替换的精确文本必须且只能匹配一次。",
 			"sessionNotFound": "目标会话已不存在",
-			"taskDepthExceeded": "任务拆分深度已达到上限",
+			"corruptSessionFile": "会话文件已损坏，已跳过加载：{{path}}",
+			"agentNotDispatchable": "该 Agent 类型不可派发：{{agentType}}",
 			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用"
 		}
 	},

@@ -1,3 +1,9 @@
+import { tool } from 'ai'
+import { z } from 'zod/mini'
+import i18n from '~/i18n'
+import { integerValue, resolveCurrentNotePath, resolveNotePath } from './shared'
+import { agentIdDep, appDep, sessionDep } from './tool-context'
+
 export interface NoteNeighborhood extends Record<string, unknown> {
 	root: string
 	depth: number
@@ -75,3 +81,62 @@ export function buildNoteNeighborhood(
 		adj,
 	}
 }
+
+export const noteNeighborhoodTool = tool({
+	description: [
+		'Discover notes related to one existing note through Obsidian links.',
+		'Use this tool when investigating backlinks, outgoing links, nearby graph context, related notes, or notes potentially affected by changes.',
+		'Use the returned note paths as candidates for subsequent reading.',
+		'Input one concrete note file or Obsidian link path plus a depth.',
+		'Do not use it for full-text search, directory enumeration, or note content retrieval.',
+	].join(' '),
+	inputSchema: z.object({
+		note: z
+			.string()
+			.check(
+				z.describe(
+					'An existing note file path or Obsidian link path. Must not be a folder path.',
+				),
+				z.trim(),
+				z.minLength(
+					1,
+					i18n.t('chatbox.errors.toolFieldRequired', { field: 'note' }),
+				),
+			),
+		depth: z._default(integerValue('depth'), 1),
+	}),
+	contextSchema: z.object({
+		app: appDep,
+		session: sessionDep,
+		agentId: agentIdDep,
+	}),
+	outputSchema: z.object({
+		root: z.string(),
+		depth: z.number(),
+		adj: z.record(z.string(), z.array(z.string())),
+	}),
+	execute: async (params, { context }) => {
+		const { app, session, agentId } = context
+		const root = resolveNotePath(
+			app,
+			params.note,
+			resolveCurrentNotePath({ session, agentId }),
+		)
+		return buildNoteNeighborhood(
+			app.metadataCache.resolvedLinks ?? {},
+			root,
+			params.depth,
+		)
+	},
+	toModelOutput: ({ output }) => {
+		const neighborhood = output
+		const entries = Object.entries(neighborhood.adj).map(
+			([path, related]) =>
+				`- ${path}: ${related.length ? related.join(', ') : 'no related notes'}`,
+		)
+		return {
+			type: 'text',
+			value: `Note neighborhood for ${neighborhood.root} at depth ${neighborhood.depth}:\n${entries.join('\n')}`,
+		}
+	},
+})

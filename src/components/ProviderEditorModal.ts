@@ -6,37 +6,61 @@ import {
 	slugifyProviderId,
 } from '~/ai/catalog/config'
 import { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import {
+	applyObsidianModalMountTarget,
+	type ChatModalMountTarget,
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
 import ProviderCorsConfirmModal from './ProviderCorsConfirmModal'
 
+const API_FORMAT_OPTIONS = [
+	{
+		value: '@ai-sdk/openai-compatible',
+		labelKey: 'settings.ai.provider.apiFormat.openaiChatCompletions',
+	},
+	{
+		value: '@ai-sdk/openai',
+		labelKey: 'settings.ai.provider.apiFormat.openaiResponses',
+	},
+	{
+		value: '@ai-sdk/anthropic',
+		labelKey: 'settings.ai.provider.apiFormat.anthropic',
+	},
+] as const
+
 export default class ProviderEditorModal extends Modal {
 	private draft: AIProviderConfig
+	private cleanupModalMount?: () => void
 
 	constructor(
 		private plugin: NutstorePlugin,
 		provider: AIProviderConfig,
 		private onSave: (provider: AIProviderConfig) => Promise<boolean> | boolean,
 		private isNew: boolean,
+		private readonly mountTarget?: ChatModalMountTarget,
 	) {
 		super(plugin.app)
 		this.draft = cloneDeep(provider)
 	}
 
 	onOpen() {
-		this.modalEl.addClass('provider-editor-modal')
-		this.contentEl.addClass('provider-editor-modal__content')
+		addClassTokens(this.modalEl, ':uno: provider-editor-modal')
+		addClassTokens(this.contentEl, ':uno: provider-editor-modal__content')
 		this.render()
 	}
 
 	private render() {
 		const { contentEl } = this
 		contentEl.empty()
-		const bodyEl = contentEl.createDiv({ cls: 'provider-editor-modal__body' })
+		const bodyEl = contentEl.createDiv({
+			cls: ':uno: flex-auto min-h-0 overflow-y-auto pr-1',
+		})
 		const footerEl = contentEl.createDiv({
-			cls: 'provider-editor-modal__footer',
+			cls: ':uno: provider-editor-modal__footer',
 		})
 
 		bodyEl.createEl('h2', {
@@ -48,7 +72,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.name'))
 			.setDesc(i18n.t('settings.ai.provider.desc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text.setValue(this.draft.name).onChange((value) => {
 					this.draft.name = value
@@ -56,9 +80,31 @@ export default class ProviderEditorModal extends Modal {
 			)
 
 		new Setting(bodyEl)
+			.setName(i18n.t('settings.ai.provider.apiFormat.name'))
+			.setDesc(i18n.t('settings.ai.provider.apiFormat.desc'))
+			.addDropdown((dropdown) => {
+				const knownValues = API_FORMAT_OPTIONS.map((o) => o.value)
+				for (const opt of API_FORMAT_OPTIONS) {
+					dropdown.addOption(opt.value, i18n.t(opt.labelKey))
+				}
+				if (!knownValues.includes(this.draft.npm as never)) {
+					dropdown.addOption(
+						this.draft.npm,
+						i18n.t('settings.ai.provider.apiFormat.other', {
+							npm: this.draft.npm,
+						}),
+					)
+				}
+				dropdown.setValue(this.draft.npm)
+				dropdown.onChange((value) => {
+					this.draft.npm = value
+				})
+			})
+
+		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.baseUrl.name'))
 			.setDesc(i18n.t('settings.ai.provider.baseUrl.desc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text
 					.setPlaceholder('https://api.openai.com/v1')
@@ -71,7 +117,7 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(bodyEl)
 			.setName(i18n.t('settings.ai.provider.apiKey.name'))
 			.setDesc(i18n.t('settings.ai.provider.apiKey.desc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) => {
 				text.setValue(this.draft.apiKey).onChange((value) => {
 					this.draft.apiKey = value
@@ -92,6 +138,7 @@ export default class ProviderEditorModal extends Modal {
 						}
 						const confirmed = await new ProviderCorsConfirmModal(
 							this.app,
+							this.mountTarget,
 						).open()
 						if (!confirmed) {
 							this.render()
@@ -102,7 +149,7 @@ export default class ProviderEditorModal extends Modal {
 			)
 
 		const modelContainer = bodyEl.createDiv({
-			cls: 'provider-editor-modal__models',
+			cls: ':uno: provider-editor-modal__models',
 		})
 		new Setting(modelContainer)
 			.setName(i18n.t('settings.ai.models.name'))
@@ -128,6 +175,7 @@ export default class ProviderEditorModal extends Modal {
 						{
 							findPresetOnSave: true,
 							presetProviderApi: this.draft.api,
+							modalMountTarget: this.mountTarget,
 						},
 					).open()
 				}),
@@ -136,7 +184,7 @@ export default class ProviderEditorModal extends Modal {
 		const models = listModels(this.draft)
 		if (models.length === 0) {
 			modelContainer.createDiv({
-				cls: 'setting-item-description',
+				cls: ':uno: setting-item-description',
 				text: i18n.t('settings.ai.models.empty'),
 			})
 		}
@@ -146,14 +194,17 @@ export default class ProviderEditorModal extends Modal {
 				.setName(model.name || i18n.t('settings.ai.unnamedModel'))
 				.then((s) => {
 					const inputModalities = model.modalities?.input ?? ['text']
-					s.descEl.createDiv({ cls: 'modality-badge-row' }, (row) => {
-						for (const modality of inputModalities) {
-							row.createSpan({
-								cls: `modality-badge modality-badge-${modality}`,
-								text: modality,
-							})
-						}
-					})
+					s.descEl.createDiv(
+						{ cls: ':uno: flex flex-wrap gap-1 mt-1' },
+						(row) => {
+							for (const modality of inputModalities) {
+								row.createSpan({
+									cls: `:uno: modality-badge modality-badge-${modality}`,
+									text: modality,
+								})
+							}
+						},
+					)
 				})
 				.addButton((button) =>
 					button
@@ -174,6 +225,7 @@ export default class ProviderEditorModal extends Modal {
 									return true
 								},
 								false,
+								{ modalMountTarget: this.mountTarget },
 							).open()
 						}),
 				)
@@ -184,7 +236,7 @@ export default class ProviderEditorModal extends Modal {
 						confirmDelete = false
 						button.buttonEl.empty()
 						setIcon(button.buttonEl, 'trash')
-						button.buttonEl.removeClass('mod-warning')
+						removeClassTokens(button.buttonEl, ':uno: mod-warning')
 					}
 
 					button.setIcon('trash').onClick(() => {
@@ -194,7 +246,7 @@ export default class ProviderEditorModal extends Modal {
 							button.buttonEl.createSpan({
 								text: i18n.t('settings.ai.modals.confirmDeleteLabel'),
 							})
-							button.buttonEl.addClass('mod-warning')
+							addClassTokens(button.buttonEl, ':uno: mod-warning')
 							return
 						}
 						this.deleteModel(model)
@@ -242,9 +294,19 @@ export default class ProviderEditorModal extends Modal {
 		this.render()
 	}
 
+	open() {
+		super.open()
+		this.cleanupModalMount = applyObsidianModalMountTarget(
+			this,
+			this.mountTarget,
+		)
+	}
+
 	onClose() {
-		this.modalEl.removeClass('provider-editor-modal')
-		this.contentEl.removeClass('provider-editor-modal__content')
+		this.cleanupModalMount?.()
+		this.cleanupModalMount = undefined
+		removeClassTokens(this.modalEl, ':uno: provider-editor-modal')
+		removeClassTokens(this.contentEl, ':uno: provider-editor-modal__content')
 		this.contentEl.empty()
 	}
 }

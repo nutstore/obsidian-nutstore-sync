@@ -11,10 +11,13 @@ export function getDBKey(vaultName: string, remoteBaseDir: string) {
 }
 
 export async function getTraversalWebDAVDBKey(
-	token: string,
+	remoteAccountId: string,
+	remoteEndpoint: string,
 	remoteBaseDir: string,
 ) {
-	const hash = await sha256(token)
-	remoteBaseDir = normalizePath(remoteBaseDir)
-	return `${hash}:${remoteBaseDir}`
+	return objectHash({
+		remoteEndpoint,
+		accountHash: await sha256(remoteAccountId),
+		remoteBaseDir: normalizePath(remoteBaseDir),
+	})
 }

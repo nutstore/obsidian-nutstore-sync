@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/mini'
 import logger from '~/utils/logger'
 import {
 	AIModelConfig,
@@ -24,7 +24,7 @@ const DEFAULT_MODALITIES: AIModelConfig['modalities'] = {
 
 const DEFAULT_LIMIT: AIModelConfig['limit'] = { context: 0, output: 0 }
 
-function formatSchemaIssues(error: z.ZodError): string {
+function formatSchemaIssues(error: z.core.$ZodError): string {
 	return error.issues
 		.map((issue) => {
 			const path = issue.path.length > 0 ? issue.path.join('.') : '(root)'

@@ -30,4 +30,29 @@ describe('resolveMarkdownLinkAction', () => {
 			linktext: 'Target note',
 		})
 	})
+
+	it('preserves non-ASCII internal link paths from rendered markdown', () => {
+		expect(
+			resolveMarkdownLinkAction({
+				href: '示例目录/测试笔记：中文标题.md',
+				datasetHref: '示例目录/测试笔记：中文标题.md',
+				classNames: ['internal-link'],
+			}),
+		).toEqual({
+			type: 'internal',
+			linktext: '示例目录/测试笔记：中文标题.md',
+		})
+	})
+
+	it('extracts the provider id from the provider editor protocol', () => {
+		expect(
+			resolveMarkdownLinkAction({
+				href: 'obsidian://nutstore-sync/modal/provider-edit?providerId=openai%20compatible',
+			}),
+		).toEqual({
+			type: 'protocol',
+			href: 'obsidian://nutstore-sync/modal/provider-edit?providerId=openai%20compatible',
+			providerId: 'openai compatible',
+		})
+	})
 })

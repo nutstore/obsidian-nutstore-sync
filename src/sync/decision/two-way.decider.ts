@@ -7,7 +7,6 @@ import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
 import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
-import { ConflictStrategy } from '../tasks/conflict-resolve.task'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 import {
@@ -22,17 +21,6 @@ export default class TwoWaySyncDecider extends BaseSyncDecider {
 		const input = await this.buildDecisionInput()
 		return twoWayDecider(input)
 	}
-}
-
-function pickConflictStrategy(
-	path: string,
-	configDir: string,
-	userStrategy: ConflictStrategy,
-): ConflictStrategy {
-	if (path === configDir || path.startsWith(configDir + '/')) {
-		return ConflictStrategy.LatestTimeStamp
-	}
-	return userStrategy
 }
 
 export async function twoWayDecider(
@@ -181,14 +169,9 @@ export async function twoWayDecider(
 									taskFactory.createConflictResolveTask({
 										...options,
 										record,
-										strategy: pickConflictStrategy(
-											p,
-											settings.configDir,
-											settings.conflictStrategy,
-										),
+										strategy: settings.conflictStrategy,
 										localStat: local,
 										remoteStat: remote,
-										useGitStyle: settings.useGitStyle,
 										mobileAppDownloadFileChunkSize:
 											settings.mobileAppDownloadFileChunkSize,
 									}),
@@ -402,14 +385,9 @@ export async function twoWayDecider(
 						tasks.push(
 							taskFactory.createConflictResolveTask({
 								...options,
-								strategy: pickConflictStrategy(
-									p,
-									settings.configDir,
-									settings.conflictStrategy,
-								),
+								strategy: settings.conflictStrategy,
 								localStat: local,
 								remoteStat: remote,
-								useGitStyle: settings.useGitStyle,
 								mobileAppDownloadFileChunkSize:
 									settings.mobileAppDownloadFileChunkSize,
 							}),

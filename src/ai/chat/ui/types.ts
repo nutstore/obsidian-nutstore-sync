@@ -1,14 +1,15 @@
 import type {
 	ChatDisplayBlock,
-	ChatMessageRecord,
+	AppUIMessage,
 	ChatRunState,
 	ChatSubmission,
-	ChatTaskRecord,
+	ChatAgentStatus,
 } from '~/ai/chat/types'
 import type { LanguageModelUsage } from 'ai'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
+import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 
-export interface ChatModelOption {
+interface ChatModelOption {
 	id: string
 	name: string
 }
@@ -19,40 +20,45 @@ export interface ChatProviderOption {
 	models: ChatModelOption[]
 }
 
-export interface ChatSessionHistoryItem {
+interface ChatSessionHistoryItem {
 	id: string
 	title: string
 	createdAt: number
 	updatedAt: number
 }
 
-export interface ChatTimelineFragmentItem {
-	id: string
-	kind: 'fragment'
-	createdAt: number
+export interface ChatMcpServerOption {
+	name: string
+	connected: boolean
+	toolCount: number
+	/** Whether this MCP server is disabled for the active session. */
+	disabled: boolean
 }
 
 export interface ChatTimelineMessageItem {
-	id: string
-	kind: 'message'
 	createdAt: number
-	message: ChatMessageRecord
+	message: AppUIMessage
 	displayBlocks: ChatDisplayBlock[]
 	showHeader: boolean
 }
 
-export type ChatTimelineItem =
-	| ChatTimelineFragmentItem
-	| ChatTimelineMessageItem
+export interface ChatAgentView {
+	id: string
+	type: string
+	status: ChatAgentStatus
+	createdAt: number
+	startedAt?: number
+	finishedAt?: number
+	timeline: ChatTimelineMessageItem[]
+}
 
-export interface ChatboxViewModel {
+interface ChatboxViewModel {
 	title: string
 	activeContextItems: UserContextItem[]
 	sessionHistory: ChatSessionHistoryItem[]
 	activeSessionId?: string
-	timeline: ChatTimelineItem[]
-	currentSessionTasks: ChatTaskRecord[]
-	otherSessionTasks: ChatTaskRecord[]
+	timeline: ChatTimelineMessageItem[]
+	agentsById: Record<string, ChatAgentView>
 	otherBusySessionIds: string[]
 	providers: ChatProviderOption[]
 	selectedProviderId?: string
@@ -61,10 +67,11 @@ export interface ChatboxViewModel {
 	draft: ChatSubmission
 	pending: ChatSubmission[]
 	canSend: boolean
-	canCreateFragment: boolean
 	canCompress: boolean
+	/** Globally enabled MCP servers with per-session state, for the session MCP popover. */
+	mcpServers: ChatMcpServerOption[]
 	/**
-	 * Most recent assistant token usage record in the active fragment, or
+	 * Most recent assistant token usage record in the active agent context, or
 	 * undefined when no usage data is available yet. Carries inputTokens,
 	 * outputTokens, and their breakdowns — the UI decides how to present them.
 	 */
@@ -80,10 +87,12 @@ export interface RecallMessageResult {
 
 export interface ChatboxProps extends ChatboxViewModel {
 	onNewSession: () => void
-	onNewFragment: () => void
 	onCompressContext: () => Promise<void>
 	onSwitchSession: (sessionId: string) => void
-	onExportSession: (sessionId: string) => Promise<void>
+	onExportSession: (
+		sessionId: string,
+		modalMountTarget?: ChatModalMountTarget,
+	) => Promise<void>
 	onDeleteSession: (sessionId: string) => Promise<void>
 	onSelectProvider: (providerId: string) => void
 	onSelectModel: (modelId: string) => void
@@ -101,7 +110,7 @@ export interface ChatboxProps extends ChatboxViewModel {
 	) => void
 	onDropContextItem: (path: string) => Promise<void> | void
 	onCaptureActiveContext?: () => void
-	onCancelTask?: (taskId: string) => void
+	onModalHostChange?: (rootEl?: HTMLElement) => void
 	onDeleteMessage?: (messageId: string) => void
 	onRegenerateMessage?: (messageId: string) => void
 	onRecallMessage?: (
@@ -109,9 +118,16 @@ export interface ChatboxProps extends ChatboxViewModel {
 		options?: { restoreFiles?: boolean },
 	) => Promise<RecallMessageResult | void> | void
 	onRecallHasReversibleOps?: (messageId: string) => boolean
+	onToggleSessionMcpServer?: (serverName: string) => void
+	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
+	onResolveResourceDataUrl?: (
+		path: string,
+		mediaType: string,
+	) => Promise<string | undefined>
 	renderMarkdown?: (
 		el: HTMLElement,
 		markdown: string,
+		options?: { streaming?: boolean },
 	) => void | (() => void) | Promise<void | (() => void)>
 }
 

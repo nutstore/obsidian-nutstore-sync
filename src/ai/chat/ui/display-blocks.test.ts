@@ -1,63 +1,91 @@
 import { describe, expect, it } from 'vitest'
-import { projectFragmentMessageGroups } from './display-blocks'
+import { projectTimelineMessageGroups } from './display-blocks'
 
-describe('projectFragmentMessageGroups', () => {
-	it('keeps user messages that only contain user context', () => {
-		const groups = projectFragmentMessageGroups([
+describe('projectTimelineMessageGroups', () => {
+	it('projects English and Chinese reasoning as separate display blocks', () => {
+		const groups = projectTimelineMessageGroups([
 			{
-				id: 'm1',
-				createdAt: 1,
-				message: {
-					role: 'user',
-					content: [],
-				},
-				userContext: [
-					{
-						type: 'image',
-						hash: 'img-1',
-						blob: new Blob([new Uint8Array([1])], { type: 'image/png' }),
-						mimeType: 'image/png',
-						name: 'demo.png',
-						size: 1,
-					},
+				id: 'message',
+				role: 'assistant',
+				parts: [
+					{ type: 'text', text: 'First response.' },
+					{ type: 'reasoning', text: 'Check the next step.' },
+					{ type: 'text', text: '后续内容。' },
+					{ type: 'reasoning', text: '确认下一步。' },
 				],
 			},
 		])
 
+		expect(groups[0]?.blocks).toEqual([
+			{ kind: 'content', parts: [{ type: 'text', text: 'First response.' }] },
+			{
+				kind: 'reasoning',
+				part: { type: 'reasoning', text: 'Check the next step.' },
+			},
+			{ kind: 'content', parts: [{ type: 'text', text: '后续内容。' }] },
+			{
+				kind: 'reasoning',
+				part: { type: 'reasoning', text: '确认下一步。' },
+			},
+		])
+	})
+
+	it('keeps user messages that only contain user context', () => {
+		const groups = projectTimelineMessageGroups([
+			{
+				id: 'm1',
+				role: 'user',
+				parts: [
+					{
+						type: 'data-user-context',
+						data: {
+							items: [
+								{
+									type: 'image',
+									hash: 'img-1',
+									blob: new Blob(['x']),
+									mimeType: 'image/png',
+									size: 1,
+								},
+							],
+						},
+					},
+				],
+			},
+		])
 		expect(groups).toHaveLength(1)
-		expect(groups[0]?.record.id).toBe('m1')
+		expect(groups[0]?.message.id).toBe('m1')
 		expect(groups[0]?.blocks).toEqual([])
 	})
 
-	it('suppresses legacy image file parts when mirrored in user context', () => {
-		const groups = projectFragmentMessageGroups([
+	it('projects system notification data parts as visible timeline blocks', () => {
+		const groups = projectTimelineMessageGroups([
 			{
-				id: 'm2',
-				createdAt: 2,
-				message: {
-					role: 'user',
-					content: [
-						{
-							type: 'file',
-							mediaType: 'image/png',
-							data: 'data:image/png;base64,AA==',
-						},
-					],
-				},
-				userContext: [
+				id: 'notification',
+				role: 'user',
+				parts: [
 					{
-						type: 'image',
-						hash: 'img-2',
-						blob: new Blob([new Uint8Array([1])], { type: 'image/png' }),
-						mimeType: 'image/png',
-						name: 'demo.png',
-						size: 1,
+						type: 'data-system-notification',
+						data: {
+							kind: 'task-result-ready',
+							taskId: 'explorer-one',
+							resultPath: '/tmp/session/tasks/explorer-one.txt',
+						},
 					},
 				],
 			},
 		])
 
 		expect(groups).toHaveLength(1)
-		expect(groups[0]?.blocks).toEqual([])
+		expect(groups[0]?.blocks).toEqual([
+			{
+				kind: 'system-notification',
+				notification: {
+					kind: 'task-result-ready',
+					taskId: 'explorer-one',
+					resultPath: '/tmp/session/tasks/explorer-one.txt',
+				},
+			},
+		])
 	})
 })

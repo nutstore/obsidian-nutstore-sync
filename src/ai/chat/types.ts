@@ -1,30 +1,19 @@
 import type {
 	AssistantModelMessage,
+	DynamicToolUIPart,
 	FilePart,
 	FinishReason,
 	LanguageModelUsage,
 	ModelMessage,
+	UIMessage,
+	UIMessagePart,
+	UITools,
 	TextPart,
 	ToolCallPart,
-	ToolModelMessage,
-	UserModelMessage,
 } from 'ai'
-import { z } from 'zod'
+
+import { z } from 'zod/mini'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
-
-export type {
-	AssistantModelMessage,
-	FilePart,
-	TextPart,
-	ToolCallPart,
-	ToolModelMessage,
-	UserModelMessage,
-}
-
-export type ChatMessage = ModelMessage
-export type ChatAssistantMessage = AssistantModelMessage
-export type ChatUserMessage = UserModelMessage
-export type ChatToolMessage = ToolModelMessage
 
 type AssistantContentArray = Extract<
 	AssistantModelMessage['content'],
@@ -42,26 +31,69 @@ export type ChatMessageContentPart =
 	| ReasoningPart
 	| ToolCallPart
 
+interface ContextCheckpointData {
+	mode: 'summary' | 'reset'
+	summary?: string
+	preservedTurnCount?: number
+}
+
+export interface SystemNotificationData {
+	kind: 'task-result-ready'
+	taskId: string
+	resultPath: string
+}
+
+type ChatDataParts = {
+	'workspace-context': { deltas: WorkspaceContextDelta[] }
+	'user-context': { items: UserContextItem[] }
+	'context-checkpoint': ContextCheckpointData
+	'system-notification': SystemNotificationData
+	'model-file': { file: FilePart }
+	todos: { items: ChatTodoItem[] }
+}
+
+interface ChatMessageMetadata {
+	createdAt: number
+	llm?: ChatMessageMeta
+	status?: 'error'
+}
+
+export type AppUIMessage = UIMessage<
+	ChatMessageMetadata,
+	ChatDataParts,
+	UITools
+>
+
+export type AppUIMessagePart = UIMessagePart<ChatDataParts, UITools>
+
 export interface ChatDisplayContentBlock {
 	kind: 'content'
-	parts: Array<Exclude<ChatMessageContentPart, ToolCallPart>>
+	parts: Array<Extract<AppUIMessagePart, { type: 'text' }> | FilePart>
+}
+
+export interface ChatDisplayReasoningBlock {
+	kind: 'reasoning'
+	part: Extract<AppUIMessagePart, { type: 'reasoning' }>
 }
 
 export interface ChatDisplayToolCallBlock {
 	kind: 'tool-call'
-	toolCall: ToolCallPart
-	toolMessage?: ChatMessageRecord
+	toolCall: DynamicToolUIPart
+	timing?: ToolTiming
+	todos?: ChatTodoItem[]
+	fileChanges?: ReversibleToolOp[]
 }
 
-export interface ChatDisplayToolResultBlock {
-	kind: 'tool-result'
-	toolMessage: ChatMessageRecord
+export interface ChatDisplaySystemNotificationBlock {
+	kind: 'system-notification'
+	notification: SystemNotificationData
 }
 
 export type ChatDisplayBlock =
 	| ChatDisplayContentBlock
+	| ChatDisplayReasoningBlock
 	| ChatDisplayToolCallBlock
-	| ChatDisplayToolResultBlock
+	| ChatDisplaySystemNotificationBlock
 
 export interface ReversibleCompressedContent {
 	compress: 'deflate'
@@ -79,16 +111,21 @@ export type ReversibleToolOp =
 			vaultPath: string
 			operation: 'create'
 			before: { kind: 'file' | 'dir' }
+			after?: ReversibleFileSnapshot | { kind: 'dir' }
+			toolCallId?: string
 	  }
 	| {
 			vaultPath: string
 			operation: 'update'
 			before: ReversibleFileSnapshot
+			after?: ReversibleFileSnapshot
+			toolCallId?: string
 	  }
 	| {
 			vaultPath: string
 			operation: 'delete'
 			before: ReversibleFileSnapshot | { kind: 'dir' }
+			toolCallId?: string
 	  }
 
 export type ChatRunState =
@@ -113,10 +150,11 @@ export interface WorkspaceContextDelta {
 	content: unknown
 }
 
-export interface ChatMessageRecord {
+/** Persisted V1 record. Kept only for lossless on-load migration. */
+export interface LegacyChatMessageRecord {
 	id: string
 	createdAt: number
-	message: ChatMessage
+	message: ModelMessage
 	workspaceContextDelta?: WorkspaceContextDelta[]
 	meta?: ChatMessageMeta
 	isError?: boolean
@@ -125,76 +163,50 @@ export interface ChatMessageRecord {
 	todos?: ChatTodoItem[]
 }
 
-export interface ChatTaskBase {
+export type ChatAgentStatus =
+	| 'idle'
+	| 'queued'
+	| 'running'
+	| 'completed'
+	| 'failed'
+	| 'cancelled'
+
+export interface ToolTiming {
+	startedAt: number
+	finishedAt?: number
+}
+
+export interface ChatAgentState {
 	id: string
-	sessionId: string
-	parentTaskId?: string
-	depth: number
-	maxDepth: number
-	title: string
-	prompt: string
+	type: string
+	status: ChatAgentStatus
 	createdAt: number
-}
-
-export interface QueuedChatTask extends ChatTaskBase {
-	status: 'queued'
-}
-
-export interface RunningChatTask extends ChatTaskBase {
-	status: 'running'
-	startedAt: number
-}
-
-export interface CompletedChatTask extends ChatTaskBase {
-	status: 'completed'
-	startedAt: number
-	finishedAt: number
-	summary: string
-	sourceCount: number
-}
-
-export interface FailedChatTask extends ChatTaskBase {
-	status: 'failed'
-	finishedAt: number
-	error: string
-	summary?: string
-	failureStage?: string
 	startedAt?: number
-	sourceCount?: number
+	finishedAt?: number
+	timeline: AppUIMessage[]
+	pendingInputs: AppUIMessage[]
+	operations: Record<string, ReversibleToolOp[]>
+	toolTimings: Record<string, ToolTiming>
+	readVaultPaths?: string[]
+	subagents: Record<string, ChatAgentState>
 }
 
-export interface CancelledChatTask extends ChatTaskBase {
-	status: 'cancelled'
-	finishedAt: number
-	cancelReason: string
-	summary?: string
-	startedAt?: number
-}
-
-export type ChatTaskRecord =
-	| QueuedChatTask
-	| RunningChatTask
-	| CompletedChatTask
-	| FailedChatTask
-	| CancelledChatTask
-
-export const chatTodoStatusSchema = z.enum([
+const chatTodoStatusSchema = z.enum([
 	'pending',
 	'in_progress',
 	'completed',
 	'cancelled',
 ])
 
-export const chatTodoPrioritySchema = z.enum(['high', 'medium', 'low'])
+const chatTodoPrioritySchema = z.enum(['high', 'medium', 'low'])
 
 export const chatTodoItemSchema = z.object({
-	content: z.string().trim().min(1),
+	content: z.string().check(z.trim(), z.minLength(1)),
 	status: chatTodoStatusSchema,
-	priority: chatTodoPrioritySchema.default('medium'),
+	priority: z._default(chatTodoPrioritySchema, 'medium'),
 })
 
 export type ChatTodoStatus = z.infer<typeof chatTodoStatusSchema>
-export type ChatTodoPriority = z.infer<typeof chatTodoPrioritySchema>
 export type ChatTodoItem = z.infer<typeof chatTodoItemSchema>
 
 export interface ChatSubmission {

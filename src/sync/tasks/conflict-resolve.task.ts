@@ -11,17 +11,19 @@ import {
 	readLocalBinary,
 	writeLocalText,
 } from '~/utils/local-vault-io'
-import { mergeDigIn } from '~/utils/merge-dig-in'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
-import { resolveByIntelligentMerge } from '../core/merge-utils'
+import {
+	IntelligentMergeParams,
+	IntelligentMergeResult,
+	resolveByDiff3Merge,
+	resolveByIntelligentMerge,
+} from '../core/merge-utils'
 import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
 
 export enum ConflictStrategy {
-	DiffMatchPatch = 'diff-match-patch',
-	LatestTimeStamp = 'latest-timestamp',
-	Skip = 'skip',
-	DiffMatchPatchOrSkip = 'diff-match-patch-or-skip',
+	NoConflictMerge = 'no-conflict-merge',
+	Diff3 = 'diff3',
 	LocalPriority = 'local-priority',
 	ServerPriority = 'server-priority',
 }
@@ -33,7 +35,6 @@ export default class ConflictResolveTask extends BaseTask {
 			strategy: ConflictStrategy
 			remoteStat?: StatModel
 			localStat?: StatModel
-			useGitStyle: boolean
 			mobileAppDownloadFileChunkSize?: string
 		},
 	) {
@@ -71,16 +72,13 @@ export default class ConflictResolveTask extends BaseTask {
 			}
 
 			switch (this.options.strategy) {
-				case ConflictStrategy.DiffMatchPatch:
-					return await this.execIntelligentMerge()
-				case ConflictStrategy.LatestTimeStamp:
-					return await this.execLatestTimeStamp(local, remote)
-				case ConflictStrategy.Skip:
-					// Skip conflict resolution - keep files as they are
-					// Don't update record to preserve conflict state for next sync
-					return { success: true, skipRecord: true } as const
-				case ConflictStrategy.DiffMatchPatchOrSkip:
-					return await this.execIntelligentMergeOrSkip()
+				case ConflictStrategy.NoConflictMerge:
+					return await this.execMerge(
+						resolveByIntelligentMerge,
+						'NoConflictMerge',
+					)
+				case ConflictStrategy.Diff3:
+					return await this.execMerge(resolveByDiff3Merge, 'Diff3')
 				case ConflictStrategy.LocalPriority:
 					return await this.execLocalPriority()
 				case ConflictStrategy.ServerPriority:
@@ -92,62 +90,6 @@ export default class ConflictResolveTask extends BaseTask {
 				success: false,
 				error: toTaskError(e, this),
 			}
-		}
-	}
-
-	async execLatestTimeStamp(local: StatModel, remote: StatModel) {
-		try {
-			// At this point we know both local and remote are files (not directories)
-			// so mtime is guaranteed to exist
-			const localMtime = local.mtime!
-			const remoteMtime = remote.mtime!
-			if (remote.isDir) {
-				throw new Error('Remote path is a directory: ' + this.remotePath)
-			}
-			const remoteSize = remote.size
-
-			if (remoteMtime === localMtime) {
-				return { success: true } as const
-			}
-
-			this.logger.info(
-				`[ConflictResolve/LatestTimestamp] ${this.localPath}: ${remoteMtime > localMtime ? 'remote newer → pull' : 'local newer → push'}`,
-			)
-
-			const exists = await existsLocalPath(this.vault, this.localPath)
-			if (!exists) {
-				return {
-					success: false,
-					error: toTaskError(
-						new Error('cannot find file in local fs: ' + this.localPath),
-						this,
-					),
-				}
-			}
-			if (remoteMtime > localMtime) {
-				await downloadRemoteFile({
-					vault: this.vault,
-					webdav: this.webdav,
-					remotePath: this.remotePath,
-					localPath: this.localPath,
-					remoteSize,
-					mobileAppDownloadFileChunkSize:
-						this.options.mobileAppDownloadFileChunkSize,
-				})
-			} else {
-				const localContent = await readLocalBinary(this.vault, this.localPath)
-				await this.webdav.putFileContents(this.remotePath, localContent, {
-					overwrite: true,
-				})
-			}
-
-			return { success: true } as const
-		} catch (e) {
-			this.logger.error(
-				`[ConflictResolve/LatestTimestamp] failed: ${this.localPath}`,
-				e,
-			)
-			return { success: false, error: toTaskError(e, this) }
 		}
 	}
 
@@ -201,7 +143,12 @@ export default class ConflictResolveTask extends BaseTask {
 		}
 	}
 
-	async execIntelligentMergeOrSkip() {
+	async execMerge(
+		resolver: (
+			params: IntelligentMergeParams,
+		) => IntelligentMergeResult | Promise<IntelligentMergeResult>,
+		strategyName: string,
+	) {
 		try {
 			const exists = await existsLocalPath(this.vault, this.localPath)
 			if (!exists) {
@@ -233,125 +180,22 @@ export default class ConflictResolveTask extends BaseTask {
 
 			const localText = await new Blob([new Uint8Array(localBuffer)]).text()
 			const remoteText = await new Blob([new Uint8Array(remoteBuffer)]).text()
-			const baseText = (await baseBlob?.text()) ?? localText
+			const baseText = (await baseBlob?.text()) ?? ''
 
-			const mergeResult = await resolveByIntelligentMerge({
+			const mergeResult = await resolver({
 				localContentText: localText,
 				remoteContentText: remoteText,
 				baseContentText: baseText,
+				filePath: this.localPath,
+				hasBase: baseBlob !== null,
 			})
 
 			this.logger.info(
-				`[ConflictResolve/DiffMatchPatchOrSkip] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → skip'}`,
+				`[ConflictResolve/${strategyName}] ${this.localPath}: merge ${mergeResult.success ? 'ok' : 'failed'}`,
 			)
 
 			if (!mergeResult.success) {
 				throw new Error(i18n.t('sync.error.failedToAutoMerge'))
-			}
-
-			if (mergeResult.isIdentical) {
-				return { success: true } as const
-			}
-
-			const mergedText = mergeResult.mergedText!
-
-			if (mergedText === remoteText) {
-				if (mergedText !== localText) {
-					await writeLocalText(this.vault, this.localPath, mergedText)
-				}
-				return { success: true } as const
-			}
-
-			const putResult = await this.webdav.putFileContents(
-				this.remotePath,
-				mergedText,
-				{ overwrite: true },
-			)
-
-			if (!putResult) {
-				throw new Error(i18n.t('sync.error.failedToUploadMerged'))
-			}
-
-			if (localText !== mergedText) {
-				await writeLocalText(this.vault, this.localPath, mergedText)
-			}
-
-			return { success: true } as const
-		} catch (e) {
-			this.logger.error(
-				`[ConflictResolve/DiffMatchPatchOrSkip] failed: ${this.localPath}`,
-				e,
-			)
-			return { success: false, error: toTaskError(e, this) }
-		}
-	}
-
-	async execIntelligentMerge() {
-		try {
-			const exists = await existsLocalPath(this.vault, this.localPath)
-			if (!exists) {
-				throw new Error('cannot find file in local fs: ' + this.localPath)
-			}
-			const localBuffer = await readLocalBinary(this.vault, this.localPath)
-			const remoteBuffer = (await this.webdav.getFileContents(this.remotePath, {
-				format: 'binary',
-				details: false,
-			})) as BufferLike
-
-			if (isEqual(localBuffer, remoteBuffer)) {
-				return { success: true } as const
-			}
-
-			const { record } = this.options
-			let baseBlob: Blob | null = null
-			const baseKey = record?.base?.key
-			if (baseKey) {
-				baseBlob = await blobStore.get(baseKey)
-			}
-
-			const localIsMergeable = isMergeablePath(this.localPath)
-			const remoteIsMergeable = isMergeablePath(this.remotePath)
-
-			if (!(localIsMergeable && remoteIsMergeable)) {
-				throw new Error(i18n.t('sync.error.mergeNotSupported'))
-			}
-
-			const localText = await new Blob([new Uint8Array(localBuffer)]).text()
-			const remoteText = await new Blob([new Uint8Array(remoteBuffer)]).text()
-			const baseText = (await baseBlob?.text()) ?? localText
-
-			const mergeResult = await resolveByIntelligentMerge({
-				localContentText: localText,
-				remoteContentText: remoteText,
-				baseContentText: baseText,
-			})
-
-			this.logger.info(
-				`[ConflictResolve/DiffMatchPatch] ${this.localPath}: patch_apply ${mergeResult.success ? 'ok' : 'failed → fallback to mergeDigIn'}`,
-			)
-
-			if (!mergeResult.success) {
-				// If patch_apply fails to resolve all, use mergeDigIn as a further fallback
-				const mergeDigInResult = mergeDigIn(localText, baseText, remoteText, {
-					stringSeparator: '\n',
-					useGitStyle: this.options.useGitStyle,
-				})
-				// mergeDigIn itself might produce conflict markers if it can't fully resolve.
-				// The task should handle this merged text (which might contain markers).
-				const mergedDmpText = mergeDigInResult.result.join('\n')
-
-				const putResult = await this.webdav.putFileContents(
-					this.remotePath,
-					mergedDmpText,
-					{ overwrite: true },
-				)
-
-				if (putResult) {
-					await writeLocalText(this.vault, this.localPath, mergedDmpText)
-					return { success: true } as const
-				} else {
-					throw new Error(i18n.t('sync.error.failedToUploadMerged'))
-				}
 			}
 
 			if (mergeResult.isIdentical) {
@@ -388,7 +232,7 @@ export default class ConflictResolveTask extends BaseTask {
 			return { success: true } as const
 		} catch (e) {
 			this.logger.error(
-				`[ConflictResolve/DiffMatchPatch] failed: ${this.localPath}`,
+				`[ConflictResolve/${strategyName}] failed: ${this.localPath}`,
 				e,
 			)
 			return { success: false, error: toTaskError(e, this) }

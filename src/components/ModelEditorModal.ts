@@ -2,13 +2,19 @@ import { cloneDeep } from 'lodash-es'
 import { Modal, Notice, Setting } from 'obsidian'
 import { findPresetModelById } from '~/ai/catalog/config'
 import { AIModelConfig } from '~/ai/core/types'
+import {
+	applyObsidianModalMountTarget,
+	type ChatModalMountTarget,
+} from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
+import { addClassTokens, toggleClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
 interface ModelEditorOptions {
 	findPresetOnSave?: boolean
 	presetProviderApi?: string
+	modalMountTarget?: ChatModalMountTarget
 }
 
 const INPUT_MODALITY_OPTIONS: AIModelConfig['modalities']['input'] = [
@@ -23,6 +29,7 @@ export default class ModelEditorModal extends Modal {
 	private draft: AIModelConfig
 	private lastMatchedModelId?: string
 	private updateInputModalityTags?: () => void
+	private cleanupModalMount?: () => void
 
 	constructor(
 		plugin: NutstorePlugin,
@@ -56,7 +63,7 @@ export default class ModelEditorModal extends Modal {
 		new Setting(contentEl)
 			.setName(i18n.t('settings.ai.model.id'))
 			.setDesc(i18n.t('settings.ai.model.idDesc'))
-			.then((s) => s.settingEl.addClass('setting-required'))
+			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) => {
 				text.setValue(this.draft.id).onChange((value) => {
 					this.draft.id = value
@@ -70,7 +77,7 @@ export default class ModelEditorModal extends Modal {
 			i18n.t('settings.ai.model.inputModalities'),
 		)
 		const tagContainer = modalitiesSetting.controlEl.createDiv({
-			cls: 'model-editor-modality-tags',
+			cls: ':uno: flex flex-wrap gap-2',
 		})
 		const updateTags = () => {
 			for (const child of Array.from(tagContainer.children)) {
@@ -78,14 +85,14 @@ export default class ModelEditorModal extends Modal {
 				const modality = button.dataset
 					.modality as AIModelConfig['modalities']['input'][number]
 				const selected = this.draft.modalities.input.includes(modality)
-				button.classList.toggle('is-active', selected)
+				toggleClassTokens(button, ':uno: is-active', selected)
 			}
 		}
 		this.updateInputModalityTags = updateTags
 		for (const modality of INPUT_MODALITY_OPTIONS) {
 			const button = tagContainer.createEl('button', {
 				text: modality,
-				cls: 'model-editor-modality-tag',
+				cls: ':uno: model-editor-modality-tag',
 			})
 			button.type = 'button'
 			button.dataset.modality = modality
@@ -133,7 +140,17 @@ export default class ModelEditorModal extends Modal {
 			)
 	}
 
+	open() {
+		super.open()
+		this.cleanupModalMount = applyObsidianModalMountTarget(
+			this,
+			this.options.modalMountTarget,
+		)
+	}
+
 	onClose() {
+		this.cleanupModalMount?.()
+		this.cleanupModalMount = undefined
 		this.contentEl.empty()
 		this.updateInputModalityTags = undefined
 	}

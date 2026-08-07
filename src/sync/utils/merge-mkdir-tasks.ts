@@ -17,93 +17,37 @@ import MkdirsRemoteTask from '../tasks/mkdirs-remote.task'
 export function mergeMkdirTasks(
 	mkdirTasks: MkdirRemoteTask[],
 ): MkdirsRemoteTask[] {
-	if (mkdirTasks.length === 0) {
-		return []
-	}
-
-	// Group mkdir tasks by their path hierarchy
-	// Key: deepest path, Value: all paths in the hierarchy (including parents)
-	const hierarchyGroups = new Map<
-		string,
-		Array<{ task: MkdirRemoteTask; remotePath: string }>
-	>()
-
+	// Keep the last task for duplicate paths, matching the previous Map behavior.
+	const tasksByPath = new Map<string, MkdirRemoteTask>()
 	for (const task of mkdirTasks) {
-		const remotePath = task.remotePath
-		let foundParent = false
-
-		// Check if this task is a child of any existing group
-		for (const [deepestPath, group] of hierarchyGroups.entries()) {
-			if (remotePath.startsWith(deepestPath + '/')) {
-				// This is a child, so deepestPath should be replaced with this path
-				hierarchyGroups.delete(deepestPath)
-				group.push({ task, remotePath })
-				hierarchyGroups.set(remotePath, group)
-				foundParent = true
-				break
-			}
-		}
-
-		if (!foundParent) {
-			// Check if any existing group is a child of this task
-			let childGroups: Array<{
-				task: MkdirRemoteTask
-				remotePath: string
-			}> = []
-			const groupsToDelete: string[] = []
-
-			for (const [deepestPath, group] of hierarchyGroups.entries()) {
-				if (deepestPath.startsWith(remotePath + '/')) {
-					// Existing group is a child of this task
-					childGroups = childGroups.concat(group)
-					groupsToDelete.push(deepestPath)
-				}
-			}
-
-			// Delete child groups and create new group with this task
-			for (const key of groupsToDelete) {
-				hierarchyGroups.delete(key)
-			}
-
-			if (childGroups.length > 0) {
-				// This task is a parent of existing groups
-				childGroups.push({ task, remotePath })
-				// Find the deepest path among all
-				const deepest = childGroups.reduce((max, item) =>
-					item.remotePath.length > max.remotePath.length ? item : max,
-				)
-				hierarchyGroups.set(deepest.remotePath, childGroups)
-			} else {
-				// This task is independent
-				hierarchyGroups.set(remotePath, [{ task, remotePath }])
-			}
-		}
+		tasksByPath.set(task.remotePath, task)
 	}
 
-	// Create merged tasks - all converted to MkdirsRemoteTask
-	const mergedTasks: MkdirsRemoteTask[] = []
+	const entries = [...tasksByPath.entries()]
+	const isDescendant = (path: string, parent: string) =>
+		path.startsWith(parent.endsWith('/') ? parent : `${parent}/`)
+	const leaves = entries.filter(
+		([path]) => !entries.some(([otherPath]) => isDescendant(otherPath, path)),
+	)
+	const assignedPaths = new Set<string>()
 
-	for (const group of hierarchyGroups.values()) {
-		// Find the deepest path
-		const deepestItem = group.reduce((max, item) =>
-			item.remotePath.length > max.remotePath.length ? item : max,
-		)
+	return leaves.map(([leafPath, leafTask]) => {
+		assignedPaths.add(leafPath)
+		const additionalPaths = entries
+			.filter(
+				([path]) => !assignedPaths.has(path) && isDescendant(leafPath, path),
+			)
+			.map(([path, task]) => {
+				assignedPaths.add(path)
+				return {
+					localPath: task.localPath,
+					remotePath: path,
+				}
+			})
 
-		// All other paths are additional paths (empty if group.length === 1)
-		const additionalPaths = group
-			.filter((item) => item !== deepestItem)
-			.map((item) => ({
-				localPath: item.task.localPath,
-				remotePath: item.task.remotePath,
-			}))
-
-		const mkdirsTask = new MkdirsRemoteTask({
-			...deepestItem.task.options,
+		return new MkdirsRemoteTask({
+			...leafTask.options,
 			additionalPaths,
 		})
-
-		mergedTasks.push(mkdirsTask)
-	}
-
-	return mergedTasks
+	})
 }

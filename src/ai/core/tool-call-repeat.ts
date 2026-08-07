@@ -1,4 +1,4 @@
-import type { AIToolCall } from './types'
+import type { ToolCallPart } from 'ai'
 
 export const REPEATED_TOOL_CALL_THRESHOLD = 5
 
@@ -24,7 +24,7 @@ function sortJsonValue(value: unknown): unknown {
 	return value
 }
 
-export function createToolCallRoundSignature(toolCalls: AIToolCall[]) {
+export function createToolCallRoundSignature(toolCalls: ToolCallPart[]) {
 	return JSON.stringify(
 		toolCalls.map((toolCall) => ({
 			name: toolCall.toolName,
@@ -35,7 +35,7 @@ export function createToolCallRoundSignature(toolCalls: AIToolCall[]) {
 
 export function updateToolCallRepeatState(
 	state: ToolCallRepeatState,
-	toolCalls: AIToolCall[],
+	toolCalls: ToolCallPart[],
 ): ToolCallRepeatState {
 	const signature = createToolCallRoundSignature(toolCalls)
 	const consecutiveCount =

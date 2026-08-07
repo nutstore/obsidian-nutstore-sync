@@ -1,5 +1,6 @@
 import localforage from 'localforage'
-import type { ChatSession, ChatSessionIndexItem } from '~/ai/chat/domain'
+import type { ChatSessionIndexItem } from '~/ai/chat/domain'
+import type { PersistedChatSession } from '~/ai/chat/session/session-persistence'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
 import useStorage from './use-storage'
@@ -45,7 +46,7 @@ export interface ChatMetaRecord {
 }
 
 export const chatSessionKV =
-	createRecoverableStorage<ChatSession>('chat_sessions')
+	createRecoverableStorage<PersistedChatSession>('chat_sessions')
 
 export const chatMetaKV = createRecoverableStorage<
 	ChatMetaRecord | ChatSessionIndexItem[]

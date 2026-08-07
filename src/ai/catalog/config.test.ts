@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
+import { describe, expect, it } from 'vitest'
+import {
+	aiProviderDefinitionsSchema,
+	type AIProviderDefinition,
+} from '../core/types'
 import {
 	createModelConfig,
 	createProviderConfig,
@@ -7,10 +11,6 @@ import {
 	findPresetModelById,
 	sanitizeProviders,
 } from './config'
-import {
-	aiProviderDefinitionsSchema,
-	type AIProviderDefinition,
-} from '../core/types'
 
 describe('ai config', () => {
 	it('matches the models-api provider catalog shape', () => {
@@ -77,6 +77,7 @@ describe('ai config', () => {
 				npm: '@ai-sdk/openai-compatible',
 				api: 'https://example.com/v1',
 				doc: 'https://example.com/docs',
+				allowBrowserCors: false,
 				models: {
 					'model-1': {
 						id: 'model-1',

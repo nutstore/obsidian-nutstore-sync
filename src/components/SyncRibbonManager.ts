@@ -1,10 +1,12 @@
 import { Notice } from 'obsidian'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import { emitCancelSync } from '../events'
 import i18n from '../i18n'
 import type NutstorePlugin from '../index'
 import { BaseService } from '../services/service.interface'
 import { SyncStartMode } from '../sync'
+import { type SyncPolicy } from '../settings'
 import { CHATBOX_VIEW_TYPE } from '../views/chatbox.view'
 import SyncConfirmModal from './SyncConfirmModal'
 
@@ -41,9 +43,10 @@ export class SyncRibbonManager extends BaseService {
 					return
 				}
 
-				const startSync = async () => {
+				const startSync = async (syncPolicy?: SyncPolicy) => {
 					await this.plugin.syncExecutorService.executeSync({
 						mode: SyncStartMode.MANUAL_SYNC,
+						syncPolicy,
 					})
 				}
 				if (this.plugin.settings.confirmBeforeSync) {
@@ -64,7 +67,7 @@ export class SyncRibbonManager extends BaseService {
 			i18n.t('sync.stopButton'),
 			() => emitCancelSync(),
 		)
-		this.stopRibbonEl.classList.add('hidden')
+		addClassTokens(this.stopRibbonEl, ':uno: hidden')
 
 		this.plugin.addRibbonIcon(
 			'bot',
@@ -90,11 +93,11 @@ export class SyncRibbonManager extends BaseService {
 		if (this.plugin.isSyncing) {
 			this.startRibbonEl.setAttr('aria-disabled', 'true')
 			this.startRibbonEl.addClass('nutstore-sync-spinning')
-			this.stopRibbonEl.classList.remove('hidden')
+			removeClassTokens(this.stopRibbonEl, ':uno: hidden')
 		} else {
 			this.startRibbonEl.removeAttribute('aria-disabled')
 			this.startRibbonEl.removeClass('nutstore-sync-spinning')
-			this.stopRibbonEl.classList.add('hidden')
+			addClassTokens(this.stopRibbonEl, ':uno: hidden')
 		}
 	}
 }

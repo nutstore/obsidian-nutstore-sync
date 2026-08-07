@@ -6,7 +6,9 @@ import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
 import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
 import SkippedTask from '~/sync/tasks/skipped.task'
 import { BaseTask } from '~/sync/tasks/task.interface'
+import { addClassTokens } from '~/utils/class-tokens'
 import getTaskName from '~/utils/get-task-name'
+import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
 import {
 	emitCancelSync,
@@ -27,7 +29,9 @@ export default class SyncProgressModal extends Modal {
 	private progressText!: HTMLDivElement
 	private progressStats!: HTMLDivElement
 	private currentFile!: HTMLDivElement
+	private currentOperation!: HTMLDivElement
 	private filesList!: HTMLDivElement
+	private filesSection!: HTMLDivElement
 	private syncCancelled = false
 	private cancelSubscription: Subscription
 	private updateMtimeSubscription: Subscription
@@ -67,6 +71,28 @@ export default class SyncProgressModal extends Modal {
 		}
 
 		const progress = this.plugin.progressService.syncProgress
+		const preparation = this.plugin.progressService.preparationProgress
+
+		if (
+			preparation &&
+			!this.plugin.progressService.syncEnd &&
+			!this.plugin.progressService.syncFailed &&
+			!this.syncCancelled
+		) {
+			const text = getSyncPreparationText(preparation)
+			this.currentOperation.setText(text.operation)
+			this.currentFile.setText(preparation.traversal?.currentPath ?? '')
+			this.progressBar.addClass('nutstore-sync-progress-indeterminate')
+			this.progressBar.style.width = '40%'
+			this.progressText.setText('')
+			this.progressStats.setText(text.detail)
+			this.filesSection.hide()
+			return
+		}
+
+		this.currentOperation.setText(i18n.t('sync.syncingFiles'))
+		this.progressBar.removeClass('nutstore-sync-progress-indeterminate')
+		this.filesSection.show()
 
 		const percent =
 			Math.round((progress.completed.length / progress.total) * 100) || 0
@@ -86,13 +112,25 @@ export default class SyncProgressModal extends Modal {
 		)
 
 		if (this.plugin.progressService.syncEnd) {
-			this.stopButtonComponent.buttonEl.addClass('hidden')
+			addClassTokens(this.stopButtonComponent.buttonEl, ':uno: hidden')
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
-			this.currentFile.setText(i18n.t('sync.complete'))
+			const failedCount = this.plugin.progressService.syncFailedCount
+			this.currentOperation.setText(
+				failedCount > 0
+					? i18n.t('sync.completeWithFailed', { failedCount })
+					: i18n.t('sync.complete'),
+			)
+			this.currentFile.setText('')
 		} else if (this.syncCancelled) {
-			this.stopButtonComponent.buttonEl.addClass('hidden')
+			addClassTokens(this.stopButtonComponent.buttonEl, ':uno: hidden')
 			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
-			this.currentFile.setText(i18n.t('sync.cancelled'))
+			this.currentOperation.setText(i18n.t('sync.cancelled'))
+			this.currentFile.setText('')
+		} else if (this.plugin.progressService.syncFailed) {
+			addClassTokens(this.stopButtonComponent.buttonEl, ':uno: hidden')
+			this.hideButtonComponent.setButtonText(i18n.t('sync.closeButton'))
+			this.currentOperation.setText(i18n.t('sync.failedStatus'))
+			this.currentFile.setText('')
 		} else {
 			if (progress.current) {
 				this.currentFile.setText(
@@ -127,17 +165,17 @@ export default class SyncProgressModal extends Modal {
 	): void {
 		const iconCls =
 			status === 'in-progress'
-				? 'text-[var(--text-warning)]'
+				? ':uno: text-[var(--text-warning)]'
 				: status === 'failed'
-					? 'text-[var(--text-error)]'
-					: 'text-[var(--text-muted)]'
+					? ':uno: text-[var(--text-error)]'
+					: ':uno: text-[var(--text-muted)]'
 		const labelCls =
 			status === 'failed'
-				? 'text-[var(--text-error)]'
-				: 'text-[var(--text-normal)]'
+				? ':uno: text-[var(--text-error)]'
+				: ':uno: text-[var(--text-normal)]'
 
 		const item = this.filesList.createDiv({
-			cls: 'flex items-center p-1 rounded text-2.5 gap-2 hover:bg-[var(--background-secondary)]',
+			cls: ':uno: flex items-center p-1 rounded text-2.5 gap-2 hover:bg-[var(--background-secondary)]',
 		})
 
 		const icon = item.createSpan({ cls: iconCls })
@@ -171,11 +209,11 @@ export default class SyncProgressModal extends Modal {
 		}
 
 		const typeLabel = item.createSpan({
-			cls: `flex-none w-17 md:w-24 font-500 ${labelCls}`,
+			cls: `:uno: flex-none w-17 md:w-24 font-500 ${labelCls}`,
 		})
 		typeLabel.setText(getTaskName(file))
 
-		const filePath = item.createSpan({ cls: 'flex-1 break-all' })
+		const filePath = item.createSpan({ cls: ':uno: flex-1 break-all' })
 		filePath.setText(i18n.t('sync.filePath', { path: file.localPath }))
 	}
 
@@ -184,96 +222,98 @@ export default class SyncProgressModal extends Modal {
 		contentEl.empty()
 
 		const container = contentEl.createDiv({
-			cls: 'flex flex-col gap-4 min-h-[40vh] max-h-[75vh]',
+			cls: ':uno: flex flex-col gap-4 min-h-[40vh] max-h-[75vh]',
 		})
 
 		const header = container.createDiv({
-			cls: 'border-b border-[var(--background-modifier-border)]',
+			cls: ':uno: border-b border-[var(--background-modifier-border)]',
 		})
 
 		const title = header.createEl('h2', {
-			cls: 'm-0',
+			cls: ':uno: m-0',
 		})
 		title.setText(i18n.t('sync.progressTitle'))
 
 		const statusSection = container.createDiv({
-			cls: 'flex flex-col gap-1',
+			cls: ':uno: flex flex-col gap-1',
 		})
 
 		const currentOperation = statusSection.createDiv()
 		currentOperation.setText(i18n.t('sync.syncingFiles'))
 
 		const currentFile = statusSection.createDiv({
-			cls: 'text-3 text-[var(--text-muted)] truncate overflow-hidden whitespace-nowrap',
+			cls: ':uno: text-3 text-[var(--text-muted)] truncate overflow-hidden whitespace-nowrap',
 		})
 
 		const progressSection = container.createDiv({
-			cls: 'flex flex-col gap-2',
+			cls: ':uno: flex flex-col gap-2',
 		})
 
 		const progressStats = progressSection.createDiv({
-			cls: 'text-3.25',
+			cls: ':uno: text-3.25',
 		})
 
 		const progressBarContainer = progressSection.createDiv({
-			cls: 'relative h-5 bg-[var(--background-secondary)] rounded overflow-hidden',
+			cls: ':uno: relative h-5 bg-[var(--background-secondary)] rounded overflow-hidden',
 		})
 
 		const progressBar = progressBarContainer.createDiv({
-			cls: 'absolute h-full bg-[var(--interactive-accent)] w-0 transition-width',
+			cls: ':uno: absolute h-full bg-[var(--interactive-accent)] w-0 transition-width',
 		})
 
 		const progressText = progressBarContainer.createDiv({
-			cls: 'absolute w-full text-center text-3 leading-5 text-[var(--text-on-accent)] mix-blend-difference',
+			cls: ':uno: absolute w-full text-center text-3 leading-5 text-[var(--text-on-accent)] mix-blend-difference',
 		})
 
 		// Cache progress section
 		const cacheProgressSection = container.createDiv({
-			cls: 'flex flex-col gap-1',
+			cls: ':uno: flex flex-col gap-1',
 		})
 		this.cacheCurrentOperation = cacheProgressSection.createDiv()
 		this.cacheCurrentOperation.setText(i18n.t('sync.updatingCache'))
 		this.cacheCurrentOperation.hide()
 
 		const cacheProgressStats = cacheProgressSection.createDiv({
-			cls: 'text-3.25',
+			cls: ':uno: text-3.25',
 		})
 		this.cacheProgressStats = cacheProgressStats
 		this.cacheProgressStats.hide()
 
 		const cacheProgressBarContainer = cacheProgressSection.createDiv({
-			cls: 'relative h-5 bg-[var(--background-secondary)] rounded overflow-hidden',
+			cls: ':uno: relative h-5 bg-[var(--background-secondary)] rounded overflow-hidden',
 		})
 		cacheProgressBarContainer.hide()
 
 		this.cacheProgressBar = cacheProgressBarContainer.createDiv({
-			cls: 'absolute h-full bg-[var(--interactive-accent)] w-0 transition-width',
+			cls: ':uno: absolute h-full bg-[var(--interactive-accent)] w-0 transition-width',
 		})
 		this.cacheProgressText = cacheProgressBarContainer.createDiv({
-			cls: 'absolute w-full text-center text-3 leading-5 text-[var(--text-on-accent)] mix-blend-difference',
+			cls: ':uno: absolute w-full text-center text-3 leading-5 text-[var(--text-on-accent)] mix-blend-difference',
 		})
 
 		const filesSection = container.createDiv({
-			cls: 'flex flex-col flex-1 gap-2 mt-2 overflow-y-auto',
+			cls: ':uno: flex flex-col flex-1 gap-2 mt-2 overflow-y-auto',
 		})
 
 		const filesHeader = filesSection.createDiv({
-			cls: 'font-500 text-3.5 pb-1 border-b border-[var(--background-modifier-border)]',
+			cls: ':uno: font-500 text-3.5 pb-1 border-b border-[var(--background-modifier-border)]',
 		})
 		filesHeader.setText(i18n.t('sync.completedFilesTitle'))
 
 		const filesList = filesSection.createDiv({
-			cls: 'flex-1 overflow-y-auto border border-[var(--background-modifier-border)] border-solid rounded p-1',
+			cls: ':uno: flex-1 overflow-y-auto border border-[var(--background-modifier-border)] border-solid rounded p-1',
 		})
 
 		this.progressBar = progressBar
 		this.progressText = progressText
 		this.progressStats = progressStats
 		this.currentFile = currentFile
+		this.currentOperation = currentOperation
 		this.filesList = filesList
+		this.filesSection = filesSection
 
 		const footerButtons = container.createDiv({
-			cls: 'border-t border-[var(--background-modifier-border)]',
+			cls: ':uno: border-t border-[var(--background-modifier-border)]',
 		})
 
 		new Setting(footerButtons)

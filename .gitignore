@@ -5,6 +5,9 @@
 # npm
 node_modules
 
+# pnpm
+.pnpm-store
+
 # Exclude sourcemaps
 *.map
 

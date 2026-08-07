@@ -25,6 +25,7 @@ vi.mock('~/sync', () => ({
 }))
 
 import { SyncStartMode } from '~/sync'
+import type { SyncPolicy } from '~/settings'
 import SyncExecutorService from './sync-executor.service'
 
 function createPlugin(): any {
@@ -32,6 +33,7 @@ function createPlugin(): any {
 		isSyncing: false,
 		isAccountConfigured: vi.fn(() => true),
 		getToken: vi.fn(async () => 'token'),
+		getRemoteAccountId: vi.fn(async () => 'neutral-account'),
 		remoteBaseDir: '/remote',
 		app: {
 			vault: {
@@ -87,7 +89,10 @@ describe('SyncExecutorService', () => {
 		).resolves.toBe(true)
 
 		expect(nutstoreSyncCtor).toHaveBeenCalledTimes(1)
-		expect(startMock).toHaveBeenCalledWith({ mode: SyncStartMode.AUTO_SYNC })
+		expect(startMock).toHaveBeenCalledWith({
+			mode: SyncStartMode.AUTO_SYNC,
+			syncPolicy: 'two-way',
+		})
 	})
 
 	it('returns false without constructing sync when account is not configured', async () => {
@@ -143,7 +148,10 @@ describe('SyncExecutorService', () => {
 		expect(emitStopGcMock).toHaveBeenCalledTimes(1)
 		expect(plugin.gcService.waitUntilIdle).toHaveBeenCalledTimes(1)
 		expect(nutstoreSyncCtor).toHaveBeenCalledTimes(1)
-		expect(startMock).toHaveBeenCalledWith({ mode: SyncStartMode.AUTO_SYNC })
+		expect(startMock).toHaveBeenCalledWith({
+			mode: SyncStartMode.AUTO_SYNC,
+			syncPolicy: 'two-way',
+		})
 	})
 
 	it('returns true when sync completes without runnable tasks', async () => {
@@ -158,6 +166,27 @@ describe('SyncExecutorService', () => {
 		await expect(
 			service.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
 		).resolves.toBe(true)
+	})
+
+	it('uses a supplied policy for one sync without changing the saved default', async () => {
+		startMock.mockResolvedValue({
+			ended: true,
+			ranTasks: true,
+			shouldReloadSettings: false,
+		})
+		const plugin = createPlugin()
+		const service = new SyncExecutorService(plugin)
+
+		await service.executeSync({
+			mode: SyncStartMode.MANUAL_SYNC,
+			syncPolicy: 'receive-only' as SyncPolicy,
+		})
+
+		expect(startMock).toHaveBeenCalledWith({
+			mode: SyncStartMode.MANUAL_SYNC,
+			syncPolicy: 'receive-only',
+		})
+		expect(plugin.localSettings.syncPolicy).toBe('two-way')
 	})
 
 	it('logs sync trigger mode and policy before starting', async () => {

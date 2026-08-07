@@ -4,7 +4,7 @@ export type MarkdownLinkAction =
 	| { type: 'none' }
 	| { type: 'internal'; linktext: string }
 	| { type: 'external'; href: string }
-	| { type: 'protocol'; href: string }
+	| { type: 'protocol'; href: string; providerId?: string }
 
 export interface MarkdownLinkDescriptor {
 	href?: string | null
@@ -34,7 +34,12 @@ export function resolveMarkdownLinkAction(
 	}
 
 	if (href.startsWith(PROVIDER_EDIT_PROTOCOL)) {
-		return { type: 'protocol', href }
+		try {
+			const providerId = new URL(href).searchParams.get('providerId')?.trim()
+			return { type: 'protocol', href, providerId: providerId || undefined }
+		} catch {
+			return { type: 'protocol', href }
+		}
 	}
 
 	return { type: 'external', href }

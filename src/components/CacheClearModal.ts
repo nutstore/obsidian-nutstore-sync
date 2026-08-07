@@ -1,6 +1,7 @@
 import { Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
 import { blobKV, syncRecordKV, traverseWebDAVKV } from '~/storage/kv'
+import { removeClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
@@ -32,7 +33,7 @@ export default class CacheClearModal extends Modal {
 			.setDesc(i18n.t('settings.cache.clearModal.description'))
 
 		const optionsContainer = contentEl.createDiv({
-			cls: 'py-2',
+			cls: ':uno: py-2',
 		})
 
 		// Sync Record Cache Option
@@ -93,7 +94,7 @@ export default class CacheClearModal extends Modal {
 								button.setButtonText(
 									i18n.t('settings.cache.clearModal.confirm'),
 								)
-								button.buttonEl.classList.remove('mod-warning')
+								removeClassTokens(button.buttonEl, ':uno: mod-warning')
 								confirmed = false
 							}
 						} else {
@@ -108,7 +109,7 @@ export default class CacheClearModal extends Modal {
 					if (confirmed) {
 						confirmed = false
 						button.setButtonText(i18n.t('settings.cache.clear'))
-						button.buttonEl.classList.remove('mod-warning')
+						removeClassTokens(button.buttonEl, ':uno: mod-warning')
 					}
 				})
 			})

@@ -1,222 +1,154 @@
-import { createPermissionGuard } from '~/ai/tools/permission-guard'
-import { createAITools } from '~/ai/tools/tools'
-import type {
-	AIMessageRecord,
-	AISession,
-	AIToolCall,
-	AIToolDefinition,
-	AIToolExecutionContext,
-	AITodoItem,
-	ToolExecutionResult,
-} from '~/ai/core/types'
-import type { ChatState } from '~/ai/chat/runtime/chat-state'
-import { getActiveFragment } from '~/ai/chat/domain'
-import { createFragmentReadTracker } from '~/ai/tools/file-operation'
-import { deriveTitle } from '~/ai/chat/messages/message-utils'
-import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
-import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
-import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
-import i18n from '~/i18n'
-import logger from '~/utils/logger'
-import { InMemoryFs } from 'just-bash/browser'
-import type NutstorePlugin from '../../..'
+import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
+import type { App } from 'obsidian'
+import type { ChatSession } from '~/ai/chat/domain'
 
-export interface ResolvedToolResult {
-	payload: string | Record<string, unknown>
-	isError: boolean
-	reversibleOps?: AIMessageRecord['reversibleOps']
-	todos?: AITodoItem[]
+import { findAgent } from '~/ai/chat/agents/agent-tree'
+import {
+	createAgentDefinitions,
+	filterToolsForAgent,
+	listDispatchableDefinitions,
+	MASTER_AGENT_ID,
+	type AgentDefinition,
+} from '~/ai/chat/agents/registry'
+import { getMasterAgent } from '~/ai/chat/domain'
+import { deriveTitle } from '~/ai/chat/messages/message-utils'
+import { MAX_TASK_DEPTH } from '~/ai/chat/prompts'
+import type { ChatState } from '~/ai/chat/runtime/chat-state'
+import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
+import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
+import type { AIModelConfig } from '~/ai/core/types'
+import {
+	createFragmentReadTracker,
+	type ReadTracker,
+} from '~/ai/tools/file-operation'
+import {
+	createFullAccessPermissionGuard,
+	createPermissionGuard,
+	createReadonlyPermissionGuard,
+	type PermissionGuard,
+} from '~/ai/tools/permission-guard'
+import type { DispatchTaskFn } from '~/ai/tools/task'
+import { createAITools } from '~/ai/tools/tools'
+import type McpService from '~/services/mcp.service'
+import type { NutstoreSettings } from '~/settings'
+
+export interface StableToolsContext {
+	app: App
+	permissionGuard?: PermissionGuard
+	scratch: IFileSystem
+	dispatchTask?: DispatchTaskFn
+	dispatchableDefinitions?: readonly AgentDefinition[]
 }
 
-export type SpawnTaskHandler = (
-	rawArgs: string,
-	context: AIToolExecutionContext,
-) => Promise<Record<string, unknown>>
-
 export class ToolExecutor {
-	private spawnTaskHandler: SpawnTaskHandler = () =>
-		Promise.resolve({
-			status: 'failed',
-			error_summary: 'spawn handler not set',
-		})
+	private dispatchTaskHandler: DispatchTaskFn = () => {
+		throw new Error('task handler not set')
+	}
 
 	constructor(
-		private plugin: NutstorePlugin,
+		private app: App,
+		private getSettings: () => NutstoreSettings['ai'],
 		private state: ChatState,
 		private runtimeStates: RuntimeStates,
+		private mcpService: McpService,
 	) {}
 
-	setSpawnTaskHandler(handler: SpawnTaskHandler) {
-		this.spawnTaskHandler = handler
+	setDispatchTaskHandler(handler: DispatchTaskFn) {
+		this.dispatchTaskHandler = handler
 	}
 
 	getChatModalMountTarget() {
 		return resolveChatModalMountTarget(this.state.chatModalHostEl)
 	}
 
-	createToolsForContext(
-		session: AISession,
-		depth: number,
-		maxDepth: number,
-		parentTaskId?: string,
-	) {
-		const allowSpawn = depth < maxDepth
-		const runtime = this.runtimeStates.get(session.id)
-		const bashScratch = runtime.bashScratch ?? new InMemoryFs()
-		runtime.bashScratch = bashScratch
-		const permissionGuard = createPermissionGuard(
-			this.plugin.app,
-			() => this.plugin.settings,
-			{
-				has: (signature) =>
-					this.runtimeStates.getAutoApproveRequests(session.id).has(signature),
-				add: (signature) => {
-					this.runtimeStates.getAutoApproveRequests(session.id).add(signature)
-				},
-			},
-			{
-				sessionTitle:
-					this.state.sessionIndex.find((item) => item.id === session.id)
-						?.title || deriveTitle(session),
-				modalMountTarget: this.getChatModalMountTarget(),
-			},
-		)
-		return createAITools(this.plugin.app, {
-			allowSpawn,
-			bashScratch,
-			permissionGuard,
-			enableTodoWrite: depth === 0,
-			spawnTask: async (params) => ({
-				task_id: null,
-				parent_task_id: parentTaskId || params.parentTaskId || null,
-				label: params.title || params.prompt.slice(0, 48),
-				task: params.prompt,
-				status: 'running',
-				depth: params.depth,
-				max_depth: params.maxDepth,
-				async: true,
-			}),
+	getAgentDefinitions() {
+		return createAgentDefinitions({
+			fullAccess: Boolean(this.getSettings().yolo),
 		})
 	}
 
-	async resolveToolCalls(
-		toolCalls: AIToolCall[],
-		tools: AIToolDefinition[],
-		context: AIToolExecutionContext,
-	) {
-		const toolsByName = new Map(tools.map((t) => [t.name, t]))
-		const fragment = getActiveFragment(context.session)
-		const readSnapshot = new Set(fragment?.readVaultPaths ?? [])
-		const readTracker = fragment
-			? createFragmentReadTracker(fragment, readSnapshot)
-			: undefined
-		const enrichedContext: AIToolExecutionContext = {
-			...context,
-			readTracker: readTracker ?? context.readTracker,
-		}
-		const results = await Promise.all(
-			toolCalls.map((toolCall) =>
-				this.resolveSingleToolCall(toolCall, toolsByName, enrichedContext),
-			),
+	getAgentDefinition(agentType: string): AgentDefinition {
+		const definition = this.getAgentDefinitions().find(
+			(candidate) => candidate.id === agentType,
 		)
-
-		return toolCalls.map((toolCall, index) => ({
-			message: {
-				role: 'tool' as const,
-				content: [
-					{
-						type: 'tool-result' as const,
-						toolCallId: toolCall.toolCallId,
-						toolName: toolCall.toolName,
-						output: {
-							type: 'text' as const,
-							value:
-								typeof results[index].payload === 'string'
-									? results[index].payload
-									: JSON.stringify(results[index].payload, null, 2),
-						},
-					},
-				],
-			},
-			isError: results[index].isError,
-			reversibleOps: results[index].reversibleOps,
-			todos: results[index].todos,
-		}))
+		if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
+		return definition
 	}
 
-	async resolveSingleToolCall(
-		toolCall: AIToolCall,
-		toolsByName: Map<string, AIToolDefinition>,
-		context: AIToolExecutionContext,
-	): Promise<ResolvedToolResult> {
-		const inputJson = JSON.stringify(toolCall.input ?? {})
-		if (toolCall.toolName === 'spawn') {
-			const payload = await this.spawnTaskHandler(inputJson, context)
-			return {
-				payload,
-				isError: payload.status !== 'completed',
-			}
-		}
-
-		const result = await this.executeToolCall(
-			toolsByName,
-			toolCall.toolName,
-			inputJson,
-			context,
-		)
-		return {
-			payload: result.payload,
-			reversibleOps: result.reversibleOps,
-			todos: result.todos,
-			isError: typeof result.payload === 'object' && !!result.payload.error,
-		}
-	}
-
-	async executeToolCall(
-		toolsByName: Map<string, AIToolDefinition>,
-		name: string,
-		args: string,
-		context: AIToolExecutionContext,
+	async createTools(
+		depth: number,
+		definition: AgentDefinition,
+		session?: ChatSession,
+		model?: AIModelConfig,
 	) {
-		const tool = toolsByName.get(name)
-		let result: ToolExecutionResult
-
-		try {
-			if (!tool) {
-				throw new Error(
-					i18n.t('chatbox.errors.unknownTool', {
-						name,
-					}),
+		const allowSpawn = depth < MAX_TASK_DEPTH
+		const tools = createAITools({
+			allowSpawn,
+			enableTodoWrite: depth === 0,
+			enableViewImage: model?.modalities.input.includes('image') ?? false,
+		})
+		if (definition.id === MASTER_AGENT_ID) {
+			await this.mcpService.refreshIfChanged()
+			if (session) {
+				Object.assign(
+					tools,
+					this.mcpService.getToolsForSession(
+						session.id,
+						session.disabledMcpServers,
+					),
 				)
 			}
-			const parsedArgs = JSON.parse(args) as Record<string, unknown>
-			const params = tool.inputSchema.parse(parsedArgs)
-			result = await tool.execute(params, context)
-		} catch (error) {
-			logger.error(error)
-			result = {
-				result: {
-					error: error instanceof Error ? error.message : String(error),
-				},
-			}
 		}
+		return filterToolsForAgent(tools, definition)
+	}
 
+	createStableToolsContext(
+		session: ChatSession,
+		definition: AgentDefinition,
+	): StableToolsContext {
+		const runtime = this.runtimeStates.get(session.id)
+		const bashScratch = runtime.bashScratch ?? new InMemoryFs()
+		runtime.bashScratch = bashScratch
+		const permissionGuard =
+			definition.permissionMode === 'readonly'
+				? createReadonlyPermissionGuard()
+				: definition.permissionMode === 'full'
+					? createFullAccessPermissionGuard()
+					: createPermissionGuard(
+							this.app,
+							{
+								has: (signature) =>
+									this.runtimeStates
+										.getAutoApproveRequests(session.id)
+										.has(signature),
+								add: (signature) => {
+									this.runtimeStates
+										.getAutoApproveRequests(session.id)
+										.add(signature)
+								},
+							},
+							{
+								sessionTitle:
+									this.state.sessionIndex.find((item) => item.id === session.id)
+										?.title || deriveTitle(session),
+								modalMountTarget: this.getChatModalMountTarget(),
+							},
+						)
 		return {
-			payload: result.result,
-			reversibleOps: result.reversibleOps
-				?.map(normalizeReversibleToolOpRecord)
-				.filter(
-					(op): op is NonNullable<AIMessageRecord['reversibleOps']>[number] =>
-						!!op,
-				),
-			todos: result.todos,
+			app: this.app,
+			permissionGuard,
+			scratch: bashScratch,
+			dispatchTask: (params) => this.dispatchTaskHandler(params),
+			dispatchableDefinitions: listDispatchableDefinitions({
+				fullAccess: Boolean(this.getSettings().yolo),
+			}),
 		}
 	}
 
-	requireToolString(value: unknown, field: string) {
-		if (typeof value !== 'string' || !value.trim()) {
-			throw new Error(i18n.t('chatbox.errors.toolFieldRequired', { field }))
-		}
-		return value.trim()
+	prepareReadTracker(session: ChatSession, agentId: string): ReadTracker {
+		const agent =
+			findAgent(getMasterAgent(session), agentId) ?? getMasterAgent(session)
+		const readSnapshot = new Set<string>(agent.readVaultPaths ?? [])
+		return createFragmentReadTracker(agent, readSnapshot)
 	}
 }

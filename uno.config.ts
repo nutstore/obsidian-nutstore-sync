@@ -1,4 +1,11 @@
-import { defineConfig, presetIcons, presetUno } from 'unocss'
+import {
+	defineConfig,
+	presetIcons,
+	presetUno,
+	transformerCompileClass,
+} from 'unocss'
+
+const isDevelopment = process.env.NODE_ENV === 'development'
 
 export default defineConfig({
 	content: {
@@ -8,19 +15,32 @@ export default defineConfig({
 		[/^background-none$/, () => ({ background: 'none' })],
 		[
 			/^scrollbar-hide$/,
-			([_]) => {
-				return `.scrollbar-hide{scrollbar-width:none}
-  .scrollbar-hide::-webkit-scrollbar{display:none}`
-			},
+			(_, { symbols }) => [
+				{ 'scrollbar-width': 'none' },
+				{
+					[symbols.selector]: (selector) => `${selector}::-webkit-scrollbar`,
+					display: 'none',
+				},
+			],
 		],
 		[
 			/^scrollbar-default$/,
-			([_]) => {
-				return `.scrollbar-default{scrollbar-width:auto}
-  .scrollbar-default::-webkit-scrollbar{display:block}`
-			},
+			(_, { symbols }) => [
+				{ 'scrollbar-width': 'auto' },
+				{
+					[symbols.selector]: (selector) => `${selector}::-webkit-scrollbar`,
+					display: 'block',
+				},
+			],
 		],
 	],
+	transformers: isDevelopment
+		? []
+		: [
+				transformerCompileClass({
+					classPrefix: 'ns-',
+				}),
+			],
 	presets: [
 		presetIcons({
 			collections: {
@@ -31,6 +51,6 @@ export default defineConfig({
 				},
 			},
 		}),
-		presetUno(),
+		presetUno({ preflight: false }),
 	],
 })

@@ -60,10 +60,6 @@
 			"logout": "Logout",
 			"logoutSuccess": "Logged out successfully"
 		},
-		"useGitStyle": {
-			"name": "Use git-style conflict markers",
-			"desc": "Use <<<<<<< and >>>>>>> markers for conflicts instead of HTML tags"
-		},
 		"backupWarning": {
 			"name": "Backup warning",
 			"desc": "⚠️ Note: Sync process will modify or delete local files. Please backup important files before syncing."
@@ -71,10 +67,8 @@
 		"conflictStrategy": {
 			"name": "Conflict resolution strategy",
 			"desc": "Choose how to resolve file conflicts. \nNote: We recommend backing up important files before using auto-merge to prevent data loss.",
-			"diffMatchPatch": "Smart merge (recommended)",
-			"latestTimestamp": "Use latest version",
-			"skip": "Skip conflicts",
-			"diffMatchPatchOrSkip": "Smart merge, skip if unresolvable",
+			"noConflictMerge": "Conflict-free merge",
+			"diff3": "Diff3 merge (with Git-style conflict markers)",
 			"localPriority": "Local priority (overwrite server)",
 			"serverPriority": "Server priority (overwrite local)"
 		},
@@ -135,15 +129,16 @@
 			"filters": "Filter rules",
 			"ai": "AI"
 		},
+		"tabs": {
+			"sync": "Sync",
+			"ai": "AI",
+			"troubleshooting": "Troubleshooting"
+		},
 		"ai": {
 			"saved": "AI settings saved",
 			"none": "Not set",
 			"unnamedProvider": "Unnamed provider",
 			"unnamedModel": "Unnamed model",
-			"defaultProvider": {
-				"name": "Default provider",
-				"desc": "Optional provider selected for new chat sessions"
-			},
 			"defaultModel": {
 				"name": "Default model",
 				"desc": "Optional model selected for new chat sessions"
@@ -162,7 +157,6 @@
 				"disconnect": "Disconnect",
 				"disconnected": "Nutstore AI disconnected",
 				"refreshModels": "Refresh",
-				"modelsRefreshed": "Models refreshed",
 				"betaModal": {
 					"title": "Feature in Beta",
 					"message": "Nutstore AI is currently in beta and not yet available to all users. If you are not on the beta list, you may not be able to use the feature after authorizing. We are gradually opening access — please check back later.",
@@ -191,12 +185,11 @@
 				"refreshPresetModelsLoading": "Fetching...",
 				"refreshPresetModelsSuccess": "Fetched ✓ providers {{providers}} models {{models}}",
 				"refreshPresetModelsFailure": "Failed ×",
-				"presetModelsRefreshed": "Latest model list fetched",
 				"presetModelsRefreshFailed": "Update failed. Continuing with local/built-in model list.",
 				"presetModelsRefreshFailedWithReason": "Update failed. Continuing with local/built-in model list: {{reason}}",
 				"empty": "No provider configured yet.",
-				"openaiDefault": "OpenAI default endpoint",
-				"presetCustom": "Custom (OpenAI Compatible)",
+				"defaultEndpoint": "Default endpoint",
+				"presetCustom": "Custom",
 				"updateModels": "Update models",
 				"updateModelsHint": "{{count}} preset model(s) can be added to this provider.",
 				"updateModelsSuccess": "{{count}} model(s) added"
@@ -215,6 +208,14 @@
 				"allowBrowserCors": {
 					"name": "Allow browser CORS requests",
 					"desc": "Prefer native browser fetch for providers that support CORS, enabling streaming output"
+				},
+				"apiFormat": {
+					"name": "API format",
+					"desc": "Protocol used to talk to this provider",
+					"openaiChatCompletions": "OpenAI Chat Completions",
+					"openaiResponses": "OpenAI Responses",
+					"anthropic": "Anthropic Messages",
+					"other": "Other ({{npm}})"
 				}
 			},
 			"models": {
@@ -253,6 +254,46 @@
 					"deleted": "Model deleted"
 				}
 			},
+			"mcp": {
+				"name": "MCP servers",
+				"summary": "{{count}} server(s) configured",
+				"manage": "Manage MCP servers",
+				"manager": {
+					"title": "MCP servers",
+					"add": "Add server",
+					"empty": "No MCP server configured yet.",
+					"configFileHint": "Stored in {{path}}. You can also ask the AI in chat to edit this file.",
+					"parseError": "Failed to parse {{path}}: {{reason}}",
+					"statusDisabled": "disabled",
+					"statusConnected": "{{count}} tool(s)",
+					"statusError": "connection failed: {{reason}}",
+					"test": "Test",
+					"testSuccess": "Connected: {{count}} tool(s) available",
+					"testFailed": "Connection failed: {{reason}}"
+				},
+				"editor": {
+					"createTitle": "Add MCP server",
+					"editTitle": "Edit MCP server",
+					"serverName": "Server name",
+					"serverNameDesc": "Letters, numbers, hyphens and underscores only",
+					"url": "URL",
+					"urlDesc": "Streamable HTTP endpoint of the MCP server",
+					"headers": "Headers",
+					"headersDesc": "Custom HTTP headers, e.g. Authorization",
+					"headerKeyPlaceholder": "Header name",
+					"headerValuePlaceholder": "Header value",
+					"addHeader": "Add header",
+					"removeHeader": "Remove header",
+					"enabled": "Enabled"
+				},
+				"errors": {
+					"emptyName": "Server name cannot be empty",
+					"invalidName": "Server name may only contain letters, numbers, hyphens and underscores",
+					"duplicateName": "A server with this name already exists",
+					"emptyUrl": "URL cannot be empty",
+					"invalidUrl": "Invalid URL"
+				}
+			},
 			"yolo": {
 				"name": "Full access",
 				"desc": "⚠️ When enabled, AI can read and write vault files directly without user confirmation"
@@ -267,6 +308,7 @@
 				"duplicateProviderId": "A provider with this name already exists",
 				"reservedProviderId": "This provider name is reserved by Nutstore AI. Use another name.",
 				"providerNotFoundForProtocolOpen": "Provider not found. It may have been deleted or renamed: {{providerId}}",
+				"networkDisconnected": "Network connection unavailable. Check your connection and try again.",
 				"browserCorsFallbackToBuiltinTransport": "Browser CORS request failed. Temporarily fell back to the built-in request transport.",
 				"browserCorsFailedWithDisableLink": "Browser CORS request failed. [Open this provider and disable CORS]({{link}})."
 			}
@@ -387,6 +429,7 @@
 		"alwaysAllow": "Auto-approve this operation",
 		"deny": "Deny",
 		"denied": "Permission denied: {{summary}}",
+		"readonly": "This agent is read-only and cannot modify files. Attempted: {{summary}}",
 		"source": "Source",
 		"destination": "Destination",
 		"operations": {
@@ -411,8 +454,24 @@
 		},
 		"requestsTooFrequent": "Requests too frequent, plugin will resume sync at {{time}}",
 		"preparing": "📋 Preparing sync",
+		"preparation": {
+			"checkingRemote": "Checking the remote directory…",
+			"loadingState": "Reading sync state…",
+			"scanningRemote": "Scanning remote directories…",
+			"checkingChanges": "Checking remote changes…",
+			"retryingRemote": "The server is busy. Retrying in 30 seconds…",
+			"analyzing": "Analyzing file differences…",
+			"savingCache": "Saving the remote traversal cache…",
+			"traversalStats": "Scanned {{processed}} directories, {{queued}} queued, {{items}} items found",
+			"incrementalStats": "Processed {{changes}} remote changes"
+		},
 		"start": "⌛️ Starting sync",
 		"complete": "✅ Sync completed",
+		"result": {
+			"title": "Sync successful",
+			"success": "All synchronization tasks have been completed",
+			"noChanges": "There are currently no files to synchronize"
+		},
 		"completeWithFailed": "❌ Sync completed with {{failedCount}} failed tasks",
 		"failedWithError": "Sync failed with error: {{error}}",
 		"progress": "Sync progress: {{percent}}%",
@@ -462,12 +521,12 @@
 		},
 		"confirmModal": {
 			"title": "Sync confirmation",
+			"policyTitle": "Sync policy for this sync",
 			"message": "⚠️ Please note:\n\n1. Sync operation may modify or delete local files\n2. We recommend backing up important files before syncing\n3. In case of file conflicts, manual resolution may be required\n4. Initial sync will process all files and may take longer, please be patient\n\nAre you sure you want to start syncing?",
 			"confirm": "Confirm sync",
 			"cancel": "Cancel",
 			"remoteDir": "Remote directory: {{dir}}",
-			"strategy": "Sync strategy: {{strategy}}",
-			"policy": "Sync policy: {{policy}}"
+			"strategy": "Conflict strategy: {{strategy}}"
 		}
 	},
 	"taskList": {
@@ -513,6 +572,13 @@
 		"sessionDeleted": "Session deleted",
 		"exportSaved": "Session exported: {{fileName}}",
 		"exportFailed": "Failed to export session",
+		"conflictResolution": {
+			"action": "Resolve {{count}} conflict(s) with AI",
+			"prompt": "Resolve every merge conflict in the context file. Analyze both sides of each <<<<<<<, =======, and >>>>>>> block. Preserve useful, non-conflicting information from both sides, merge duplicate passages by meaning, and retain the existing Markdown structure, frontmatter, internal links, and writing style. Do not invent information that is not present in the file. If the two sides contradict each other, cannot both be true, and the file does not provide enough evidence to choose one, ask me a specific question in the chat and wait for my answer; do not modify the file or invent a compromise before I respond. Continue resolving the conflicts after receiving my answer. Remove every conflict marker when finished and verify that the result is coherent and complete. Modify only this file.",
+			"alreadyResolved": "The conflicts in this file are already resolved",
+			"modelUnavailable": "Configure a default AI provider and model first",
+			"failed": "Could not create an AI conflict-resolution session"
+		},
 		"exportDialog": {
 			"title": "Export session",
 			"description": "Export to a Markdown file in your vault.",
@@ -522,7 +588,8 @@
 		},
 		"exportRole": {
 			"user": "User",
-			"tool": "Tool"
+			"tool": "Tool",
+			"systemNotification": "System notification"
 		},
 		"exportFrontmatter": {
 			"title": "title",
@@ -531,7 +598,8 @@
 			"createdAt": "created_at",
 			"updatedAt": "updated_at",
 			"model": "model",
-			"includeToolMessages": "include_tool_messages"
+			"includeToolMessages": "include_tool_messages",
+			"pluginVersion": "plugin_version"
 		},
 		"exportMeta": {
 			"messageTime": "Time",
@@ -555,14 +623,14 @@
 				"exportAsMarkdown": "Export as Markdown",
 				"deleteSession": "Delete",
 				"cancel": "Cancel",
+				"close": "Close",
 				"selectFile": "Select File",
 				"send": "Send",
 				"stopRun": "Stop",
-				"newFragment": "New Fragment",
 				"compressContext": "Compress Context",
-				"closeTasks": "Close",
-				"cancelTask": "Cancel",
 				"copy": "Copy",
+				"runHtmlCode": "Run",
+				"showHtmlCode": "Code",
 				"deleteMessage": "Delete message",
 				"regenerateMessage": "Regenerate",
 				"recallMessage": "Recall",
@@ -578,14 +646,17 @@
 				"toolCall": "Tool call",
 				"params": "Params",
 				"result": "Result",
-				"tasks": "Tasks",
-				"currentSession": "Current session",
-				"otherSessions": "Other sessions",
 				"queuedSubmissions": "Queued Submissions",
-				"depth": "Depth",
-				"sources": "Sources",
 				"contextArea": "Context",
-				"todoList": "Todo List"
+				"reasoning": "Reasoning",
+				"todoList": "Todo List",
+				"systemNotification": "System Notification"
+			},
+			"fileChanges": {
+				"create": "Added",
+				"update": "Modified",
+				"delete": "Deleted",
+				"binary": "Binary file; text diff is unavailable"
 			},
 			"states": {
 				"empty": "Start by sending a message",
@@ -595,20 +666,27 @@
 				"processingTools": "Processing Tools",
 				"noProvider": "No provider",
 				"noModel": "No model",
-				"noTasks": "No tasks yet",
+				"taskDispatching": "Dispatching…",
+				"running": "Running",
+				"completed": "Completed",
+				"failed": "Failed",
+				"cancelled": "Cancelled",
+				"taskQueued": "Queued",
+				"taskWaiting": "Waiting for subtask",
+				"toolDenied": "Denied",
+				"toolWaitingApproval": "Waiting for approval",
+				"noSubagentMessages": "This subagent has not produced any messages yet.",
 				"copied": "Copied!",
 				"loadingContextItem": "Loading…",
-				"taskQueued": "Queued",
-				"taskRunning": "Running",
-				"taskCompleted": "Completed",
-				"taskFailed": "Failed",
-				"taskCancelled": "Cancelled",
 				"todoEmpty": "No todos"
 			},
 			"placeholders": {
 				"input": "Type a message. Enter to send, Shift+Enter for newline"
 			},
 			"dialogs": {
+				"subagentTimeline": {
+					"title": "Subagent timeline"
+				},
 				"deleteSession": {
 					"title": "Delete Session",
 					"message": "Delete this session permanently? This action cannot be undone.",
@@ -621,11 +699,6 @@
 					"toolConfirm": "This will delete this tool result and remove the corresponding tool call from the AI message. This action cannot be undone.",
 					"toolRestoreWarning": "After deletion, these file changes can no longer be restored by recalling the message.",
 					"confirm": "Delete"
-				},
-				"newFragment": {
-					"title": "New Fragment",
-					"message": "This starts a fresh stretch of chat in the current conversation. Earlier messages are kept, but the AI will rely less on older parts of the conversation.",
-					"confirm": "Create fragment"
 				},
 				"compressContext": {
 					"title": "Compress Context",
@@ -647,6 +720,13 @@
 					"restoreConfirm": "Recall and restore files",
 					"onlyConfirm": "Recall only"
 				}
+			},
+			"mcp": {
+				"button": "MCP servers",
+				"title": "MCP servers for this session",
+				"empty": "No MCP servers configured",
+				"toolCount": "{{count}} tools",
+				"notConnected": "not connected"
 			}
 		},
 		"requestFailed": "Request failed",
@@ -658,13 +738,13 @@
 			"unsupportedAttachmentType": "Unsupported file type: {{name}}",
 			"unknownTool": "Unknown tool: {{name}}",
 			"toolFieldRequired": "{{field}} is required",
+			"toolFieldTooLong": "{{field}} is too long",
 			"fileNotFound": "File not found: {{path}}",
 			"notFile": "Path is not a file: {{path}}",
 			"fileNotRead": "Editing failed — read {{path}} at least once before editing it.",
-			"editMatchNotFound": "Exact text to replace was not found in the file.",
-			"editMatchNotUnique": "Exact text to replace must match exactly once in the file.",
 			"sessionNotFound": "The target session no longer exists",
-			"taskDepthExceeded": "The task depth limit has been reached",
+			"corruptSessionFile": "A session file is corrupted and was skipped: {{path}}",
+			"agentNotDispatchable": "Agent type cannot be dispatched: {{agentType}}",
 			"taskSessionUnavailable": "The task session or model configuration is no longer available"
 		}
 	},

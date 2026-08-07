@@ -1,21 +1,37 @@
-import { describe, expect, it } from 'vitest'
-import { TFile, TFolder, type App, type Vault } from 'obsidian'
-import { createAITools } from '~/ai/tools/tools'
 import {
-	createFragmentReadTracker,
-	type ReadTracker,
-} from '~/ai/tools/file-operation'
-import type {
-	AIToolCall,
-	AIToolExecutionContext,
-	AIToolDefinition,
-} from '~/ai/core/types'
+	asSchema,
+	type FlexibleSchema,
+	type ToolCallPart,
+	type ToolSet,
+} from 'ai'
+import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
+import { TFile, TFolder, type App, type Vault } from 'obsidian'
+import { describe, expect, it } from 'vitest'
+import {
+	EXPLORER_AGENT_ID,
+	filterToolsForAgent,
+	getAgentDefinition,
+	MASTER_AGENT_ID,
+} from '~/ai/chat/agents/registry'
 import type { ChatFragment, ChatSession } from '~/ai/chat/domain'
-import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
+import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
-import { SessionStore } from '~/ai/chat/session/session-store'
+import { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
+import { migrateLegacySession } from '~/ai/chat/session/session-migration'
+import { SessionsFileBackend } from '~/ai/chat/session/session-files'
+import {
+	SessionStore,
+	type SessionLegacyStore,
+} from '~/ai/chat/session/session-store'
+import { createFragmentReadTracker } from '~/ai/tools/file-operation'
+import { createAITools } from '~/ai/tools/tools'
+import {
+	createViewImageAttachmentMessage,
+	InMemoryViewImageAttachmentRegistry,
+} from '~/ai/tools/view-image-attachments'
+import i18n from '~/i18n'
 
 interface MockFile {
 	path: string
@@ -23,28 +39,7 @@ interface MockFile {
 }
 
 function createMockApp(files: MockFile[]) {
-	const store = new Map<string, string>()
-	for (const f of files) {
-		store.set(f.path, f.content)
-	}
-
-	const vault = {
-		getAbstractFileByPath(path: string) {
-			if (!store.has(path)) return null
-			return Object.assign(new TFile(), {
-				path,
-				name: path.split('/').pop() ?? path,
-				stat: { size: store.get(path)!.length, mtime: 0 },
-			})
-		},
-		async cachedRead(file: { path: string }) {
-			return store.get(file.path) ?? ''
-		},
-		async modify(file: { path: string }, content: string) {
-			store.set(file.path, content)
-		},
-	} as unknown as Vault
-
+	const { vault, store } = createMockVaultForExecutor(files)
 	return {
 		app: { vault } as unknown as App,
 		store,
@@ -107,6 +102,15 @@ function createMockVaultForExecutor(files: MockFile[]) {
 		async modify(file: { path: string }, content: string) {
 			store.set(file.path, content)
 		},
+		async delete(file: { path: string }) {
+			store.delete(file.path)
+		},
+		async rename(file: { path: string }, path: string) {
+			const content = store.get(file.path)
+			if (content === undefined) throw new Error(`missing: ${file.path}`)
+			store.delete(file.path)
+			store.set(path, content)
+		},
 		async createBinary(path: string, data: ArrayBuffer) {
 			store.set(path, new TextDecoder().decode(data))
 		},
@@ -147,22 +151,18 @@ function createMockVaultForExecutor(files: MockFile[]) {
 	}
 }
 
-function findTool(tools: AIToolDefinition[], name: string) {
-	const tool = tools.find((t) => t.name === name)
+function findTool(tools: ToolSet, name: string) {
+	const tool = tools[name]
 	if (!tool) throw new Error(`tool not found: ${name}`)
 	return tool
 }
 
 function makeContext(
+	app: App,
 	session: ChatSession,
-	readTracker?: ReadTracker,
-): AIToolExecutionContext {
-	return {
-		session,
-		depth: 0,
-		maxDepth: 2,
-		readTracker,
-	}
+	extra: Record<string, unknown> = {},
+) {
+	return { app, session, agentId: 'master', ...extra }
 }
 
 function makeSession(fragment?: ChatFragment): ChatSession {
@@ -172,28 +172,245 @@ function makeSession(fragment?: ChatFragment): ChatSession {
 		updatedAt: 0,
 		messages: [],
 	}
-	return {
+	return migrateLegacySession({
 		id: 's1',
 		createdAt: 0,
 		updatedAt: 0,
 		fragments: [frag],
 		activeFragmentId: frag.id,
-		tasks: [],
-	}
+	})
 }
 
-async function callEditFile(
-	app: App,
-	params: { path: string; oldText: string; newText: string },
-	context: AIToolExecutionContext,
-) {
-	const tools = createAITools(app, { permissionGuard: undefined })
-	const tool = findTool(tools, 'edit_file')
-	const parsed = tool.inputSchema.parse(params)
-	return tool.execute(parsed, context)
+async function callApplyPatch(patch: string, context: unknown) {
+	const tool = findTool(createAITools(), 'apply_patch')
+	return executeToolForTest(tool, { patch }, context)
 }
 
-describe('edit_file read-gate', () => {
+async function executeToolForTest(
+	tool: ToolSet[string],
+	input: unknown,
+	context: unknown,
+): Promise<unknown> {
+	if (!tool.execute) throw new Error('Expected executable tool')
+	return (await tool.execute(input, {
+		toolCallId: 'test-tool-call',
+		messages: [],
+		context,
+	})) as unknown
+}
+
+describe('tool registration', () => {
+	it('converts every registered tool schema to JSON Schema', async () => {
+		const tools = createAITools({
+			allowSpawn: true,
+			enableTodoWrite: true,
+			enableViewImage: true,
+		})
+		for (const [name, registeredTool] of Object.entries(tools)) {
+			expect(
+				await asSchema(registeredTool.inputSchema as FlexibleSchema<unknown>)
+					.jsonSchema,
+				name,
+			).toBeDefined()
+		}
+	})
+
+	it('does not register a dedicated use_skill tool', () => {
+		expect('use_skill' in createAITools()).toBe(false)
+	})
+
+	it('does not register view_image when image input is unavailable', () => {
+		expect('view_image' in createAITools()).toBe(false)
+	})
+
+	it('registers view_image as a tool result with an in-memory model attachment', async () => {
+		const { app } = createMockApp([
+			{ path: '媒体/示例.png', content: 'abc' },
+			{ path: 'images/example.png', content: 'def' },
+			{
+				path: '.agents/nutstore-sync/tmp/mcp/example/image.png',
+				content: 'ghi',
+			},
+		])
+		const tool = findTool(
+			createAITools({ enableViewImage: true }),
+			'view_image',
+		)
+		const attachments = new InMemoryViewImageAttachmentRegistry()
+		const output = await executeToolForTest(
+			tool,
+			{ path: '媒体/示例.png' },
+			makeContext(app, makeSession(), {
+				scratch: new InMemoryFs(),
+				viewImageAttachments: attachments,
+			}),
+		)
+
+		expect(output).toEqual({
+			path: '/vault/媒体/示例.png',
+			filename: '示例.png',
+			mediaType: 'image/png',
+		})
+		expect(
+			await tool.toModelOutput?.({
+				toolCallId: 'view-image-call',
+				input: { path: '/vault/媒体/示例.png' },
+				output,
+			}),
+		).toEqual({
+			type: 'text',
+			value: 'Loaded image 示例.png from /vault/媒体/示例.png.',
+		})
+		expect(
+			attachments.takeUninjected([
+				{
+					type: 'tool-call',
+					toolCallId: 'test-tool-call',
+					toolName: 'view_image',
+					input: { path: '媒体/示例.png' },
+				},
+			]),
+		).toEqual([
+			{
+				type: 'file',
+				filename: '示例.png',
+				mediaType: 'image/png',
+				data: { type: 'data', data: new Uint8Array([97, 98, 99]) },
+			},
+		])
+		expect(
+			await executeToolForTest(
+				tool,
+				{ path: '/vault/images/example.png' },
+				makeContext(app, makeSession(), {
+					scratch: new InMemoryFs(),
+					viewImageAttachments: attachments,
+				}),
+			),
+		).toMatchObject({
+			path: '/vault/images/example.png',
+			filename: 'example.png',
+		})
+		expect(
+			await executeToolForTest(
+				tool,
+				{ path: '/tmp/mcp/example/image.png' },
+				makeContext(app, makeSession(), {
+					scratch: new InMemoryFs(),
+					viewImageAttachments: attachments,
+				}),
+			),
+		).toMatchObject({
+			path: '/tmp/mcp/example/image.png',
+			filename: 'image.png',
+		})
+	})
+
+	it('keeps image attachments in tool-call order and injects each once', () => {
+		const attachments = new InMemoryViewImageAttachmentRegistry()
+		attachments.register('second-call', {
+			type: 'file',
+			data: { type: 'data', data: new Uint8Array([2]) },
+			filename: '第二张.png',
+			mediaType: 'image/png',
+		})
+		attachments.register('first-call', {
+			type: 'file',
+			data: { type: 'data', data: new Uint8Array([1]) },
+			filename: 'first.png',
+			mediaType: 'image/png',
+		})
+		const toolCalls = [
+			{
+				type: 'tool-call' as const,
+				toolCallId: 'first-call',
+				toolName: 'view_image',
+				input: {},
+			},
+			{
+				type: 'tool-call' as const,
+				toolCallId: 'second-call',
+				toolName: 'view_image',
+				input: {},
+			},
+		]
+		const files = attachments.takeUninjected(toolCalls)
+
+		expect(files.map((file) => file.filename)).toEqual([
+			'first.png',
+			'第二张.png',
+		])
+		expect(attachments.takeUninjected(toolCalls)).toEqual([])
+		expect(createViewImageAttachmentMessage(files)).toMatchObject({
+			role: 'user',
+			content: [
+				{ type: 'text' },
+				{ type: 'file', filename: 'first.png' },
+				{ type: 'text' },
+				{ type: 'file', filename: '第二张.png' },
+			],
+		})
+	})
+
+	it('registers only the asynchronous task dispatch tool for subagents', async () => {
+		const dispatched: unknown[] = []
+		const tools = createAITools()
+		const tool = findTool(tools, 'task')
+		const session = makeSession()
+		const context = {
+			session,
+			agentId: 'caller-agent',
+			dispatchTask: async (params: unknown) => {
+				dispatched.push(params)
+				return {
+					taskId: 'task-example',
+					subagentType: EXPLORER_AGENT_ID,
+					status: 'dispatched' as const,
+				}
+			},
+		}
+
+		const output = await executeToolForTest(
+			tool,
+			{
+				subagent_type: EXPLORER_AGENT_ID,
+				prompt: 'Inspect the vault',
+			},
+			context,
+		)
+
+		expect('spawn' in tools).toBe(false)
+		expect('background_output' in tools).toBe(false)
+		expect(dispatched).toEqual([
+			{
+				prompt: 'Inspect the vault',
+				subagentType: EXPLORER_AGENT_ID,
+				callerAgentId: 'caller-agent',
+				sessionId: session.id,
+			},
+		])
+		expect(output).toEqual({
+			taskId: 'task-example',
+			subagentType: EXPLORER_AGENT_ID,
+			status: 'dispatched',
+		})
+		expect(
+			await tool.toModelOutput?.({
+				toolCallId: 'task-call',
+				input: {
+					subagent_type: EXPLORER_AGENT_ID,
+					prompt: 'Inspect the vault',
+				},
+				output,
+			}),
+		).toEqual({
+			type: 'text',
+			value: expect.stringContaining('Task dispatched. Task ID: task-example.'),
+		})
+	})
+})
+
+describe('apply_patch read-gate', () => {
 	it('treats a vault/ prefix without a leading slash as a vault-relative folder', async () => {
 		const { app, store } = createMockApp([
 			{ path: 'vault/notes/x.md', content: 'nested target' },
@@ -209,17 +426,24 @@ describe('edit_file read-gate', () => {
 		const previousBatch = createFragmentReadTracker(fragment)
 		previousBatch.markRead('vault/notes/x.md')
 
-		const result = await callEditFile(
-			app,
-			{
-				path: 'vault/notes/x.md',
-				oldText: 'nested',
-				newText: 'updated',
-			},
-			makeContext(session, createFragmentReadTracker(fragment)),
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: vault/notes/x.md',
+				'@@',
+				'-nested target',
+				'+updated target',
+				'*** End Patch',
+			].join('\n'),
+			makeContext(app, session, {
+				readTracker: createFragmentReadTracker(fragment),
+			}),
 		)
 
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({
+			applied: true,
+			files: ['vault/notes/x.md'],
+		})
 		expect(store.get('vault/notes/x.md')).toBe('updated target')
 		expect(store.get('notes/x.md')).toBe('root target')
 	})
@@ -236,12 +460,18 @@ describe('edit_file read-gate', () => {
 		}
 		const session = makeSession(fragment)
 		const tracker = createFragmentReadTracker(fragment)
-		const context = makeContext(session, tracker)
+		const context = makeContext(app, session, { readTracker: tracker })
 
 		await expect(
-			callEditFile(
-				app,
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
@@ -263,15 +493,21 @@ describe('edit_file read-gate', () => {
 		batch1Tracker.markRead('notes/x.md')
 
 		const batch2Tracker = createFragmentReadTracker(fragment)
-		const context = makeContext(session, batch2Tracker)
+		const context = makeContext(app, session, { readTracker: batch2Tracker })
 
-		const result = await callEditFile(
-			app,
-			{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/x.md',
+				'@@',
+				'-hello world',
+				'+hi world',
+				'*** End Patch',
+			].join('\n'),
 			context,
 		)
 
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({ applied: true, files: ['notes/x.md'] })
 		expect(store.get('notes/x.md')).toBe('hi world')
 	})
 
@@ -291,15 +527,21 @@ describe('edit_file read-gate', () => {
 		batch1Tracker.markRead('notes/x.md')
 
 		const batch2Tracker = createFragmentReadTracker(fragment)
-		const context = makeContext(session, batch2Tracker)
+		const context = makeContext(app, session, { readTracker: batch2Tracker })
 
-		const result = await callEditFile(
-			app,
-			{ path: '/vault/notes/x.md', oldText: 'hello', newText: 'hi' },
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: /vault/notes/x.md',
+				'@@',
+				'-hello world',
+				'+hi world',
+				'*** End Patch',
+			].join('\n'),
 			context,
 		)
 
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({ applied: true, files: ['notes/x.md'] })
 		expect(store.get('notes/x.md')).toBe('hi world')
 	})
 
@@ -320,21 +562,26 @@ describe('edit_file read-gate', () => {
 			updatedAt: 1,
 			messages: [],
 		}
-		const session: ChatSession = {
+		const session = migrateLegacySession({
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
 			fragments: [oldFragment, newFragment],
 			activeFragmentId: 'f2',
-			tasks: [],
-		}
+		})
 		const tracker = createFragmentReadTracker(newFragment)
-		const context = makeContext(session, tracker)
+		const context = makeContext(app, session, { readTracker: tracker })
 
 		await expect(
-			callEditFile(
-				app,
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
@@ -345,18 +592,24 @@ describe('edit_file read-gate', () => {
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
 		const session = makeSession()
-		const context = makeContext(session, undefined)
+		const context = makeContext(app, session)
 
 		await expect(
-			callEditFile(
-				app,
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
 	})
 
-	it('blocks edit when bash cat and edit_file share the same batch tracker (race guard)', async () => {
+	it('blocks apply_patch when bash cat shares the same batch tracker', async () => {
 		const { app } = createMockApp([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -370,30 +623,338 @@ describe('edit_file read-gate', () => {
 
 		const sharedTracker = createFragmentReadTracker(fragment)
 		sharedTracker.markRead('notes/x.md')
-		const context = makeContext(session, sharedTracker)
+		const context = makeContext(app, session, { readTracker: sharedTracker })
 
 		await expect(
-			callEditFile(
-				app,
-				{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 				context,
 			),
 		).rejects.toThrow(/read .*notes\/x\.md/i)
 
 		expect(fragment.readVaultPaths).toEqual(['notes/x.md'])
 
-		const nextBatchTracker = createFragmentReadTracker(fragment)
-		const nextContext = makeContext(session, nextBatchTracker)
-		const result = await callEditFile(
-			app,
-			{ path: 'notes/x.md', oldText: 'hello', newText: 'hi' },
-			nextContext,
+		sharedTracker.resetSnapshot()
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/x.md',
+				'@@',
+				'-hello world',
+				'+hi world',
+				'*** End Patch',
+			].join('\n'),
+			context,
 		)
-		expect(result.result).toEqual({ replaced: true })
+		expect(result).toEqual({ applied: true, files: ['notes/x.md'] })
+	})
+})
+
+describe('apply_patch file operations', () => {
+	it('rejects a file header without the Codex colon syntax', async () => {
+		const { app } = createMockApp([
+			{
+				path: '示例/协作记录.md',
+				content:
+					'<<<<<<< 本地版本\n本地内容\n=======\n远端内容\n>>>>>>> 远端版本\n',
+			},
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('示例/协作记录.md')
+
+		await expect(
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File /vault/示例/协作记录.md',
+					'@@',
+					'-本地内容',
+					'+合并内容',
+					'*** End Patch',
+				].join('\n'),
+				makeContext(app, makeSession(fragment), {
+					readTracker: createFragmentReadTracker(fragment),
+				}),
+			),
+		).rejects.toThrow(
+			'Invalid patch: unexpected line "*** Update File /vault/示例/协作记录.md"',
+		)
+	})
+
+	it('accepts unified numeric hunk headers when resolving Chinese conflicts', async () => {
+		const { app, store } = createMockApp([
+			{
+				path: 'notes/conflict.md',
+				content: [
+					'# 协作记录',
+					'',
+					'## 安排',
+					'',
+					'<<<<<<< 本地版本',
+					'Local schedule',
+					'=======',
+					'远端安排',
+					'>>>>>>> 远端版本',
+					'',
+					'## 结论',
+					'',
+				].join('\n'),
+			},
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('notes/conflict.md')
+
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/conflict.md',
+				'@@ -20,9 +20,5 @@',
+				' ## 安排',
+				' ',
+				'-<<<<<<< 本地版本',
+				' Local schedule',
+				'-=======',
+				'-远端安排',
+				'->>>>>>> 远端版本',
+				' ',
+				' ## 结论',
+				'*** End Patch',
+			].join('\n'),
+			makeContext(app, makeSession(fragment), {
+				readTracker: createFragmentReadTracker(fragment),
+			}),
+		)
+
+		expect(result).toEqual({
+			applied: true,
+			files: ['notes/conflict.md'],
+		})
+		expect(store.get('notes/conflict.md')).toBe(
+			'# 协作记录\n\n## 安排\n\nLocal schedule\n\n## 结论\n',
+		)
+	})
+
+	it('applies bilingual multi-hunk updates, moves, additions, and deletions', async () => {
+		const { app, store } = createMockApp([
+			{
+				path: 'notes/source.md',
+				content: 'English line\n中性内容\n中文行\nEnding line\n',
+			},
+			{ path: 'notes/remove.md', content: 'Temporary note\n临时笔记\n' },
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('notes/source.md')
+		previousBatch.markRead('notes/remove.md')
+		const metadata: unknown[] = []
+
+		const result = await callApplyPatch(
+			[
+				'*** Begin Patch',
+				'*** Update File: notes/source.md',
+				'*** Move to: archive/source.md',
+				'@@',
+				'-English line',
+				'+Updated line',
+				' 中性内容',
+				'@@',
+				'-中文行',
+				'+更新行',
+				' Ending line',
+				'*** Add File: notes/new.md',
+				'+Sample note',
+				'+示例笔记',
+				'*** Delete File: notes/remove.md',
+				'*** End Patch',
+			].join('\n'),
+			makeContext(app, makeSession(fragment), {
+				readTracker: createFragmentReadTracker(fragment),
+				recordMetadata: (_toolCallId: string, value: unknown) => {
+					metadata.push(value)
+				},
+			}),
+		)
+
+		expect(result).toEqual({
+			applied: true,
+			files: [
+				'notes/source.md',
+				'archive/source.md',
+				'notes/new.md',
+				'notes/remove.md',
+			],
+		})
+		expect(store.has('notes/source.md')).toBe(false)
+		expect(store.get('archive/source.md')).toBe(
+			'Updated line\n中性内容\n更新行\nEnding line\n',
+		)
+		expect(store.get('notes/new.md')).toBe('Sample note\n示例笔记\n')
+		expect(store.has('notes/remove.md')).toBe(false)
+		expect(metadata).toHaveLength(1)
+	})
+
+	it('does not write any file when a later bilingual hunk fails validation', async () => {
+		const { app, store } = createMockApp([
+			{ path: 'notes/first.md', content: 'First line\n第一行\n' },
+			{ path: 'notes/second.md', content: 'Second line\n第二行\n' },
+		])
+		const fragment: ChatFragment = {
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		}
+		const previousBatch = createFragmentReadTracker(fragment)
+		previousBatch.markRead('notes/first.md')
+		previousBatch.markRead('notes/second.md')
+
+		await expect(
+			callApplyPatch(
+				[
+					'*** Begin Patch',
+					'*** Update File: notes/first.md',
+					'@@',
+					'-First line',
+					'+Updated line',
+					' 第一行',
+					'*** Update File: notes/second.md',
+					'@@',
+					'-Missing line',
+					'+缺失行',
+					'*** End Patch',
+				].join('\n'),
+				makeContext(app, makeSession(fragment), {
+					readTracker: createFragmentReadTracker(fragment),
+				}),
+			),
+		).rejects.toThrow(/hunk context was not found/)
+
+		expect(store.get('notes/first.md')).toBe('First line\n第一行\n')
+		expect(store.get('notes/second.md')).toBe('Second line\n第二行\n')
+	})
+})
+
+describe('update_session_title tool', () => {
+	it('records the proposed title via recordMetadata and echoes it back', async () => {
+		const tools = createAITools()
+		const tool = findTool(tools, 'update_session_title')
+		const recorded: Array<{ toolCallId: string; metadata: unknown }> = []
+		const context = {
+			recordMetadata: (toolCallId: string, metadata: unknown) => {
+				recorded.push({ toolCallId, metadata })
+			},
+		}
+
+		const output = await executeToolForTest(
+			tool,
+			{ title: 'Refactor vault sync' },
+			context,
+		)
+
+		expect(output).toEqual({ updated: true, title: 'Refactor vault sync' })
+		expect(recorded).toEqual([
+			{
+				toolCallId: 'test-tool-call',
+				metadata: { sessionTitle: 'Refactor vault sync' },
+			},
+		])
+	})
+
+	it('trims surrounding whitespace before recording the title', async () => {
+		const tools = createAITools()
+		const tool = findTool(tools, 'update_session_title')
+		const recorded: string[] = []
+		const context = {
+			recordMetadata: (_id: string, metadata: { sessionTitle?: string }) => {
+				recorded.push(metadata.sessionTitle ?? '')
+			},
+		}
+
+		const output = await executeToolForTest(
+			tool,
+			{ title: '  padded title  ' },
+			context,
+		)
+
+		expect(output).toEqual({ updated: true, title: 'padded title' })
+		expect(recorded).toEqual(['padded title'])
+	})
+
+	it('produces a concise model-facing output', async () => {
+		const tools = createAITools()
+		const tool = findTool(tools, 'update_session_title')
+		const context = {}
+
+		const output = await executeToolForTest(
+			tool,
+			{ title: 'Plan weekly review' },
+			context,
+		)
+
+		expect(
+			await tool.toModelOutput?.({
+				toolCallId: 'tc',
+				input: { title: 'Plan weekly review' },
+				output,
+			}),
+		).toEqual({
+			type: 'text',
+			value: 'Session title updated to "Plan weekly review".',
+		})
 	})
 })
 
 describe('note_neighborhood path resolution', () => {
+	it('rejects a folder path with a clear error', async () => {
+		const folder = Object.assign(new TFolder(), {
+			path: 'projects',
+			name: 'projects',
+			children: [],
+		})
+		const app = {
+			vault: {
+				getAbstractFileByPath: (path: string) =>
+					path === folder.path ? folder : null,
+			},
+			metadataCache: {
+				getFirstLinkpathDest: () => null,
+			},
+		} as unknown as App
+		const tool = findTool(createAITools(), 'note_neighborhood')
+
+		await expect(
+			executeToolForTest(
+				tool,
+				{ note: folder.path, depth: 1 },
+				makeContext(app, makeSession()),
+			),
+		).rejects.toThrow(i18n.t('chatbox.errors.notFile', { path: folder.path }))
+	})
+
 	it('resolves an ambiguous link path relative to the current note', async () => {
 		const { app } = createMockApp([
 			{ path: 'projects/a/Shared.md', content: 'A' },
@@ -433,16 +994,42 @@ describe('note_neighborhood path resolution', () => {
 				},
 			],
 		}
-		const tool = findTool(createAITools(app), 'note_neighborhood')
+		const tool = findTool(createAITools(), 'note_neighborhood')
 
-		const result = await tool.execute(
-			tool.inputSchema.parse({ note: 'Shared', depth: 1 }),
-			makeContext(makeSession(fragment)),
+		const result = await executeToolForTest(
+			tool,
+			{ note: 'Shared', depth: 1 },
+			makeContext(app, makeSession(fragment)),
 		)
 
-		expect(result.result).toMatchObject({ root: 'projects/b/Shared.md' })
+		expect(result).toMatchObject({ root: 'projects/b/Shared.md' })
 	})
 })
+
+function buildTestSessionStore(
+	state: ChatState,
+	runtimeStates: RuntimeStates,
+	selection: Selection,
+) {
+	const backend = {
+		hasAnySessionFiles: async () => false,
+		listSessionIds: async () => [],
+		readSessionFile: async () => {
+			throw new Error('unused backend')
+		},
+		writeSessionFile: async () => undefined,
+		deleteSessionFile: async () => undefined,
+		readMetaFile: async () => null,
+		writeMetaFile: async () => undefined,
+	} as unknown as SessionsFileBackend
+	const legacy = {
+		listSessionKeys: async () => [],
+		getSession: async () => undefined,
+		unsetSession: async () => undefined,
+		getMeta: async () => ({ meta: null, index: [] }),
+	} as unknown as SessionLegacyStore
+	return new SessionStore(state, runtimeStates, selection, backend, legacy)
+}
 
 describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 	it('preserves readVaultPaths through normalizeSession', () => {
@@ -458,27 +1045,20 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 		const selection = {
 			sanitizeSessionSelection: () => false,
 		} as unknown as Selection
-		const store = new SessionStore(state, runtimeStates, selection)
+		const store = buildTestSessionStore(state, runtimeStates, selection)
 
+		const master = createEmptyMasterAgent(0)
+		master.readVaultPaths = ['notes/a.md', 'notes/b.md']
 		const session: ChatSession = {
+			schemaVersion: 2,
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
-			fragments: [
-				{
-					id: 'f1',
-					createdAt: 0,
-					updatedAt: 0,
-					messages: [],
-					readVaultPaths: ['notes/a.md', 'notes/b.md'],
-				},
-			],
-			activeFragmentId: 'f1',
-			tasks: [],
+			subagents: { master },
 		}
 
 		const normalized = store.normalizeSession(session)
-		expect(normalized.fragments[0].readVaultPaths).toEqual([
+		expect(normalized.subagents.master.readVaultPaths).toEqual([
 			'notes/a.md',
 			'notes/b.md',
 		])
@@ -497,83 +1077,23 @@ describe('normalizeSession preserves readVaultPaths (rehydration)', () => {
 		const selection = {
 			sanitizeSessionSelection: () => false,
 		} as unknown as Selection
-		const store = new SessionStore(state, runtimeStates, selection)
+		const store = buildTestSessionStore(state, runtimeStates, selection)
 
 		const session: ChatSession = {
+			schemaVersion: 2,
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
-			fragments: [
-				{
-					id: 'f1',
-					createdAt: 0,
-					updatedAt: 0,
-					messages: [],
-				},
-			],
-			activeFragmentId: 'f1',
-			tasks: [],
+			subagents: { master: createEmptyMasterAgent(0) },
 		}
 
 		const normalized = store.normalizeSession(session)
-		expect(normalized.fragments[0].readVaultPaths).toBeUndefined()
+		expect(normalized.subagents.master.readVaultPaths).toBeUndefined()
 	})
 })
 
-describe('bash tool UTF-8 handling', () => {
-	it('returns decoded UTF-8 text without project-level re-decoding', async () => {
-		const { vault, store } = createMockVaultForExecutor([
-			{ path: 'notes/source.md', content: '中文测试\n' },
-		])
-		const app = { vault } as unknown as App
-		const tools = createAITools(app, { permissionGuard: undefined })
-		const tool = findTool(tools, 'bash')
-		const session = makeSession()
-
-		const result = await tool.execute(
-			tool.inputSchema.parse({
-				script:
-					'cat /vault/notes/source.md > /vault/notes/copy.md && cat /vault/notes/copy.md',
-			}),
-			makeContext(session),
-		)
-
-		expect(result.result).toBe('中文测试\n\n\n')
-		expect(store.get('notes/copy.md')).toBe('中文测试\n')
-	})
-
-	it('writes oversized output to a readable temporary file', async () => {
-		const content = 'x'.repeat(25 * 1024)
-		const { vault } = createMockVaultForExecutor([
-			{ path: 'notes/large.md', content },
-		])
-		const app = { vault } as unknown as App
-		const tool = findTool(createAITools(app), 'bash')
-		const session = makeSession()
-
-		const result = await tool.execute(
-			tool.inputSchema.parse({ script: 'cat /vault/notes/large.md' }),
-			makeContext(session),
-		)
-
-		expect(result.result).toEqual(expect.stringContaining('too long'))
-		const outputPath = String(result.result).match(
-			/\/tmp\/bash-output-[^\s]+\.txt/,
-		)?.[0]
-		expect(outputPath).toBeDefined()
-
-		const readBack = await tool.execute(
-			tool.inputSchema.parse({ script: `wc -c ${outputPath}` }),
-			makeContext(session),
-		)
-		expect(readBack.result).toEqual(
-			expect.stringContaining(String(content.length + 2)),
-		)
-	})
-})
-
-describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
-	function makeToolExecutor() {
+describe('normalizeSession preserves disabledMcpServers (rehydration)', () => {
+	function makeStore() {
 		const state = {
 			loadedSessions: new Map(),
 			sessionIndex: [],
@@ -583,26 +1103,150 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 			chatModalHostEl: null,
 		} as unknown as ChatState
 		const runtimeStates = new RuntimeStates(state)
-		const plugin = {} as never
-		const executor = new ToolExecutor(plugin, state, runtimeStates)
+		const selection = {
+			sanitizeSessionSelection: () => false,
+		} as unknown as Selection
+		return buildTestSessionStore(state, runtimeStates, selection)
+	}
+
+	it('preserves disabledMcpServers through normalizeSession', () => {
+		const store = makeStore()
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 's1',
+			createdAt: 0,
+			updatedAt: 0,
+			disabledMcpServers: ['notes-server', '翻译工具'],
+			subagents: { master: createEmptyMasterAgent(0) },
+		}
+
+		const normalized = store.normalizeSession(session)
+		expect(normalized.disabledMcpServers).toEqual(['notes-server', '翻译工具'])
+	})
+
+	it('drops invalid disabledMcpServers values through normalizeSession', () => {
+		const store = makeStore()
+		const session = {
+			schemaVersion: 2,
+			id: 's1',
+			createdAt: 0,
+			updatedAt: 0,
+			disabledMcpServers: ['valid-server', 42],
+			subagents: { master: createEmptyMasterAgent(0) },
+		} as unknown as ChatSession
+
+		const normalized = store.normalizeSession(session)
+		expect(normalized.disabledMcpServers).toEqual(['valid-server'])
+	})
+
+	it('preserves undefined disabledMcpServers through normalizeSession', () => {
+		const store = makeStore()
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 's1',
+			createdAt: 0,
+			updatedAt: 0,
+			subagents: { master: createEmptyMasterAgent(0) },
+		}
+
+		const normalized = store.normalizeSession(session)
+		expect(normalized.disabledMcpServers).toBeUndefined()
+	})
+})
+
+describe('bash tool UTF-8 handling', () => {
+	it('returns decoded UTF-8 text without project-level re-decoding', async () => {
+		const { vault, store } = createMockVaultForExecutor([
+			{ path: 'notes/source.md', content: '中文测试\n' },
+		])
+		const app = { vault } as unknown as App
+		const tools = createAITools()
+		const tool = findTool(tools, 'bash')
+		const session = makeSession()
+
+		const result = await executeToolForTest(
+			tool,
+			{
+				script:
+					'cat /vault/notes/source.md > /vault/notes/copy.md && cat /vault/notes/copy.md',
+			},
+			makeContext(app, session, { scratch: new InMemoryFs() }),
+		)
+
+		expect(result).toBe('中文测试\n\n\n')
+		expect(store.get('notes/copy.md')).toBe('中文测试\n')
+	})
+
+	it('writes oversized output to a readable temporary file', async () => {
+		const content = 'x'.repeat(25 * 1024)
+		const { vault } = createMockVaultForExecutor([
+			{ path: 'notes/large.md', content },
+		])
+		const app = { vault } as unknown as App
+		const tool = findTool(createAITools(), 'bash')
+		const session = makeSession()
+
+		const scratch = new InMemoryFs()
+		const result = await executeToolForTest(
+			tool,
+			{ script: 'cat /vault/notes/large.md' },
+			makeContext(app, session, { scratch }),
+		)
+
+		expect(result).toEqual(expect.stringContaining('too long'))
+		const outputPath = String(result).match(/\/tmp\/bash_[^\s]+\.txt/)?.[0]
+		expect(outputPath).toBeDefined()
+
+		const readBack = await executeToolForTest(
+			tool,
+			{ script: `wc -c ${outputPath}` },
+			makeContext(app, session, { scratch }),
+		)
+		expect(readBack).toEqual(
+			expect.stringContaining(String(content.length + 2)),
+		)
+	})
+})
+
+describe('ToolExecutor SDK tool-round read-gate wiring', () => {
+	function makeToolExecutor(app = {} as App) {
+		const state = {
+			loadedSessions: new Map(),
+			sessionIndex: [],
+			runtimeBySessionId: new Map(),
+			autoApproveRequestsBySessionId: new Map(),
+			deletedSessionIds: new Set(),
+			chatModalHostEl: null,
+		} as unknown as ChatState
+		const runtimeStates = new RuntimeStates(state)
+		const mcpService = {
+			refreshIfChanged: async () => {},
+			getToolsForSession: () => ({}),
+		}
+		const executor = new ToolExecutor(
+			app,
+			() => ({ yolo: false }) as never,
+			state,
+			runtimeStates,
+			mcpService as never,
+		)
 		return { executor, runtimeStates, state }
 	}
 
 	function makeSession(fragment: ChatFragment): ChatSession {
-		return {
+		return migrateLegacySession({
 			id: 's1',
 			createdAt: 0,
 			updatedAt: 0,
 			fragments: [fragment],
 			activeFragmentId: fragment.id,
-			tasks: [],
-		}
+		})
 	}
 
 	function toolCall(
 		toolName: string,
 		input: Record<string, unknown>,
-	): AIToolCall {
+	): ToolCallPart {
 		return {
 			type: 'tool-call',
 			toolCallId: `call_${toolName}_${Math.random()}`,
@@ -611,7 +1255,26 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 		}
 	}
 
-	it('blocks edit_file in the same resolveToolCalls batch as bash cat (race guard at executor level)', async () => {
+	async function executeRound(
+		executor: ToolExecutor,
+		app: App,
+		scratch: IFileSystem,
+		toolCalls: ToolCallPart[],
+		tools: ToolSet,
+		session: ChatSession,
+	) {
+		const readTracker = executor.prepareReadTracker(session, 'master')
+		const context = makeContext(app, session, { readTracker, scratch })
+		return Promise.allSettled(
+			toolCalls.map((call) => {
+				const tool = tools[call.toolName]
+				if (!tool) throw new Error(`Missing tool: ${call.toolName}`)
+				return executeToolForTest(tool, call.input, context)
+			}),
+		)
+	}
+
+	it('blocks apply_patch in the same SDK tool round as bash cat', async () => {
 		const { vault, store } = createMockVaultForExecutor([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -623,37 +1286,41 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 			messages: [],
 		}
 		const session = makeSession(fragment)
-		const { executor } = makeToolExecutor()
-		executor['plugin'] = { app } as never
+		const { executor } = makeToolExecutor(app)
 
-		const tools = createAITools(app, { permissionGuard: undefined })
+		const tools = createAITools()
+		const scratch = new InMemoryFs()
 
-		const toolCalls: AIToolCall[] = [
+		const toolCalls: ToolCallPart[] = [
 			toolCall('bash', { script: 'cat /vault/notes/x.md' }),
-			toolCall('edit_file', {
-				path: 'notes/x.md',
-				oldText: 'hello',
-				newText: 'hi',
+			toolCall('apply_patch', {
+				patch: [
+					'*** Begin Patch',
+					'*** Update File: notes/x.md',
+					'@@',
+					'-hello world',
+					'+hi world',
+					'*** End Patch',
+				].join('\n'),
 			}),
 		]
 
-		const results = await executor.resolveToolCalls(toolCalls, tools, {
+		const results = await executeRound(
+			executor,
+			app,
+			scratch,
+			toolCalls,
+			tools,
 			session,
-			depth: 0,
-			maxDepth: 2,
-		})
-
-		expect(fragment.readVaultPaths).toEqual(['notes/x.md'])
-		const editResult = results.find(
-			(r) =>
-				r.message.content[0]?.type === 'tool-result' &&
-				r.message.content[0].toolName === 'edit_file',
 		)
-		expect(editResult?.isError).toBe(true)
+
+		expect(session.subagents.master.readVaultPaths).toEqual(['notes/x.md'])
+		const editResult = results[1]
+		expect(editResult?.status).toBe('rejected')
 		expect(store.get('notes/x.md')).toBe('hello world')
 	})
 
-	it('allows edit_file in a subsequent resolveToolCalls batch after bash cat in a prior batch', async () => {
+	it('allows apply_patch in the SDK round after bash cat', async () => {
 		const { vault, store } = createMockVaultForExecutor([
 			{ path: 'notes/x.md', content: 'hello world' },
 		])
@@ -665,31 +1332,158 @@ describe('ToolExecutor.resolveToolCalls read-gate wiring', () => {
 			messages: [],
 		}
 		const session = makeSession(fragment)
-		const { executor } = makeToolExecutor()
-		executor['plugin'] = { app } as never
+		const { executor } = makeToolExecutor(app)
 
-		const tools = createAITools(app, { permissionGuard: undefined })
+		const tools = createAITools()
+		const scratch = new InMemoryFs()
 
-		const batch1Results = await executor.resolveToolCalls(
+		const batch1Results = await executeRound(
+			executor,
+			app,
+			scratch,
 			[toolCall('bash', { script: 'cat /vault/notes/x.md' })],
 			tools,
-			{ session, depth: 0, maxDepth: 2 },
+			session,
 		)
-		expect(batch1Results[0].isError).toBe(false)
-		expect(fragment.readVaultPaths).toEqual(['notes/x.md'])
+		expect(batch1Results[0].status).toBe('fulfilled')
+		expect(session.subagents.master.readVaultPaths).toEqual(['notes/x.md'])
 
-		const batch2Results = await executor.resolveToolCalls(
+		const batch2Results = await executeRound(
+			executor,
+			app,
+			scratch,
 			[
-				toolCall('edit_file', {
-					path: 'notes/x.md',
-					oldText: 'hello',
-					newText: 'hi',
+				toolCall('apply_patch', {
+					patch: [
+						'*** Begin Patch',
+						'*** Update File: notes/x.md',
+						'@@',
+						'-hello world',
+						'+hi world',
+						'*** End Patch',
+					].join('\n'),
 				}),
 			],
 			tools,
-			{ session, depth: 0, maxDepth: 2 },
+			session,
 		)
-		expect(batch2Results[0].isError).toBe(false)
+		expect(batch2Results[0].status).toBe('fulfilled')
 		expect(store.get('notes/x.md')).toBe('hi world')
+	})
+
+	it('keeps explorer read-only when global full access is enabled', async () => {
+		const { vault, store } = createMockVaultForExecutor([
+			{ path: 'notes/x.md', content: 'before' },
+		])
+		const session = makeSession({
+			id: 'f1',
+			createdAt: 0,
+			updatedAt: 0,
+			messages: [],
+		})
+		const explorer = {
+			...createEmptyMasterAgent(0),
+			id: 'explorer-test',
+			type: EXPLORER_AGENT_ID,
+			status: 'running' as const,
+		}
+		session.subagents.master.subagents[explorer.id] = explorer
+		const state = {
+			loadedSessions: new Map([[session.id, session]]),
+			sessionIndex: [],
+			runtimeBySessionId: new Map(),
+			autoApproveRequestsBySessionId: new Map(),
+			deletedSessionIds: new Set(),
+			chatModalHostEl: null,
+		} as unknown as ChatState
+		const plugin = {
+			app: { vault },
+			settings: { ai: { yolo: true } },
+		}
+		const executor = new ToolExecutor(
+			plugin.app as never,
+			() => plugin.settings.ai as never,
+			state,
+			new RuntimeStates(state),
+			{
+				refreshIfChanged: async () => {},
+				getToolsForSession: () => ({}),
+			} as never,
+		)
+		expect(executor.getAgentDefinition(MASTER_AGENT_ID).permissionMode).toBe(
+			'full',
+		)
+		plugin.settings.ai.yolo = false
+		expect(executor.getAgentDefinition(MASTER_AGENT_ID).permissionMode).toBe(
+			'ask',
+		)
+		plugin.settings.ai.yolo = true
+		const definition = executor.getAgentDefinition(EXPLORER_AGENT_ID)
+		const tools = await executor.createTools(1, definition)
+		const imageTools = await executor.createTools(1, definition, undefined, {
+			modalities: { input: ['text', 'image'] },
+		} as never)
+		const bash = findTool(tools, 'bash')
+		const stable = executor.createStableToolsContext(session, definition)
+		expect(stable.dispatchableDefinitions?.map(({ id }) => id)).toEqual([
+			EXPLORER_AGENT_ID,
+		])
+		expect('view_image' in tools).toBe(false)
+		expect('view_image' in imageTools).toBe(true)
+
+		await expect(
+			executeToolForTest(
+				bash,
+				{
+					script: "printf 'after' > /vault/notes/x.md",
+				},
+				{
+					app: stable.app,
+					permissionGuard: stable.permissionGuard,
+					scratch: stable.scratch,
+					session,
+					agentId: explorer.id,
+				},
+			),
+		).rejects.toThrow('read-only')
+		expect(store.get('notes/x.md')).toBe('before')
+	})
+})
+
+describe('filterToolsForAgent', () => {
+	it('excludes apply_patch, todowrite, and update_session_title for the explorer subagent', () => {
+		const tools = createAITools({ allowSpawn: true, enableViewImage: true })
+		const definition = getAgentDefinition(EXPLORER_AGENT_ID)
+		if (!definition) throw new Error('Expected explorer agent definition')
+		const filtered = filterToolsForAgent(tools, definition)
+		const names = Object.keys(filtered)
+
+		expect(names).not.toContain('apply_patch')
+		expect(names).not.toContain('todowrite')
+		expect(names).not.toContain('update_session_title')
+		expect(names).toContain('bash')
+		expect(names).toContain('note_neighborhood')
+		expect(names).toContain('view_image')
+		expect(names).toContain('task')
+	})
+
+	it('returns all tools for the master agent type', () => {
+		const tools = createAITools({
+			enableTodoWrite: true,
+			allowSpawn: true,
+			enableViewImage: true,
+		})
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const filtered = filterToolsForAgent(tools, definition)
+		const names = Object.keys(filtered)
+
+		expect(names).toContain('apply_patch')
+		expect(names).toContain('bash')
+		expect(names).toContain('note_neighborhood')
+		expect(names).toContain('view_image')
+		expect(names).toContain('todowrite')
+		expect(names).toContain('update_session_title')
+		expect(names).toContain('task')
 	})
 })

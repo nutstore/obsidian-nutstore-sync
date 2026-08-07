@@ -10,6 +10,7 @@ import {
 	WorkspaceLeaf,
 } from 'obsidian'
 import type { EditorView } from '@codemirror/view'
+import { resolveResourceDataUrl } from '~/ai/tools/resource-data-url'
 import {
 	createImageContextItem,
 	createPendingContextItem,
@@ -27,6 +28,7 @@ import {
 	hideChatboxSelectionHighlight,
 	showChatboxSelectionHighlight,
 } from './chatbox-selection-highlight'
+import { enhanceHtmlCodeBlocks } from './chatbox-code-preview'
 import {
 	resolveMarkdownLinkAction,
 	resolveMarkdownSourcePath,
@@ -68,7 +70,13 @@ export default class ChatboxView extends ItemView {
 	private highlightedEditorView?: EditorView
 	private preservingSelectionForChatFocus = false
 	private readonly renderMarkdown: NonNullable<ChatboxProps['renderMarkdown']> =
-		async (el: HTMLElement, markdown: string) => {
+		async (
+			el: HTMLElement,
+			markdown: string,
+			options?: { streaming?: boolean },
+		) => {
+			const app = this.app
+			const plugin = this.plugin
 			const component = new Component()
 			this.addChild(component)
 			component.load()
@@ -79,7 +87,7 @@ export default class ChatboxView extends ItemView {
 
 			try {
 				await MarkdownRenderer.render(
-					this.app,
+					app,
 					markdown,
 					renderedEl,
 					sourcePath,
@@ -96,6 +104,10 @@ export default class ChatboxView extends ItemView {
 			el.replaceChildren(...Array.from(renderedEl.childNodes))
 			if (!el.childNodes.length) {
 				el.textContent = fallbackText
+			}
+
+			if (!options?.streaming) {
+				enhanceHtmlCodeBlocks(el)
 			}
 
 			const onLinkClick = (event: MouseEvent) => {
@@ -121,10 +133,14 @@ export default class ChatboxView extends ItemView {
 				event.stopPropagation()
 
 				if (action.type === 'internal') {
-					void this.app.workspace.openLinkText(
-						action.linktext,
-						this.getMarkdownSourcePath(true),
-						false,
+					void app.workspace.openLinkText(action.linktext, sourcePath, false)
+					return
+				}
+
+				if (action.type === 'protocol' && action.providerId) {
+					void plugin.protocolService.openProviderEditor(
+						action.providerId,
+						plugin.chatService.getChatModalMountTarget(),
 					)
 					return
 				}
@@ -239,17 +255,26 @@ export default class ChatboxView extends ItemView {
 		this.highlightedEditorView = undefined
 	}
 
+	private getLastActiveMarkdownView(): MarkdownView | null {
+		const leaf = this.lastActiveMarkdownLeaf
+		if (
+			!(leaf?.view instanceof MarkdownView) ||
+			!leaf.view.containerEl.isConnected
+		) {
+			this.lastActiveMarkdownLeaf = null
+			return null
+		}
+		return leaf.view
+	}
+
 	private resolveMarkdownView(allowFallback = false): MarkdownView | null {
 		const activeMarkdownView =
 			this.app.workspace.getActiveViewOfType(MarkdownView)
 		if (activeMarkdownView) {
 			return activeMarkdownView
 		}
-		if (
-			allowFallback &&
-			this.lastActiveMarkdownLeaf?.view instanceof MarkdownView
-		) {
-			return this.lastActiveMarkdownLeaf.view
+		if (allowFallback) {
+			return this.getLastActiveMarkdownView()
 		}
 		return null
 	}
@@ -299,6 +324,14 @@ export default class ChatboxView extends ItemView {
 		}
 		if (leaf?.getViewState().type === CHATBOX_VIEW_TYPE) {
 			this.persistSelectionHighlight(true)
+			return
+		}
+		const root = leaf?.getRoot()
+		if (
+			leaf &&
+			(root === this.app.workspace.leftSplit ||
+				root === this.app.workspace.rightSplit)
+		) {
 			return
 		}
 		this.preservingSelectionForChatFocus = false
@@ -353,6 +386,33 @@ export default class ChatboxView extends ItemView {
 		return []
 	}
 
+	private async openFileChange(vaultPath: string, line?: number) {
+		const target = this.app.vault.getAbstractFileByPath(
+			normalizePath(vaultPath),
+		)
+		if (!(target instanceof TFile)) return
+		const leaf =
+			this.app.workspace
+				.getLeavesOfType('markdown')
+				.find(
+					(candidate) =>
+						candidate.view instanceof MarkdownView &&
+						candidate.view.file?.path === target.path,
+				) ??
+			this.getLastActiveMarkdownView()?.leaf ??
+			this.app.workspace.getLeaf('tab')
+		await leaf.openFile(target, { active: true })
+		if (line === undefined || !(leaf.view instanceof MarkdownView)) return
+		const editor = leaf.view.editor
+		const position = {
+			line: Math.max(0, Math.min(line - 1, editor.lastLine())),
+			ch: 0,
+		}
+		editor.setCursor(position)
+		editor.scrollIntoView({ from: position, to: position }, true)
+		editor.focus()
+	}
+
 	private getChatboxProps(): ChatboxProps {
 		const viewProps = this.plugin.chatService.getViewProps()
 		const activeContextItems = this.getActiveContextItems().filter((item) => {
@@ -365,6 +425,12 @@ export default class ChatboxView extends ItemView {
 			...viewProps,
 			activeContextItems,
 			renderMarkdown: this.renderMarkdown,
+			onModalHostChange: (rootEl) =>
+				this.plugin.chatService.setChatModalHost(rootEl),
+			onOpenFileChange: (vaultPath, line) =>
+				this.openFileChange(vaultPath, line),
+			onResolveResourceDataUrl: (path, mediaType) =>
+				resolveResourceDataUrl(this.app, path, mediaType),
 			onSendMessage: (text: string, contextItems?: UserContextItem[]) =>
 				this.plugin.chatService.sendMessage(text, contextItems ?? []),
 			onCaptureActiveContext: () => {
@@ -432,7 +498,7 @@ export default class ChatboxView extends ItemView {
 	async onOpen() {
 		this.contentEl.empty()
 		this.rootEl = this.contentEl.createDiv({
-			cls: 'nutstore-chatbox-view h-full',
+			cls: ':uno: nutstore-chatbox-view h-full',
 		})
 		this.captureActiveContextSnapshot(true)
 		this.plugin.chatService.setChatModalHost(this.rootEl)

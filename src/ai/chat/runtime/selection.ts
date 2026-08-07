@@ -1,3 +1,4 @@
+import type { ChatSession } from '~/ai/chat/domain'
 import { Notice } from 'obsidian'
 import {
 	getFirstModel,
@@ -6,23 +7,18 @@ import {
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
 import { assertProviderUsable } from '~/ai/core/runtime'
-import type { AIProviderConfig, AISession } from '~/ai/core/types'
+import type { AIProviderConfig } from '~/ai/core/types'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
-import type NutstorePlugin from '../../..'
-
-export interface ModelDescriptor {
-	id: string
-	name?: string
-}
+import type { NutstoreSettings } from '~/settings'
 
 export class Selection {
 	constructor(
-		private plugin: NutstorePlugin,
+		private getSettings: () => NutstoreSettings['ai'],
 		private state: ChatState,
 		private notify: () => void,
-		private persistSession: (session: AISession) => Promise<void>,
+		private persistSession: (session: ChatSession) => Promise<void>,
 	) {}
 
 	getLoadedActiveSession() {
@@ -41,10 +37,7 @@ export class Selection {
 				return
 			}
 
-			const provider = getProviderById(
-				this.plugin.settings.ai.providers,
-				providerId,
-			)
+			const provider = getProviderById(this.getSettings().providers, providerId)
 			if (!provider) {
 				return
 			}
@@ -62,10 +55,7 @@ export class Selection {
 			return
 		}
 
-		const provider = getProviderById(
-			this.plugin.settings.ai.providers,
-			providerId,
-		)
+		const provider = getProviderById(this.getSettings().providers, providerId)
 		if (!provider) {
 			return
 		}
@@ -88,7 +78,7 @@ export class Selection {
 			}
 
 			const provider = getProviderById(
-				this.plugin.settings.ai.providers,
+				this.getSettings().providers,
 				this.state.pendingProviderId,
 			)
 			const model = getModelById(provider, modelId)
@@ -109,7 +99,7 @@ export class Selection {
 		}
 
 		const provider = getProviderById(
-			this.plugin.settings.ai.providers,
+			this.getSettings().providers,
 			session.model?.providerId,
 		)
 		const model = getModelById(provider, modelId)
@@ -122,18 +112,18 @@ export class Selection {
 		this.notify()
 	}
 
-	sanitizeSessionSelection(session: AISession) {
+	sanitizeSessionSelection(session: ChatSession) {
 		if (!session.model) {
 			if (this.sessionHasMessages(session)) {
 				return false
 			}
 
 			const fallbackSelection = resolveInitialSelection(
-				this.plugin.settings.ai.providers,
-				this.plugin.settings.ai.defaultModel,
+				this.getSettings().providers,
+				this.getSettings().defaultModel,
 			)
 			const fallbackProvider = getProviderById(
-				this.plugin.settings.ai.providers,
+				this.getSettings().providers,
 				fallbackSelection.providerId,
 			)
 			const fallbackModel = getModelById(
@@ -152,7 +142,7 @@ export class Selection {
 		}
 
 		const provider = getProviderById(
-			this.plugin.settings.ai.providers,
+			this.getSettings().providers,
 			session.model?.providerId,
 		)
 		if (!provider) {
@@ -173,8 +163,8 @@ export class Selection {
 		return changed
 	}
 
-	sessionHasMessages(session: AISession) {
-		return session.fragments.some((fragment) => fragment.messages.length > 0)
+	sessionHasMessages(session: ChatSession) {
+		return session.subagents.master.timeline.length > 0
 	}
 
 	getInitialSelectionForNewSession() {
@@ -187,15 +177,14 @@ export class Selection {
 
 	getEmptyStateSelection() {
 		const defaults = resolveInitialSelection(
-			this.plugin.settings.ai.providers,
-			this.plugin.settings.ai.defaultModel,
+			this.getSettings().providers,
+			this.getSettings().defaultModel,
 		)
 		const provider =
 			getProviderById(
-				this.plugin.settings.ai.providers,
+				this.getSettings().providers,
 				this.state.pendingProviderId,
-			) ||
-			getProviderById(this.plugin.settings.ai.providers, defaults.providerId)
+			) || getProviderById(this.getSettings().providers, defaults.providerId)
 		const model =
 			getModelById(provider, this.state.pendingModelId) ||
 			getModelById(provider, defaults.modelId) ||
@@ -209,11 +198,11 @@ export class Selection {
 
 	syncPendingSelectionWithSettings() {
 		const defaults = resolveInitialSelection(
-			this.plugin.settings.ai.providers,
-			this.plugin.settings.ai.defaultModel,
+			this.getSettings().providers,
+			this.getSettings().defaultModel,
 		)
 		const provider = getProviderById(
-			this.plugin.settings.ai.providers,
+			this.getSettings().providers,
 			defaults.providerId,
 		)
 		const model =
@@ -222,7 +211,7 @@ export class Selection {
 		this.state.pendingModelId = model?.id
 	}
 
-	validateSessionSelection(session: AISession) {
+	validateSessionSelection(session: ChatSession) {
 		try {
 			const provider = this.getProviderOrThrow(session)
 			this.getModelOrThrow(provider, session)
@@ -237,7 +226,7 @@ export class Selection {
 	}
 
 	requireProvider(id: string | undefined): AIProviderConfig {
-		const provider = getProviderById(this.plugin.settings.ai.providers, id)
+		const provider = getProviderById(this.getSettings().providers, id)
 		if (!provider) throw new Error(i18n.t('chatbox.errors.noProvider'))
 		assertProviderUsable(provider)
 		return provider
@@ -249,7 +238,7 @@ export class Selection {
 		return model
 	}
 
-	getProviderOrThrow(session: AISession) {
+	getProviderOrThrow(session: ChatSession) {
 		return this.requireProvider(session.model?.providerId)
 	}
 
@@ -257,7 +246,7 @@ export class Selection {
 		return this.requireProvider(id)
 	}
 
-	getModelOrThrow(provider: AIProviderConfig, session: AISession) {
+	getModelOrThrow(provider: AIProviderConfig, session: ChatSession) {
 		return this.requireModel(provider, session.model?.modelId)
 	}
 

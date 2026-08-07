@@ -9,6 +9,7 @@ import {
 	sanitizeProviders,
 } from '~/ai/catalog/config'
 import ProvidersManagerModal from '~/components/ProvidersManagerModal'
+import McpServersManagerModal from '~/components/McpServersManagerModal'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 import BaseSettings from './settings.base'
@@ -40,8 +41,8 @@ export default class AISettings extends BaseSettings {
 			)
 
 		new Setting(this.containerEl)
-			.setName(i18n.t('settings.ai.defaultProvider.name'))
-			.setDesc(i18n.t('settings.ai.defaultProvider.desc'))
+			.setName(i18n.t('settings.ai.defaultModel.name'))
+			.setDesc(i18n.t('settings.ai.defaultModel.desc'))
 			.addDropdown((dropdown) => {
 				dropdown.addOption('', i18n.t('settings.ai.none'))
 				for (const provider of listProviders(
@@ -75,10 +76,6 @@ export default class AISettings extends BaseSettings {
 						this.display()
 					})
 			})
-
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.ai.defaultModel.name'))
-			.setDesc(i18n.t('settings.ai.defaultModel.desc'))
 			.addDropdown((dropdown) => {
 				const provider = getProviderById(
 					this.plugin.settings.ai.providers,
@@ -107,6 +104,21 @@ export default class AISettings extends BaseSettings {
 						await this.persist()
 					})
 			})
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.ai.mcp.name'))
+			.setDesc(
+				i18n.t('settings.ai.mcp.summary', {
+					count: Object.keys(this.plugin.mcpService.getServers()).length,
+				}),
+			)
+			.addButton((button) =>
+				button.setButtonText(i18n.t('settings.ai.mcp.manage')).onClick(() => {
+					new McpServersManagerModal(this.plugin, async () => {
+						this.display()
+					}).open()
+				}),
+			)
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.ai.yolo.name'))

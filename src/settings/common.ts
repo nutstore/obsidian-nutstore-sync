@@ -135,20 +135,12 @@ export default class CommonSettings extends BaseSettings {
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption(
-						ConflictStrategy.DiffMatchPatch,
-						i18n.t('settings.conflictStrategy.diffMatchPatch'),
+						ConflictStrategy.NoConflictMerge,
+						i18n.t('settings.conflictStrategy.noConflictMerge'),
 					)
 					.addOption(
-						ConflictStrategy.LatestTimeStamp,
-						i18n.t('settings.conflictStrategy.latestTimestamp'),
-					)
-					.addOption(
-						ConflictStrategy.Skip,
-						i18n.t('settings.conflictStrategy.skip'),
-					)
-					.addOption(
-						ConflictStrategy.DiffMatchPatchOrSkip,
-						i18n.t('settings.conflictStrategy.diffMatchPatchOrSkip'),
+						ConflictStrategy.Diff3,
+						i18n.t('settings.conflictStrategy.diff3'),
 					)
 					.addOption(
 						ConflictStrategy.LocalPriority,
@@ -161,18 +153,6 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(this.plugin.settings.conflictStrategy)
 					.onChange(async (value) => {
 						this.plugin.settings.conflictStrategy = value as ConflictStrategy
-						await this.plugin.settingsService.saveSettings()
-					}),
-			)
-
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.useGitStyle.name'))
-			.setDesc(i18n.t('settings.useGitStyle.desc'))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.useGitStyle)
-					.onChange(async (value) => {
-						this.plugin.settings.useGitStyle = value
 						await this.plugin.settingsService.saveSettings()
 					}),
 			)

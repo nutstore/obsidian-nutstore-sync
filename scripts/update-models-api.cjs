@@ -7,6 +7,42 @@ const { z } = require('zod')
 const SOURCE_URL = 'https://models.dev/api.json'
 const TARGET_PATH = path.resolve(__dirname, '..', 'src/ai/models-api.json')
 
+const INCLUDED_PROVIDER_IDS = new Set([
+	'302ai',
+	'alibaba-cn',
+	'alibaba',
+	'amazon-bedrock',
+	'anthropic',
+	'azure',
+	'cerebras',
+	'cloudflare-workers-ai',
+	'deepseek',
+	'fireworks-ai',
+	'github-models',
+	'google',
+	'groq',
+	'huggingface',
+	'lmstudio',
+	'minimax-cn',
+	'minimax',
+	'moonshotai-cn',
+	'moonshotai',
+	'nvidia',
+	'ollama-cloud',
+	'openai',
+	'openrouter',
+	'scaleway',
+	'siliconflow-cn',
+	'siliconflow',
+	'togetherai',
+	'xai',
+	'xiaomi-token-plan-ams',
+	'xiaomi-token-plan-cn',
+	'xiaomi-token-plan-sgp',
+	'xiaomi',
+	'zhipuai',
+])
+
 const aiModelModalitySchema = z.enum(['text', 'image', 'audio', 'video', 'pdf'])
 
 const aiModelCostSchema = z.object({
@@ -116,6 +152,12 @@ async function fetchCatalog() {
 	return response.json()
 }
 
+function filterCatalog(catalog) {
+	return Object.fromEntries(
+		Object.entries(catalog).filter(([id]) => INCLUDED_PROVIDER_IDS.has(id)),
+	)
+}
+
 async function main() {
 	const remoteCatalog = await fetchCatalog()
 	const parsed = aiProviderDefinitionsSchema.safeParse(remoteCatalog)
@@ -127,14 +169,19 @@ async function main() {
 		throw new Error(`Zod validation failed: ${details}`)
 	}
 
-	const output = `${JSON.stringify(parsed.data, null, 2)}\n`
+	const filteredCatalog = filterCatalog(parsed.data)
+	const output = `${JSON.stringify(filteredCatalog, null, 2)}\n`
 	await fs.writeFile(TARGET_PATH, output, 'utf8')
 
 	console.log(`Updated: ${TARGET_PATH}`)
-	console.log(`Providers: ${Object.keys(parsed.data).length}`)
+	console.log(`Providers: ${Object.keys(filteredCatalog).length}`)
 }
 
-main().catch((error) => {
-	console.error(error instanceof Error ? error.message : String(error))
-	process.exitCode = 1
-})
+if (require.main === module) {
+	main().catch((error) => {
+		console.error(error instanceof Error ? error.message : String(error))
+		process.exitCode = 1
+	})
+}
+
+module.exports = { filterCatalog, INCLUDED_PROVIDER_IDS }

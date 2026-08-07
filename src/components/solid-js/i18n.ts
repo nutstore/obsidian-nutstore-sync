@@ -1,5 +1,4 @@
 import * as i18n from '@solid-primitives/i18n'
-import { createMemo, createSignal } from 'solid-js'
 import en from '~/i18n/locales/en.json'
 import zh from '~/i18n/locales/zh.json'
 
@@ -12,9 +11,9 @@ const messagesByLocale: Record<Locale, ComponentMessages> = {
 
 type ComponentDict = i18n.Flatten<ComponentMessages>
 
-export type Locale = 'zh' | 'en'
+type Locale = 'zh' | 'en'
 
-export function toLocale(language: string): Locale {
+function toLocale(language: string): Locale {
 	switch (language.split('-')[0].toLowerCase()) {
 		case 'zh':
 			return 'zh'
@@ -23,12 +22,8 @@ export function toLocale(language: string): Locale {
 	}
 }
 
-export const [locale, setLocale] = createSignal<Locale>(
-	toLocale(navigator.language),
+const dict: ComponentDict = i18n.flatten(
+	messagesByLocale[toLocale(navigator.language)],
 )
 
-const dict = createMemo<ComponentDict>(() =>
-	i18n.flatten(messagesByLocale[locale()]),
-)
-
-export const t = i18n.translator(dict, i18n.resolveTemplate)
+export const t = i18n.translator(() => dict, i18n.resolveTemplate)

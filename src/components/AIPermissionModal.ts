@@ -32,6 +32,7 @@ export default class AIPermissionModal extends Modal {
 	private result: AIPermissionResult = 'deny'
 	private resolved = false
 	private resolve!: (result: AIPermissionResult) => void
+	private cleanupModalMount?: () => void
 
 	constructor(
 		app: App,
@@ -152,6 +153,8 @@ export default class AIPermissionModal extends Modal {
 	}
 
 	onClose() {
+		this.cleanupModalMount?.()
+		this.cleanupModalMount = undefined
 		const { contentEl } = this
 		contentEl.empty()
 		if (!this.resolved) {
@@ -164,7 +167,10 @@ export default class AIPermissionModal extends Modal {
 		return new Promise((resolve) => {
 			this.resolve = resolve
 			super.open()
-			applyObsidianModalMountTarget(this, this.mountTarget)
+			this.cleanupModalMount = applyObsidianModalMountTarget(
+				this,
+				this.mountTarget,
+			)
 		})
 	}
 }

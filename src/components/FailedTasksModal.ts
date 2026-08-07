@@ -22,15 +22,15 @@ export default class FailedTasksModal extends Modal {
 		contentEl.empty()
 
 		const instruction = contentEl.createEl('p', {
-			cls: 'failed-tasks-instruction',
+			cls: ':uno: failed-tasks-instruction',
 		})
 		instruction.setText(i18n.t('failedTasks.instruction'))
 
 		const tableContainer = contentEl.createDiv({
-			cls: 'max-h-50vh overflow-y-auto',
+			cls: ':uno: max-h-50vh overflow-y-auto',
 		})
 		const table = tableContainer.createEl('table', {
-			cls: 'task-list-table',
+			cls: ':uno: task-list-table',
 		})
 
 		const thead = table.createEl('thead')

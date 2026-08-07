@@ -2,13 +2,8 @@ import { Bash } from 'just-bash/browser'
 import type { IFileSystem } from 'just-bash/browser'
 import type { App } from 'obsidian'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
-import {
-	listVaultPaths,
-	MountedVaultFs,
-	ObsidianVaultFs,
-	ReversibleOpRecorder,
-	VAULT_MOUNT_POINT,
-} from './fs'
+import { ReversibleOpRecorder } from './fs'
+import { createVaultFileSystem, VAULT_MOUNT_POINT } from '../vault-filesystem'
 
 export interface VaultBashExecOptions {
 	cwd?: string
@@ -26,20 +21,13 @@ export async function createVaultBash(
 	onRead?: (vaultPath: string) => void,
 	scratch?: IFileSystem,
 ) {
-	const initialPaths = await listVaultPaths(app)
-	const vaultFs = new ObsidianVaultFs(
-		app.vault,
-		initialPaths,
+	const fs = await createVaultFileSystem(app, {
 		permissionGuard,
 		recorder,
 		onRead,
-	)
-	const fs = new MountedVaultFs(vaultFs, scratch)
-
-	return new Bash({
-		fs,
-		cwd: VAULT_MOUNT_POINT,
+		scratch,
 	})
+	return new Bash({ fs, cwd: VAULT_MOUNT_POINT })
 }
 
 export async function execVaultBash(
@@ -62,8 +50,12 @@ export async function execVaultBash(
 	})
 	return {
 		...result,
-		reversibleOps: recorder.getOperations(),
+		reversibleOps: await recorder.getNetOperations(app.vault),
 	}
 }
 
-export { VAULT_MOUNT_POINT }
+export {
+	AGENTS_MOUNT_POINT,
+	BUILTIN_SKILLS_MOUNT_POINT,
+	VAULT_MOUNT_POINT,
+} from '../vault-filesystem'
