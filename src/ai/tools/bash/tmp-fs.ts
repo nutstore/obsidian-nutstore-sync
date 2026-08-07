@@ -2,26 +2,43 @@ import { normalizePath, type App } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
 
 import { mkdirsVault } from '~/utils/mkdirs-vault'
-import { ObsidianAdapterFs } from '~/ai/tools/bash/adapter-fs'
+import type { PermissionGuard } from '~/ai/tools/permission-guard'
+import { ObsidianAdapterFs } from './adapter-fs'
+import type { ReversibleOpRecorder } from './fs'
+import { BASH_TMP_MOUNT_POINT, BASH_TMP_VAULT_PATH } from './mount-points'
 
-export const BASH_TMP_MOUNT_POINT = '/tmp'
+function getBashTmpAdapterRoot() {
+	return normalizePath(BASH_TMP_VAULT_PATH)
+}
 
-function getBashTmpAdapterRoot(app: App) {
-	return normalizePath(
-		`${app.vault.configDir}/plugins/nutstore-sync/cache/fs/tmp`,
+export async function ensureBashTmpDirectory(app: App) {
+	await mkdirsVault(app.vault, getBashTmpAdapterRoot())
+}
+
+export async function createBashTmpFs(
+	app: App,
+	permissionGuard?: PermissionGuard,
+	recorder?: ReversibleOpRecorder,
+	onRead?: (vaultPath: string) => void,
+) {
+	await ensureBashTmpDirectory(app)
+	return ObsidianAdapterFs.create(
+		app.vault.adapter,
+		BASH_TMP_VAULT_PATH,
+		permissionGuard,
+		recorder,
+		onRead,
+		BASH_TMP_MOUNT_POINT,
 	)
 }
 
-export async function createBashTmpFs(app: App) {
-	await mkdirsVault(app.vault, getBashTmpAdapterRoot(app))
-	return ObsidianAdapterFs.create(app.vault.adapter, getBashTmpAdapterRoot(app))
-}
+export { BASH_TMP_MOUNT_POINT }
 
 export async function existsBashTmpPath(app: App, absolutePath: string) {
-	return app.vault.adapter.exists(resolveBashTmpAdapterPath(app, absolutePath))
+	return app.vault.adapter.exists(resolveBashTmpAdapterPath(absolutePath))
 }
 
-export function resolveBashTmpAdapterPath(app: App, absolutePath: string) {
+export function resolveBashTmpAdapterPath(absolutePath: string) {
 	const normalized = pathPosix.normalize(absolutePath)
 	if (
 		normalized !== BASH_TMP_MOUNT_POINT &&
@@ -34,8 +51,8 @@ export function resolveBashTmpAdapterPath(app: App, absolutePath: string) {
 	const relativePath = normalized.slice(BASH_TMP_MOUNT_POINT.length + 1)
 	return normalizePath(
 		relativePath
-			? `${getBashTmpAdapterRoot(app)}/${relativePath}`
-			: getBashTmpAdapterRoot(app),
+			? `${getBashTmpAdapterRoot()}/${relativePath}`
+			: getBashTmpAdapterRoot(),
 	)
 }
 
@@ -44,7 +61,7 @@ export async function writeBashTmpText(
 	absolutePath: string,
 	content: string,
 ) {
-	const adapterPath = resolveBashTmpAdapterPath(app, absolutePath)
+	const adapterPath = resolveBashTmpAdapterPath(absolutePath)
 	await mkdirsVault(app.vault, pathPosix.dirname(adapterPath))
 	await app.vault.adapter.write(adapterPath, content)
 }
@@ -54,7 +71,7 @@ export async function writeBashTmpBinary(
 	absolutePath: string,
 	content: Uint8Array,
 ) {
-	const adapterPath = resolveBashTmpAdapterPath(app, absolutePath)
+	const adapterPath = resolveBashTmpAdapterPath(absolutePath)
 	await mkdirsVault(app.vault, pathPosix.dirname(adapterPath))
 	await app.vault.adapter.writeBinary(
 		adapterPath,

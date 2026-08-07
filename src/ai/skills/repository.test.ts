@@ -65,12 +65,12 @@ describe('SkillRepository', () => {
 			{
 				name: 'a-first',
 				description: 'First skill',
-				path: '/vault/.agents/skills/a-first/SKILL.md',
+				path: '/.agents/skills/a-first/SKILL.md',
 			},
 			{
 				name: 'z-last',
 				description: 'Last skill',
-				path: '/vault/.agents/skills/z-last/SKILL.md',
+				path: '/.agents/skills/z-last/SKILL.md',
 			},
 		])
 	})
@@ -82,7 +82,7 @@ describe('SkillRepository', () => {
 				{
 					name: 'skill-creator',
 					description: 'Create Skills',
-					path: '/.agents/skills/skill-creator/SKILL.md',
+					path: '/.agents/nutstore-sync/builtin-skills/skill-creator/SKILL.md',
 					content: '# Skill Creator',
 				},
 			],
@@ -92,7 +92,7 @@ describe('SkillRepository', () => {
 			{
 				name: 'skill-creator',
 				description: 'Create Skills',
-				path: '/.agents/skills/skill-creator/SKILL.md',
+				path: '/.agents/nutstore-sync/builtin-skills/skill-creator/SKILL.md',
 			},
 		])
 	})
@@ -104,7 +104,7 @@ describe('SkillRepository', () => {
 				{
 					name: 'skill-creator',
 					description: 'Built-in creator',
-					path: '/.agents/skills/skill-creator/SKILL.md',
+					path: '/.agents/nutstore-sync/builtin-skills/skill-creator/SKILL.md',
 					content: '# Built-in',
 				},
 			],
@@ -115,7 +115,7 @@ describe('SkillRepository', () => {
 		expect(repository.getCatalog()[0]).toEqual({
 			name: 'skill-creator',
 			description: 'Customized creator',
-			path: '/vault/.agents/skills/skill-creator/SKILL.md',
+			path: '/.agents/skills/skill-creator/SKILL.md',
 		})
 		expect(repository.discover().diagnostics).toContainEqual({
 			path: '.agents/skills/skill-creator/SKILL.md',

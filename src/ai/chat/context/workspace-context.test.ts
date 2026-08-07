@@ -22,7 +22,7 @@ describe('workspace skill context', () => {
 			{
 				name: 'review',
 				description: 'Review notes',
-				path: '/vault/.agents/skills/review/SKILL.md',
+				path: '/.agents/skills/review/SKILL.md',
 			},
 		]
 		const repository = { getCatalog: () => catalog } as SkillRepository
@@ -41,7 +41,7 @@ describe('workspace skill context', () => {
 			{
 				name: 'review',
 				description: 'Review notes',
-				path: '/vault/.agents/skills/review/SKILL.md',
+				path: '/.agents/skills/review/SKILL.md',
 			},
 		]
 		const repository = {

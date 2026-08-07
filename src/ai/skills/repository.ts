@@ -1,5 +1,6 @@
 import { App, normalizePath, parseYaml } from 'obsidian'
 import { BUILTIN_SKILLS } from '~/ai/skills/builtin'
+import { AGENTS_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 import type {
 	BuiltinSkill,
 	SkillMetadata,
@@ -7,7 +8,7 @@ import type {
 } from '~/ai/skills/types'
 
 export const SKILLS_ROOT = '.agents/skills'
-export const VAULT_SKILLS_ROOT = `/vault/${SKILLS_ROOT}`
+export const VAULT_SKILLS_ROOT = `${AGENTS_MOUNT_POINT}/skills`
 export const MAX_SKILL_MARKDOWN_BYTES = 64 * 1024
 
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/

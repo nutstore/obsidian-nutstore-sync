@@ -1,6 +1,7 @@
 import type { ContentBlock } from '@modelcontextprotocol/sdk/types.js'
 import { toUint8Array } from 'js-base64'
 import type { App } from 'obsidian'
+import { BASH_TMP_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 import {
 	existsBashTmpPath,
 	writeBashTmpBinary,
@@ -66,9 +67,12 @@ export async function formatMcpToolResult(
 
 async function saveMcpToolResult(app: App, options: SaveMcpToolResultOptions) {
 	const resultId = await createUniqueWordId('mcp', (id) =>
-		existsBashTmpPath(app, `/tmp/${options.sessionId}/mcp/${id}`),
+		existsBashTmpPath(
+			app,
+			`${BASH_TMP_MOUNT_POINT}/${options.sessionId}/mcp/${id}`,
+		),
 	)
-	const resultDir = `/tmp/${options.sessionId}/mcp/${resultId}`
+	const resultDir = `${BASH_TMP_MOUNT_POINT}/${options.sessionId}/mcp/${resultId}`
 	const resultPath = `${resultDir}/result.md`
 	const lines = [
 		'# MCP tool result',

@@ -53,6 +53,7 @@ export class ObsidianAdapterFs implements IFileSystem {
 		private readonly permissionGuard?: PermissionGuard,
 		private readonly recorder?: ReversibleOpRecorder,
 		private readonly onRead?: (vaultPath: string) => void,
+		private readonly permissionMountPoint?: string,
 	) {}
 
 	static async create(
@@ -61,6 +62,7 @@ export class ObsidianAdapterFs implements IFileSystem {
 		permissionGuard?: PermissionGuard,
 		recorder?: ReversibleOpRecorder,
 		onRead?: (vaultPath: string) => void,
+		permissionMountPoint?: string,
 	) {
 		const fs = new ObsidianAdapterFs(
 			adapter,
@@ -68,6 +70,7 @@ export class ObsidianAdapterFs implements IFileSystem {
 			permissionGuard,
 			recorder,
 			onRead,
+			permissionMountPoint,
 		)
 		await fs.refreshPaths()
 		return fs
@@ -124,6 +127,12 @@ export class ObsidianAdapterFs implements IFileSystem {
 	}
 
 	private toPermissionPath(path: string) {
+		if (this.permissionMountPoint) {
+			const normalized = normalizeVirtualPath(path)
+			return normalized === '/'
+				? this.permissionMountPoint
+				: `${this.permissionMountPoint}${normalized}`
+		}
 		return `/vault/${this.toVaultPath(path)}`
 	}
 

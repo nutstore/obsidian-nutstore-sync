@@ -3,11 +3,12 @@ import { idAgent } from 'id-agent'
 import { tool } from 'ai'
 import { z } from 'zod/mini'
 import {
+	AGENTS_MOUNT_POINT,
 	BUILTIN_SKILLS_MOUNT_POINT,
 	execVaultBash,
 	VAULT_MOUNT_POINT,
 } from '~/ai/tools/bash/runtime'
-import { writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
+import { BASH_TMP_MOUNT_POINT, writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
 import {
 	appDep,
 	permissionGuardDep,
@@ -25,8 +26,10 @@ function isAllowedBashCwd(pathValue: string) {
 	)
 	return (
 		normalized === '/' ||
-		normalized === BUILTIN_SKILLS_MOUNT_POINT ||
-		normalized.startsWith(`${BUILTIN_SKILLS_MOUNT_POINT}/`) ||
+		normalized === BASH_TMP_MOUNT_POINT ||
+		normalized.startsWith(`${BASH_TMP_MOUNT_POINT}/`) ||
+		normalized === AGENTS_MOUNT_POINT ||
+		normalized.startsWith(`${AGENTS_MOUNT_POINT}/`) ||
 		normalized === VAULT_MOUNT_POINT ||
 		normalized.startsWith(`${VAULT_MOUNT_POINT}/`)
 	)
@@ -34,10 +37,10 @@ function isAllowedBashCwd(pathValue: string) {
 
 export const bashTool = tool({
 	description: [
-		'Execute a browser-based bash subset against a virtual filesystem where the Obsidian vault is mounted at /vault and built-in Skills are read-only under /.agents/skills.',
+		`Execute a browser-based bash subset against a virtual filesystem where the Obsidian vault is mounted at ${VAULT_MOUNT_POINT}, agent data is mounted at ${AGENTS_MOUNT_POINT}, and built-in Skills are read-only under ${BUILTIN_SKILLS_MOUNT_POINT}.`,
 		'This is not the host shell: node, python, xxd, and some command flags are unavailable.',
 		'Prefer supported commands such as ls, cat, rg, sed, awk, od, mkdir, mv, cp, and rm.',
-		"Treat /vault as the user's personal knowledge base — only write there for content the user intends to keep; use /tmp for intermediate or scratch work.",
+		`Treat ${VAULT_MOUNT_POINT} as the user's personal knowledge base — only write there for content the user intends to keep; use ${BASH_TMP_MOUNT_POINT} for intermediate or scratch work.`,
 	].join(' '),
 	inputSchema: z.object({
 		script: textValue('script'),
@@ -59,7 +62,7 @@ export const bashTool = tool({
 		const cwd = params.cwd || VAULT_MOUNT_POINT
 		if (!isAllowedBashCwd(cwd)) {
 			throw new Error(
-				`Invalid bash cwd: ${cwd}. Allowed roots are / and ${VAULT_MOUNT_POINT}`,
+				`Invalid bash cwd: ${cwd}. Allowed roots are /, ${VAULT_MOUNT_POINT}, ${AGENTS_MOUNT_POINT}, and ${BASH_TMP_MOUNT_POINT}`,
 			)
 		}
 
@@ -76,7 +79,7 @@ export const bashTool = tool({
 			reversibleOps: result.reversibleOps,
 		})
 		if (output.length > MAX_INLINE_BASH_OUTPUT_CHARS) {
-			const outputPath = `/tmp/${idAgent({ prefix: 'bash', words: 3 })}.txt`
+			const outputPath = `${BASH_TMP_MOUNT_POINT}/${idAgent({ prefix: 'bash', words: 3 })}.txt`
 			await writeBashTmpText(app, outputPath, output)
 			return `Bash output was too long to return inline (${output.length} characters). The complete output was written to ${outputPath}. Use bash commands such as rg, sed, head, or tail to inspect it in smaller chunks.`
 		}

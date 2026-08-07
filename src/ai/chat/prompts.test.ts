@@ -12,10 +12,10 @@ describe('main system prompt Skills guidance', () => {
 		expect(prompt).toContain('use bash to read the complete SKILL.md')
 		expect(prompt).toContain('copy it exactly from workspace context')
 		expect(prompt).toContain(
-			'Paths under /vault/.agents/skills are user-defined Vault Skills',
+			'Paths under /.agents/skills are user-defined Vault Skills',
 		)
 		expect(prompt).toContain(
-			'paths under /.agents/skills are bundled built-in Skills',
+			'paths under /.agents/nutstore-sync/builtin-skills are bundled built-in Skills',
 		)
 		expect(prompt).toContain('These namespaces are distinct')
 		expect(prompt).toContain('retry the exact catalog path')

@@ -28,6 +28,7 @@ import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { ChatAgentState } from '~/ai/chat/types'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import { BASH_TMP_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 import { writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
 import { consumePendingInputs } from '~/ai/chat/messages/ui-message'
 import i18n from '~/i18n'
@@ -258,7 +259,7 @@ export class TaskManager {
 		agent: ChatAgentState,
 		resultText: string,
 	) {
-		const resultPath = `/tmp/${session.id}/tasks/${agent.id}.txt`
+		const resultPath = `${BASH_TMP_MOUNT_POINT}/${session.id}/tasks/${agent.id}.txt`
 		await writeBashTmpText(this.app, resultPath, resultText)
 		return resultPath
 	}

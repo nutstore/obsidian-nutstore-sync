@@ -1,8 +1,9 @@
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
+import { BUILTIN_SKILLS_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 import skillCreatorContent from './builtin/skill-creator/SKILL.md?raw'
 import type { BuiltinSkill } from './types'
 
-export const BUILTIN_SKILLS_ROOT = '/.agents/skills'
+export const BUILTIN_SKILLS_ROOT = BUILTIN_SKILLS_MOUNT_POINT
 
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 	{

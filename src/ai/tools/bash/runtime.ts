@@ -55,6 +55,7 @@ export async function execVaultBash(
 }
 
 export {
+	AGENTS_MOUNT_POINT,
 	BUILTIN_SKILLS_MOUNT_POINT,
 	VAULT_MOUNT_POINT,
 } from '../vault-filesystem'

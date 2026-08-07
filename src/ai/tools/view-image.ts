@@ -54,14 +54,14 @@ export const viewImageTool = tool({
 	description: [
 		'View an image stored in the Obsidian vault or temporary filesystem.',
 		'Use this tool when you need to inspect an image file visually.',
-		'Input an absolute image path under /vault or /tmp, or a path relative to /vault, with a supported extension: avif, bmp, gif, ico, jpeg, jpg, png, svg, or webp.',
+		`Input an absolute image path under ${VAULT_MOUNT_POINT} or ${BASH_TMP_MOUNT_POINT}, or a path relative to ${VAULT_MOUNT_POINT}, with a supported extension: avif, bmp, gif, ico, jpeg, jpg, png, svg, or webp.`,
 	].join(' '),
 	inputSchema: z.object({
 		path: z
 			.string()
 			.check(
 				z.describe(
-					'The image path under /vault or /tmp; relative paths resolve from /vault.',
+					`The image path under ${VAULT_MOUNT_POINT} or ${BASH_TMP_MOUNT_POINT}; relative paths resolve from ${VAULT_MOUNT_POINT}.`,
 				),
 				z.trim(),
 				z.minLength(

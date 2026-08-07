@@ -15,7 +15,7 @@ export async function resolveResourceDataUrl(
 	if (normalizedPath.startsWith(`${VAULT_MOUNT_POINT}/`)) {
 		adapterPath = normalizedPath.slice(VAULT_MOUNT_POINT.length + 1)
 	} else if (normalizedPath.startsWith(`${BASH_TMP_MOUNT_POINT}/`)) {
-		adapterPath = resolveBashTmpAdapterPath(app, normalizedPath)
+		adapterPath = resolveBashTmpAdapterPath(normalizedPath)
 	} else {
 		return undefined
 	}

@@ -315,6 +315,7 @@ function assertUniquePaths(operations: PatchOperation[]) {
 export const applyPatchTool = tool({
 	description: [
 		'Apply a file-oriented patch inside the Obsidian vault.',
+		'Use bash rather than this tool for files under /.agents.',
 		'Every patch, including one that only adds, deletes, updates, or moves a single file, MUST start with "*** Begin Patch" and end with "*** End Patch".',
 		'A Delete patch has this complete form: "*** Begin Patch\\n*** Delete File: notes/example.md\\n*** End Patch".',
 		'An Update patch has this complete form: "*** Begin Patch\\n*** Update File: notes/example.md\\n@@\\n-old text\\n+new text\\n*** End Patch".',

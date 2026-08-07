@@ -4,13 +4,21 @@ import type { App } from 'obsidian'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { ObsidianAdapterFs } from './bash/adapter-fs'
-import { BASH_TMP_MOUNT_POINT, createBashTmpFs } from './bash/tmp-fs'
 import {
-	BUILTIN_SKILLS_MOUNT_POINT,
+	BASH_TMP_MOUNT_POINT,
+	createBashTmpFs,
+	ensureBashTmpDirectory,
+} from './bash/tmp-fs'
+import {
+	AGENTS_MOUNT_POINT,
+	AGENTS_VAULT_PATH,
+	BUILTIN_SKILLS_RELATIVE_MOUNT_POINT,
+	VAULT_MOUNT_POINT,
+} from './bash/mount-points'
+import {
 	listVaultPaths,
 	ObsidianVaultFs,
 	ReversibleOpRecorder,
-	VAULT_MOUNT_POINT,
 } from './bash/fs'
 
 export interface CreateVaultFileSystemOptions {
@@ -32,31 +40,42 @@ export async function createVaultFileSystem(
 		options.recorder,
 		options.onRead,
 	)
+	await ensureBashTmpDirectory(app)
 	const agentsFs = await ObsidianAdapterFs.create(
 		app.vault.adapter,
-		'.agents',
+		AGENTS_VAULT_PATH,
+		options.permissionGuard,
+		options.recorder,
+		options.onRead,
+		AGENTS_MOUNT_POINT,
+	)
+	const tmpFs = await createBashTmpFs(
+		app,
 		options.permissionGuard,
 		options.recorder,
 		options.onRead,
 	)
-	const vaultNamespace = new MountableFs({
-		base: vaultFs,
-		mounts: [{ mountPoint: '/.agents', filesystem: agentsFs }],
-	})
-	return new MountableFs({
-		base: options.scratch,
+	const agentsNamespace = new MountableFs({
+		base: agentsFs,
 		mounts: [
 			{
-				mountPoint: BASH_TMP_MOUNT_POINT,
-				filesystem: await createBashTmpFs(app),
-			},
-			{ mountPoint: VAULT_MOUNT_POINT, filesystem: vaultNamespace },
-			{
-				mountPoint: BUILTIN_SKILLS_MOUNT_POINT,
+				mountPoint: BUILTIN_SKILLS_RELATIVE_MOUNT_POINT,
 				filesystem: await createBuiltinSkillsFs(),
 			},
 		],
 	})
+	return new MountableFs({
+		base: options.scratch,
+		mounts: [
+			{ mountPoint: BASH_TMP_MOUNT_POINT, filesystem: tmpFs },
+			{ mountPoint: VAULT_MOUNT_POINT, filesystem: vaultFs },
+			{ mountPoint: AGENTS_MOUNT_POINT, filesystem: agentsNamespace },
+		],
+	})
 }
 
-export { BUILTIN_SKILLS_MOUNT_POINT, VAULT_MOUNT_POINT }
+export {
+	AGENTS_MOUNT_POINT,
+	BUILTIN_SKILLS_MOUNT_POINT,
+	VAULT_MOUNT_POINT,
+} from './bash/mount-points'

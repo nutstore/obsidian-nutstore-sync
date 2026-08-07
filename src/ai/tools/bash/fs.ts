@@ -32,11 +32,10 @@ import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { existsLocalPath } from '~/utils/local-vault-io'
 import { sha256Base64 } from '~/utils/sha256'
 import { statVaultItem } from '~/utils/stat-vault-item'
+import { VAULT_MOUNT_POINT } from './mount-points'
 
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
-const VAULT_MOUNT_POINT = '/vault'
-const BUILTIN_SKILLS_MOUNT_POINT = '/.agents/skills'
 type ReadFileOptions = { encoding?: BufferEncoding | null }
 type WriteFileOptions = { encoding?: BufferEncoding }
 type SnapshotKind = 'file' | 'dir'
@@ -847,4 +846,4 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 }
 
-export { BUILTIN_SKILLS_MOUNT_POINT, VAULT_MOUNT_POINT }
+export { VAULT_MOUNT_POINT } from './mount-points'

@@ -31,8 +31,7 @@ describe('resolveResourceDataUrl', () => {
 	})
 
 	it('resolves a Chinese temporary path', async () => {
-		const adapterPath =
-			'.obsidian/plugins/nutstore-sync/cache/fs/tmp/session/mcp/示例.png'
+		const adapterPath = '.agents/nutstore-sync/tmp/session/mcp/示例.png'
 		const { app, readBinary } = createApp({ [adapterPath]: '示例' })
 
 		const result = await resolveResourceDataUrl(

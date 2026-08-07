@@ -228,7 +228,7 @@ describe('tool registration', () => {
 			{ path: '媒体/示例.png', content: 'abc' },
 			{ path: 'images/example.png', content: 'def' },
 			{
-				path: '.obsidian/plugins/nutstore-sync/cache/fs/tmp/mcp/example/image.png',
+				path: '.agents/nutstore-sync/tmp/mcp/example/image.png',
 				content: 'ghi',
 			},
 		])

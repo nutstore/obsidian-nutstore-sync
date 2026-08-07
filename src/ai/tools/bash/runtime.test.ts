@@ -4,6 +4,7 @@ import { InMemoryFs, MountableFs, type IFileSystem } from 'just-bash/browser'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import type { PermissionRequest } from '~/ai/tools/permission-guard'
 import { createVaultBash, execVaultBash, VAULT_MOUNT_POINT } from './runtime'
+import { createVaultFileSystem } from '../vault-filesystem'
 import { listVaultPaths, ObsidianVaultFs, ReversibleOpRecorder } from './fs'
 import { ObsidianAdapterFs } from './adapter-fs'
 
@@ -404,7 +405,7 @@ describe('vault bash runtime', () => {
 		const requests: PermissionRequest[] = []
 		const result = await execVaultBash(
 			app,
-			'cat /vault/.agents/skills/custom/SKILL.md && printf "new" > /vault/.agents/skills/new/SKILL.md',
+			'cat /.agents/skills/custom/SKILL.md && printf "new" > /.agents/skills/new/SKILL.md',
 			{
 				onRead: (path) => reads.push(path),
 				permissionGuard: async (request) => {
@@ -424,7 +425,7 @@ describe('vault bash runtime', () => {
 				type: 'fs',
 				fs: {
 					kind: 'write',
-					path: '/vault/.agents/skills/new/SKILL.md',
+					path: '/.agents/skills/new/SKILL.md',
 				},
 			},
 		])
@@ -450,11 +451,11 @@ describe('vault bash runtime', () => {
 		])
 	})
 
-	it('exposes the built-in skill-creator below /.agents/skills', async () => {
+	it('exposes the built-in skill-creator below the plugin namespace', async () => {
 		const { vault } = createMockVault()
 		const result = await execVaultBash(
 			createApp(vault),
-			'cat /.agents/skills/skill-creator/SKILL.md',
+			'cat /.agents/nutstore-sync/builtin-skills/skill-creator/SKILL.md',
 		)
 
 		expect(result.exitCode).toBe(0)
@@ -467,17 +468,20 @@ describe('vault bash runtime', () => {
 			base: new InMemoryFs(),
 			mounts: [
 				{
-					mountPoint: '/.agents/skills',
+					mountPoint: '/.agents/nutstore-sync/builtin-skills',
 					filesystem: await createBuiltinSkillsFs(),
 				},
 			],
 		})
 		await mounted.writeFile('/source', 'source')
-		const file = '/.agents/skills/skill-creator/SKILL.md'
+		const file = '/.agents/nutstore-sync/builtin-skills/skill-creator/SKILL.md'
 		const mutations: Array<[() => Promise<unknown>, string]> = [
 			[() => mounted.writeFile(file, 'changed'), 'read-only'],
 			[() => mounted.appendFile(file, 'changed'), 'read-only'],
-			[() => mounted.mkdir('/.agents/skills/new-skill'), 'read-only'],
+			[
+				() => mounted.mkdir('/.agents/nutstore-sync/builtin-skills/new-skill'),
+				'read-only',
+			],
 			[() => mounted.rm(file), 'read-only'],
 			[() => mounted.cp('/source', file), 'read-only'],
 			[() => mounted.mv(file, '/moved'), 'read-only'],
@@ -529,26 +533,68 @@ describe('vault bash runtime', () => {
 		)
 	})
 
-	it('mounts the persistent plugin cache at /tmp', async () => {
+	it('mounts /tmp to the persistent plugin temporary directory', async () => {
 		const { vault, store } = createMockVault({
-			'.obsidian/plugins/nutstore-sync/cache/fs/tmp/session/tasks/task.txt':
-				'result',
+			'.agents/nutstore-sync/tmp/session/tasks/task.txt': 'result',
 		})
+		const requests: PermissionRequest[] = []
 
 		const result = await execVaultBash(
 			createApp(vault),
 			'cat /tmp/session/tasks/task.txt && printf "next" > /tmp/session/tasks/next.txt',
+			{
+				permissionGuard: async (request) => {
+					requests.push(request)
+				},
+			},
 		)
 
 		expect(result.exitCode).toBe(0)
 		expect(result.stdout).toContain('result')
 		expect(
 			new TextDecoder().decode(
-				store.readBinary(
-					'.obsidian/plugins/nutstore-sync/cache/fs/tmp/session/tasks/next.txt',
-				),
+				store.readBinary('.agents/nutstore-sync/tmp/session/tasks/next.txt'),
 			),
 		).toBe('next')
+		expect(requests).toEqual([
+			{
+				type: 'fs',
+				fs: {
+					kind: 'write',
+					path: '/tmp/session/tasks/next.txt',
+				},
+			},
+		])
+	})
+
+	it('does not expose or reuse the legacy plugin cache as /tmp', async () => {
+		const legacyPath =
+			'.obsidian/plugins/nutstore-sync/cache/fs/tmp/session/tasks/legacy-旧缓存.txt'
+		const { vault, store } = createMockVault({
+			[legacyPath]: 'legacy / 旧缓存',
+		})
+		const fs = await createVaultFileSystem(createApp(vault))
+
+		expect(await fs.readdir('/')).toEqual(['.agents', 'tmp', 'vault'])
+		expect(await fs.exists('/tmp/session/tasks/legacy-旧缓存.txt')).toBe(false)
+
+		await fs.writeFile('/tmp/session/tasks/current-当前.txt', 'current / 当前')
+
+		expect(
+			new TextDecoder().decode(
+				store.readBinary(
+					'.agents/nutstore-sync/tmp/session/tasks/current-当前.txt',
+				),
+			),
+		).toBe('current / 当前')
+		expect(
+			store.exists(
+				'.obsidian/plugins/nutstore-sync/cache/fs/tmp/session/tasks/current-当前.txt',
+			),
+		).toBe(false)
+		expect(new TextDecoder().decode(store.readBinary(legacyPath))).toBe(
+			'legacy / 旧缓存',
+		)
 	})
 
 	it('supports shell glob expansion from the initial vault snapshot', async () => {
