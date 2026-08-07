@@ -22,6 +22,17 @@ describe('main system prompt Skills guidance', () => {
 		expect(prompt).not.toContain('call use_skill')
 		expect(prompt).not.toContain('background_output')
 		expect(prompt).not.toContain('subagent_type')
+		expect(prompt).not.toContain('MCP servers are configured')
+	})
+
+	it('states the agent identity and its environment', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(prompt).toContain('Nutstore Sync Obsidian plugin')
+		expect(prompt).toContain('Obsidian vault')
+		expect(prompt).toContain('WebDAV')
 	})
 })
 

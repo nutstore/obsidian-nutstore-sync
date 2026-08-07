@@ -1,11 +1,37 @@
 import { InMemoryFs, type IFileSystem } from 'just-bash/browser'
+import { posix as pathPosix } from 'path-browserify'
 import { BUILTIN_SKILLS_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
+import aiChatboxReferenceContent from './builtin/nutstore-sync-guide/references/ai-chatbox.md?raw'
+import mcpServersReferenceContent from './builtin/nutstore-sync-guide/references/mcp-servers.md?raw'
+import nutstoreSyncGuideContent from './builtin/nutstore-sync-guide/SKILL.md?raw'
+import syncReferenceContent from './builtin/nutstore-sync-guide/references/sync.md?raw'
 import skillCreatorContent from './builtin/skill-creator/SKILL.md?raw'
 import type { BuiltinSkill } from './types'
 
 export const BUILTIN_SKILLS_ROOT = BUILTIN_SKILLS_MOUNT_POINT
 
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
+	{
+		name: 'nutstore-sync-guide',
+		description:
+			'Explain and operate Nutstore Sync features—including syncing, AI ChatBox, and MCP server configuration—when users ask for plugin help, setup, or troubleshooting.',
+		path: `${BUILTIN_SKILLS_ROOT}/nutstore-sync-guide/SKILL.md`,
+		content: nutstoreSyncGuideContent,
+		resources: [
+			{
+				path: 'references/ai-chatbox.md',
+				content: aiChatboxReferenceContent,
+			},
+			{
+				path: 'references/mcp-servers.md',
+				content: mcpServersReferenceContent,
+			},
+			{
+				path: 'references/sync.md',
+				content: syncReferenceContent,
+			},
+		],
+	},
 	{
 		name: 'skill-creator',
 		description:
@@ -15,11 +41,31 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 	},
 ]
 
+function resolveBuiltinResourcePath(skillName: string, resourcePath: string) {
+	const normalized = pathPosix.normalize(resourcePath)
+	if (
+		pathPosix.isAbsolute(resourcePath) ||
+		normalized === '.' ||
+		normalized === '..' ||
+		normalized.startsWith('../')
+	) {
+		throw new Error(
+			`Built-in Skill resource path must stay within '${skillName}': ${resourcePath}`,
+		)
+	}
+	return `/${skillName}/${normalized}`
+}
+
 export async function createBuiltinSkillsFs(): Promise<IFileSystem> {
 	const fs = new InMemoryFs()
 	for (const skill of BUILTIN_SKILLS) {
 		await fs.mkdir(`/${skill.name}`, { recursive: true })
 		await fs.writeFile(`/${skill.name}/SKILL.md`, skill.content)
+		for (const resource of skill.resources ?? []) {
+			const path = resolveBuiltinResourcePath(skill.name, resource.path)
+			await fs.mkdir(pathPosix.dirname(path), { recursive: true })
+			await fs.writeFile(path, resource.content)
+		}
 	}
 	const mutations = new Set([
 		'writeFile',
