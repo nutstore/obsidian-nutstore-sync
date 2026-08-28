@@ -52,10 +52,7 @@ export type SyncPolicyDescI18nKey =
 	| 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
 
 export type ConflictStrategyI18nKey =
-	| 'noConflictMerge'
-	| 'diff3'
-	| 'localPriority'
-	| 'serverPriority'
+	'noConflictMerge' | 'diff3' | 'localPriority' | 'serverPriority'
 
 export function getConflictStrategyI18nKey(
 	strategy: ConflictStrategy,
@@ -152,6 +149,11 @@ export interface NutstoreSettings {
 		defaultModel?: { providerId: string; modelId: string }
 		yolo?: boolean
 		nutstoreLlmGateway?: NutstoreLlmGatewayAuthSettings
+		memoTrigger?: {
+			enabled: boolean
+			threshold: number
+			message: string
+		}
 	}
 	configDirSyncMode?: 'none' | 'bookmarks' | 'all'
 }
@@ -220,6 +222,11 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 		defaultModel: undefined,
 		yolo: false,
 		nutstoreLlmGateway: {},
+		memoTrigger: {
+			enabled: false,
+			threshold: 10,
+			message: '总结备忘录',
+		},
 	},
 	configDirSyncMode: 'none',
 }

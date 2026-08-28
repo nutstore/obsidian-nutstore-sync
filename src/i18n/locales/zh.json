@@ -270,6 +270,21 @@
 				"networkDisconnected": "网络连接不可用，请检查网络后重试。",
 				"browserCorsFallbackToBuiltinTransport": "浏览器跨域请求失败，已临时回退到内置请求方式。",
 				"browserCorsFailedWithDisableLink": "浏览器跨域请求失败。[打开此提供商并关闭 CORS]({{link}})。"
+			},
+			"memoTrigger": {
+				"section": "备忘录自动触发",
+				"enabled": {
+					"name": "启用自动触发",
+					"desc": "当 vault 中新增笔记达到阈值时，自动让 AI agent 处理它们。agent 会根据触发消息自动加载匹配的 Skill（如 memo-to-todo）。"
+				},
+				"threshold": {
+					"name": "触发阈值",
+					"desc": "新增多少条备忘录笔记后触发 agent（默认 10）。只统计 .obsidian/ 与 .agents/ 之外的 .md 文件，欢迎.md 不计入。"
+				},
+				"message": {
+					"name": "触发消息",
+					"desc": "达到阈值时发给 agent 的消息。与某个 Skill 的描述匹配时，agent 会自动加载该 Skill 执行。"
+				}
 			}
 		},
 		"confirmBeforeSync": {
@@ -821,5 +836,10 @@
 		"labels": {
 			"currentPath": "当前路径"
 		}
+	},
+	"memoTrigger": {
+		"triggered": "备忘录自动触发：agent 正在处理新增笔记。",
+		"triggerRejected": "备忘录自动触发：消息未被接受（请检查 AI 服务商配置）。",
+		"triggerError": "备忘录自动触发失败，详情见日志。"
 	}
 }

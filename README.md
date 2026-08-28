@@ -47,8 +47,8 @@ _This plugin enables two-way synchronization between Obsidian notes and Nutstore
 AI 助手是一个内置的智能代理，让你通过自然语言管理 Obsidian Vault。支持任意兼容 OpenAI 接口的服务商，可自主完成复杂的多步骤任务。
 _The AI Agent is a built-in assistant that lets you manage your Obsidian vault through natural language. It supports any OpenAI-compatible provider and can handle complex, multi-step tasks autonomously._
 
-Agent 在做出任何更改前都会请求用户确认。你可以逐条批准、按操作类型批准当前会话，或在设置中开启 *YOLO 模式* 全部自动通过。
-_Before the agent makes any changes, it asks for your approval. You can approve individual operations, approve an operation type for the entire session, or enable _YOLO mode_ in settings to auto-approve everything._
+Agent 在做出任何更改前都会请求用户确认。你可以逐条批准、按操作类型批准当前会话，或在设置中开启 _YOLO 模式_ 全部自动通过。
+_Before the agent makes any changes, it asks for your approval. You can approve individual operations, approve an operation type for the entire session, or enable *YOLO mode* in settings to auto-approve everything._
 
 **配置方法 | Setup：**
 
@@ -58,6 +58,21 @@ _Before the agent makes any changes, it asks for your approval. You can approve 
    _Add an AI provider (any OpenAI-compatible endpoint) and fill in the model name_
 3. 从左侧边栏打开 AI 对话框，开始对话
    _Open the AI chat panel from the left sidebar and start chatting_
+
+### ⚡ 备忘录自动触发 | Memo Auto-Trigger
+
+当 vault 中新增笔记达到设定阈值时，插件会自动让 AI Agent 处理它们——例如触发一次「总结备忘录」流程，将笔记整理成任务。
+
+_When enough new notes are created in the vault, the plugin automatically asks the AI Agent to process them — e.g. triggering a "summarize memos" flow that turns notes into tasks._
+
+- 在设置 → **AI** 标签页启用，可配置阈值（默认 10）与触发消息
+  _Enable it in Settings → **AI** tab; configure the threshold (default 10) and the trigger message_
+- 只有 `.obsidian/`、`.agents/` 目录之外的 `.md` 文件会计数（`欢迎.md` 不计入）
+  _Only `.md` files outside `.obsidian/` and `.agents/` are counted (`欢迎.md` is ignored)_
+- 触发消息与某个 Skill 的描述匹配时，Agent 会自动加载该 Skill 执行
+  _If the trigger message matches a Skill description, the Agent loads that Skill automatically_
+- 注意：自动触发仍需遵循常规权限模式——Agent 执行写入操作前会请求确认（除非已开启 YOLO 模式）；自动触发仅在 Obsidian 运行且 AI 服务商已配置时生效
+  _Note: the auto-trigger still respects the regular permission mode — the Agent asks for approval before write actions (unless YOLO mode is enabled); it only fires while Obsidian is running with an AI provider configured_
 
 ---
 

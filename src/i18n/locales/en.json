@@ -312,6 +312,21 @@
 				"networkDisconnected": "Network connection unavailable. Check your connection and try again.",
 				"browserCorsFallbackToBuiltinTransport": "Browser CORS request failed. Temporarily fell back to the built-in request transport.",
 				"browserCorsFailedWithDisableLink": "Browser CORS request failed. [Open this provider and disable CORS]({{link}})."
+			},
+			"memoTrigger": {
+				"section": "Memo Auto-Trigger",
+				"enabled": {
+					"name": "Enable auto-trigger",
+					"desc": "When this many new notes are created in the vault, automatically ask the AI agent to process them. The agent loads the matching Skill (e.g. memo-to-todo) via its trigger message."
+				},
+				"threshold": {
+					"name": "Trigger threshold",
+					"desc": "Number of new memo notes that triggers the agent (default 10). Only .md files outside .obsidian/ and .agents/ are counted; 欢迎.md is ignored."
+				},
+				"message": {
+					"name": "Trigger message",
+					"desc": "Message sent to the agent when the threshold is reached. Match it to a Skill description to make the agent load that Skill automatically."
+				}
 			}
 		},
 		"logout": {
@@ -821,5 +836,10 @@
 		"labels": {
 			"currentPath": "Current Path"
 		}
+	},
+	"memoTrigger": {
+		"triggered": "Memo auto-trigger: agent is processing the new notes.",
+		"triggerRejected": "Memo auto-trigger: the message was not accepted (check the AI provider settings).",
+		"triggerError": "Memo auto-trigger failed. See the logs for details."
 	}
 }

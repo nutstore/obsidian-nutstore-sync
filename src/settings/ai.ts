@@ -139,6 +139,55 @@ export default class AISettings extends BaseSettings {
 						await this.persist(false)
 					}),
 			)
+
+		this.displayMemoTriggerSettings()
+	}
+
+	private displayMemoTriggerSettings() {
+		const memoTrigger = this.plugin.settings.ai.memoTrigger ?? {
+			enabled: false,
+			threshold: 10,
+			// Keep in sync with DEFAULT_SETTINGS.ai.memoTrigger.message
+			message: '总结备忘录',
+		}
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.ai.memoTrigger.section'))
+			.setHeading()
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.ai.memoTrigger.enabled.name'))
+			.setDesc(i18n.t('settings.ai.memoTrigger.enabled.desc'))
+			.addToggle((toggle) =>
+				toggle.setValue(memoTrigger.enabled).onChange(async (value) => {
+					memoTrigger.enabled = value
+					this.plugin.settings.ai.memoTrigger = memoTrigger
+					await this.persist(false)
+				}),
+			)
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.ai.memoTrigger.threshold.name'))
+			.setDesc(i18n.t('settings.ai.memoTrigger.threshold.desc'))
+			.addText((text) =>
+				text.setValue(String(memoTrigger.threshold)).onChange(async (value) => {
+					const parsed = parseInt(value, 10)
+					memoTrigger.threshold = Number.isNaN(parsed) ? 10 : parsed
+					this.plugin.settings.ai.memoTrigger = memoTrigger
+					await this.persist(false)
+				}),
+			)
+
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.ai.memoTrigger.message.name'))
+			.setDesc(i18n.t('settings.ai.memoTrigger.message.desc'))
+			.addText((text) =>
+				text.setValue(memoTrigger.message).onChange(async (value) => {
+					memoTrigger.message = value
+					this.plugin.settings.ai.memoTrigger = memoTrigger
+					await this.persist(false)
+				}),
+			)
 	}
 
 	private listUserManagedProviders() {

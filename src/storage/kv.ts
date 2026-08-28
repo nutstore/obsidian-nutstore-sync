@@ -51,3 +51,10 @@ export const chatSessionKV =
 export const chatMetaKV = createRecoverableStorage<
 	ChatMetaRecord | ChatSessionIndexItem[]
 >('chat_meta')
+
+export interface MemoTriggerRecord {
+	counted: string[]
+}
+
+export const memoTriggerKV =
+	createRecoverableStorage<MemoTriggerRecord>('memo_trigger')
