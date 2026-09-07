@@ -56,22 +56,10 @@ describe('built-in Skills', () => {
 		)
 	})
 
-	it('ships a self-consistent long-term-memory definition', () => {
-		const skill = BUILTIN_SKILLS.find(
-			(item) => item.name === 'long-term-memory',
-		)
-
-		expect(skill).toBeDefined()
-		expect(skill!.path).toBe(`${BUILTIN_SKILLS_ROOT}/long-term-memory/SKILL.md`)
-		expect(skill!.content).toContain('\nname: long-term-memory\n')
-		expect(skill!.content).toContain(`description: ${skill!.description}\n`)
-		expect(skill!.content).toContain('memory/archive/<YYYY>/<YYYY-MM-DD>.md')
-		expect(skill!.content).toContain('memory/catalog/<YYYY>.tsv')
-		expect(skill!.content).toContain('## 文件格式')
-		expect(skill!.content).toMatch(/^index: /m)
-		// No per-entry cue cards or active/archive split — both were removed from the design.
-		expect(skill!.content).not.toContain('memory/active/')
-		expect(skill!.content).not.toContain('@cue')
+	it('keeps the long-term-memory protocol out of the public Skill catalog', () => {
+		expect(
+			BUILTIN_SKILLS.some((item) => item.name === 'long-term-memory'),
+		).toBe(false)
 	})
 
 	it('mounts every built-in Skill under the read-only skills filesystem', async () => {

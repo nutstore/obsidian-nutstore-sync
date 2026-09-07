@@ -81,6 +81,7 @@ export class ToolExecutor {
 	getAgentDefinitions() {
 		return createAgentDefinitions({
 			fullAccess: Boolean(this.getSettings().yolo),
+			longTermMemoryEnabled: this.getSettings().longTermMemory === true,
 		})
 	}
 
@@ -156,6 +157,7 @@ export class ToolExecutor {
 				this.dispatchTaskHandler(params, origin),
 			dispatchableDefinitions: listDispatchableDefinitions({
 				fullAccess: Boolean(this.getSettings().yolo),
+				longTermMemoryEnabled: this.getSettings().longTermMemory === true,
 			}),
 			getSettingsSnapshot: this.settingsIo.getSettingsSnapshot,
 			updateSettings: this.settingsIo.updateSettings,

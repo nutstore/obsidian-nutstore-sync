@@ -19,7 +19,6 @@ import {
 	captureWorkspaceContexts,
 	computeChangedContexts,
 } from '~/ai/chat/context/workspace-context'
-import type { MemoryIndexRepository } from '~/ai/chat/context/memory-index'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import {
 	isSessionExecutionPending,
@@ -96,7 +95,6 @@ export class MessageOps {
 			targetMessageId: string,
 		) => boolean,
 		private skillRepository?: SkillRepository,
-		private memoryIndexRepository?: MemoryIndexRepository,
 		private settingsIo?: {
 			getSettingsSnapshot: SettingsSnapshotFn
 			updateSettings: SettingsUpdater
@@ -231,7 +229,6 @@ export class MessageOps {
 		)
 		if (idx === -1) return undefined
 		await this.skillRepository?.refresh()
-		await this.memoryIndexRepository?.refresh()
 		if (!isCurrent()) return undefined
 
 		const originalTimeline = agent.timeline.slice()
@@ -263,11 +260,7 @@ export class MessageOps {
 		}
 		if (lastUserIdx !== -1) {
 			const prevMessages = prefix.slice(0, lastUserIdx)
-			const current = captureWorkspaceContexts(
-				this.app,
-				this.skillRepository,
-				this.memoryIndexRepository,
-			)
+			const current = captureWorkspaceContexts(this.app, this.skillRepository)
 			const changed = computeChangedContexts(prevMessages, current)
 			const message = prefix[lastUserIdx]
 			prefix[lastUserIdx] = {

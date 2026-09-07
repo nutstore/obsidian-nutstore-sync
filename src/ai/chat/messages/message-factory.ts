@@ -16,7 +16,6 @@ import {
 	captureWorkspaceContexts,
 	computeChangedContexts,
 } from '~/ai/chat/context/workspace-context'
-import type { MemoryIndexRepository } from '~/ai/chat/context/memory-index'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import createId from '~/utils/create-id'
 import logger from '~/utils/logger'
@@ -32,7 +31,6 @@ export class MessageFactory {
 		private app: App,
 		private notify: () => void,
 		private skillRepository?: SkillRepository,
-		private memoryIndexRepository?: MemoryIndexRepository,
 	) {}
 
 	getActiveAgent(session: ChatSession) {
@@ -111,15 +109,10 @@ export class MessageFactory {
 		isCurrent?: () => boolean,
 	) {
 		await this.skillRepository?.refresh()
-		await this.memoryIndexRepository?.refresh()
 		if (isCurrent && !isCurrent()) return undefined
 		const now = Date.now()
 		if (session) session.updatedAt = now
-		const current = captureWorkspaceContexts(
-			this.app,
-			this.skillRepository,
-			this.memoryIndexRepository,
-		)
+		const current = captureWorkspaceContexts(this.app, this.skillRepository)
 		const changed = computeChangedContexts(agent.timeline, current)
 		const message: AppUIMessage = {
 			id: createId('message'),

@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai'
 import { isMcpToolName } from '~/ai/mcp/types'
+import longTermMemoryProtocol from '../../skills/builtin/long-term-memory/SKILL.md?raw'
 
 export type AgentPermissionMode = 'ask' | 'readonly' | 'full'
 
@@ -15,10 +16,12 @@ export interface AgentDefinition {
 
 export interface AgentDefinitionSettings {
 	fullAccess: boolean
+	longTermMemoryEnabled?: boolean
 }
 
 export const MASTER_AGENT_ID = 'master'
 export const EXPLORER_AGENT_ID = 'explorer'
+export const MEMORY_AGENT_ID = 'memory'
 
 const MASTER_SYSTEM_PROMPT = [
 	'You are the AI agent (ChatBox) built into the Nutstore Sync Obsidian plugin, which synchronizes an Obsidian vault with Nutstore over WebDAV.',
@@ -29,6 +32,7 @@ const MASTER_SYSTEM_PROMPT = [
 	'Treat every Skill path as an opaque absolute path: copy it exactly from workspace context and never construct, normalize, or substitute a different path from the Skill name.',
 	'Paths under /.agents/skills are user-defined Vault Skills; paths under /.agents/nutstore-sync/builtin-skills are bundled built-in Skills. These namespaces are distinct and are not interchangeable.',
 	'Hidden dot-folders are internal; do not expose their paths or contents unless the user explicitly asks about them. Never guess or fabricate credentials.',
+	'Long-term memory is handled exclusively by the memory subagent when that task type is available. When the request needs cross-session history, or needs to preserve, correct, or forget memory, dispatch a bounded memory task with the relevant facts, retrieval target, and expected result. If it is unavailable, say long-term memory is disabled rather than accessing its files. Do not read, search, or modify .agents/nutstore-sync/memory yourself.',
 ].join('\n')
 
 const EXPLORER_SYSTEM_PROMPT = [
@@ -40,6 +44,15 @@ const EXPLORER_SYSTEM_PROMPT = [
 	'Hidden dot-folders are internal; do not expose their paths or contents unless the task explicitly asks to inspect them.',
 	'If evidence is insufficient or conflicting, say so explicitly rather than guessing.',
 	'Return a concise, grounded final answer. Do not ask questions — make reasonable assumptions and note any limitations.',
+].join('\n')
+
+const MEMORY_SYSTEM_PROMPT = [
+	'You are the long-term memory subagent for an Obsidian vault.',
+	'You operate in an isolated context and receive only a task prompt from the main conversational agent. Carry out only the retrieval or maintenance scope explicitly delegated in that prompt; do not infer additional user intent or perform unrelated vault work.',
+	'Use the memory protocol below as the authority for storage, retrieval, correction, and forgetting. Keep your final answer concise: state the result, relevant memory facts or changes, and any source paths needed by the caller. Do not expose hidden internal paths to the user unless the delegated task explicitly requires it.',
+	'<memory-protocol>',
+	longTermMemoryProtocol.trim(),
+	'</memory-protocol>',
 ].join('\n')
 
 function createMasterAgentDefinition({
@@ -74,12 +87,28 @@ function createExplorerAgentDefinition(): AgentDefinition {
 	}
 }
 
+function createMemoryAgentDefinition({
+	fullAccess,
+	longTermMemoryEnabled,
+}: AgentDefinitionSettings): AgentDefinition {
+	return {
+		id: MEMORY_AGENT_ID,
+		description:
+			'Specialized agent for delegated cross-session memory retrieval and maintenance.',
+		systemPrompt: MEMORY_SYSTEM_PROMPT,
+		tools: ['bash'],
+		permissionMode: fullAccess ? 'full' : 'ask',
+		dispatchable: longTermMemoryEnabled === true,
+	}
+}
+
 export function createAgentDefinitions(
 	settings: AgentDefinitionSettings = { fullAccess: false },
 ) {
 	return [
 		createMasterAgentDefinition(settings),
 		createExplorerAgentDefinition(),
+		createMemoryAgentDefinition(settings),
 	]
 }
 

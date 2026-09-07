@@ -259,7 +259,7 @@
 			},
 			"longTermMemory": {
 				"name": "长期记忆",
-				"desc": "开启后，AI 可在跨会话间记住稳定的偏好、约定和决定"
+				"desc": "开启后，AI 可委派子 Agent 检索和维护跨会话的偏好、约定和决定"
 			},
 			"errors": {
 				"saveFailed": "AI 设置保存失败",

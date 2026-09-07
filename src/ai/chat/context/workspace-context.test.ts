@@ -25,7 +25,7 @@ function asPreviousMessage(deltas: WorkspaceContextDelta[]): AppUIMessage {
 }
 
 function captureAt(date: Date) {
-	return captureWorkspaceContexts(createApp(), undefined, undefined, {
+	return captureWorkspaceContexts(createApp(), undefined, {
 		now: () => date,
 	})
 }
@@ -101,6 +101,21 @@ describe('workspace skill context', () => {
 			hash: hashObject(catalog),
 		})
 		expect(computeChangedContexts([], current)).toEqual(current)
+	})
+
+	it('does not inject long-term memory into normal workspace context', () => {
+		const repository = {
+			getCatalog: () => [
+				{
+					name: 'review',
+					description: 'Review neutral notes 复核中性笔记 🌿',
+					path: '/.agents/skills/review/SKILL.md',
+				},
+			],
+		} as SkillRepository
+
+		const current = captureWorkspaceContexts(createApp(), repository)
+		expect(current.some((entry) => entry.key.startsWith('memory:'))).toBe(false)
 	})
 
 	it('emits an empty catalog to clear previously disclosed skills', () => {

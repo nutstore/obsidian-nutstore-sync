@@ -41,6 +41,18 @@ describe('main system prompt Skills guidance', () => {
 		expect(prompt).toContain('Obsidian vault')
 		expect(prompt).toContain('WebDAV')
 	})
+
+	it('delegates long-term memory instead of exposing it to the main agent', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(prompt).toContain('memory subagent')
+		expect(prompt).toContain('dispatch a bounded memory task')
+		expect(prompt).toContain('long-term memory is disabled')
+		expect(prompt).toContain('Do not read, search, or modify')
+		expect(prompt).not.toContain('<memory-protocol>')
+	})
 })
 
 describe('virtual filesystem guidance', () => {
@@ -73,6 +85,17 @@ describe('virtual filesystem guidance', () => {
 		expect(prompt).toContain('<virtual-filesystem>')
 		expect(prompt).toContain('/.agents/nutstore-sync/tmp')
 		expect(prompt).toContain('read-only explorer subagent')
+	})
+
+	it('gives the memory agent its private protocol and constrained tools', () => {
+		const definition = getAgentDefinition('memory')
+		if (!definition) throw new Error('Expected memory agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(definition.tools).toEqual(['bash'])
+		expect(prompt).toContain('<memory-protocol>')
+		expect(prompt).toContain('memory/archive/<YYYY>/<YYYY-MM-DD>.md')
+		expect(prompt).toContain('isolated context')
 	})
 })
 

@@ -63,7 +63,6 @@ import {
 } from '~/ai/chat/ui/view-projection'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
 import { SkillRepository } from '~/ai/skills/repository'
-import { MemoryIndexRepository } from '~/ai/chat/context/memory-index'
 import { createAbortError, isAbortError } from '~/ai/transport/abort'
 import SessionExportModal from '~/components/SessionExportModal'
 import i18n from '~/i18n'
@@ -120,19 +119,10 @@ export default class ChatService extends BaseService {
 	private readonly sessionProcessor: SessionProcessor
 	private readonly compactionCoordinator: ContextCompactionCoordinator
 	private readonly skillRepository: SkillRepository
-	private readonly memoryIndexRepository: MemoryIndexRepository
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
-		// Not all settings are loaded when services get constructed (the
-		// settings service loads them during onload, after construction), so
-		// the memory gate must not read `plugin.settings` here. Repositories
-		// default to enabled; `initializeInternal` and `handleSettingsChanged`
-		// sync them from the loaded setting before any refresh/injection runs.
 		this.skillRepository = new SkillRepository(plugin.app)
-		this.memoryIndexRepository = new MemoryIndexRepository(plugin.app, {
-			enabled: true,
-		})
 		this.selection = new Selection(
 			() => plugin.settings.ai,
 			this.state,
@@ -171,7 +161,6 @@ export default class ChatService extends BaseService {
 			plugin.app,
 			() => this.notify(),
 			this.skillRepository,
-			this.memoryIndexRepository,
 		)
 		const ensureProviderReady = (provider: AIProviderConfig) =>
 			plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
@@ -214,7 +203,6 @@ export default class ChatService extends BaseService {
 			(sessionId, messageId) =>
 				this.sessionProcessor.enqueueRegenerate(sessionId, messageId),
 			this.skillRepository,
-			this.memoryIndexRepository,
 			{
 				getSettingsSnapshot: () => plugin.settings,
 				updateSettings: (patch) =>
@@ -246,10 +234,6 @@ export default class ChatService extends BaseService {
 		this.notifier.notify()
 	}
 
-	override onload() {
-		this.syncMemoryGate()
-	}
-
 	override onunload() {
 		for (const [sessionId, session] of this.state.loadedSessions) {
 			this.state.deletedSessionIds.add(sessionId)
@@ -278,7 +262,6 @@ export default class ChatService extends BaseService {
 	}
 
 	private async initializeInternal() {
-		this.syncMemoryGate()
 		const initialSession = await this.store.loadInitialSession()
 		if (initialSession) {
 			this.taskManager.restoreMasterTaskContinuations(initialSession)
@@ -299,20 +282,7 @@ export default class ChatService extends BaseService {
 		return this.notifier.subscribe(listener)
 	}
 
-	/**
-	 * Sync the long-term memory gate (settings → repositories). Safe only
-	 * after `plugin.settings` has been loaded (settings service onload), so it
-	 * is called from `initializeInternal` and `handleSettingsChanged`, never
-	 * from the constructor.
-	 */
-	private syncMemoryGate() {
-		const memoryEnabled = this.plugin.settings.ai.longTermMemory === true
-		this.skillRepository.setLongTermMemoryEnabled(memoryEnabled)
-		this.memoryIndexRepository.setEnabled(memoryEnabled)
-	}
-
 	async handleSettingsChanged() {
-		this.syncMemoryGate()
 		this.selection.syncPendingSelectionWithSettings()
 		if (!this.state.initialization) {
 			this.notify()

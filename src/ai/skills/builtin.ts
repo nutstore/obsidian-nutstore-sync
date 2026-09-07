@@ -8,7 +8,6 @@ import settingsReferenceContent from './builtin/nutstore-sync-guide/references/s
 import nutstoreSyncGuideContent from './builtin/nutstore-sync-guide/SKILL.md?raw'
 import syncReferenceContent from './builtin/nutstore-sync-guide/references/sync.md?raw'
 import skillCreatorContent from './builtin/skill-creator/SKILL.md?raw'
-import longTermMemoryContent from './builtin/long-term-memory/SKILL.md?raw'
 import type { BuiltinSkill } from './types'
 
 export const BUILTIN_SKILLS_ROOT = BUILTIN_SKILLS_MOUNT_POINT
@@ -49,13 +48,6 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 			'Create and define agent Skills in the current Obsidian vault. Use when the user asks to create a Skill, write a SKILL.md file, or turn a workflow into reusable agent instructions.',
 		path: `${BUILTIN_SKILLS_ROOT}/skill-creator/SKILL.md`,
 		content: skillCreatorContent,
-	},
-	{
-		name: 'long-term-memory',
-		description:
-			'读取和维护 Agent 与用户跨聊天会话形成的长期记忆，使当前交互能够延续过去的重要经历、知识和上下文，而不是每次从零开始。用于记住、回忆、纠正或忘记过去的信息，以及当前交互与既往经历、讨论、决定、目标、偏好、约定、未完成事项或其他历史上下文明显相关的情况。',
-		path: `${BUILTIN_SKILLS_ROOT}/long-term-memory/SKILL.md`,
-		content: longTermMemoryContent,
 	},
 ]
 

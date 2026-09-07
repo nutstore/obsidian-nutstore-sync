@@ -5,6 +5,7 @@ import {
 	EXPLORER_AGENT_ID,
 	filterToolsForAgent,
 	MASTER_AGENT_ID,
+	MEMORY_AGENT_ID,
 } from './registry'
 
 function findDefinition(
@@ -18,8 +19,14 @@ function findDefinition(
 
 describe('createAgentDefinitions', () => {
 	it('rebuilds definitions from current settings without elevating explorer', () => {
-		const askDefinitions = createAgentDefinitions({ fullAccess: false })
-		const fullDefinitions = createAgentDefinitions({ fullAccess: true })
+		const askDefinitions = createAgentDefinitions({
+			fullAccess: false,
+			longTermMemoryEnabled: true,
+		})
+		const fullDefinitions = createAgentDefinitions({
+			fullAccess: true,
+			longTermMemoryEnabled: true,
+		})
 
 		expect(fullDefinitions).not.toBe(askDefinitions)
 		expect(findDefinition(askDefinitions, MASTER_AGENT_ID).permissionMode).toBe(
@@ -31,6 +38,27 @@ describe('createAgentDefinitions', () => {
 		expect(
 			findDefinition(fullDefinitions, EXPLORER_AGENT_ID).permissionMode,
 		).toBe('readonly')
+		expect(findDefinition(askDefinitions, MEMORY_AGENT_ID)).toMatchObject({
+			permissionMode: 'ask',
+			dispatchable: true,
+			tools: ['bash'],
+		})
+		expect(
+			findDefinition(fullDefinitions, MEMORY_AGENT_ID).permissionMode,
+		).toBe('full')
+	})
+
+	it('keeps the memory agent addressable but rejects new dispatch when disabled', () => {
+		const definition = findDefinition(
+			createAgentDefinitions({
+				fullAccess: false,
+				longTermMemoryEnabled: false,
+			}),
+			MEMORY_AGENT_ID,
+		)
+
+		expect(definition.dispatchable).toBe(false)
+		expect(definition.systemPrompt).toContain('<memory-protocol>')
 	})
 })
 

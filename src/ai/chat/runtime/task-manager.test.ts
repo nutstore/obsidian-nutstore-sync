@@ -10,6 +10,7 @@ import {
 	EXPLORER_AGENT_ID,
 	getAgentDefinition,
 	MASTER_AGENT_ID,
+	MEMORY_AGENT_ID,
 } from '~/ai/chat/agents/registry'
 import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
 import { BASH_TMP_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
@@ -1062,7 +1063,7 @@ describe('TaskManager parent notifications', () => {
 		expect(master.pendingInputs).toEqual([])
 	})
 
-	it('rejects non-dispatchable agent types', async () => {
+	it('rejects non-dispatchable agent types, including disabled memory', async () => {
 		const master = createEmptyMasterAgent(1)
 		const session: ChatSession = {
 			schemaVersion: 2,
@@ -1095,17 +1096,19 @@ describe('TaskManager parent notifications', () => {
 			{} as never,
 		)
 
-		await expect(
-			manager.dispatchTask(
-				{
-					prompt: 'Inspect the vault',
-					subagentType: MASTER_AGENT_ID,
-					callerAgentId: MASTER_AGENT_ID,
-					sessionId: session.id,
-				},
-				testOrigin(),
-			),
-		).rejects.toThrow('cannot be dispatched')
+		for (const subagentType of [MASTER_AGENT_ID, MEMORY_AGENT_ID]) {
+			await expect(
+				manager.dispatchTask(
+					{
+						prompt: 'Inspect neutral notes 检查中性笔记 🌿',
+						subagentType,
+						callerAgentId: MASTER_AGENT_ID,
+						sessionId: session.id,
+					},
+					testOrigin(),
+				),
+			).rejects.toThrow('cannot be dispatched')
+		}
 		expect(master.subagents).toEqual({})
 	})
 

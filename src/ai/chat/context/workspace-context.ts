@@ -4,7 +4,6 @@ import { hash as hashObject } from 'ohash'
 import type { AppUIMessage, WorkspaceContextDelta } from '~/ai/chat/types'
 import { getWorkspaceContextDeltas } from '~/ai/chat/messages/ui-message'
 import type { SkillRepository } from '~/ai/skills/repository'
-import type { MemoryIndexRepository } from '~/ai/chat/context/memory-index'
 import { formatLocalDate } from '~/utils/local-date'
 
 type View = WorkspaceLeaf['view'] & {
@@ -93,7 +92,6 @@ function getConnectedFilePath(leaf: WorkspaceLeaf): string | null {
 export function captureWorkspaceContexts(
 	app: App,
 	skillRepository?: SkillRepository,
-	memoryIndexRepository?: MemoryIndexRepository,
 	options: WorkspaceContextOptions = {},
 ): WorkspaceContextDelta[] {
 	const activeFile = app.workspace.getActiveFile()?.path ?? null
@@ -119,9 +117,6 @@ export function captureWorkspaceContexts(
 	if (skillRepository) {
 		const skills = skillRepository.getCatalog()
 		contexts.push({ key: 'skills', content: skills, hash: hashObject(skills) })
-	}
-	if (memoryIndexRepository) {
-		contexts.push(...memoryIndexRepository.getDeltas())
 	}
 	return contexts
 }

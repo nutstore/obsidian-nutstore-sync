@@ -96,7 +96,7 @@ Agent 支持：
 - **多步骤任务**：拆解复杂任务，并按需使用只读探索任务梳理信息。
 - **Skills**：调用内置或用户创建的 Skills，复用工作流程、领域知识和操作约定。
 - **MCP**：连接你配置的 MCP 服务，将外部工具和信息源带入对话。
-- **长期记忆**：可选地跨会话记住稳定的偏好、约定和决策。
+- **长期记忆**：可选地由专门子 Agent 跨会话检索和维护偏好、约定和决策。
 - **持续会话**：保存聊天记录并压缩较长上下文；会话文件可以随现有同步在设备间流转。
 - **多种模型**：使用 OpenAI、Anthropic、Google、xAI 等服务商格式与预设，或配置自定义兼容端点。
 
@@ -201,7 +201,7 @@ The Agent supports:
 - **Multi-step tasks**: Break down complex work and delegate read-only exploration when useful.
 - **Skills**: Use built-in or user-created Skills to reuse workflows, domain knowledge, and operating conventions.
 - **MCP**: Connect configured MCP servers to bring external tools and information sources into a conversation.
-- **Long-term memory**: Optionally remember stable preferences, conventions, and decisions across sessions.
+- **Long-term memory**: Optionally delegate cross-session retrieval and maintenance of preferences, conventions, and decisions to a specialized subagent.
 - **Persistent sessions**: Save conversations and compress long contexts; session files can travel through the existing sync flow.
 - **Multiple model providers**: Use OpenAI, Anthropic, Google, xAI, or custom compatible endpoints.
 

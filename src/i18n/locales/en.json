@@ -301,7 +301,7 @@
 			},
 			"longTermMemory": {
 				"name": "Long-term memory",
-				"desc": "When on, the AI can remember stable preferences, conventions and decisions across sessions."
+				"desc": "When on, the AI can delegate retrieval and maintenance of preferences, conventions and decisions across sessions."
 			},
 			"errors": {
 				"saveFailed": "Failed to save AI settings",

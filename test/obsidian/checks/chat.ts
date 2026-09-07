@@ -50,30 +50,6 @@ export async function persistsChatSessions(app: App) {
 	)
 }
 
-export async function readsMemoryFiles(app: App) {
-	const { MEMORY_ROOT, MemoryIndexRepository } =
-		await import('~/ai/chat/context/memory-index')
-	const path = `${MEMORY_ROOT}/2026/2026-09-01.md`
-	await app.vault.adapter.mkdir(`${MEMORY_ROOT}/2026`)
-	await app.vault.adapter.write(
-		path,
-		'---\nindex: neutral index 中性索引 🌱\n---\n\nneutral body',
-	)
-	const repository = new MemoryIndexRepository(app, {
-		now: () => new Date('2026-09-01T12:00:00.000Z'),
-	})
-	await repository.refresh()
-	const delta = repository
-		.getDeltas()
-		.find((entry) => entry.key === 'memory:2026-09-01')
-	assert(delta, 'Memory file was not indexed')
-	const content = delta.content as { index: string }
-	assert(
-		content.index === 'neutral index 中性索引 🌱',
-		'Memory frontmatter was not read',
-	)
-}
-
 export async function toleratesCorruptChatMeta(app: App) {
 	const { SessionsFileBackend } =
 		await import('~/ai/chat/session/session-files')
