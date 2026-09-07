@@ -279,7 +279,10 @@ export default class ChatService extends BaseService {
 
 	private async initializeInternal() {
 		this.syncMemoryGate()
-		await this.store.loadInitialSession()
+		const initialSession = await this.store.loadInitialSession()
+		if (initialSession) {
+			this.taskManager.restoreMasterTaskContinuations(initialSession)
+		}
 
 		if (this.state.sessionIndex.length === 0) {
 			const session = await this.createEmptySession()
@@ -580,8 +583,9 @@ export default class ChatService extends BaseService {
 			return
 		}
 
-		await this.store.loadSessionById(sessionId)
+		const session = await this.store.loadSessionById(sessionId)
 		this.state.activeSessionId = sessionId
+		this.taskManager.restoreMasterTaskContinuations(session)
 		await this.store.persistMetaAndIndex()
 		this.notify()
 	}

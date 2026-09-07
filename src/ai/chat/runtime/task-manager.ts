@@ -338,21 +338,7 @@ export class TaskManager {
 		assertMasterPendingInputsEmpty(master)
 		const parent = findParentAgent(master, agent.id)
 		if (!parent) throw new Error('Task parent is unavailable')
-		const input: AppUIMessage = {
-			id: createId('input'),
-			role: 'user',
-			metadata: { createdAt: Date.now() },
-			parts: [
-				{
-					type: 'data-system-notification',
-					data: {
-						kind: 'task-result-ready',
-						taskId: agent.id,
-						resultPath,
-					},
-				},
-			],
-		}
+		const input = this.createTaskResultInput(agent.id, resultPath)
 		if (!this.isCurrentSession(session) || !this.isOriginAlive(origin))
 			return false
 		if (parent.id === MASTER_AGENT_ID) {
@@ -379,6 +365,68 @@ export class TaskManager {
 		}
 		this.wakeSubagent(session, parent.id)
 		return true
+	}
+
+	/**
+	 * Restores master notifications whose durable task result was written before
+	 * a reload, but whose scheduler-only turn was not yet appended to the
+	 * conversation timeline.
+	 */
+	restoreMasterTaskContinuations(session: ChatSession) {
+		if (!this.isCurrentSession(session)) return
+		const master = getMasterAgent(session)
+		for (const agent of Object.values(master.subagents)) {
+			if (!isTerminalAgent(agent) || !agent.resultPath) continue
+			if (this.masterHasTaskResultNotification(master, agent.id)) continue
+			const origin: TaskOrigin = {
+				turnId: createId('turn'),
+				signal: new AbortController().signal,
+			}
+			if (
+				!this.enqueueMasterAgentInput(
+					session.id,
+					this.createTaskResultInput(agent.id, agent.resultPath),
+					origin,
+				)
+			) {
+				throw new Error('Unable to restore master task continuation')
+			}
+		}
+	}
+
+	private createTaskResultInput(
+		taskId: string,
+		resultPath: string,
+	): AppUIMessage {
+		return {
+			id: createId('input'),
+			role: 'user',
+			metadata: { createdAt: Date.now() },
+			parts: [
+				{
+					type: 'data-system-notification',
+					data: {
+						kind: 'task-result-ready',
+						taskId,
+						resultPath,
+					},
+				},
+			],
+		}
+	}
+
+	private masterHasTaskResultNotification(
+		master: ChatAgentState,
+		taskId: string,
+	) {
+		return master.timeline.some((message) =>
+			message.parts.some(
+				(part) =>
+					part.type === 'data-system-notification' &&
+					part.data.kind === 'task-result-ready' &&
+					part.data.taskId === taskId,
+			),
+		)
 	}
 
 	private removePendingInput(agent: ChatAgentState, input: AppUIMessage) {
@@ -478,6 +526,7 @@ export class TaskManager {
 			return
 		agent.status = status
 		agent.finishedAt = Date.now()
+		agent.resultPath = resultPath
 		try {
 			await this.persistCurrentSession(session)
 			if (this.isCurrentSession(session) && this.isOriginAlive(origin)) {

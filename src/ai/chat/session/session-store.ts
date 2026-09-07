@@ -469,6 +469,8 @@ export class SessionStore {
 				createdAt: agent.createdAt || session.createdAt,
 				startedAt: normalizeTimestamp(agent.startedAt),
 				finishedAt: normalizeTimestamp(agent.finishedAt),
+				resultPath:
+					typeof agent.resultPath === 'string' ? agent.resultPath : undefined,
 				timeline,
 				pendingInputs,
 				operations: Object.fromEntries(

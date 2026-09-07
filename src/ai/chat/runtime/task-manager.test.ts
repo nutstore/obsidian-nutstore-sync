@@ -5,6 +5,7 @@ import { MessageFactory } from '~/ai/chat/messages/message-factory'
 import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
 import { ContextCompactionCoordinator } from '~/ai/chat/runtime/context-compaction-coordinator'
 import { TaskManager } from '~/ai/chat/runtime/task-manager'
+import { normalizeRehydratedExecution } from '~/ai/chat/session/rehydration-execution'
 import {
 	EXPLORER_AGENT_ID,
 	getAgentDefinition,
@@ -224,6 +225,64 @@ describe('TaskManager parent notifications', () => {
 
 		expect(persistSession).toHaveBeenCalledTimes(1)
 		expect(handler).toHaveBeenCalledTimes(1)
+	})
+
+	it('rebuilds an unconsumed master task continuation after rehydration', () => {
+		const master = createEmptyMasterAgent(1)
+		const child: ChatAgentState = {
+			...createEmptyMasterAgent(2),
+			id: 'completed-child',
+			type: EXPLORER_AGENT_ID,
+			status: 'completed',
+			resultPath: `${BASH_TMP_MOUNT_POINT}/session/tasks/completed-child.txt`,
+		}
+		master.subagents[child.id] = child
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'session',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master },
+		}
+		const handler = vi.fn(
+			(_sessionId: string, _input: AppUIMessage, _origin: TaskOrigin) => true,
+		)
+		const manager = new TaskManager(
+			{} as never,
+			vi.fn(),
+			{
+				loadedSessions: new Map([[session.id, session]]),
+				deletedSessionIds: new Set<string>(),
+				taskModelSelection: new Map(),
+			} as never,
+			{} as never,
+			{ persistSession: vi.fn(async () => undefined) } as never,
+			vi.fn(),
+			{} as never,
+			{} as never,
+			{} as never,
+		)
+		manager.setMasterAgentInputHandler(handler)
+
+		normalizeRehydratedExecution(session)
+		manager.restoreMasterTaskContinuations(session)
+
+		expect(handler).toHaveBeenCalledTimes(1)
+		expect(handler.mock.calls[0]?.[0]).toBe(session.id)
+		expect(handler.mock.calls[0]?.[1]).toMatchObject({
+			role: 'user',
+			parts: [
+				{
+					type: 'data-system-notification',
+					data: {
+						kind: 'task-result-ready',
+						taskId: child.id,
+						resultPath: child.resultPath,
+					},
+				},
+			],
+		})
+		expect(master.pendingInputs).toEqual([])
 	})
 
 	it('does not settle or notify when persisting the result fails', async () => {

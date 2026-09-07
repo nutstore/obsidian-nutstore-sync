@@ -191,6 +191,8 @@ export interface ChatAgentState {
 	createdAt: number
 	startedAt?: number
 	finishedAt?: number
+	/** Persisted result artifact for a terminal task that can notify its parent. */
+	resultPath?: string
 	timeline: AppUIMessage[]
 	/** Continuation inbox for non-master subagents; the master scheduler owns master input. */
 	pendingInputs: AppUIMessage[]
