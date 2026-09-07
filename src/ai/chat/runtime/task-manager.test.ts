@@ -237,63 +237,109 @@ describe('TaskManager parent notifications', () => {
 		expect(handler).toHaveBeenCalledTimes(1)
 	})
 
-	it('rebuilds an unconsumed master task continuation after rehydration', () => {
-		const master = createEmptyMasterAgent(1)
-		const child: ChatAgentState = {
-			...createEmptyMasterAgent(2),
-			id: 'completed-child',
-			type: EXPLORER_AGENT_ID,
-			status: 'completed',
-			resultPath: `${BASH_TMP_MOUNT_POINT}/session/tasks/completed-child.txt`,
-		}
-		master.subagents[child.id] = child
-		const session: ChatSession = {
-			schemaVersion: 2,
-			id: 'session',
-			createdAt: 1,
-			updatedAt: 1,
-			subagents: { master },
-		}
-		const handler = vi.fn(
-			(_sessionId: string, _input: AppUIMessage, _origin: TaskOrigin) => true,
-		)
-		const manager = new TaskManager(
-			{} as never,
-			vi.fn(),
-			{
-				loadedSessions: new Map([[session.id, session]]),
-				deletedSessionIds: new Set<string>(),
-				taskModelSelection: new Map(),
-			} as never,
-			{} as never,
-			{ persistSession: vi.fn(async () => undefined) } as never,
-			vi.fn(),
-			{} as never,
-			{} as never,
-			{} as never,
-		)
-		manager.setMasterAgentInputHandler(handler)
-
-		normalizeRehydratedExecution(session)
-		manager.restoreMasterTaskContinuations(session)
-
-		expect(handler).toHaveBeenCalledTimes(1)
-		expect(handler.mock.calls[0]?.[0]).toBe(session.id)
-		expect(handler.mock.calls[0]?.[1]).toMatchObject({
-			role: 'user',
-			parts: [
-				{
-					type: 'data-system-notification',
-					data: {
-						kind: 'task-result-ready',
-						taskId: child.id,
-						resultPath: child.resultPath,
+	it.each([0, 1, 3])(
+		'rebuilds an unconsumed task continuation at depth %s after rehydration',
+		(depth) => {
+			const master = createEmptyMasterAgent(1)
+			const child: ChatAgentState = {
+				...createEmptyMasterAgent(2),
+				id: 'completed-child',
+				type: EXPLORER_AGENT_ID,
+				status: 'completed',
+				resultPath: `${BASH_TMP_MOUNT_POINT}/session/tasks/completed-child.txt`,
+			}
+			let parent = master
+			for (let level = 0; level < depth; level += 1) {
+				const ancestor: ChatAgentState = {
+					...createEmptyMasterAgent(1),
+					id: `探索 Explorer 🌿 ${level}`,
+					type: EXPLORER_AGENT_ID,
+					status: 'idle',
+				}
+				parent.subagents[ancestor.id] = ancestor
+				parent = ancestor
+			}
+			child.id = '记忆 Memory 🌿'
+			child.resultPath = `${BASH_TMP_MOUNT_POINT}/session/tasks/${child.id}.txt`
+			parent.subagents[child.id] = child
+			const pendingInput: AppUIMessage = {
+				id: '结果 Result 🌿',
+				role: 'user',
+				parts: [
+					{
+						type: 'data-system-notification',
+						data: {
+							kind: 'task-result-ready',
+							taskId: child.id,
+							resultPath: child.resultPath,
+						},
 					},
-				},
-			],
-		})
-		expect(master.pendingInputs).toEqual([])
-	})
+				],
+			}
+			if (depth > 0) parent.pendingInputs.push(pendingInput)
+			const session: ChatSession = {
+				schemaVersion: 2,
+				id: 'session',
+				createdAt: 1,
+				updatedAt: 1,
+				subagents: { master },
+			}
+			const handler = vi.fn(
+				(_sessionId: string, _input: AppUIMessage, _origin: TaskOrigin) => true,
+			)
+			const manager = new TaskManager(
+				{} as never,
+				vi.fn(),
+				{
+					loadedSessions: new Map([[session.id, session]]),
+					deletedSessionIds: new Set<string>(),
+					taskModelSelection: new Map(),
+				} as never,
+				{} as never,
+				{ persistSession: vi.fn(async () => undefined) } as never,
+				vi.fn(),
+				{} as never,
+				{} as never,
+				{} as never,
+			)
+			manager.setMasterAgentInputHandler(handler)
+
+			normalizeRehydratedExecution(session)
+			manager.restoreMasterTaskContinuations(session)
+
+			expect(handler).toHaveBeenCalledTimes(1)
+			expect(handler.mock.calls[0]?.[0]).toBe(session.id)
+			expect(handler.mock.calls[0]?.[1]).toMatchObject({
+				role: 'user',
+				parts: [
+					{
+						type: 'data-system-notification',
+						data: {
+							kind: 'task-result-ready',
+							taskId: child.id,
+							resultPath: child.resultPath,
+						},
+					},
+				],
+			})
+			expect(master.pendingInputs).toEqual([])
+			expect(parent.pendingInputs).toEqual([])
+			if (depth > 0) expect(parent.status).toBe('cancelled')
+
+			// Once the recovered turn is durable, another reload must not replay it.
+			master.timeline.push(handler.mock.calls[0]![1])
+			handler.mockClear()
+			normalizeRehydratedExecution(session)
+			manager.restoreMasterTaskContinuations(session)
+			expect(handler).not.toHaveBeenCalled()
+
+			// A result already consumed by its direct parent also needs no replay.
+			master.timeline = []
+			parent.timeline.push(pendingInput)
+			manager.restoreMasterTaskContinuations(session)
+			expect(handler).not.toHaveBeenCalled()
+		},
+	)
 
 	it('does not settle or notify when persisting the result fails', async () => {
 		writeTaskResult.mockRejectedValueOnce(new Error('disk full'))

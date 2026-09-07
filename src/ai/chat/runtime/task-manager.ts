@@ -371,16 +371,24 @@ export class TaskManager {
 	}
 
 	/**
-	 * Restores master notifications whose durable task result was written before
-	 * a reload, but whose scheduler-only turn was not yet appended to the
-	 * conversation timeline.
+	 * Rehydration cancels task execution and clears pending inputs. Recover
+	 * unconsumed results from the entire tree through the master scheduler,
+	 * since cancelled parents can no longer forward their children’s results.
 	 */
 	restoreMasterTaskContinuations(session: ChatSession) {
 		if (!this.isCurrentSession(session)) return
 		const master = getMasterAgent(session)
-		for (const agent of Object.values(master.subagents)) {
+		for (const agent of getSessionSubagents(session)) {
 			if (!isTerminalAgent(agent) || !agent.resultPath) continue
-			if (this.masterHasTaskResultNotification(master, agent.id)) continue
+			if (this.hasTaskResultNotification(master, agent.id)) continue
+			const parent = findParentAgent(master, agent.id)
+			if (!parent) continue
+			if (
+				parent.id !== MASTER_AGENT_ID &&
+				(!isTerminalAgent(parent) ||
+					this.hasTaskResultNotification(parent, agent.id))
+			)
+				continue
 			const origin: TaskOrigin = {
 				turnId: createId('turn'),
 				signal: new AbortController().signal,
@@ -418,11 +426,8 @@ export class TaskManager {
 		}
 	}
 
-	private masterHasTaskResultNotification(
-		master: ChatAgentState,
-		taskId: string,
-	) {
-		return master.timeline.some((message) =>
+	private hasTaskResultNotification(agent: ChatAgentState, taskId: string) {
+		return agent.timeline.some((message: AppUIMessage) =>
 			message.parts.some(
 				(part) =>
 					part.type === 'data-system-notification' &&
