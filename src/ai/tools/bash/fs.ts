@@ -20,6 +20,7 @@ import type {
 	AIDualPathFileOperation,
 	AISinglePathFileOperation,
 } from '~/ai/tools/file-operation'
+import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import type { ReversibleFileSnapshot, ReversibleToolOp } from '~/ai/chat/types'
 import { decodeReversibleFileSnapshot } from '~/ai/chat/messages/reversible-content'
@@ -32,7 +33,7 @@ import {
 	writeLocalBinary,
 } from '~/utils/local-vault-io'
 import { statVaultItem } from '~/utils/stat-vault-item'
-import { AGENTS_MOUNT_POINT, AGENTS_VAULT_PATH } from './mount-points'
+import { AGENTS_VAULT_PATH } from './mount-points'
 
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
@@ -380,18 +381,17 @@ export class ObsidianVaultFs implements IFileSystem {
 			) {
 				return { files: [], folders: [] }
 			}
-			const listed = await this.vault.adapter.list(adapterPath)
-			const stable = await this.removeUnavailableSkillEntries(
-				normalized,
-				listed,
+			const listed = await listAvailableAdapterEntries(
+				this.vault.adapter,
+				adapterPath,
 			)
 			if (normalized === '/') {
-				const folders = new Set(stable.folders)
+				const folders = new Set(listed.folders)
 				folders.add(AGENTS_VAULT_PATH)
 				folders.add(normalizePath(this.vault.configDir))
-				return { files: stable.files, folders: [...folders] }
+				return { files: listed.files, folders: [...folders] }
 			}
-			return stable
+			return listed
 		}
 
 		const target =
@@ -414,43 +414,6 @@ export class ObsidianVaultFs implements IFileSystem {
 			folders.push(AGENTS_VAULT_PATH, normalizePath(this.vault.configDir))
 		}
 		return { files, folders }
-	}
-
-	/**
-	 * A cloud adapter can briefly return a Skill directory from list() after it
-	 * was removed locally, while stat() already reports ENOENT. Do not expose
-	 * such a transient entry to the shell: just-bash stats discovered entries
-	 * while expanding commands, which would otherwise make every command fail.
-	 */
-	private async removeUnavailableSkillEntries(
-		virtualPath: string,
-		listed: { files: string[]; folders: string[] },
-	) {
-		if (virtualPath !== `${AGENTS_MOUNT_POINT}/skills`) return listed
-
-		const available = async (path: string) => {
-			try {
-				return Boolean(await this.vault.adapter.stat(normalizePath(path)))
-			} catch {
-				return false
-			}
-		}
-		const [files, folders] = await Promise.all([
-			Promise.all(
-				listed.files.map(async (path) =>
-					(await available(path)) ? path : undefined,
-				),
-			),
-			Promise.all(
-				listed.folders.map(async (path) =>
-					(await available(path)) ? path : undefined,
-				),
-			),
-		])
-		return {
-			files: files.filter((path): path is string => Boolean(path)),
-			folders: folders.filter((path): path is string => Boolean(path)),
-		}
 	}
 
 	private recordPath(inputPath: string) {

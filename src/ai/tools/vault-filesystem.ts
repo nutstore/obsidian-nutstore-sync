@@ -1,6 +1,7 @@
 import { MountableFs, type IFileSystem } from 'just-bash/browser'
 import { normalizePath, type App } from 'obsidian'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
+import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { ObsidianVaultFs, ReversibleOpRecorder } from './bash/fs'
 import {
@@ -46,7 +47,10 @@ async function listAgentDomainPaths(app: App) {
 	while (directories.length > 0) {
 		const directory = directories.pop()!
 		try {
-			const listed = await app.vault.adapter.list(directory)
+			const listed = await listAvailableAdapterEntries(
+				app.vault.adapter,
+				directory,
+			)
 			for (const path of [...listed.files, ...listed.folders])
 				paths.push(normalizePath(path))
 			for (const path of listed.folders) directories.push(normalizePath(path))

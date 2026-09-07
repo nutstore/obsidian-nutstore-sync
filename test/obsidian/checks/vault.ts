@@ -153,6 +153,7 @@ export async function skipsStaleVaultSkillEntries(app: App) {
 	const { SkillRepository, SKILLS_ROOT } =
 		await import('~/ai/skills/repository')
 	const { ObsidianVaultFs } = await import('~/ai/tools/bash/fs')
+	const { createVaultFileSystem } = await import('~/ai/tools/vault-filesystem')
 	const adapter = app.vault.adapter
 	const stableFolder = `${SKILLS_ROOT}/steady-skill`
 	const stableSkill = `${stableFolder}/SKILL.md`
@@ -207,6 +208,12 @@ export async function skipsStaleVaultSkillEntries(app: App) {
 		assert(
 			!entries.includes('temporary-中性-🌱'),
 			'Stale Skill entry was exposed to Bash',
+		)
+
+		const indexedFs = await createVaultFileSystem(app)
+		assert(
+			!indexedFs.getAllPaths().includes(`/${staleFolder}`),
+			'Stale adapter entry was added to the initial Bash glob index',
 		)
 	} finally {
 		adapter.list = originalList
