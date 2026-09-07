@@ -82,7 +82,7 @@ export class TaskManager {
 		origin: TaskOrigin,
 	) {
 		if (!this.isAgentExecutionAlive(session, agent, origin)) return
-		const selectedModel = this.state.taskModelSelection.get(agent.id)
+		const selectedModel = agent.model
 		if (!selectedModel?.providerId || !selectedModel.modelId) {
 			await this.finishAgentAsFailed(
 				session,
@@ -190,7 +190,7 @@ export class TaskManager {
 		model: AIModelConfig,
 		isTurnAlive: () => boolean,
 	): ContextCompactionRequest {
-		const selectedModel = this.state.taskModelSelection.get(agent.id)
+		const selectedModel = agent.model
 		// Capture primitive ids at request creation. The selection object can be
 		// mutated in place when settings change; retaining the object reference
 		// would make the stale-job check observe the new values as if they were
@@ -209,7 +209,7 @@ export class TaskManager {
 				this.agentRunner.resolveSummaryContext(agent, session, model),
 			isCancelled: () => !isTurnAlive(),
 			isCurrent: () => {
-				const currentSelection = this.state.taskModelSelection.get(agent.id)
+				const currentSelection = agent.model
 				return (
 					isTurnAlive() &&
 					currentSelection?.providerId === selectedProviderId &&
@@ -244,6 +244,9 @@ export class TaskManager {
 				}),
 			)
 		}
+		const selectedModel =
+			this.toolExecutor.getSubagentModelSelection(definition.id) ??
+			(session.model ? { ...session.model } : undefined)
 
 		const shouldQueue =
 			this.countRunningAgentsForSession(session) >=
@@ -256,6 +259,7 @@ export class TaskManager {
 		const agent: ChatAgentState = {
 			id: agentId,
 			type: definition.id,
+			model: selectedModel,
 			status: shouldQueue ? 'queued' : 'running',
 			createdAt: now,
 			startedAt: shouldQueue ? undefined : now,
@@ -276,7 +280,6 @@ export class TaskManager {
 		}
 		parent.subagents[agent.id] = agent
 		this.taskOrigins.set(this.originKey(session.id, agent.id), origin)
-		this.state.taskModelSelection.set(agent.id, session.model)
 		void this.persistCurrentSession(session)
 		this.notify()
 		if (shouldQueue) this.startQueuedAgentsForSession(session)
@@ -595,12 +598,10 @@ export class TaskManager {
 			const agentId = key.slice(prefix.length)
 			this.compactionCoordinator.cancel(session.id, agentId)
 			this.taskOrigins.delete(key)
-			this.state.taskModelSelection.delete(agentId)
 		}
 	}
 
 	private cleanupAgentTracking(sessionId: string, agentId: string) {
-		this.state.taskModelSelection.delete(agentId)
 		this.taskOrigins.delete(this.originKey(sessionId, agentId))
 	}
 }

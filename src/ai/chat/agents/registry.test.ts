@@ -21,11 +21,11 @@ describe('createAgentDefinitions', () => {
 	it('rebuilds definitions from current settings without elevating explorer', () => {
 		const askDefinitions = createAgentDefinitions({
 			fullAccess: false,
-			longTermMemoryEnabled: true,
+			subagents: { explorer: { enabled: true }, memory: { enabled: true } },
 		})
 		const fullDefinitions = createAgentDefinitions({
 			fullAccess: true,
-			longTermMemoryEnabled: true,
+			subagents: { explorer: { enabled: true }, memory: { enabled: true } },
 		})
 
 		expect(fullDefinitions).not.toBe(askDefinitions)
@@ -48,17 +48,35 @@ describe('createAgentDefinitions', () => {
 		).toBe('full')
 	})
 
-	it('keeps the memory agent addressable but rejects new dispatch when disabled', () => {
-		const definition = findDefinition(
-			createAgentDefinitions({
-				fullAccess: false,
-				longTermMemoryEnabled: false,
-			}),
-			MEMORY_AGENT_ID,
-		)
+	it('keeps disabled agents addressable without exposing task', () => {
+		const definitions = createAgentDefinitions({ fullAccess: false })
+		const memory = findDefinition(definitions, MEMORY_AGENT_ID)
 
-		expect(definition.dispatchable).toBe(false)
-		expect(definition.systemPrompt).toContain('<memory-protocol>')
+		expect(memory.dispatchable).toBe(false)
+		expect(memory.systemPrompt).toContain('<memory-protocol>')
+		expect(findDefinition(definitions, EXPLORER_AGENT_ID).dispatchable).toBe(
+			false,
+		)
+		expect(findDefinition(definitions, MASTER_AGENT_ID).tools).not.toContain(
+			'task',
+		)
+	})
+
+	it('exposes only enabled subagent types and task tools', () => {
+		const definitions = createAgentDefinitions({
+			fullAccess: false,
+			subagents: { explorer: { enabled: false }, memory: { enabled: true } },
+		})
+
+		expect(
+			definitions
+				.filter((definition) => definition.dispatchable)
+				.map((definition) => definition.id),
+		).toEqual([MEMORY_AGENT_ID])
+		expect(findDefinition(definitions, MASTER_AGENT_ID).tools).toContain('task')
+		expect(findDefinition(definitions, EXPLORER_AGENT_ID).tools).toContain(
+			'task',
+		)
 	})
 })
 

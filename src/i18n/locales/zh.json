@@ -257,9 +257,24 @@
 				"name": "完全访问权限",
 				"desc": "⚠️ 开启后，AI 可自动修改文件和插件设置，不再逐次询问确认"
 			},
-			"longTermMemory": {
-				"name": "长期记忆",
-				"desc": "开启后，AI 可委派子 Agent 检索和维护跨会话的偏好、约定和决定"
+			"subagents": {
+				"heading": "子 Agent",
+				"explorer": {
+					"name": "Explorer",
+					"desc": "用于只读调查库内内容的 Agent。",
+					"model": {
+						"name": "Explorer 模型",
+						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
+					}
+				},
+				"memory": {
+					"name": "Memory",
+					"desc": "用于检索和维护跨会话偏好、约定和决定的 Agent。",
+					"model": {
+						"name": "Memory 模型",
+						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
+					}
+				}
 			},
 			"errors": {
 				"saveFailed": "AI 设置保存失败",

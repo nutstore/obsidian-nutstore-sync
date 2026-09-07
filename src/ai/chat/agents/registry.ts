@@ -1,6 +1,6 @@
 import type { ToolSet } from 'ai'
 import { isMcpToolName } from '~/ai/mcp/types'
-import longTermMemoryProtocol from '../../skills/builtin/long-term-memory/SKILL.md?raw'
+import memoryProtocol from '../../skills/builtin/long-term-memory/SKILL.md?raw'
 
 export type AgentPermissionMode = 'ask' | 'readonly' | 'full'
 
@@ -16,7 +16,10 @@ export interface AgentDefinition {
 
 export interface AgentDefinitionSettings {
 	fullAccess: boolean
-	longTermMemoryEnabled?: boolean
+	subagents?: {
+		explorer?: { enabled?: boolean }
+		memory?: { enabled?: boolean }
+	}
 }
 
 export const MASTER_AGENT_ID = 'master'
@@ -51,13 +54,14 @@ const MEMORY_SYSTEM_PROMPT = [
 	'You operate in an isolated context and receive only a task prompt from the main conversational agent. Carry out only the retrieval or maintenance scope explicitly delegated in that prompt; do not infer additional user intent or perform unrelated vault work.',
 	'Use the memory protocol below as the authority for storage, retrieval, correction, and forgetting. Keep your final answer concise: state the result, relevant memory facts or changes, and any source paths needed by the caller. Do not expose hidden internal paths to the user unless the delegated task explicitly requires it.',
 	'<memory-protocol>',
-	longTermMemoryProtocol.trim(),
+	memoryProtocol.trim(),
 	'</memory-protocol>',
 ].join('\n')
 
-function createMasterAgentDefinition({
-	fullAccess,
-}: AgentDefinitionSettings): AgentDefinition {
+function createMasterAgentDefinition(
+	{ fullAccess }: AgentDefinitionSettings,
+	canDispatch: boolean,
+): AgentDefinition {
 	return {
 		id: MASTER_AGENT_ID,
 		description: 'Main conversational assistant with full vault access.',
@@ -68,28 +72,31 @@ function createMasterAgentDefinition({
 			'view_image',
 			'todowrite',
 			'update_session_title',
-			'task',
+			...(canDispatch ? ['task'] : []),
 		],
 		permissionMode: fullAccess ? 'full' : 'ask',
 		dispatchable: false,
 	}
 }
 
-function createExplorerAgentDefinition(): AgentDefinition {
+function createExplorerAgentDefinition(
+	enabled: boolean,
+	canDispatch: boolean,
+): AgentDefinition {
 	return {
 		id: EXPLORER_AGENT_ID,
 		description:
 			'Read-only subagent for exploring the vault and answering questions about its contents without modifying files.',
 		systemPrompt: EXPLORER_SYSTEM_PROMPT,
-		tools: ['bash', 'view_image', 'task'],
+		tools: ['bash', 'view_image', ...(canDispatch ? ['task'] : [])],
 		permissionMode: 'readonly',
-		dispatchable: true,
+		dispatchable: enabled,
 	}
 }
 
 function createMemoryAgentDefinition({
 	fullAccess,
-	longTermMemoryEnabled,
+	subagents,
 }: AgentDefinitionSettings): AgentDefinition {
 	return {
 		id: MEMORY_AGENT_ID,
@@ -98,16 +105,19 @@ function createMemoryAgentDefinition({
 		systemPrompt: MEMORY_SYSTEM_PROMPT,
 		tools: ['bash'],
 		permissionMode: fullAccess ? 'full' : 'ask',
-		dispatchable: longTermMemoryEnabled === true,
+		dispatchable: subagents?.memory?.enabled === true,
 	}
 }
 
 export function createAgentDefinitions(
 	settings: AgentDefinitionSettings = { fullAccess: false },
 ) {
+	const explorerEnabled = settings.subagents?.explorer?.enabled === true
+	const memoryEnabled = settings.subagents?.memory?.enabled === true
+	const canDispatch = explorerEnabled || memoryEnabled
 	return [
-		createMasterAgentDefinition(settings),
-		createExplorerAgentDefinition(),
+		createMasterAgentDefinition(settings, canDispatch),
+		createExplorerAgentDefinition(explorerEnabled, canDispatch),
 		createMemoryAgentDefinition(settings),
 	]
 }

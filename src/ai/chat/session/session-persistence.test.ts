@@ -13,6 +13,43 @@ import {
 } from '~/ai/chat/session/session-persistence'
 
 describe('chat session persistence', () => {
+	it('round-trips a subagent model snapshot and accepts legacy agents without one', async () => {
+		const master = createEmptyMasterAgent(1)
+		master.subagents['neutral-agent'] = {
+			...createEmptyMasterAgent(2),
+			id: 'neutral-agent',
+			type: 'explorer',
+			status: 'queued',
+			model: { providerId: '中性-provider', modelId: 'model-🌿' },
+		}
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'neutral-session',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master },
+		}
+
+		const decoded = decodeChatSessionFromStorage(
+			await encodeChatSessionForStorage(session),
+		) as ChatSession
+		expect(decoded.subagents.master.subagents['neutral-agent'].model).toEqual({
+			providerId: '中性-provider',
+			modelId: 'model-🌿',
+		})
+
+		delete (
+			decoded.subagents.master.subagents['neutral-agent'] as {
+				model?: unknown
+			}
+		).model
+		expect(
+			migrateChatSession(decoded).session.subagents.master.subagents[
+				'neutral-agent'
+			].model,
+		).toBeUndefined()
+	})
+
 	it('cleans incomplete execution state from every agent on rehydrate', () => {
 		const master = createEmptyMasterAgent(1)
 		master.timeline.push({

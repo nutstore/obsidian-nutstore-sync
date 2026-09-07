@@ -457,14 +457,25 @@ export class SessionStore {
 			const timeline = Array.isArray(agent.timeline)
 				? agent.timeline.map(normalizeMessage)
 				: []
+			const model =
+				agent.model &&
+				typeof agent.model.providerId === 'string' &&
+				typeof agent.model.modelId === 'string'
+					? {
+							providerId: agent.model.providerId,
+							modelId: agent.model.modelId,
+						}
+					: undefined
 			if (agent.id === MASTER_AGENT_ID && storedPendingInputs.length > 0) {
 				changed = true
 			}
+			if (agent.model !== undefined && !model) changed = true
 			return {
 				id: agent.id,
 				type:
 					agent.type ||
 					(agent.id === MASTER_AGENT_ID ? MASTER_AGENT_ID : 'subagent'),
+				model,
 				status: agent.id === MASTER_AGENT_ID ? 'idle' : agent.status,
 				createdAt: agent.createdAt || session.createdAt,
 				startedAt: normalizeTimestamp(agent.startedAt),

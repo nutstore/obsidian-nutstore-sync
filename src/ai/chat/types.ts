@@ -187,6 +187,8 @@ export interface ToolTiming {
 export interface ChatAgentState {
 	id: string
 	type: string
+	/** Model captured when this subagent was dispatched. */
+	model?: { providerId: string; modelId: string }
 	status: ChatAgentStatus
 	createdAt: number
 	startedAt?: number

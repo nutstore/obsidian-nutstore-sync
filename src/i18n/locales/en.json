@@ -299,9 +299,24 @@
 				"name": "Full access",
 				"desc": "⚠️ When on, the AI can edit files and change plugin settings without asking for confirmation each time."
 			},
-			"longTermMemory": {
-				"name": "Long-term memory",
-				"desc": "When on, the AI can delegate retrieval and maintenance of preferences, conventions and decisions across sessions."
+			"subagents": {
+				"heading": "Subagents",
+				"explorer": {
+					"name": "Explorer",
+					"desc": "A read-only agent for investigating vault contents.",
+					"model": {
+						"name": "Explorer model",
+						"desc": "Leave blank to inherit the model of the agent that dispatches the task."
+					}
+				},
+				"memory": {
+					"name": "Memory",
+					"desc": "An agent for retrieving and maintaining cross-session preferences, conventions and decisions.",
+					"model": {
+						"name": "Memory model",
+						"desc": "Leave blank to inherit the model of the agent that dispatches the task."
+					}
+				}
 			},
 			"errors": {
 				"saveFailed": "Failed to save AI settings",

@@ -81,8 +81,16 @@ export class ToolExecutor {
 	getAgentDefinitions() {
 		return createAgentDefinitions({
 			fullAccess: Boolean(this.getSettings().yolo),
-			longTermMemoryEnabled: this.getSettings().longTermMemory === true,
+			subagents: this.getSettings().subagents,
 		})
+	}
+
+	getSubagentModelSelection(agentType: string) {
+		const selection =
+			agentType === 'explorer' || agentType === 'memory'
+				? this.getSettings().subagents?.[agentType]
+				: undefined
+		return selection?.model ? { ...selection.model } : undefined
 	}
 
 	getAgentDefinition(agentType: string): AgentDefinition {
@@ -157,7 +165,7 @@ export class ToolExecutor {
 				this.dispatchTaskHandler(params, origin),
 			dispatchableDefinitions: listDispatchableDefinitions({
 				fullAccess: Boolean(this.getSettings().yolo),
-				longTermMemoryEnabled: this.getSettings().longTermMemory === true,
+				subagents: this.getSettings().subagents,
 			}),
 			getSettingsSnapshot: this.settingsIo.getSettingsSnapshot,
 			updateSettings: this.settingsIo.updateSettings,

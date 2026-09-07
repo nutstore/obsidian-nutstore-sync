@@ -23,14 +23,14 @@
 
 <a id="zh"></a>
 
-Nutstore Sync 是面向坚果云用户的 Obsidian 同步插件，支持桌面端与移动端。你可以按自己的工作方式选择双向、单向或镜像同步，还可以使用内置 AI 助手调用工具、复用 Skills、连接 MCP 服务，并通过可选长期记忆延续工作上下文。
+Nutstore Sync 是面向坚果云用户的 Obsidian 同步插件，支持桌面端与移动端。你可以按自己的工作方式选择双向、单向或镜像同步，还可以使用内置 AI 助手调用工具、复用 Skills、连接 MCP 服务，以及按需启用专用子 Agent。
 
 ### ✨ 为什么使用 Nutstore Sync
 
 - **同步方向由你决定**：五种同步策略覆盖多设备同步、单向备份和镜像场景。
 - **重要操作看得见**：可在同步前审阅待执行操作，并为自动删除单独保留确认步骤。
 - **大型 Vault 也能灵活配置**：支持增量同步、宽松或严格扫描、路径过滤和大文件跳过。
-- **可扩展的 AI 助手**：在 Obsidian 中使用内置工具、Skills、MCP 和可选长期记忆，并在重要修改前保留确认。
+- **可扩展的 AI 助手**：在 Obsidian 中使用内置工具、Skills、MCP 和可配置子 Agent，并在重要修改前保留确认。
 
 ### 🚀 快速开始
 
@@ -77,7 +77,7 @@ Nutstore Sync 是面向坚果云用户的 Obsidian 同步插件，支持桌面�
 
 ### 🤖 AI 助手
 
-AI Agent ChatBox 是驻留在 Obsidian 中的可扩展助手。Vault 是它的重要上下文和工作空间，但不是能力边界：配置模型后，它可以调用内置工具、遵循可复用 Skills、连接你授权的 MCP 服务，并通过可选长期记忆延续偏好和约定。
+AI Agent ChatBox 是驻留在 Obsidian 中的可扩展助手。Vault 是它的重要上下文和工作空间，但不是能力边界：配置模型后，它可以调用内置工具、遵循可复用 Skills、连接你授权的 MCP 服务，并按需委派 Explorer 或 Memory 子 Agent。
 
 你可以这样使用它：
 
@@ -96,7 +96,7 @@ Agent 支持：
 - **多步骤任务**：拆解复杂任务，并按需使用只读探索任务梳理信息。
 - **Skills**：调用内置或用户创建的 Skills，复用工作流程、领域知识和操作约定。
 - **MCP**：连接你配置的 MCP 服务，将外部工具和信息源带入对话。
-- **长期记忆**：可选地由专门子 Agent 跨会话检索和维护偏好、约定和决策。
+- **子 Agent**：按需启用只读探索，或跨会话检索和维护偏好、约定和决策。
 - **持续会话**：保存聊天记录并压缩较长上下文；会话文件可以随现有同步在设备间流转。
 - **多种模型**：使用 OpenAI、Anthropic、Google、xAI 等服务商格式与预设，或配置自定义兼容端点。
 
@@ -106,7 +106,7 @@ Agent 支持：
 2. 添加服务商、API Key 和模型，或在账号可用时授权实验性的 Nutstore AI。
 3. 选择默认模型。
 4. 点击功能区的机器人图标，或从命令面板运行 **Open chatbox**。
-5. 按需开启长期记忆、添加 MCP 服务或管理 Skills。
+5. 按需配置 Explorer 或 Memory 子 Agent、添加 MCP 服务或管理 Skills。
 
 模型能力取决于你选择的服务商和具体模型。Nutstore AI 仍是实验性功能，并非所有账号都可用。
 
@@ -128,14 +128,14 @@ Agent 可修改的插件设置采用白名单，不包含坚果云登录凭据�
 
 <a id="en"></a>
 
-Nutstore Sync is an Obsidian plugin for syncing a vault with Nutstore on desktop and mobile. Choose two-way, one-way, or mirror-style synchronization, and optionally work with a built-in AI assistant that can use tools, reusable Skills, MCP connections, and long-term memory.
+Nutstore Sync is an Obsidian plugin for syncing a vault with Nutstore on desktop and mobile. Choose two-way, one-way, or mirror-style synchronization, and optionally work with a built-in AI assistant that can use tools, reusable Skills, MCP connections, and configured subagents.
 
 ### ✨ Why Nutstore Sync
 
 - **You control the direction**: Five sync policies cover everyday multi-device use, one-way backup, and mirror workflows.
 - **Important operations stay visible**: Review planned operations before syncing and keep a separate confirmation step for automatic deletions.
 - **Flexible for large vaults**: Use incremental sync, loose or strict scanning, path filters, and large-file limits.
-- **An extensible AI assistant**: Use built-in tools, Skills, MCP, and optional long-term memory inside Obsidian while keeping approval in the loop for important changes.
+- **An extensible AI assistant**: Use built-in tools, Skills, MCP, and configurable subagents inside Obsidian while keeping approval in the loop for important changes.
 
 ### 🚀 Quick Start
 
@@ -182,7 +182,7 @@ Automatic merging only supports recognized text formats. Binary files and file-v
 
 ### 🤖 AI Assistant
 
-AI Agent ChatBox is an extensible assistant that lives inside Obsidian. Your vault is an important source of context and a working space, but it is not the limit of what the assistant can do. After configuring a model, the Agent can use built-in tools, follow reusable Skills, connect to MCP servers you authorize, and optionally carry preferences and conventions across sessions through long-term memory.
+AI Agent ChatBox is an extensible assistant that lives inside Obsidian. Your vault is an important source of context and a working space, but it is not the limit of what the assistant can do. After configuring a model, the Agent can use built-in tools, follow reusable Skills, connect to MCP servers you authorize, and delegate to configured Explorer or Memory subagents.
 
 For example:
 
@@ -201,7 +201,7 @@ The Agent supports:
 - **Multi-step tasks**: Break down complex work and delegate read-only exploration when useful.
 - **Skills**: Use built-in or user-created Skills to reuse workflows, domain knowledge, and operating conventions.
 - **MCP**: Connect configured MCP servers to bring external tools and information sources into a conversation.
-- **Long-term memory**: Optionally delegate cross-session retrieval and maintenance of preferences, conventions, and decisions to a specialized subagent.
+- **Subagents**: Optionally enable read-only exploration or cross-session memory retrieval and maintenance.
 - **Persistent sessions**: Save conversations and compress long contexts; session files can travel through the existing sync flow.
 - **Multiple model providers**: Use OpenAI, Anthropic, Google, xAI, or custom compatible endpoints.
 
@@ -211,7 +211,7 @@ The Agent supports:
 2. Add a provider, API key, and model, or authorize the experimental Nutstore AI service if it is available for your account.
 3. Select a default model.
 4. Click the robot ribbon icon, or run **Open chatbox** from the command palette.
-5. Optionally enable long-term memory, add MCP servers, or manage Skills.
+5. Optionally configure Explorer or Memory subagents, add MCP servers, or manage Skills.
 
 Capabilities vary by provider and model. Nutstore AI is experimental and is not available to every account.
 

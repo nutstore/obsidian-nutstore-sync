@@ -25,6 +25,15 @@ function testOrigin(turnId = 'T1'): TaskOrigin {
 	return { turnId, signal: new AbortController().signal }
 }
 
+function getEnabledExplorerDefinition(agentType: string) {
+	const definition = getAgentDefinition(agentType, {
+		fullAccess: false,
+		subagents: { explorer: { enabled: true } },
+	})
+	if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
+	return definition
+}
+
 vi.mock('~/ai/tools/bash/tmp-fs', () => ({
 	writeBashTmpText: writeTaskResult,
 }))
@@ -573,11 +582,8 @@ describe('TaskManager parent notifications', () => {
 			taskModelSelection: new Map(),
 		} as never
 		const toolExecutor = {
-			getAgentDefinition: (agentType: string) => {
-				const definition = getAgentDefinition(agentType)
-				if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
-				return definition
-			},
+			getAgentDefinition: getEnabledExplorerDefinition,
+			getSubagentModelSelection: () => undefined,
 		}
 		const manager = new TaskManager(
 			{} as never,
@@ -609,11 +615,126 @@ describe('TaskManager parent notifications', () => {
 		expect(master.subagents[output.taskId]).toMatchObject({
 			id: output.taskId,
 			type: EXPLORER_AGENT_ID,
+			model: { providerId: 'provider', modelId: 'model' },
 		})
 		expect(output).toMatchObject({
 			subagentType: EXPLORER_AGENT_ID,
 			status: 'dispatched',
 		})
+	})
+
+	it('captures the configured subagent model instead of later settings changes', async () => {
+		const master = createEmptyMasterAgent(1)
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'neutral-session',
+			createdAt: 1,
+			updatedAt: 1,
+			model: { providerId: 'caller-provider', modelId: 'caller-model' },
+			subagents: { master },
+		}
+		const configuredModel = {
+			providerId: 'configured-provider',
+			modelId: 'configured-model',
+		}
+		const manager = new TaskManager(
+			{} as never,
+			vi.fn(),
+			{
+				loadedSessions: new Map([[session.id, session]]),
+				deletedSessionIds: new Set<string>(),
+			} as never,
+			{} as never,
+			{ persistSession: vi.fn(async () => undefined) } as never,
+			vi.fn(),
+			{
+				getAgentDefinition: getEnabledExplorerDefinition,
+				getSubagentModelSelection: () => ({ ...configuredModel }),
+			} as never,
+			{} as never,
+			{} as never,
+		)
+		vi.spyOn(manager as never, 'runAgent' as never).mockResolvedValue(
+			undefined as never,
+		)
+
+		const task = await manager.dispatchTask(
+			{
+				prompt: '调查中性内容 🌿',
+				subagentType: EXPLORER_AGENT_ID,
+				callerAgentId: MASTER_AGENT_ID,
+				sessionId: session.id,
+			},
+			testOrigin(),
+		)
+		configuredModel.modelId = 'changed-after-dispatch'
+
+		expect(master.subagents[task.taskId].model).toEqual({
+			providerId: 'configured-provider',
+			modelId: 'configured-model',
+		})
+	})
+
+	it('settles an unavailable configured model and notifies its parent', async () => {
+		const master = createEmptyMasterAgent(1)
+		const child: ChatAgentState = {
+			...createEmptyMasterAgent(2),
+			id: 'neutral-child',
+			type: EXPLORER_AGENT_ID,
+			model: { providerId: 'missing-provider', modelId: 'missing-model' },
+			status: 'running',
+		}
+		master.subagents[child.id] = child
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'neutral-session',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master },
+		}
+		const notifyParent = vi.fn(() => true)
+		const manager = new TaskManager(
+			{} as never,
+			vi.fn(),
+			{
+				loadedSessions: new Map([[session.id, session]]),
+				deletedSessionIds: new Set<string>(),
+			} as never,
+			{
+				getProviderByIdOrThrow: () => {
+					throw new Error('中性 provider 不可用 🌿')
+				},
+			} as never,
+			{ persistSession: vi.fn(async () => undefined) } as never,
+			vi.fn(),
+			{} as never,
+			{} as never,
+			{} as never,
+		)
+		manager.setMasterAgentInputHandler(notifyParent)
+
+		await manager.runAgent(session, child, testOrigin())
+
+		expect(child.status).toBe('failed')
+		expect(child.resultPath).toBe(
+			`${BASH_TMP_MOUNT_POINT}/${session.id}/tasks/${child.id}.txt`,
+		)
+		expect(writeTaskResult).toHaveBeenCalledWith(
+			{},
+			child.resultPath,
+			expect.stringContaining('中性 provider 不可用 🌿'),
+		)
+		expect(notifyParent).toHaveBeenCalledWith(
+			session.id,
+			expect.objectContaining({
+				parts: [
+					expect.objectContaining({
+						data: expect.objectContaining({ kind: 'task-result-ready' }),
+					}),
+				],
+			}),
+			expect.anything(),
+		)
 	})
 
 	it('captures master task lineage when dispatching and preserves it for nested tasks', async () => {
@@ -654,11 +775,8 @@ describe('TaskManager parent notifications', () => {
 			]),
 		} as never
 		const toolExecutor = {
-			getAgentDefinition: (agentType: string) => {
-				const definition = getAgentDefinition(agentType)
-				if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
-				return definition
-			},
+			getAgentDefinition: getEnabledExplorerDefinition,
+			getSubagentModelSelection: () => undefined,
 		}
 		const handler = vi.fn(
 			(_sessionId: string, _input: AppUIMessage, _origin: TaskOrigin) => true,
@@ -740,11 +858,8 @@ describe('TaskManager parent notifications', () => {
 			cancel: vi.fn(),
 		}
 		const toolExecutor = {
-			getAgentDefinition: (agentType: string) => {
-				const definition = getAgentDefinition(agentType)
-				if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
-				return definition
-			},
+			getAgentDefinition: getEnabledExplorerDefinition,
+			getSubagentModelSelection: () => undefined,
 		}
 		const manager = new TaskManager(
 			{} as never,
@@ -1017,11 +1132,8 @@ describe('TaskManager parent notifications', () => {
 			]),
 		} as never
 		const toolExecutor = {
-			getAgentDefinition: (agentType: string) => {
-				const definition = getAgentDefinition(agentType)
-				if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
-				return definition
-			},
+			getAgentDefinition: getEnabledExplorerDefinition,
+			getSubagentModelSelection: () => undefined,
 		}
 		const handler = vi.fn(
 			(_sessionId: string, _input: AppUIMessage, _origin: TaskOrigin) => true,
@@ -1091,6 +1203,7 @@ describe('TaskManager parent notifications', () => {
 					if (!definition) throw new Error(`Unknown agent type: ${agentType}`)
 					return definition
 				},
+				getSubagentModelSelection: () => undefined,
 			} as never,
 			{} as never,
 			{} as never,
@@ -1118,6 +1231,7 @@ describe('TaskManager parent notifications', () => {
 			...createEmptyMasterAgent(2),
 			id: 'neutral-child',
 			type: 'subagent',
+			model: { providerId: 'neutral-provider', modelId: 'neutral-model' },
 			status: 'running',
 			timeline: [
 				{
@@ -1182,6 +1296,7 @@ describe('TaskManager parent notifications', () => {
 			...createEmptyMasterAgent(2),
 			id: 'neutral-child',
 			type: 'subagent',
+			model: { providerId: 'neutral-provider', modelId: 'neutral-model' },
 			status: 'running',
 			timeline: [
 				{

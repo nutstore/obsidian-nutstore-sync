@@ -151,11 +151,19 @@ export interface NutstoreSettings {
 		providers: AIProviderConfigs
 		defaultModel?: { providerId: string; modelId: string }
 		yolo?: boolean
-		/** When enabled, the main agent may delegate cross-session memory tasks. Defaults off. */
-		longTermMemory?: boolean
+		subagents: {
+			explorer: SubagentSettings
+			memory: SubagentSettings
+		}
 		nutstoreLlmGateway?: NutstoreLlmGatewayAuthSettings
 	}
 	configDirSyncMode?: 'none' | 'bookmarks' | 'all'
+}
+
+export interface SubagentSettings {
+	enabled: boolean
+	/** Optional explicit model; an enabled subagent otherwise inherits its caller. */
+	model?: { providerId: string; modelId: string }
 }
 
 function exclude(expr: string): GlobFilterRule {
@@ -221,6 +229,10 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 		providers: {},
 		defaultModel: undefined,
 		yolo: false,
+		subagents: {
+			explorer: { enabled: false },
+			memory: { enabled: false },
+		},
 		nutstoreLlmGateway: {},
 	},
 	configDirSyncMode: 'none',

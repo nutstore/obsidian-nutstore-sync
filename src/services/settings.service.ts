@@ -77,7 +77,19 @@ export default class SettingsService extends BaseService {
 			providers: {},
 			defaultModel: undefined,
 			yolo: false,
+			subagents: {
+				explorer: { enabled: false },
+				memory: { enabled: false },
+			},
 		}
+		this.plugin.settings.ai.subagents ??= {
+			explorer: { enabled: false },
+			memory: { enabled: false },
+		}
+		this.plugin.settings.ai.subagents.explorer ??= { enabled: false }
+		this.plugin.settings.ai.subagents.memory ??= { enabled: false }
+		this.plugin.settings.ai.subagents.explorer.enabled ??= false
+		this.plugin.settings.ai.subagents.memory.enabled ??= false
 		this.plugin.settings.ai.nutstoreLlmGateway ??= {}
 		if (Array.isArray(this.plugin.settings.ai.providers)) {
 			this.plugin.settings.ai.providers = {}

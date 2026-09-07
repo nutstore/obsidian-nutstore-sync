@@ -14,11 +14,6 @@ export interface SessionRuntimeState {
 	scheduler: MasterTurnScheduler
 }
 
-interface TaskModelSelection {
-	providerId: string
-	modelId: string
-}
-
 export class ChatState {
 	readonly loadedSessions = new Map<string, ChatSession>()
 	readonly autoApproveRequestsBySessionId = new Map<string, Set<string>>()
@@ -28,10 +23,6 @@ export class ChatState {
 	pendingModelId?: string
 	activeSessionId?: string
 	readonly runtimeBySessionId = new Map<string, SessionRuntimeState>()
-	readonly taskModelSelection = new Map<
-		string,
-		TaskModelSelection | undefined
-	>()
 	chatModalHostEl?: HTMLElement
 	initialization?: Promise<void>
 	initialized = false
