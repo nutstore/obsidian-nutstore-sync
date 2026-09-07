@@ -244,9 +244,10 @@ export class TaskManager {
 				}),
 			)
 		}
-		const selectedModel =
-			this.toolExecutor.getSubagentModelSelection(definition.id) ??
-			(session.model ? { ...session.model } : undefined)
+		const selectedModel = this.resolveSubagentModelSelection(
+			this.toolExecutor.getSubagentModelSelection(definition.id),
+			session.model,
+		)
 
 		const shouldQueue =
 			this.countRunningAgentsForSession(session) >=
@@ -296,6 +297,24 @@ export class TaskManager {
 		return createUniqueWordId(agentType, (id) =>
 			Boolean(findAgent(getMasterAgent(session), id)),
 		)
+	}
+
+	private resolveSubagentModelSelection(
+		configuredModel: ChatSession['model'],
+		fallbackModel: ChatSession['model'],
+	) {
+		if (!configuredModel) {
+			return fallbackModel ? { ...fallbackModel } : undefined
+		}
+		try {
+			const provider = this.selection.getProviderByIdOrThrow(
+				configuredModel.providerId,
+			)
+			this.selection.getModelByIdsOrThrow(provider, configuredModel.modelId)
+			return { ...configuredModel }
+		} catch {
+			return fallbackModel ? { ...fallbackModel } : undefined
+		}
 	}
 
 	private originKey(sessionId: string, agentId: string) {

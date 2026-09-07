@@ -690,7 +690,10 @@ describe('TaskManager parent notifications', () => {
 				loadedSessions: new Map([[session.id, session]]),
 				deletedSessionIds: new Set<string>(),
 			} as never,
-			{} as never,
+			{
+				getProviderByIdOrThrow: () => ({ id: 'configured-provider' }),
+				getModelByIdsOrThrow: () => ({ id: 'configured-model' }),
+			} as never,
 			{ persistSession: vi.fn(async () => undefined) } as never,
 			vi.fn(),
 			{
@@ -720,6 +723,71 @@ describe('TaskManager parent notifications', () => {
 			modelId: 'configured-model',
 		})
 	})
+
+	it.each([
+		{
+			name: 'deleted provider',
+			getProviderByIdOrThrow: () => {
+				throw new Error('中性 provider 已删除 🌿')
+			},
+			getModelByIdsOrThrow: vi.fn(),
+		},
+		{
+			name: 'removed model',
+			getProviderByIdOrThrow: () => ({ id: 'configured-provider' }),
+			getModelByIdsOrThrow: () => {
+				throw new Error('中性 model 已移除 🌿')
+			},
+		},
+	])(
+		'falls back to the caller model after a $name subagent configuration',
+		async (selection) => {
+			const master = createEmptyMasterAgent(1)
+			const session: ChatSession = {
+				schemaVersion: 2,
+				id: 'neutral-session',
+				createdAt: 1,
+				updatedAt: 1,
+				model: { providerId: 'caller-provider', modelId: 'caller-model' },
+				subagents: { master },
+			}
+			const manager = new TaskManager(
+				{} as never,
+				vi.fn(),
+				{
+					loadedSessions: new Map([[session.id, session]]),
+					deletedSessionIds: new Set<string>(),
+				} as never,
+				selection as never,
+				{ persistSession: vi.fn(async () => undefined) } as never,
+				vi.fn(),
+				{
+					getAgentDefinition: getEnabledExplorerDefinition,
+					getSubagentModelSelection: () => ({
+						providerId: 'configured-provider',
+						modelId: 'configured-model',
+					}),
+				} as never,
+				{} as never,
+				{} as never,
+			)
+			vi.spyOn(manager as never, 'runAgent' as never).mockResolvedValue(
+				undefined as never,
+			)
+
+			const task = await manager.dispatchTask(
+				{
+					prompt: 'Review neutral notes 复核中性笔记 🌿',
+					subagentType: EXPLORER_AGENT_ID,
+					callerAgentId: MASTER_AGENT_ID,
+					sessionId: session.id,
+				},
+				testOrigin(),
+			)
+
+			expect(master.subagents[task.taskId].model).toEqual(session.model)
+		},
+	)
 
 	it('settles an unavailable configured model and notifies its parent', async () => {
 		const master = createEmptyMasterAgent(1)
