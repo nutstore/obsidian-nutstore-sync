@@ -405,7 +405,11 @@
 			"clearDesc": "删除所有控制台输出记录"
 		},
 		"troubleshooting": {
-			"title": "排障"
+			"title": "排障",
+			"pluginInfo": "插件与环境信息",
+			"platform": "运行平台",
+			"language": "界面语言",
+			"unknownPlatform": "未知平台"
 		},
 		"cache": {
 			"title": "缓存管理",

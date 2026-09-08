@@ -405,7 +405,11 @@
 			"clearDesc": "Delete all console output records"
 		},
 		"troubleshooting": {
-			"title": "Troubleshoot"
+			"title": "Troubleshoot",
+			"pluginInfo": "Plugin and environment information",
+			"platform": "Platform",
+			"language": "Interface language",
+			"unknownPlatform": "Unknown platform"
 		},
 		"cache": {
 			"title": "Cache management",
