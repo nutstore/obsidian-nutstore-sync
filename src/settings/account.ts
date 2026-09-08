@@ -132,7 +132,8 @@ export default class AccountSettings extends BaseSettings {
 				.setName(i18n.t('settings.ssoStatus.notLoggedIn'))
 				.addButton(async (button) => {
 					button.setButtonText(i18n.t('settings.login.name'))
-					const anchor = createEl('a')
+					const ownerDocument = button.buttonEl.ownerDocument
+					const anchor = ownerDocument.createElement('a')
 					anchor.target = '_blank'
 					button.buttonEl.parentElement?.appendChild(anchor)
 					anchor.appendChild(button.buttonEl)
@@ -141,7 +142,7 @@ export default class AccountSettings extends BaseSettings {
 					})
 					this.updateOAuthUrlTimer = window.setInterval(() => {
 						void (async () => {
-							const stillInDoc = document.contains(anchor)
+							const stillInDoc = ownerDocument.contains(anchor)
 							if (stillInDoc) {
 								anchor.href = await createOAuthUrl({
 									app: 'obsidian',
