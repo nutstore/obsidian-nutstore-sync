@@ -49,7 +49,7 @@ jobs:
           NUTSTORE_PAT: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm run build
+        run: pnpm run build:plugin
 
       - name: Run unit tests
         run: pnpm run test:unit
