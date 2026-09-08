@@ -59,7 +59,7 @@ export default class ModelsPresetService extends BaseService {
 					errorMessage: `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
 				}
 			}
-			const payload = await response.json()
+			const payload = (await response.json()) as unknown
 			const providers = sanitizePresetProviders(payload)
 			if (!providers) {
 				return {

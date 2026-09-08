@@ -29,3 +29,4 @@ data.local.json
 dist
 styles.css
 main.js
+/.cache

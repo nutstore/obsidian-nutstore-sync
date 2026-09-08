@@ -20,9 +20,15 @@ describe('isRunnableHtmlCodeBlock', () => {
 
 describe('html code preview i18n', () => {
 	it('provides run/show labels in both locales', () => {
-		expect(en.chatbox.ui.actions.runHtmlCode).toBeTruthy()
-		expect(en.chatbox.ui.actions.showHtmlCode).toBeTruthy()
-		expect(zh.chatbox.ui.actions.runHtmlCode).toBeTruthy()
-		expect(zh.chatbox.ui.actions.showHtmlCode).toBeTruthy()
+		const labels = [
+			en.chatbox.ui.actions.runHtmlCode,
+			en.chatbox.ui.actions.showHtmlCode,
+			zh.chatbox.ui.actions.runHtmlCode,
+			zh.chatbox.ui.actions.showHtmlCode,
+		]
+		for (const label of labels) {
+			expect(typeof label).toBe('string')
+			expect(label.trim()).not.toBe('')
+		}
 	})
 })

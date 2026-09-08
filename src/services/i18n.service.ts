@@ -15,10 +15,10 @@ export default class I18nService extends BaseService {
 	update = async () => {
 		try {
 			if (this.plugin.settings.language) {
-				i18n.changeLanguage(this.plugin.settings.language.toLowerCase())
+				void i18n.changeLanguage(this.plugin.settings.language.toLowerCase())
 			} else {
 				const code = navigator.language.split('-')[0]
-				i18n.changeLanguage(code.toLowerCase())
+				void i18n.changeLanguage(code.toLowerCase())
 			}
 		} catch (e) {
 			logger.error(e)

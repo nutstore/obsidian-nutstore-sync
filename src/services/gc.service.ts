@@ -5,6 +5,7 @@ import { emitGcProgress } from '~/events/gc-progress'
 import { onStopGc } from '~/events/gc-stop'
 import i18n from '~/i18n'
 import { blobKV, syncRecordKV } from '~/storage/kv'
+import logger from '~/utils/logger'
 import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
@@ -58,7 +59,7 @@ export default class GcService extends BaseService {
 			this.stopRequested = true
 		})
 		try {
-			const start = globalThis.performance?.now?.() ?? Date.now()
+			const start = window.performance?.now?.() ?? Date.now()
 			let stoppedEarly = false
 			const deletedCount = await collectBlobGarbage(emitGcProgress, () => {
 				if (this.stopRequested) {
@@ -67,14 +68,11 @@ export default class GcService extends BaseService {
 				}
 				return false
 			})
-			const durationMs = (globalThis.performance?.now?.() ?? Date.now()) - start
-			console.table([
-				{
-					event: 'blob gc completed',
-					deletedCount,
-					durationMs: Number(durationMs.toFixed(2)),
-				},
-			])
+			const durationMs = (window.performance?.now?.() ?? Date.now()) - start
+			logger.debug('Blob GC completed', {
+				deletedCount,
+				durationMs: Number(durationMs.toFixed(2)),
+			})
 			if (stoppedEarly) {
 				return {
 					ok: false,

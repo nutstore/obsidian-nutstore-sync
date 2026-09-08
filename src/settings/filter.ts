@@ -42,7 +42,7 @@ export default class FilterSettings extends BaseSettings {
 										this.plugin.settings.configDirSyncMode = 'bookmarks'
 										await this.plugin.settingsService.saveSettings()
 									} else {
-										this.display()
+										void this.display()
 									}
 								},
 							).open()
@@ -60,7 +60,7 @@ export default class FilterSettings extends BaseSettings {
 										this.plugin.settings.configDirSyncMode = 'all'
 										await this.plugin.settingsService.saveSettings()
 									} else {
-										this.display()
+										void this.display()
 									}
 								},
 							).open()
@@ -89,7 +89,7 @@ export default class FilterSettings extends BaseSettings {
 						async (filters) => {
 							this.plugin.settings.filterRules.rules = filters
 							await this.plugin.settingsService.saveSettings()
-							this.display()
+							void this.display()
 						},
 						getHighlightedRule,
 					).open()
@@ -104,7 +104,7 @@ class ConfigDirSyncBookmarksModal extends Modal {
 	constructor(
 		app: App,
 		private configDir: string,
-		private onResult: (confirmed: boolean) => void,
+		private onResult: (confirmed: boolean) => void | Promise<void>,
 	) {
 		super(app)
 	}
@@ -127,7 +127,7 @@ class ConfigDirSyncBookmarksModal extends Modal {
 					.onClick(() => {
 						this.resolved = true
 						this.close()
-						this.onResult(true)
+						void this.onResult(true)
 					}),
 			)
 			.addButton((btn) =>
@@ -136,7 +136,7 @@ class ConfigDirSyncBookmarksModal extends Modal {
 					.onClick(() => {
 						this.resolved = true
 						this.close()
-						this.onResult(false)
+						void this.onResult(false)
 					}),
 			)
 	}
@@ -144,7 +144,7 @@ class ConfigDirSyncBookmarksModal extends Modal {
 	onClose() {
 		this.contentEl.empty()
 		if (!this.resolved) {
-			this.onResult(false)
+			void this.onResult(false)
 		}
 	}
 }
@@ -156,7 +156,7 @@ class ConfigDirSyncWarningModal extends Modal {
 		app: App,
 		private configDir: string,
 		private pruningRule: GlobFilterRule | undefined,
-		private onResult: (confirmed: boolean) => void,
+		private onResult: (confirmed: boolean) => void | Promise<void>,
 	) {
 		super(app)
 	}
@@ -196,7 +196,7 @@ class ConfigDirSyncWarningModal extends Modal {
 					.onClick(() => {
 						this.resolved = true
 						this.close()
-						this.onResult(true)
+						void this.onResult(true)
 					}),
 			)
 			.addButton((btn) =>
@@ -205,7 +205,7 @@ class ConfigDirSyncWarningModal extends Modal {
 					.onClick(() => {
 						this.resolved = true
 						this.close()
-						this.onResult(false)
+						void this.onResult(false)
 					}),
 			)
 	}
@@ -213,7 +213,7 @@ class ConfigDirSyncWarningModal extends Modal {
 	onClose() {
 		this.contentEl.empty()
 		if (!this.resolved) {
-			this.onResult(false)
+			void this.onResult(false)
 		}
 	}
 }

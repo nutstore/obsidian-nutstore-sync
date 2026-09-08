@@ -1,7 +1,7 @@
 import {
 	defineConfig,
 	presetIcons,
-	presetUno,
+	presetWind3,
 	transformerCompileClass,
 } from 'unocss'
 
@@ -51,6 +51,6 @@ export default defineConfig({
 				},
 			},
 		}),
-		presetUno({ preflight: false }),
+		presetWind3({ preflight: false }),
 	],
 })

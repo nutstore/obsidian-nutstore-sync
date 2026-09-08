@@ -17,20 +17,18 @@ import {
 	computeChangedContexts,
 } from '~/ai/chat/context/workspace-context'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
-import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import createId from '~/utils/create-id'
 import logger from '~/utils/logger'
 import type { SkillRepository } from '~/ai/skills/repository'
 import type { App } from 'obsidian'
 import {
-	getMessageText,
 	modelMessageToUIMessage,
+	removeIncompleteToolCalls,
 } from '~/ai/chat/messages/ui-message'
 
 export class MessageFactory {
 	constructor(
 		private app: App,
-		private runtimeStates: RuntimeStates,
 		private notify: () => void,
 		private skillRepository?: SkillRepository,
 	) {}
@@ -45,6 +43,8 @@ export class MessageFactory {
 		checkpoint: {
 			mode: 'summary' | 'reset'
 			summary?: string
+			summarizedThroughMessageId?: string
+			retainedMessageIds?: string[]
 			preservedTurnCount?: number
 		},
 	) {
@@ -106,8 +106,10 @@ export class MessageFactory {
 		text: string,
 		session?: ChatSession,
 		userContext?: UserContextItem[],
+		isCurrent?: () => boolean,
 	) {
 		await this.skillRepository?.refresh()
+		if (isCurrent && !isCurrent()) return undefined
 		const now = Date.now()
 		if (session) session.updatedAt = now
 		const current = captureWorkspaceContexts(this.app, this.skillRepository)
@@ -134,41 +136,23 @@ export class MessageFactory {
 		}
 		if (text) message.parts.push({ type: 'text', text })
 		agent.timeline.push(message)
+		return message
+	}
+
+	appendAgentInput(
+		agent: ChatAgentState,
+		input: AppUIMessage,
+		session?: ChatSession,
+		isCurrent?: () => boolean,
+	) {
+		if (isCurrent && !isCurrent()) return false
+		if (session) session.updatedAt = Date.now()
+		agent.timeline.push(input)
+		return true
 	}
 
 	removeIncompleteToolCalls(agent: ChatAgentState) {
-		let changed = false
-		agent.timeline = agent.timeline.filter((message) => {
-			if (message.role !== 'assistant') return true
-			const nextParts = message.parts.filter((part) => {
-				if (part.type !== 'dynamic-tool') return true
-				const complete =
-					part.state === 'output-available' ||
-					part.state === 'output-error' ||
-					part.state === 'output-denied'
-				if (!complete) changed = true
-				return complete
-			})
-			if (nextParts.length !== message.parts.length) message.parts = nextParts
-			if (
-				!message.parts.length ||
-				(!getMessageText(message).trim() &&
-					message.parts.every((part) => part.type === 'step-start'))
-			) {
-				changed = true
-				return false
-			}
-			return true
-		})
-		return changed
-	}
-
-	finishStoppedSessionRun(session: ChatSession, agent: ChatAgentState) {
-		const runtime = this.runtimeStates.get(session.id)
-		this.removeIncompleteToolCalls(agent)
-		runtime.stopRequested = false
-		runtime.runState = 'idle'
-		this.notify()
+		return removeIncompleteToolCalls(agent)
 	}
 
 	reportFatalError(

@@ -1,4 +1,3 @@
-import type { Modal } from 'obsidian'
 import { describe, expect, it } from 'vitest'
 import {
 	applyObsidianModalMountTarget,
@@ -89,7 +88,9 @@ describe('chat modal mount target', () => {
 		containerEl.classList.add('mod-dim')
 		const modalEl = createElement(0)
 		const cleanup = applyObsidianModalMountTarget(
-			{ containerEl, modalEl } as unknown as Modal,
+			{ containerEl, modalEl } as unknown as Parameters<
+				typeof applyObsidianModalMountTarget
+			>[0],
 			resolveChatModalMountTarget(root),
 		)
 
@@ -131,7 +132,9 @@ describe('chat modal mount target', () => {
 		const containerEl = createElement(0)
 		containerEl.classList.add('mod-dim')
 		const modalEl = createElement(0)
-		const modal = { containerEl, modalEl } as unknown as Modal
+		const modal = { containerEl, modalEl } as unknown as Parameters<
+			typeof applyObsidianModalMountTarget
+		>[0]
 
 		applyObsidianModalMountTarget(modal, {
 			mountEl: root,

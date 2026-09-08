@@ -6,10 +6,13 @@ export function createRateLimitedWebDAVClient(
 ): WebDAVClient {
 	return new Proxy(client, {
 		get(target, prop, receiver) {
-			const value = Reflect.get(target, prop, receiver)
+			const value = Reflect.get(target, prop, receiver) as unknown
 			if (typeof value === 'function') {
-				return (...args: any[]) => {
-					return apiLimiter.schedule(() => value.apply(target, args))
+				const callable = value as (...args: unknown[]) => unknown
+				return (...args: unknown[]) => {
+					return apiLimiter.schedule(() =>
+						Promise.resolve(callable.apply(target, args)),
+					)
 				}
 			}
 			return value

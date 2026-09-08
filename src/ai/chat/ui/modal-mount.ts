@@ -72,8 +72,7 @@ export function applyObsidianModalMountTarget(
 
 	if (!hostEl) return
 	const ResizeObserverConstructor =
-		hostEl.ownerDocument?.defaultView?.ResizeObserver ??
-		globalThis.ResizeObserver
+		hostEl.ownerDocument?.defaultView?.ResizeObserver
 	if (!ResizeObserverConstructor) return
 	const observer = new ResizeObserverConstructor(updateMount)
 	observer.observe(hostEl)

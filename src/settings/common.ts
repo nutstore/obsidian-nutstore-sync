@@ -40,7 +40,7 @@ export default class CommonSettings extends BaseSettings {
 					})
 				text.inputEl.addEventListener('blur', () => {
 					this.plugin.settings.remoteDir = this.plugin.remoteBaseDir
-					this.display()
+					void this.display()
 				})
 			})
 			.addButton((button) => {
@@ -53,7 +53,7 @@ export default class CommonSettings extends BaseSettings {
 					new SelectRemoteBaseDirModal(this.app, this.plugin, async (path) => {
 						this.plugin.settings.remoteDir = path
 						await this.plugin.settingsService.saveSettings()
-						this.display()
+						void this.display()
 					}).open()
 				})
 			})
@@ -87,7 +87,7 @@ export default class CommonSettings extends BaseSettings {
 						const confirmed = await new SyncPolicyModal(
 							this.app,
 							value as SyncPolicy,
-						).open()
+						).openAndWait()
 						if (confirmed) {
 							this.plugin.localSettings.syncPolicy = value as SyncPolicy
 							await this.plugin.settingsService.saveLocalSettings()
@@ -107,7 +107,7 @@ export default class CommonSettings extends BaseSettings {
 					.setValue(currentValue)
 
 				text.inputEl.addEventListener('blur', () => {
-					this.handleMaxFileSizeBlur(text)
+					void this.handleMaxFileSizeBlur(text)
 				})
 			})
 
@@ -125,7 +125,7 @@ export default class CommonSettings extends BaseSettings {
 					)
 
 				text.inputEl.addEventListener('blur', () => {
-					this.handleMobileAppDownloadFileChunkSizeBlur(text)
+					void this.handleMobileAppDownloadFileChunkSizeBlur(text)
 				})
 			})
 
@@ -217,25 +217,27 @@ export default class CommonSettings extends BaseSettings {
 							}
 						}
 					})
-				text.inputEl.addEventListener('blur', async () => {
-					const numValue = parseFloat(text.getValue())
-					const finalValue = isNaN(numValue)
-						? 0
-						: clamp(numValue, 0, MAX_SECONDS)
+				text.inputEl.addEventListener('blur', () => {
+					void (async () => {
+						const numValue = parseFloat(text.getValue())
+						const finalValue = isNaN(numValue)
+							? 0
+							: clamp(numValue, 0, MAX_SECONDS)
 
-					if (isNaN(numValue)) {
-						new Notice(i18n.t('settings.startupSyncDelay.invalidValue'))
-					} else if (finalValue !== numValue) {
-						new Notice(
-							i18n.t('settings.startupSyncDelay.exceedsMax', {
-								max: MAX_SECONDS,
-							}),
-						)
-					}
+						if (isNaN(numValue)) {
+							new Notice(i18n.t('settings.startupSyncDelay.invalidValue'))
+						} else if (finalValue !== numValue) {
+							new Notice(
+								i18n.t('settings.startupSyncDelay.exceedsMax', {
+									max: MAX_SECONDS,
+								}),
+							)
+						}
 
-					text.setValue(finalValue.toString())
-					this.plugin.settings.startupSyncDelaySeconds = finalValue
-					await this.plugin.settingsService.saveSettings()
+						text.setValue(finalValue.toString())
+						this.plugin.settings.startupSyncDelaySeconds = finalValue
+						await this.plugin.settingsService.saveSettings()
+					})()
 				})
 				text.inputEl.type = 'number'
 				text.inputEl.min = '0'
@@ -271,26 +273,28 @@ export default class CommonSettings extends BaseSettings {
 							}
 						}
 					})
-				text.inputEl.addEventListener('blur', async () => {
-					const numValue = parseFloat(text.getValue())
-					const finalValue = isNaN(numValue)
-						? 0
-						: Math.round(clamp(numValue, 0, MAX_MINUTES))
-					text.setValue(finalValue.toString())
+				text.inputEl.addEventListener('blur', () => {
+					void (async () => {
+						const numValue = parseFloat(text.getValue())
+						const finalValue = isNaN(numValue)
+							? 0
+							: Math.round(clamp(numValue, 0, MAX_MINUTES))
+						text.setValue(finalValue.toString())
 
-					if (isNaN(numValue)) {
-						new Notice(i18n.t('settings.autoSyncInterval.invalidValue'))
-					} else if (finalValue !== numValue) {
-						new Notice(
-							i18n.t('settings.autoSyncInterval.exceedsMax', {
-								max: MAX_MINUTES,
-							}),
-						)
-					}
+						if (isNaN(numValue)) {
+							new Notice(i18n.t('settings.autoSyncInterval.invalidValue'))
+						} else if (finalValue !== numValue) {
+							new Notice(
+								i18n.t('settings.autoSyncInterval.exceedsMax', {
+									max: MAX_MINUTES,
+								}),
+							)
+						}
 
-					this.plugin.settings.autoSyncIntervalSeconds = finalValue * 60
-					await this.plugin.settingsService.saveSettings()
-					await this.plugin.scheduledSyncService.updateInterval()
+						this.plugin.settings.autoSyncIntervalSeconds = finalValue * 60
+						await this.plugin.settingsService.saveSettings()
+						await this.plugin.scheduledSyncService.updateInterval()
+					})()
 				})
 				text.inputEl.type = 'number'
 				text.inputEl.min = '0'
@@ -331,7 +335,7 @@ export default class CommonSettings extends BaseSettings {
 							this.plugin.settings.language = value || undefined
 							await this.plugin.settingsService.saveSettings()
 							await this.plugin.i18nService.update()
-							await this.settings.display()
+							void this.settings.rerenderIfVisible()
 						}
 					}),
 			)

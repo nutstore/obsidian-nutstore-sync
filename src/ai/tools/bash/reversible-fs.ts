@@ -15,6 +15,15 @@ type Snapshot = ReversibleFileSnapshot | { kind: 'dir' }
 type ReadOptions = Parameters<IFileSystem['readFile']>[1]
 type WriteOptions = Parameters<IFileSystem['writeFile']>[2]
 
+export interface ReversibleFsOptions {
+	/**
+	 * Virtual mount points whose paths must remain absolute in persisted
+	 * reversible operations. All other paths are files in the Vault root and
+	 * are recorded as Vault-relative paths.
+	 */
+	absoluteMountPoints?: readonly string[]
+}
+
 function normalizePath(path: string) {
 	return pathPosix.normalize(pathPosix.resolve('/', path))
 }
@@ -29,7 +38,23 @@ export class ReversibleFs implements IFileSystem {
 	constructor(
 		private readonly inner: IFileSystem,
 		private readonly recorder: ReversibleOpRecorder,
+		private readonly options: ReversibleFsOptions = {},
 	) {}
+
+	private toRecordedPath(path: string) {
+		const normalized = normalizePath(path)
+		if (!this.options.absoluteMountPoints) return normalized
+		if (
+			normalized === '/' ||
+			this.options.absoluteMountPoints?.some(
+				(mountPoint) =>
+					normalized === mountPoint || normalized.startsWith(`${mountPoint}/`),
+			)
+		) {
+			return normalized
+		}
+		return normalized.slice(1)
+	}
 
 	private async snapshot(path: string, result = new Map<string, Snapshot>()) {
 		const normalized = normalizePath(path)
@@ -43,7 +68,7 @@ export class ReversibleFs implements IFileSystem {
 		} else {
 			result.set(normalized, {
 				kind: 'file',
-				contentCompressed: await createCompressedFileContent(
+				contentCompressed: createCompressedFileContent(
 					await this.inner.readFileBuffer(normalized),
 				),
 			})
@@ -80,7 +105,7 @@ export class ReversibleFs implements IFileSystem {
 			}
 			for (const path of new Set([...before.keys(), ...after.keys()])) {
 				this.recorder.recordVirtualTransition(
-					path,
+					this.toRecordedPath(path),
 					before.get(path),
 					after.get(path),
 				)

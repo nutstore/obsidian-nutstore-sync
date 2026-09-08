@@ -6,21 +6,20 @@ import i18n from '~/i18n'
 import { ReversibleOpRecorder } from '~/ai/tools/bash/fs'
 import {
 	AGENTS_MOUNT_POINT,
-	AGENTS_VAULT_PATH,
 	BASH_TMP_MOUNT_POINT,
-	BASH_TMP_VAULT_PATH,
 	SETTINGS_FILE_PATH,
 	VAULT_MOUNT_POINT,
 } from '~/ai/tools/bash/mount-points'
 import { createVaultFileSystem } from '~/ai/tools/vault-filesystem'
+import { withPermissionPurpose } from './permission-guard'
 import { textValue } from './shared'
 import {
 	appDep,
+	fileSystemManagerDep,
 	getSettingsSnapshotDep,
 	permissionGuardDep,
 	readTrackerDep,
 	recordMetadataDep,
-	scratchDep,
 	updateSettingsDep,
 } from './tool-context'
 
@@ -209,7 +208,7 @@ function resolveVirtualPath(rawPath: string): string {
 	if (!rel || rel === '.' || rel === '..' || rel.startsWith('../')) {
 		invalidPatch(`path escapes the vault: "${rawPath}"`)
 	}
-	return `${VAULT_MOUNT_POINT}/${rel}`
+	return pathPosix.resolve(VAULT_MOUNT_POINT, rel)
 }
 
 /**
@@ -218,24 +217,28 @@ function resolveVirtualPath(rawPath: string): string {
  * settings file is tracked by its full virtual path.
  */
 function toReadKey(virtualPath: string): string {
-	if (virtualPath.startsWith(`${BASH_TMP_MOUNT_POINT}/`)) {
-		return `${BASH_TMP_VAULT_PATH}${virtualPath.slice(BASH_TMP_MOUNT_POINT.length)}`
+	const normalized = pathPosix.normalize(virtualPath)
+	if (
+		normalized === SETTINGS_FILE_PATH ||
+		normalized.startsWith(`${SETTINGS_FILE_PATH}/`)
+	) {
+		return normalized
 	}
-	if (virtualPath.startsWith(`${AGENTS_MOUNT_POINT}/`)) {
-		return `${AGENTS_VAULT_PATH}${virtualPath.slice(AGENTS_MOUNT_POINT.length)}`
-	}
-	if (virtualPath.startsWith(`${VAULT_MOUNT_POINT}/`)) {
-		return virtualPath.slice(VAULT_MOUNT_POINT.length + 1)
-	}
-	return virtualPath
+	return normalized.startsWith('/') ? normalized.slice(1) : normalized
 }
 
 /** User-facing path: vault-relative for vault (back-compat), virtual otherwise. */
 function toDisplayKey(virtualPath: string): string {
-	if (virtualPath.startsWith(`${VAULT_MOUNT_POINT}/`)) {
-		return virtualPath.slice(VAULT_MOUNT_POINT.length + 1)
+	const normalized = pathPosix.normalize(virtualPath)
+	if (
+		normalized === AGENTS_MOUNT_POINT ||
+		normalized.startsWith(`${AGENTS_MOUNT_POINT}/`) ||
+		normalized === SETTINGS_FILE_PATH ||
+		normalized.startsWith(`${SETTINGS_FILE_PATH}/`)
+	) {
+		return normalized
 	}
-	return virtualPath
+	return normalized.startsWith('/') ? normalized.slice(1) : normalized
 }
 
 function findMatchingBlock(
@@ -340,8 +343,11 @@ function assertUniqueVirtualPaths(paths: string[]) {
 export const applyPatchTool = tool({
 	description: [
 		'Apply a file-oriented patch against the virtual filesystem.',
-		`Use a vault-relative path for files under ${VAULT_MOUNT_POINT}, or an absolute virtual path for any writable mounted filesystem. For example, scratch files live under ${BASH_TMP_MOUNT_POINT}, agent data under ${AGENTS_MOUNT_POINT}, and live plugin settings at ${SETTINGS_FILE_PATH}.`,
+		'The required "purpose" field is a very short (up to 120 characters) plain-language summary of what this patch changes and why it is being applied, written in the same language as the user\'s request and safe for users who cannot read diffs — no code, no markdown, no newlines, no patch syntax.',
+		`Use a vault-relative path for files in the vault (relative paths resolve from ${VAULT_MOUNT_POINT}), or an absolute virtual path for any writable mounted filesystem. For example, scratch files live under ${BASH_TMP_MOUNT_POINT}, agent data under ${AGENTS_MOUNT_POINT}, and live plugin settings at ${SETTINGS_FILE_PATH}.`,
 		'Every patch, including one that only adds, deletes, updates, or moves a single file, MUST start with "*** Begin Patch" and end with "*** End Patch".',
+		'An Add patch has this complete form: "*** Begin Patch\\n*** Add File: notes/example.md\\n+Example line\\n+\\n+示例行 🌱\\n*** End Patch".',
+		'Every line in an Add File section, including blank lines, must start with +.',
 		'A Delete patch has this complete form: "*** Begin Patch\\n*** Delete File: notes/example.md\\n*** End Patch".',
 		'An Update patch has this complete form: "*** Begin Patch\\n*** Update File: notes/example.md\\n@@\\n-old text\\n+new text\\n*** End Patch".',
 		'File operation headers always use the colon syntax: "*** Add File: path", "*** Delete File: path", "*** Update File: path", and "*** Move to: path".',
@@ -352,14 +358,20 @@ export const applyPatchTool = tool({
 		'Read existing files before updating, deleting, or moving them.',
 	].join(' '),
 	inputSchema: z.object({
+		purpose: textValue('purpose').check(
+			z.maxLength(
+				120,
+				i18n.t('chatbox.errors.toolFieldTooLong', { field: 'purpose' }),
+			),
+		),
 		patch: textValue('patch'),
 	}),
 	contextSchema: z.object({
 		app: appDep,
+		fileSystemManager: fileSystemManagerDep,
 		permissionGuard: permissionGuardDep,
 		readTracker: readTrackerDep,
 		recordMetadata: recordMetadataDep,
-		scratch: scratchDep,
 		getSettingsSnapshot: getSettingsSnapshotDep,
 		updateSettings: updateSettingsDep,
 	}),
@@ -367,15 +379,15 @@ export const applyPatchTool = tool({
 		applied: z.literal(true),
 		files: z.array(z.string()),
 	}),
-	execute: async ({ patch }, { context, toolCallId }) => {
+	execute: async ({ patch, purpose }, { context, toolCallId }) => {
 		const {
 			app,
+			fileSystemManager,
 			permissionGuard,
 			readTracker,
 			recordMetadata,
 			getSettingsSnapshot,
 			updateSettings,
-			scratch,
 		} = context
 		const operations = parsePatch(patch)
 
@@ -390,12 +402,12 @@ export const applyPatchTool = tool({
 
 		const recorder = new ReversibleOpRecorder()
 		const mountable = await createVaultFileSystem(app, {
-			permissionGuard,
+			permissionGuard: withPermissionPurpose(permissionGuard, purpose),
 			recorder,
 			onRead: (vaultPath) => readTracker?.markRead(vaultPath),
-			scratch,
 			getSettingsSnapshot,
 			updateSettings,
+			fileSystemManager,
 		})
 
 		const planned: PlannedOperation[] = []

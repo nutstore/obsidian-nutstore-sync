@@ -8,14 +8,16 @@ import type NutstorePlugin from '..'
 import { BaseService } from './service.interface'
 
 export default class AIConflictResolverService extends BaseService {
-	private readonly actions = new WeakMap<MarkdownView, HTMLElement>()
+	private readonly actions = new Map<MarkdownView, HTMLElement>()
 	private refreshVersion = 0
+	private unloaded = false
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
 	}
 
 	override onload() {
+		this.unloaded = false
 		this.plugin.registerEvent(
 			this.plugin.app.workspace.on('active-leaf-change', () => {
 				void this.refresh()
@@ -39,6 +41,7 @@ export default class AIConflictResolverService extends BaseService {
 
 	async refresh() {
 		const version = ++this.refreshVersion
+		if (this.unloaded) return
 		const view = this.plugin.app.workspace.getActiveViewOfType(MarkdownView)
 		if (!view) return
 
@@ -51,7 +54,11 @@ export default class AIConflictResolverService extends BaseService {
 
 		try {
 			const content = await this.plugin.app.vault.cachedRead(file)
-			if (version !== this.refreshVersion || view.file?.path !== file.path) {
+			if (
+				this.unloaded ||
+				version !== this.refreshVersion ||
+				view.file?.path !== file.path
+			) {
 				return
 			}
 			const count = countMergeConflictBlocks(content)
@@ -81,6 +88,15 @@ export default class AIConflictResolverService extends BaseService {
 		action.hidden = true
 		this.actions.set(view, action)
 		return action
+	}
+
+	override onunload() {
+		this.unloaded = true
+		this.refreshVersion++
+		for (const action of this.actions.values()) {
+			action.remove()
+		}
+		this.actions.clear()
 	}
 
 	private hasConfiguredModel() {

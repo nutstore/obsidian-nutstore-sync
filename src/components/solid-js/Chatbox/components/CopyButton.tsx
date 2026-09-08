@@ -3,17 +3,23 @@ import { t } from '../../i18n'
 
 export function CopyButton(props: { getText: () => string }) {
 	const [copied, setCopied] = createSignal(false)
-	let timer: ReturnType<typeof setTimeout>
+	let timer: number | undefined
 
 	function handleCopy() {
 		void navigator.clipboard.writeText(props.getText()).then(() => {
 			setCopied(true)
-			clearTimeout(timer)
-			timer = setTimeout(() => setCopied(false), 2000)
+			if (timer !== undefined) {
+				window.clearTimeout(timer)
+			}
+			timer = window.setTimeout(() => setCopied(false), 2000)
 		})
 	}
 
-	onCleanup(() => clearTimeout(timer))
+	onCleanup(() => {
+		if (timer !== undefined) {
+			window.clearTimeout(timer)
+		}
+	})
 
 	return (
 		<button

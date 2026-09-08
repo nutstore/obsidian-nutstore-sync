@@ -1,5 +1,7 @@
-import { isFinite } from 'lodash-es'
-
-export function isNumeric(val: any) {
-	return !isNaN(parseFloat(val)) && isFinite(Number(val))
+export function isNumeric(value: unknown): boolean {
+	if (typeof value !== 'number' && typeof value !== 'string') return false
+	return (
+		!Number.isNaN(Number.parseFloat(String(value))) &&
+		Number.isFinite(Number(value))
+	)
 }

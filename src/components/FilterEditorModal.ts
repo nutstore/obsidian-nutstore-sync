@@ -15,7 +15,7 @@ export default class FilterEditorModal extends Modal {
 	constructor(
 		plugin: NutstorePlugin,
 		rules: GlobFilterRule[] = [],
-		private onSave: (filters: GlobFilterRule[]) => void,
+		private onSave: (filters: GlobFilterRule[]) => void | Promise<void>,
 		private getHighlightedRule?: (
 			rules: GlobFilterRule[],
 		) => GlobFilterRule | undefined,
@@ -219,7 +219,7 @@ export default class FilterEditorModal extends Modal {
 					.setButtonText(i18n.t('settings.filters.save'))
 					.setCta()
 					.onClick(() => {
-						this.onSave(this.rules)
+						void this.onSave(this.rules)
 						this.close()
 					})
 			})

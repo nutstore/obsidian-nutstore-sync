@@ -9,10 +9,21 @@ import {
 	type LatestTimestampParams,
 } from './merge-utils'
 
-function expectAutoMerged(result: { success: boolean; mergedText?: string }) {
+function expectAutoMerged(
+	result: { success: boolean; mergedText?: string },
+	params: IntelligentMergeParams,
+	requiredFragments: readonly string[],
+) {
 	expect(result.success).toBe(true)
 	expect(typeof result.mergedText).toBe('string')
+	expect(result.mergedText).not.toBe('')
+	expect(result.mergedText).not.toBe(params.baseContentText)
+	expect(result.mergedText).not.toBe(params.localContentText)
+	expect(result.mergedText).not.toBe(params.remoteContentText)
 	expect(result.mergedText).not.toContain('<<<<<<<')
+	for (const fragment of requiredFragments) {
+		expect(result.mergedText).toContain(fragment)
+	}
 }
 
 describe('resolveByDiff3Merge', () => {
@@ -253,7 +264,7 @@ describe('resolveByIntelligentMerge', () => {
 				'common_prefix\nshared_line_remote_version\ncommon_suffix', // Remote also made a change
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ['common_prefix', 'common_suffix'])
 	})
 
 	it('情况 3.2: node-diff3 冲突后由 Yjs 合并', async () => {
@@ -383,7 +394,7 @@ We will achieve this by simplifying the navigation and ensuring stability.
 The deadline for this phase is strictly four months.`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ["The project's", 'We will achieve'])
 	})
 
 	it('情况 3.9: 多段文本 - 冲突与非冲突段落由 Yjs 合并', async () => {
@@ -414,7 +425,10 @@ Paragraph C: Concluding remarks and future work, with an added action item.
 This summarizes the document and suggests next steps.`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, [
+			'with local additions',
+			'expanded with remote details',
+		])
 	})
 
 	it('情况 3.10: 大段中文文本 - 两端非冲突编辑 (DMP 成功)', async () => {
@@ -492,7 +506,7 @@ This summarizes the document and suggests next steps.`,
 此阶段的截止日期严格限定为四个月。`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ['项目的主要', '我们将通过'])
 	})
 
 	it('情况 3.13: 多段中文文本 - 冲突与非冲突段落由 Yjs 合并', async () => {
@@ -523,7 +537,7 @@ This summarizes the document and suggests next steps.`,
 这总结了文档并建议了后续步骤。`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ['附带本地增补', '并用远程细节进行了扩展'])
 	})
 
 	// --- Markdown Specific Test Cases ---
@@ -582,7 +596,7 @@ This is the modified paragraph content by remote. It elaborates on the important
 			remoteContentText: `## Remotely Revised Subheading`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ['##', 'Subheading'])
 	})
 
 	it('情况 3.17: Markdown - 大型知识库片段 - 复杂非冲突编辑 (DMP 成功)', async () => {
@@ -692,7 +706,10 @@ Data flows from Frontend -> API Server -> Database.`,
 - Write unit tests for all new features.`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, [
+			'# Project Alpha: Guidelines',
+			'## Coding Standards',
+		])
 	})
 
 	it('情况 3.19: Markdown (中文) - 非冲突编辑 (本地添加列表，远程修改段落) (DMP 成功)', async () => {
@@ -817,7 +834,7 @@ Data flows from Frontend -> API Server -> Database.`,
 - 为所有新功能编写单元测试。`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ['# 项目甲：开发指南', '##编码规范'])
 	})
 
 	it('情况 3.22: Markdown - 本地在文档中间插入大段文字，远程在末尾小幅修改 (DMP 成功)', async () => {
@@ -1121,7 +1138,10 @@ ${longParagraph}
 ## 议题二：后续计划`,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, [
+			'本地补充：关于A模块的详细讨论',
+			'远程补充：关于用户反馈的整理',
+		])
 	})
 
 	// --- Yjs 自动合并 ---
@@ -1132,7 +1152,7 @@ ${longParagraph}
 			remoteContentText: 'line1\nconflicting_line_remote_change_B\nline3',
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ['line1', 'line3'])
 	})
 
 	// --- 内容边缘情况 ---
@@ -1143,7 +1163,10 @@ ${longParagraph}
 			remoteContentText: 'remote only content',
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, [
+			'local only content',
+			'remote only content',
+		])
 		expect(result.mergedText).toContain('local only content')
 		expect(result.mergedText).toContain('remote only content')
 	})
@@ -1167,7 +1190,7 @@ ${longParagraph}
 			remoteContentText: 'some base content\nshared line\nremote additions', // Remote kept base and added
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, ['remote additions'])
 		expect(result.mergedText).toContain('remote additions')
 	})
 
@@ -1190,7 +1213,11 @@ ${longParagraph}
 			hasBase: false,
 		}
 		const result = await resolveByIntelligentMerge(params)
-		expectAutoMerged(result)
+		expectAutoMerged(result, params, [
+			'本地独有的段落',
+			'远程独有的段落',
+			'共享段落',
+		])
 		expect(result.mergedText).toContain('本地独有的段落')
 		expect(result.mergedText).toContain('远程独有的段落')
 		expect(result.mergedText).toContain('共享段落')

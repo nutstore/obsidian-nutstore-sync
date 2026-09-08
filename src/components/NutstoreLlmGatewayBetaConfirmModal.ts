@@ -4,7 +4,7 @@ import i18n from '~/i18n'
 export default class NutstoreLlmGatewayBetaConfirmModal extends Modal {
 	constructor(
 		app: App,
-		private onConfirm: () => void,
+		private onConfirm: () => void | Promise<void>,
 	) {
 		super(app)
 	}
@@ -33,7 +33,7 @@ export default class NutstoreLlmGatewayBetaConfirmModal extends Modal {
 					.setCta()
 					.onClick(() => {
 						this.close()
-						this.onConfirm()
+						void this.onConfirm()
 					}),
 			)
 	}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { BASH_TMP_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 import { projectTimelineMessageGroups } from './display-blocks'
 
 describe('projectTimelineMessageGroups', () => {
@@ -69,7 +70,7 @@ describe('projectTimelineMessageGroups', () => {
 						data: {
 							kind: 'task-result-ready',
 							taskId: 'explorer-one',
-							resultPath: '/tmp/session/tasks/explorer-one.txt',
+							resultPath: `${BASH_TMP_MOUNT_POINT}/session/tasks/explorer-one.txt`,
 						},
 					},
 				],
@@ -83,7 +84,7 @@ describe('projectTimelineMessageGroups', () => {
 				notification: {
 					kind: 'task-result-ready',
 					taskId: 'explorer-one',
-					resultPath: '/tmp/session/tasks/explorer-one.txt',
+					resultPath: `${BASH_TMP_MOUNT_POINT}/session/tasks/explorer-one.txt`,
 				},
 			},
 		])

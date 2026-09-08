@@ -32,5 +32,12 @@
 		"inlineSources": true,
 		"isolatedModules": true
 	},
-	"include": ["**/*.ts", "**/*.tsx", "**/*.mts"]
+	"include": [
+		"**/*.ts",
+		"**/*.tsx",
+		"**/*.mts",
+		"**/*.js",
+		"**/*.mjs",
+		"**/*.cjs"
+	]
 }

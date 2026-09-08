@@ -139,7 +139,7 @@ export default class ProviderEditorModal extends Modal {
 						const confirmed = await new ProviderCorsConfirmModal(
 							this.app,
 							this.mountTarget,
-						).open()
+						).openAndWait()
 						if (!confirmed) {
 							this.render()
 							return

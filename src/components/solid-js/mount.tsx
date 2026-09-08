@@ -19,7 +19,7 @@ export function createMount<T extends object>(
 	const destroy = render(() => {
 		const [state, set] = createStore(initialProps)
 		setState = (next) => set(reconcile(next))
-		return <Component {...(state as T)} />
+		return <Component {...state} />
 	}, el)
 
 	return {

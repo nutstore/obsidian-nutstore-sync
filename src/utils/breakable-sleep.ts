@@ -7,7 +7,7 @@ export default function <T>(ob: Observable<T>, ms: number) {
 			error: (err) => {
 				window.clearTimeout(timer)
 				sub.unsubscribe()
-				reject(err)
+				reject(err instanceof Error ? err : new Error(String(err)))
 			},
 		})
 

@@ -1,15 +1,14 @@
 import 'blob-polyfill'
-import 'core-js/stable'
 
 import './polyfill'
 import './webdav-patch'
 
-// @ts-ignore
 import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
 import { Menu, normalizePath, Plugin } from 'obsidian'
 import { createSelectedTextContextItem } from './ai/chat/context/user-context'
+import { registerChatboxAiIcon } from './assets/icons/obsidian-nutstore-ai-icon'
 import { SyncRibbonManager } from './components/SyncRibbonManager'
 import { emitCancelSync } from './events'
 import i18n from './i18n'
@@ -99,6 +98,7 @@ export default class NutstorePlugin extends Plugin {
 	}
 
 	async onload() {
+		registerChatboxAiIcon()
 		for (const service of this.services) {
 			await service.onload()
 		}
@@ -151,12 +151,12 @@ export default class NutstorePlugin extends Plugin {
 		await this.chatService.handleSettingsChanged()
 	}
 
-	async onunload() {
+	onunload() {
 		this.settingTab?.unload()
-		this.app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
+
 		emitCancelSync()
 		for (const service of [...this.services].reverse()) {
-			service.onunload()
+			void service.onunload()
 		}
 	}
 

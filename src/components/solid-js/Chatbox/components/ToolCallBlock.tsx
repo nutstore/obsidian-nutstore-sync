@@ -95,8 +95,13 @@ export function ToolCallBlock(props: {
 					renderMarkdown={props.renderMarkdown}
 				/>
 			</Match>
-			<Match when={props.block.toolCall.toolName === 'bash'}>
-				<BashToolCallBlock
+			<Match
+				when={
+					props.block.toolCall.toolName === 'bash' ||
+					props.block.toolCall.toolName === 'apply_patch'
+				}
+			>
+				<PurposeToolCallBlock
 					block={props.block}
 					now={props.now}
 					onOpenFileChange={props.onOpenFileChange}
@@ -239,11 +244,11 @@ function TaskToolCallBlock(props: {
 		toolCall().state === 'output-available'
 			? taskIdFromOutput(toolCall().output)
 			: undefined
-	const subagentType = () =>
-		String(
-			(toolCall().input as { subagent_type?: unknown })?.subagent_type ??
-				'unknown',
-		)
+	const subagentType = () => {
+		const value = (toolCall().input as { subagent_type?: unknown })
+			?.subagent_type
+		return typeof value === 'string' ? value : 'unknown'
+	}
 	const subagent = () => {
 		const id = taskId()
 		return id ? props.getSubagent?.(id) : undefined
@@ -297,7 +302,7 @@ function TaskToolCallBlock(props: {
 	)
 }
 
-function BashToolCallBlock(props: {
+function PurposeToolCallBlock(props: {
 	block: ChatDisplayToolCallBlock
 	now: number
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void

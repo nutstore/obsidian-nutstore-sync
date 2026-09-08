@@ -1,9 +1,10 @@
-import { normalizePath, Vault } from 'obsidian'
+import type { Vault } from 'obsidian'
 import { isAbsolute, join } from 'path-browserify'
 import { WebDAVClient } from 'webdav'
 import { SyncRecord } from '~/storage/sync-record'
 import type { SyncLogger } from '~/sync/log'
 import { MaybePromise } from '~/utils/types'
+import { normalizeVaultPath } from '~/utils/normalize-vault-path'
 
 export interface BaseTaskOptions {
 	vault: Vault
@@ -54,7 +55,7 @@ export abstract class BaseTask {
 	}
 
 	get localPath() {
-		return normalizePath(this.options.localPath)
+		return normalizeVaultPath(this.options.localPath)
 	}
 
 	get logger() {

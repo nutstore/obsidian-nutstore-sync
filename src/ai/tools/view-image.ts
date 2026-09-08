@@ -2,12 +2,11 @@ import { tool } from 'ai'
 import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod/mini'
 import i18n from '~/i18n'
-import { BASH_TMP_MOUNT_POINT } from './bash/tmp-fs'
 import { createVaultFileSystem, VAULT_MOUNT_POINT } from './vault-filesystem'
 import {
 	appDep,
+	fileSystemManagerDep,
 	readTrackerDep,
-	scratchDep,
 	viewImageAttachmentsDep,
 } from './tool-context'
 
@@ -33,15 +32,13 @@ function imageFilename(path: string) {
 }
 
 function isViewableImagePath(path: string) {
-	return [VAULT_MOUNT_POINT, BASH_TMP_MOUNT_POINT].some((mountPoint) =>
-		path.startsWith(`${mountPoint}/`),
-	)
+	return path.startsWith('/') && path !== '/'
 }
 
 function resolveImagePath(path: string) {
 	return path.startsWith('/')
 		? pathPosix.normalize(path)
-		: pathPosix.resolve(VAULT_MOUNT_POINT, path)
+		: pathPosix.resolve('/', path)
 }
 
 const viewImageOutputSchema = z.object({
@@ -52,16 +49,16 @@ const viewImageOutputSchema = z.object({
 
 export const viewImageTool = tool({
 	description: [
-		'View an image stored in the Obsidian vault or temporary filesystem.',
+		'View an image stored in the Obsidian vault or agent temporary directory.',
 		'Use this tool when you need to inspect an image file visually.',
-		`Input an absolute image path under ${VAULT_MOUNT_POINT} or ${BASH_TMP_MOUNT_POINT}, or a path relative to ${VAULT_MOUNT_POINT}, with a supported extension: avif, bmp, gif, ico, jpeg, jpg, png, svg, or webp.`,
+		`Input an absolute virtual image path or a path relative to ${VAULT_MOUNT_POINT}, with a supported extension: avif, bmp, gif, ico, jpeg, jpg, png, svg, or webp.`,
 	].join(' '),
 	inputSchema: z.object({
 		path: z
 			.string()
 			.check(
 				z.describe(
-					`The image path under ${VAULT_MOUNT_POINT} or ${BASH_TMP_MOUNT_POINT}; relative paths resolve from ${VAULT_MOUNT_POINT}.`,
+					`The image path in the virtual filesystem; relative paths resolve from ${VAULT_MOUNT_POINT}.`,
 				),
 				z.trim(),
 				z.minLength(
@@ -72,7 +69,7 @@ export const viewImageTool = tool({
 	}),
 	contextSchema: z.object({
 		app: appDep,
-		scratch: scratchDep,
+		fileSystemManager: fileSystemManagerDep,
 		readTracker: readTrackerDep,
 		viewImageAttachments: viewImageAttachmentsDep,
 	}),
@@ -81,7 +78,7 @@ export const viewImageTool = tool({
 		const normalizedPath = resolveImagePath(path)
 		if (!isViewableImagePath(normalizedPath)) {
 			throw new Error(
-				`Image path must be under ${VAULT_MOUNT_POINT} or ${BASH_TMP_MOUNT_POINT}: ${path}`,
+				`Image path must be an absolute virtual path or relative to ${VAULT_MOUNT_POINT}: ${path}`,
 			)
 		}
 
@@ -91,8 +88,8 @@ export const viewImageTool = tool({
 		}
 
 		const fs = await createVaultFileSystem(context.app, {
+			fileSystemManager: context.fileSystemManager,
 			onRead: context.readTracker?.markRead.bind(context.readTracker),
-			scratch: context.scratch,
 		})
 		let data: Uint8Array
 		try {

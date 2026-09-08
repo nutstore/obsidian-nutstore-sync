@@ -30,7 +30,7 @@ export function enhanceHtmlCodeBlocks(container: HTMLElement): void {
 		header.className = 'ns-chatbox-runnable-code-header'
 		const lang = doc.createElement('span')
 		lang.className = 'ns-chatbox-runnable-code-lang'
-		lang.textContent = 'html'
+		lang.textContent = 'HTML'
 		const toggle = doc.createElement('button')
 		toggle.type = 'button'
 		toggle.className = 'ns-chatbox-runnable-code-toggle'

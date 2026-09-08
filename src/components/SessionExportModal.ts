@@ -10,7 +10,7 @@ export interface SessionExportOptions {
 }
 
 export default class SessionExportModal extends Modal {
-	private includeToolMessages = false
+	private includeToolMessages = true
 	private resolved = false
 	private cleanupModalMount?: () => void
 

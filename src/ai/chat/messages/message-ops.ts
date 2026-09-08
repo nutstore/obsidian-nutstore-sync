@@ -1,6 +1,6 @@
 import type { ChatSession } from '~/ai/chat/domain'
 import type { ReversibleToolOp } from '~/ai/chat/types'
-import { Notice, type App } from 'obsidian'
+import type { App } from 'obsidian'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
 import {
 	getMessageText,
@@ -20,24 +20,31 @@ import {
 	computeChangedContexts,
 } from '~/ai/chat/context/workspace-context'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
-import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
+import {
+	isSessionExecutionPending,
+	type RuntimeStates,
+} from '~/ai/chat/runtime/runtime-state'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { RecallMessageResult } from '~/ai/chat/ui/types'
 import logger from '~/utils/logger'
 import type { SkillRepository } from '~/ai/skills/repository'
-import { createVaultFileSystem } from '~/ai/tools/vault-filesystem'
+import {
+	createVaultFileSystem,
+	type VaultFileSystemManager,
+} from '~/ai/tools/vault-filesystem'
 import type {
 	SettingsSnapshotFn,
 	SettingsUpdater,
 } from '~/ai/tools/tool-context'
 import { posix as pathPosix } from 'path-browserify'
-import type { IFileSystem } from 'just-bash/browser'
+import { normalizeLegacyVirtualPath } from '~/ai/tools/bash/mount-points'
+import type { RegenerationTransaction } from '~/ai/chat/runtime/regeneration'
 
 export async function restoreVirtualReversibleOperations(
 	app: App,
 	operations: ReversibleToolOp[],
 	options: {
-		scratch?: IFileSystem
+		fileSystemManager?: VaultFileSystemManager
 		settingsIo?: {
 			getSettingsSnapshot: SettingsSnapshotFn
 			updateSettings: SettingsUpdater
@@ -45,18 +52,18 @@ export async function restoreVirtualReversibleOperations(
 	} = {},
 ) {
 	const fs = await createVaultFileSystem(app, {
-		scratch: options.scratch,
+		fileSystemManager: options.fileSystemManager,
 		getSettingsSnapshot: options.settingsIo?.getSettingsSnapshot,
 		updateSettings: options.settingsIo?.updateSettings,
 	})
 	const earliest = new Map<string, ReversibleToolOp>()
 	for (const operation of operations) {
-		if (!earliest.has(operation.vaultPath)) {
-			earliest.set(operation.vaultPath, operation)
+		const normalizedPath = normalizeLegacyVirtualPath(operation.vaultPath)
+		if (!earliest.has(normalizedPath)) {
+			earliest.set(normalizedPath, operation)
 		}
 	}
-	for (const operation of [...earliest.values()].reverse()) {
-		const path = operation.vaultPath
+	for (const [path, operation] of [...earliest.entries()].reverse()) {
 		if (operation.operation === 'create') {
 			if (await fs.exists(path)) await fs.rm(path, { recursive: true })
 			continue
@@ -80,14 +87,19 @@ export class MessageOps {
 		private runtimeStates: RuntimeStates,
 		private store: SessionStore,
 		private notify: () => void,
+		private reportTransientError: (message: string) => void,
 		private messageFactory: MessageFactory,
 		private validateSelection: (session: ChatSession) => boolean,
-		private requestRun: (sessionId: string) => Promise<void> | void,
+		private enqueueRegenerate: (
+			sessionId: string,
+			targetMessageId: string,
+		) => boolean,
 		private skillRepository?: SkillRepository,
 		private settingsIo?: {
 			getSettingsSnapshot: SettingsSnapshotFn
 			updateSettings: SettingsUpdater
 		},
+		private fileSystemManager?: VaultFileSystemManager,
 	) {}
 
 	deleteMessage(messageId: string) {
@@ -168,7 +180,9 @@ export class MessageOps {
 			}
 		} catch (error) {
 			logger.error(error)
-			new Notice(error instanceof Error ? error.message : String(error))
+			this.reportTransientError(
+				error instanceof Error ? error.message : String(error),
+			)
 		}
 	}
 
@@ -193,7 +207,7 @@ export class MessageOps {
 			return
 		}
 		const runtime = this.runtimeStates.get(session.id)
-		if (runtime.runState !== 'idle' || runtime.processing) {
+		if (isSessionExecutionPending(runtime)) {
 			return
 		}
 		const agent = this.messageFactory.getActiveAgent(session)
@@ -201,42 +215,146 @@ export class MessageOps {
 		if (idx === -1) {
 			return
 		}
-		const messagesAfter = agent.timeline.slice(idx + 1)
-		agent.timeline = agent.timeline.slice(0, idx)
+		this.enqueueRegenerate(session.id, messageId)
+	}
+
+	async beginRegeneration(
+		session: ChatSession,
+		targetMessageId: string,
+		isCurrent: () => boolean,
+	): Promise<RegenerationTransaction | undefined> {
+		const agent = this.messageFactory.getActiveAgent(session)
+		const idx = agent.timeline.findIndex(
+			(message) => message.id === targetMessageId,
+		)
+		if (idx === -1) return undefined
+		await this.skillRepository?.refresh()
+		if (!isCurrent()) return undefined
+
+		const originalTimeline = agent.timeline.slice()
+		const originalOperations = Object.fromEntries(
+			Object.entries(agent.operations).map(([id, operations]) => [
+				id,
+				operations.slice(),
+			]),
+		)
+		const originalToolTimings = Object.fromEntries(
+			Object.entries(agent.toolTimings).map(([id, timing]) => [
+				id,
+				{ ...timing },
+			]),
+		)
+		const originalSessionIndexPosition = this.state.sessionIndex.findIndex(
+			(item) => item.id === session.id,
+		)
+		const originalSessionUpdatedAt = session.updatedAt
+		const prefix = originalTimeline.slice(0, idx)
+		const suffix = originalTimeline.slice(idx + 1)
 
 		let lastUserIdx = -1
-		for (let index = agent.timeline.length - 1; index >= 0; index -= 1) {
-			if (agent.timeline[index].role === 'user') {
+		for (let index = prefix.length - 1; index >= 0; index -= 1) {
+			if (prefix[index].role === 'user') {
 				lastUserIdx = index
 				break
 			}
 		}
 		if (lastUserIdx !== -1) {
-			await this.skillRepository?.refresh()
-			const prevMessages = agent.timeline.slice(0, lastUserIdx)
+			const prevMessages = prefix.slice(0, lastUserIdx)
 			const current = captureWorkspaceContexts(this.app, this.skillRepository)
 			const changed = computeChangedContexts(prevMessages, current)
-			const message = agent.timeline[lastUserIdx]
-			message.parts = message.parts.filter(
-				(part) => part.type !== 'data-workspace-context',
-			)
+			const message = prefix[lastUserIdx]
+			prefix[lastUserIdx] = {
+				...message,
+				parts: message.parts.filter(
+					(part) => part.type !== 'data-workspace-context',
+				),
+			}
 			if (changed.length) {
-				message.parts.unshift({
+				prefix[lastUserIdx].parts.unshift({
 					type: 'data-workspace-context',
 					data: { deltas: changed },
 				})
 			}
 		}
 
-		runtime.runState = 'thinking'
-		await this.store.persistSession(session)
-		this.notify()
-		await this.requestRun(session.id)
-		if (messagesAfter.length > 0) {
-			const updatedAgent = this.messageFactory.getActiveAgent(session)
-			updatedAgent.timeline = [...updatedAgent.timeline, ...messagesAfter]
-			await this.store.persistSession(session)
-			this.notify()
+		agent.timeline = prefix
+		return {
+			targetMessageId,
+			targetToolCallIds: originalTimeline[idx].parts.flatMap((part) =>
+				part.type === 'dynamic-tool' ? [part.toolCallId] : [],
+			),
+			originalTimeline,
+			originalOperations,
+			originalToolTimings,
+			originalReadVaultPaths: agent.readVaultPaths?.slice(),
+			originalSessionUpdatedAt,
+			originalSessionIndexItem:
+				originalSessionIndexPosition === -1
+					? undefined
+					: {
+							...this.state.sessionIndex[originalSessionIndexPosition],
+						},
+			originalSessionIndexPosition,
+			prefixLength: prefix.length,
+			suffix,
+		}
+	}
+
+	commitRegeneration(
+		session: ChatSession,
+		transaction: RegenerationTransaction,
+	) {
+		const agent = this.messageFactory.getActiveAgent(session)
+		delete agent.operations[transaction.targetMessageId]
+		for (const toolCallId of transaction.targetToolCallIds) {
+			delete agent.toolTimings[toolCallId]
+		}
+		agent.timeline = [...agent.timeline, ...transaction.suffix]
+	}
+
+	rollbackRegeneration(
+		session: ChatSession,
+		transaction: RegenerationTransaction,
+	) {
+		const agent = this.messageFactory.getActiveAgent(session)
+		agent.timeline = transaction.originalTimeline.slice()
+		agent.operations = Object.fromEntries(
+			Object.entries(transaction.originalOperations).map(([id, operations]) => [
+				id,
+				operations.slice(),
+			]),
+		)
+		agent.toolTimings = Object.fromEntries(
+			Object.entries(transaction.originalToolTimings).map(([id, timing]) => [
+				id,
+				{ ...timing },
+			]),
+		)
+		agent.readVaultPaths = transaction.originalReadVaultPaths?.slice()
+		session.updatedAt = transaction.originalSessionUpdatedAt
+		const currentIndexPosition = this.state.sessionIndex.findIndex(
+			(item) => item.id === session.id,
+		)
+		if (transaction.originalSessionIndexItem) {
+			const restored = { ...transaction.originalSessionIndexItem }
+			if (currentIndexPosition === -1) {
+				const position = Math.min(
+					transaction.originalSessionIndexPosition,
+					this.state.sessionIndex.length,
+				)
+				this.state.sessionIndex = [
+					...this.state.sessionIndex.slice(0, position),
+					restored,
+					...this.state.sessionIndex.slice(position),
+				]
+			} else {
+				this.state.sessionIndex = this.state.sessionIndex.slice()
+				this.state.sessionIndex[currentIndexPosition] = restored
+			}
+		} else if (currentIndexPosition !== -1) {
+			this.state.sessionIndex = this.state.sessionIndex.filter(
+				(item) => item.id !== session.id,
+			)
 		}
 	}
 
@@ -328,12 +446,8 @@ export class MessageOps {
 	}
 
 	private async restoreVirtualFilesForRecall(operations: ReversibleToolOp[]) {
-		const session = this.getLoadedActiveSession()
-		const scratch = session
-			? this.runtimeStates.get(session.id).bashScratch
-			: undefined
 		await restoreVirtualReversibleOperations(this.app, operations, {
-			scratch,
+			fileSystemManager: this.fileSystemManager,
 			settingsIo: this.settingsIo,
 		})
 	}
@@ -348,15 +462,7 @@ export class MessageOps {
 			return
 		}
 		logger.info(`Recall restore delete: ${path}`)
-		if (typeof this.app.vault.delete === 'function') {
-			await this.app.vault.delete(target, true)
-			return
-		}
-		if (typeof this.app.vault.trash === 'function') {
-			await this.app.vault.trash(target, false)
-			return
-		}
-		throw new Error(`Unable to delete ${path}: vault delete is unavailable.`)
+		await this.app.fileManager.trashFile(target)
 	}
 
 	private async ensureVaultDirectory(path: string) {

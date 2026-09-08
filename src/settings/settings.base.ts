@@ -10,5 +10,5 @@ export default abstract class BaseSettings {
 		protected containerEl: HTMLElement,
 	) {}
 
-	abstract display(): void
+	abstract display(): Promise<void>
 }

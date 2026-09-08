@@ -96,7 +96,7 @@ function DiffLine(props: { line: FileDiffLine }) {
 function DiffHunk(props: { hunk: FileDiffHunk }) {
 	return (
 		<div class=":uno: font-mono text-xs leading-5">
-			<div class=":uno: bg-[var(--background-secondary-alt)] px-2 text-[var(--text-muted)]">
+			<div class=":uno: bg-[var(--background-secondary-alt)] px-4 text-[var(--text-muted)]">
 				@@ -{props.hunk.oldStart},{props.hunk.oldCount} +{props.hunk.newStart},
 				{props.hunk.newCount} @@
 			</div>
@@ -131,7 +131,7 @@ function FileChangeSummary(props: {
 				class=":uno: min-w-0 flex-1 cursor-pointer truncate text-left text-[var(--link-color)] hover:underline !border-none !bg-transparent !p-0 !shadow-none"
 				onClick={(event) => {
 					event.stopPropagation()
-					props.onOpenFile?.(props.diff.vaultPath, openLine())
+					void props.onOpenFile?.(props.diff.vaultPath, openLine())
 				}}
 			>
 				{props.diff.vaultPath}
@@ -157,7 +157,7 @@ function FileChange(props: {
 	onOpenFile?: (vaultPath: string, line?: number) => Promise<void> | void
 }) {
 	const [diff] = createResource(() => props.change, buildFileDiff)
-	const [open, setOpen] = createSignal(true)
+	const [open, setOpen] = createSignal(false)
 	return (
 		<Show when={diff()} keyed>
 			{(value) => (
@@ -174,7 +174,7 @@ function FileChange(props: {
 							{t('chatbox.ui.fileChanges.binary')}
 						</div>
 					</Show>
-					<div class=":uno: overflow-hidden rounded-3">
+					<div class=":uno: overflow-hidden rounded-3 rounded-t-6">
 						<For each={value.hunks}>{(hunk) => <DiffHunk hunk={hunk} />}</For>
 					</div>
 				</CollapsibleBlock>

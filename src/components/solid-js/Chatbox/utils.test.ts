@@ -1,12 +1,49 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
 	fencedCode,
 	formatDuration,
 	formatSystemNotificationMarkdown,
+	formatTime,
 	formatToolDetailsMarkdown,
+	shouldSubmitChatInput,
 	toolCallDisplayTitle,
 	toolCallPurpose,
 } from './utils'
+
+describe('shouldSubmitChatInput', () => {
+	const enterEvent = {
+		key: 'Enter',
+		shiftKey: false,
+		isComposing: false,
+		keyCode: 13,
+	}
+
+	it('submits a plain Enter key', () => {
+		expect(shouldSubmitChatInput(enterEvent, false)).toBe(true)
+	})
+
+	it('does not submit while an IME composition is being confirmed', () => {
+		expect(shouldSubmitChatInput({ ...enterEvent, keyCode: 229 }, false)).toBe(
+			false,
+		)
+		expect(
+			shouldSubmitChatInput({ ...enterEvent, isComposing: true }, false),
+		).toBe(false)
+		expect(shouldSubmitChatInput(enterEvent, true)).toBe(false)
+	})
+})
+
+describe('formatTime', () => {
+	it('falls back without Intl', () => {
+		vi.stubGlobal('Intl', undefined)
+		try {
+			const timestamp = new Date(2024, 1, 29, 9, 7).getTime()
+			expect(formatTime(timestamp)).toBe('02/29 09:07')
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+})
 
 describe('formatDuration', () => {
 	it('uses compact stable units', () => {
@@ -90,8 +127,8 @@ describe('toolCallPurpose', () => {
 })
 
 describe('toolCallDisplayTitle', () => {
-	function makeToolCall(input: unknown) {
-		return { toolName: 'bash', input } as unknown as Parameters<
+	function makeToolCall(input: unknown, toolName = 'bash') {
+		return { toolName, input } as unknown as Parameters<
 			typeof toolCallDisplayTitle
 		>[0]
 	}
@@ -101,6 +138,17 @@ describe('toolCallDisplayTitle', () => {
 			makeToolCall({ purpose: '读取备注内容 / Read the note content' }),
 		)
 		expect(title).toBe('读取备注内容 / Read the note content')
+	})
+
+	it('uses purpose as the title for apply_patch calls', () => {
+		expect(
+			toolCallDisplayTitle(
+				makeToolCall(
+					{ purpose: '  修复同步冲突 🚀 / Repair sync conflict  ' },
+					'apply_patch',
+				),
+			),
+		).toBe('修复同步冲突 🚀 / Repair sync conflict')
 	})
 
 	it('falls back to the tool name when purpose is blank or whitespace', () => {

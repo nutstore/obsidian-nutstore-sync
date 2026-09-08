@@ -324,7 +324,7 @@ export class NutstoreSync {
 				const confirmExec = await new TaskListConfirmModal(
 					this.app,
 					confirmedTasks,
-				).open()
+				).openAndWait()
 				if (confirmExec.confirm) {
 					confirmedTasks = confirmExec.tasks
 					this.plugin.progressService.showProgressModal()
@@ -345,11 +345,14 @@ export class NutstoreSync {
 			) {
 				const removeLocalTasks = confirmedTasks.filter(
 					(t) => t instanceof RemoveLocalTask,
-				) as RemoveLocalTask[]
+				)
 				if (removeLocalTasks.length > 0) {
 					new Notice(i18n.t('deleteConfirm.warningNotice'), 3000)
 					const { tasksToDelete, tasksToReupload } =
-						await new DeleteConfirmModal(this.app, removeLocalTasks).open()
+						await new DeleteConfirmModal(
+							this.app,
+							removeLocalTasks,
+						).openAndWait()
 
 					// Create corresponding Push/Mkdir tasks for each task to reupload
 					const reuploadMap = new Map<

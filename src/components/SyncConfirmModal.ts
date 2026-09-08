@@ -24,30 +24,25 @@ export default class SyncConfirmModal extends Modal {
 	}
 
 	async onOpen() {
+		this.setTitle(i18n.t('sync.confirmModal.title'))
+
 		const { contentEl } = this
 		addClassTokens(this.modalEl, ':uno: sync-confirm-modal')
 		addClassTokens(contentEl, ':uno: sync-confirm-modal__content')
 		const bodyEl = contentEl.createDiv({
-			cls: ':uno: min-h-0 flex-1 overflow-y-auto pr-1',
+			cls: ':uno: min-h-0 flex-1 overflow-y-auto',
 		})
 		const footerEl = contentEl.createDiv({
 			cls: ':uno: sync-confirm-modal__footer',
 		})
 
-		bodyEl.createEl('h2', { text: i18n.t('sync.confirmModal.title') })
 		const infoDiv = bodyEl.createDiv({ cls: ':uno: sync-info' })
 		infoDiv.createEl('p', {
 			text: i18n.t('sync.confirmModal.remoteDir', {
 				dir: this.settings.remoteDir,
 			}),
 		})
-		infoDiv.createEl('p', {
-			text: i18n.t('sync.confirmModal.strategy', {
-				strategy: i18n.t(
-					`settings.conflictStrategy.${getConflictStrategyI18nKey(this.settings.conflictStrategy)}`,
-				),
-			}),
-		})
+		const conflictStrategyInfo = infoDiv.createEl('p')
 
 		bodyEl.createEl('h3', {
 			text: i18n.t('sync.confirmModal.policyTitle'),
@@ -58,13 +53,28 @@ export default class SyncConfirmModal extends Modal {
 			cls: ':uno: grid gap-1.5 my-3',
 		})
 		const policyDescription = policySection.createEl('pre', {
-			cls: ':uno: mt-0',
+			cls: ':uno: mt-0 whitespace-pre-wrap',
 		})
-		policyDescription.style.whiteSpace = 'pre-wrap'
 		const updatePolicyDescription = () => {
 			policyDescription.setText(
-				i18n.t(getSyncPolicyDescI18nKey(this.selectedPolicy)),
+				[
+					i18n.t('sync.confirmModal.policyBasis'),
+					i18n.t(getSyncPolicyDescI18nKey(this.selectedPolicy)),
+					i18n.t('sync.confirmModal.policyRecordNote'),
+				].join('\n\n'),
 			)
+			if (this.selectedPolicy === SyncPolicy.TwoWay) {
+				conflictStrategyInfo.setText(
+					i18n.t('sync.confirmModal.strategy', {
+						strategy: i18n.t(
+							`settings.conflictStrategy.${getConflictStrategyI18nKey(this.settings.conflictStrategy)}`,
+						),
+					}),
+				)
+				conflictStrategyInfo.hidden = false
+			} else {
+				conflictStrategyInfo.hidden = true
+			}
 		}
 
 		for (const policy of Object.values(SyncPolicy)) {
@@ -90,8 +100,9 @@ export default class SyncConfirmModal extends Modal {
 		}
 		updatePolicyDescription()
 		bodyEl.createEl('pre', {
+			cls: ':uno: whitespace-pre-wrap',
 			text: i18n.t('sync.confirmModal.message'),
-		}).style.whiteSpace = 'pre-wrap'
+		})
 
 		new Setting(footerEl)
 			.addButton((button) =>

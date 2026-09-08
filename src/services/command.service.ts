@@ -1,4 +1,5 @@
 import { Notice } from 'obsidian'
+import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
 import SyncConfirmModal from '~/components/SyncConfirmModal'
 import { emitCancelSync } from '~/events'
 import i18n from '~/i18n'
@@ -54,10 +55,12 @@ export default class CommandService extends BaseService {
 						this.plugin.app,
 						this.plugin.settings,
 						this.plugin.localSettings,
-						startSync,
+						(syncPolicy) => {
+							void startSync(syncPolicy)
+						},
 					).open()
 				} else {
-					startSync()
+					void startSync()
 				}
 			},
 		})
@@ -65,8 +68,10 @@ export default class CommandService extends BaseService {
 		this.plugin.addCommand({
 			id: 'open-chatbox',
 			name: i18n.t('chatbox.openCommand'),
-			icon: 'bot',
-			callback: () => this.openChatbox(),
+			icon: CHATBOX_AI_ICON_ID,
+			callback: () => {
+				void this.openChatbox()
+			},
 		})
 
 		this.plugin.addCommand({
@@ -103,6 +108,6 @@ export default class CommandService extends BaseService {
 			type: CHATBOX_VIEW_TYPE,
 			active: true,
 		})
-		this.plugin.app.workspace.revealLeaf(leaf)
+		void this.plugin.app.workspace.revealLeaf(leaf)
 	}
 }

@@ -1,3 +1,4 @@
+import type { ConsolaReporter, LogObject } from 'consola'
 import { moment } from 'obsidian'
 import { IN_DEV } from '~/consts'
 import logger from '~/utils/logger'
@@ -7,7 +8,7 @@ import NutstorePlugin from '..'
 export interface LogEntry {
 	timestamp: string
 	level: string
-	args: any[]
+	args: unknown[]
 }
 
 export default class LoggerService extends BaseService {
@@ -19,8 +20,8 @@ export default class LoggerService extends BaseService {
 	}
 
 	override onload() {
-		const reporter = {
-			log: (logObj: any) => {
+		const reporter: ConsolaReporter = {
+			log: (logObj: LogObject) => {
 				this.logs.push({
 					timestamp: moment(logObj.date).format('YYYY-MM-DD HH:mm:ss'),
 					level: logObj.type,

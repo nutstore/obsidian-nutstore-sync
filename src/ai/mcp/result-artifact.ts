@@ -159,7 +159,7 @@ function isMcpToolResult(result: unknown): result is McpToolResult {
 		result !== null &&
 		typeof result === 'object' &&
 		'content' in result &&
-		Array.isArray((result as { content: unknown }).content)
+		Array.isArray(result.content)
 	)
 }
 

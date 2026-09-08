@@ -19,23 +19,27 @@ import {
 	buildAgentMessages,
 	createEmptyMasterAgent,
 } from '~/ai/chat/messages/ui-message'
-import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
 import { Notifier } from '~/ai/chat/notifier'
 import {
 	ChatState,
 	type SessionRuntimeState,
 } from '~/ai/chat/runtime/chat-state'
 import {
+	ContextCompressionFailedError,
 	resolveContextWindow,
 	resolveSummaryContext,
 	runContextCompression,
 } from '~/ai/chat/runtime/context-compression'
 import {
-	enqueuePendingSubmission,
-	hasQueuedSubmission,
-} from '~/ai/chat/runtime/pending-submission'
-import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
+	isSessionExecutionPending,
+	RuntimeStates,
+} from '~/ai/chat/runtime/runtime-state'
 import { AgentRunner } from '~/ai/chat/runtime/agent-runner'
+import { ContextCompactionCoordinator } from '~/ai/chat/runtime/context-compaction-coordinator'
+import {
+	createMasterTurnScheduler,
+	getQueuedUserSubmissions,
+} from '~/ai/chat/runtime/master-turn-scheduler'
 import { Selection } from '~/ai/chat/runtime/selection'
 import { SessionProcessor } from '~/ai/chat/runtime/session-processor'
 import { TaskManager } from '~/ai/chat/runtime/task-manager'
@@ -59,7 +63,7 @@ import {
 } from '~/ai/chat/ui/view-projection'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
 import { SkillRepository } from '~/ai/skills/repository'
-import { isAbortError } from '~/ai/transport/abort'
+import { createAbortError, isAbortError } from '~/ai/transport/abort'
 import SessionExportModal from '~/components/SessionExportModal'
 import i18n from '~/i18n'
 import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
@@ -93,7 +97,7 @@ type ChatboxActionHandlers = Pick<
 
 type ChatboxViewRuntime = Pick<
 	SessionRuntimeState,
-	'runState' | 'draft' | 'pending'
+	'runState' | 'draft' | 'scheduler'
 >
 
 type ViewSelectionState = {
@@ -113,6 +117,7 @@ export default class ChatService extends BaseService {
 	private readonly messageFactory: MessageFactory
 	private readonly messageOps: MessageOps
 	private readonly sessionProcessor: SessionProcessor
+	private readonly compactionCoordinator: ContextCompactionCoordinator
 	private readonly skillRepository: SkillRepository
 
 	constructor(private plugin: NutstorePlugin) {
@@ -127,10 +132,13 @@ export default class ChatService extends BaseService {
 		const legacyStore = this.createLegacySessionStore()
 		this.store = new SessionStore(
 			this.state,
-			this.runtimeStates,
 			this.selection,
 			new SessionsFileBackend(plugin.app.vault),
 			legacyStore,
+			(sessionId, session) => {
+				this.runtimeStates.resetExecution(sessionId)
+				this.taskManager?.cleanupSessionAgentTracking(session)
+			},
 		)
 		this.toolExecutor = new ToolExecutor(
 			plugin.app,
@@ -151,7 +159,6 @@ export default class ChatService extends BaseService {
 		)
 		this.messageFactory = new MessageFactory(
 			plugin.app,
-			this.runtimeStates,
 			() => this.notify(),
 			this.skillRepository,
 		)
@@ -164,6 +171,10 @@ export default class ChatService extends BaseService {
 			() => this.notify(),
 			plugin.app,
 		)
+		this.compactionCoordinator = new ContextCompactionCoordinator(
+			this.store,
+			this.messageFactory,
+		)
 		this.taskManager = new TaskManager(
 			plugin.app,
 			ensureProviderReady,
@@ -174,25 +185,30 @@ export default class ChatService extends BaseService {
 			this.toolExecutor,
 			this.messageFactory,
 			agentRunner,
+			this.compactionCoordinator,
 		)
-		this.toolExecutor.setDispatchTaskHandler((params) =>
-			this.taskManager.dispatchTask(params),
+		this.toolExecutor.setDispatchTaskHandler((params, origin) =>
+			this.taskManager.dispatchTask(params, origin),
 		)
+		const reportTransientError = (message: string) => new Notice(message)
 		this.messageOps = new MessageOps(
 			plugin.app,
 			this.state,
 			this.runtimeStates,
 			this.store,
 			() => this.notify(),
+			reportTransientError,
 			this.messageFactory,
 			(session) => this.selection.validateSessionSelection(session),
-			(sessionId) => this.sessionProcessor.start(sessionId),
+			(sessionId, messageId) =>
+				this.sessionProcessor.enqueueRegenerate(sessionId, messageId),
 			this.skillRepository,
 			{
 				getSettingsSnapshot: () => plugin.settings,
 				updateSettings: (patch) =>
 					plugin.settingsService.applySettingsPatch(patch),
 			},
+			this.toolExecutor.getFileSystemManager(),
 		)
 		this.sessionProcessor = new SessionProcessor(
 			ensureProviderReady,
@@ -202,22 +218,30 @@ export default class ChatService extends BaseService {
 			() => this.notify(),
 			this.selection,
 			this.messageFactory,
+			this.messageOps,
 			this.userContextManager,
 			agentRunner,
+			this.compactionCoordinator,
+			this.taskManager,
+			reportTransientError,
 		)
-		this.taskManager.setWakeAgentHandler((sessionId, agentId) => {
-			if (agentId === MASTER_AGENT_ID) {
-				void this.sessionProcessor.start(sessionId)
-			}
-		})
+		this.taskManager.setMasterAgentInputHandler((sessionId, input, origin) =>
+			this.sessionProcessor.enqueueAgentInput(sessionId, input, origin),
+		)
 	}
 
 	private notify() {
 		this.notifier.notify()
 	}
 
-	override onload() {
-		return this.initialize()
+	override onunload() {
+		for (const [sessionId, session] of this.state.loadedSessions) {
+			this.state.deletedSessionIds.add(sessionId)
+			this.compactionCoordinator.cancel(sessionId)
+			this.taskManager.cancelAllNonTerminalAgents(session)
+			this.taskManager.cleanupSessionAgentTracking(session)
+			this.runtimeStates.resetExecution(sessionId)
+		}
 	}
 
 	async initialize() {
@@ -225,15 +249,23 @@ export default class ChatService extends BaseService {
 			return this.state.initialization
 		}
 
-		this.state.initialization = this.initializeInternal().catch((error) => {
-			this.state.initialization = undefined
-			throw error
-		})
+		this.state.initialization = this.initializeInternal()
+			.then(() => {
+				this.state.initialized = true
+				this.notify()
+			})
+			.catch((error) => {
+				this.state.initialization = undefined
+				throw error
+			})
 		return this.state.initialization
 	}
 
 	private async initializeInternal() {
-		await this.store.loadSessionIndex()
+		const initialSession = await this.store.loadInitialSession()
+		if (initialSession) {
+			this.taskManager.restoreMasterTaskContinuations(initialSession)
+		}
 
 		if (this.state.sessionIndex.length === 0) {
 			const session = await this.createEmptySession()
@@ -244,19 +276,6 @@ export default class ChatService extends BaseService {
 			await this.store.persistMetaAndIndex()
 			return
 		}
-
-		const fallbackSessionId =
-			this.state.activeSessionId &&
-			this.state.sessionIndex.some(
-				(item) => item.id === this.state.activeSessionId,
-			)
-				? this.state.activeSessionId
-				: this.state.sessionIndex[0]?.id
-		this.state.activeSessionId = fallbackSessionId
-		if (fallbackSessionId) {
-			await this.store.loadSessionById(fallbackSessionId)
-			await this.store.persistMetaAndIndex()
-		}
 	}
 
 	subscribe(listener: () => void) {
@@ -264,9 +283,14 @@ export default class ChatService extends BaseService {
 	}
 
 	async handleSettingsChanged() {
+		this.selection.syncPendingSelectionWithSettings()
+		if (!this.state.initialization) {
+			this.notify()
+			return
+		}
+
 		await this.initialize()
 		const persisted: Promise<unknown>[] = []
-		this.selection.syncPendingSelectionWithSettings()
 		for (const session of this.state.loadedSessions.values()) {
 			if (this.selection.sanitizeSessionSelection(session)) {
 				persisted.push(this.store.persistSession(session))
@@ -297,6 +321,7 @@ export default class ChatService extends BaseService {
 		)
 
 		return {
+			loading: !this.state.initialized,
 			title: this.getActiveSessionTitle(),
 			activeContextItems: [],
 			sessionHistory: this.state.sessionIndex.map((item) => ({ ...item })),
@@ -316,7 +341,7 @@ export default class ChatService extends BaseService {
 				text: activeRuntime.draft.text,
 				userContext: activeRuntime.draft.userContext.slice(),
 			},
-			pending: activeRuntime.pending.map((item) => ({
+			pending: getQueuedUserSubmissions(activeRuntime).map((item) => ({
 				text: item.text,
 				userContext: item.userContext.slice(),
 			})),
@@ -381,7 +406,7 @@ export default class ChatService extends BaseService {
 				text: '',
 				userContext: [] as UserContextItem[],
 			},
-			pending: [],
+			scheduler: createMasterTurnScheduler(),
 		}
 	}
 
@@ -454,8 +479,9 @@ export default class ChatService extends BaseService {
 			},
 			onStopActiveRun: () => this.stopActiveSessionRun(),
 			onDeleteMessage: (messageId: string) => this.deleteMessage(messageId),
-			onRegenerateMessage: (messageId: string) =>
-				this.regenerateMessage(messageId),
+			onRegenerateMessage: (messageId: string) => {
+				void this.regenerateMessage(messageId)
+			},
 			onRecallMessage: (
 				messageId: string,
 				options?: { restoreFiles?: boolean },
@@ -492,6 +518,10 @@ export default class ChatService extends BaseService {
 
 	async createSession() {
 		await this.initialize()
+		const activeSession = this.getLoadedActiveSession()
+		if (activeSession && this.isUntitledEmptyActiveSession(activeSession)) {
+			return activeSession
+		}
 		const session = await this.createEmptySession()
 		this.state.loadedSessions.set(session.id, session)
 		this.state.activeSessionId = session.id
@@ -523,8 +553,9 @@ export default class ChatService extends BaseService {
 			return
 		}
 
-		await this.store.loadSessionById(sessionId)
+		const session = await this.store.loadSessionById(sessionId)
 		this.state.activeSessionId = sessionId
+		this.taskManager.restoreMasterTaskContinuations(session)
 		await this.store.persistMetaAndIndex()
 		this.notify()
 	}
@@ -536,9 +567,10 @@ export default class ChatService extends BaseService {
 		}
 
 		this.state.deletedSessionIds.add(sessionId)
+		this.compactionCoordinator.cancel(sessionId)
 		const session = this.state.loadedSessions.get(sessionId)
 		if (session) {
-			await this.stopSessionRun(session)
+			await this.stopSessionRun(session, { waitForWorker: true })
 			this.taskManager.cancelAllNonTerminalAgents(session)
 			this.taskManager.cleanupSessionAgentTracking(session)
 		}
@@ -681,11 +713,11 @@ export default class ChatService extends BaseService {
 			return false
 		}
 		const runtime = this.runtimeStates.get(session.id)
-		if (
-			!normalizedText &&
-			runtime.draft.userContext.length === 0 &&
-			activeContextItems.length === 0
-		) {
+		const userContext = this.userContextManager.dedupeUserContextItems([
+			...runtime.draft.userContext,
+			...activeContextItems,
+		])
+		if (!normalizedText && userContext.length === 0) {
 			return false
 		}
 
@@ -693,58 +725,16 @@ export default class ChatService extends BaseService {
 			return false
 		}
 
-		if (runtime.runState !== 'idle' || runtime.processing) {
-			runtime.pending = enqueuePendingSubmission(
-				runtime.pending,
-				{
-					text: normalizedText,
-					userContext: runtime.draft.userContext,
-				},
-				activeContextItems,
-				(items) => this.userContextManager.dedupeUserContextItems(items),
-			)
-			runtime.draft = {
-				text: '',
-				userContext: [],
-			}
-			this.notify()
-			return true
-		}
-
-		const pendingUserContext =
-			runtime.draft.userContext.concat(activeContextItems)
-		const preparedContext =
-			await this.userContextManager.prepareUserContextForMessage(
-				pendingUserContext,
-			)
-		await this.messageFactory.appendUserMessage(
-			this.messageFactory.getActiveAgent(session),
-			normalizedText,
-			session,
-			preparedContext.dedupedItems.length > 0
-				? preparedContext.dedupedItems
-				: undefined,
-		)
+		const turnId = this.sessionProcessor.enqueueUserSubmission(session.id, {
+			text: normalizedText,
+			userContext,
+		})
+		if (!turnId) return false
 		runtime.draft = {
 			text: '',
 			userContext: [],
 		}
-		this.store.upsertSessionIndexItem(session, deriveTitle(session))
-		runtime.runState = 'thinking'
 		this.notify()
-		void this.store.persistSession(session).catch((error) => {
-			logger.error(
-				'Failed to persist chat session before processing send',
-				error,
-			)
-		})
-		void this.store.persistMetaAndIndex().catch((error) => {
-			logger.error(
-				'Failed to persist chat session index before processing send',
-				error,
-			)
-		})
-		await this.sessionProcessor.start(session.id)
 		return true
 	}
 
@@ -756,7 +746,7 @@ export default class ChatService extends BaseService {
 		}
 
 		const runtime = this.runtimeStates.get(session.id)
-		if (runtime.runState !== 'idle' || runtime.processing) {
+		if (isSessionExecutionPending(runtime)) {
 			return
 		}
 		if (!this.selection.validateSessionSelection(session)) {
@@ -764,53 +754,62 @@ export default class ChatService extends BaseService {
 		}
 
 		const agent = this.messageFactory.getActiveAgent(session)
+		this.compactionCoordinator.cancel(session.id, agent.id)
 		runtime.runState = 'compressing'
 		this.notify()
 
-		const task = (async () => {
+		const abortController = new AbortController()
+		runtime.manualCompressionAbortController = abortController
+		let task!: Promise<void>
+		task = Promise.resolve().then(async () => {
 			try {
 				if (agent.timeline.length > 0) {
 					const provider = this.selection.getProviderOrThrow(session)
 					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
 						provider,
 					)
-					if (runtime.stopRequested) {
-						runtime.stopRequested = false
+					if (abortController.signal.aborted) {
 						return
 					}
 					const model = this.selection.getModelOrThrow(provider, session)
-					const abortController = this.runtimeStates.createAbortController(
-						session.id,
-					)
-					try {
-						await runContextCompression({
-							provider,
-							model,
-							session,
+					const isCurrentSelection = () =>
+						session.model?.providerId === provider.id &&
+						session.model?.modelId === model.id
+					const result = await runContextCompression({
+						provider,
+						model,
+						session,
+						agent,
+						store: this.store,
+						messageFactory: this.messageFactory,
+						...(await resolveSummaryContext(
 							agent,
-							store: this.store,
-							messageFactory: this.messageFactory,
-							...(await resolveSummaryContext(
+							session,
+							model,
+							this.toolExecutor,
+							this.plugin.app,
+						)),
+						buildMessages: (messages, tools) =>
+							buildAgentMessages(
 								agent,
-								session,
-								model,
-								this.toolExecutor,
-								this.plugin.app,
-							)),
-							buildMessages: (a, tools) =>
-								buildAgentMessages(a, tools, this.userContextManager),
-							isCancelled: () =>
-								runtime.stopRequested ||
-								this.state.deletedSessionIds.has(session.id),
-							abortSignal: abortController.signal,
-						})
-					} finally {
-						this.runtimeStates.clearAbortController(session.id, abortController)
+								tools,
+								this.userContextManager,
+								messages,
+							),
+						isCancelled: () =>
+							abortController.signal.aborted ||
+							this.state.deletedSessionIds.has(session.id) ||
+							!isCurrentSelection(),
+						abortSignal: abortController.signal,
+					})
+					if (result !== 'committed' && result !== 'cancelled') {
+						throw new ContextCompressionFailedError(
+							i18n.t('chatbox.errors.contextCompressionFailed'),
+						)
 					}
 				}
 			} catch (error) {
-				if (isAbortError(error) && runtime.stopRequested) {
-					runtime.stopRequested = false
+				if (isAbortError(error) && abortController.signal.aborted) {
 					return
 				}
 				const provider = getProviderById(
@@ -831,17 +830,17 @@ export default class ChatService extends BaseService {
 				)
 				await this.store.persistSession(session)
 			} finally {
-				runtime.processing = undefined
-				if (hasQueuedSubmission(runtime)) {
-					runtime.runState = 'idle'
-					this.notify()
+				if (runtime.manualCompressionAbortController === abortController) {
+					runtime.manualCompressionAbortController = undefined
+				}
+				if (runtime.processing === task) runtime.processing = undefined
+				runtime.runState = 'idle'
+				this.notify()
+				if (runtime.scheduler.queued.length > 0) {
 					void this.sessionProcessor.start(session.id)
-				} else {
-					runtime.runState = 'idle'
-					this.notify()
 				}
 			}
-		})()
+		})
 
 		runtime.processing = task
 		await task
@@ -871,27 +870,18 @@ export default class ChatService extends BaseService {
 		await this.messageOps.regenerateMessage(messageId)
 	}
 
-	private async stopSessionRun(session: ChatSession) {
+	private async stopSessionRun(
+		session: ChatSession,
+		options: { waitForWorker?: boolean } = {},
+	) {
 		const runtime = this.runtimeStates.get(session.id)
-		if (
-			runtime.runState !== 'thinking' &&
-			runtime.runState !== 'waiting_for_tools' &&
-			runtime.runState !== 'compressing'
-		) {
+		if (await this.sessionProcessor.stopActiveTurn(session.id)) {
+			if (options.waitForWorker) await runtime.processing
 			return
 		}
-
-		runtime.stopRequested = true
-		this.runtimeStates.abortActiveRequest(session.id, 'Stopped by user')
-
-		const changed = this.taskManager.cancelAllNonTerminalAgents(session)
-
-		if (changed) {
-			void this.store.persistSession(session)
-			this.notify()
-			this.taskManager.startQueuedAgentsForSession(session)
-		}
-
+		const controller = runtime.manualCompressionAbortController
+		if (!controller) return
+		controller.abort(createAbortError('Stopped by user'))
 		await runtime.processing
 	}
 
@@ -899,6 +889,18 @@ export default class ChatService extends BaseService {
 		return this.state.activeSessionId
 			? this.state.loadedSessions.get(this.state.activeSessionId)
 			: undefined
+	}
+
+	private isUntitledEmptyActiveSession(session: ChatSession) {
+		const runtime = this.runtimeStates.get(session.id)
+		return (
+			this.getActiveSessionTitle() === i18n.t('chatbox.newChat') &&
+			session.subagents.master.timeline.length === 0 &&
+			runtime.draft.text.trim().length === 0 &&
+			runtime.draft.userContext.length === 0 &&
+			runtime.scheduler.queued.length === 0 &&
+			!runtime.scheduler.active
+		)
 	}
 
 	private async createEmptySession(): Promise<ChatSession> {

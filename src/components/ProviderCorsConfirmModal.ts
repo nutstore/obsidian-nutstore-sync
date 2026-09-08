@@ -45,7 +45,7 @@ export default class ProviderCorsConfirmModal extends Modal {
 			)
 	}
 
-	async open(): Promise<boolean> {
+	openAndWait(): Promise<boolean> {
 		super.open()
 		this.cleanupModalMount = applyObsidianModalMountTarget(
 			this,

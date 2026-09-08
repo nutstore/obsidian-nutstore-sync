@@ -236,7 +236,7 @@ export default class ProvidersManagerModal extends Modal {
 				})
 				.addButton((button) => {
 					if (missingPresetModels.length === 0) {
-						button.buttonEl.style.display = 'none'
+						button.buttonEl.hide()
 						return
 					}
 					button
@@ -247,7 +247,7 @@ export default class ProvidersManagerModal extends Modal {
 								this.plugin.app,
 								provider,
 								missingPresetModels,
-							).open()
+							).openAndWait()
 							if (!confirmed) return
 							await this.addMissingPresetModels(provider, missingPresetModels)
 						})
@@ -412,17 +412,17 @@ export default class ProvidersManagerModal extends Modal {
 							}
 						}),
 				)
-				setting.addButton((button) =>
+				setting.addButton((button) => {
+					button.buttonEl.addClass('mod-warning')
 					button
-						.setWarning()
 						.setButtonText(
 							i18n.t('settings.ai.nutstoreLlmGateway.cancelAuthorization'),
 						)
 						.onClick(async () => {
 							await this.plugin.nutstoreLlmGatewayService.disconnect()
 							this.render()
-						}),
-				)
+						})
+				})
 			}
 			return
 		}

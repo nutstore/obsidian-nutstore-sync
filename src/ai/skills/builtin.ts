@@ -93,13 +93,14 @@ export async function createBuiltinSkillsFs(): Promise<IFileSystem> {
 		get(target, property, receiver) {
 			if (typeof property === 'string' && mutations.has(property)) {
 				return async (...args: unknown[]) => {
-					throw new Error(
-						`EROFS: read-only built-in Skills path '${String(args[0] ?? '/')}'`,
-					)
+					const path = typeof args[0] === 'string' ? args[0] : '/'
+					throw new Error(`EROFS: read-only built-in Skills path '${path}'`)
 				}
 			}
 			const value = Reflect.get(target, property, receiver) as unknown
-			return typeof value === 'function' ? value.bind(target) : value
+			if (typeof value !== 'function') return value
+			const callable = value as (...args: unknown[]) => unknown
+			return callable.bind(target)
 		},
-	}) as IFileSystem
+	})
 }

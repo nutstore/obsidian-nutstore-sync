@@ -10,6 +10,7 @@ import {
 	WorkspaceLeaf,
 } from 'obsidian'
 import type { EditorView } from '@codemirror/view'
+import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
 import { resolveResourceDataUrl } from '~/ai/tools/resource-data-url'
 import {
 	createImageContextItem,
@@ -195,7 +196,7 @@ export default class ChatboxView extends ItemView {
 	}
 
 	getIcon() {
-		return 'bot'
+		return CHATBOX_AI_ICON_ID
 	}
 
 	private resolveDroppedAbstractFile(path: string): TAbstractFile | null {
@@ -502,13 +503,15 @@ export default class ChatboxView extends ItemView {
 		})
 		this.captureActiveContextSnapshot(true)
 		this.plugin.chatService.setChatModalHost(this.rootEl)
-		await this.plugin.chatService.ensureSession()
 		this.unsubWindowMigrated?.()
 		this.unsubWindowMigrated = this.rootEl.onWindowMigrated(() => {
 			this.plugin.chatService.setChatModalHost(this.rootEl)
 			this.remountChatbox()
 		})
 		this.remountChatbox()
+		void this.plugin.chatService.ensureSession().catch((error) => {
+			logger.error('Failed to restore ChatBox session', error)
+		})
 	}
 
 	async onClose() {

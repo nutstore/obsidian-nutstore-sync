@@ -20,7 +20,7 @@ export default class CacheClearModal extends Modal {
 
 	constructor(
 		plugin: NutstorePlugin,
-		private onSuccess?: (options: CacheClearOptions) => void,
+		private onSuccess?: (options: CacheClearOptions) => void | Promise<void>,
 	) {
 		super(plugin.app)
 	}
@@ -85,7 +85,7 @@ export default class CacheClearModal extends Modal {
 						if (confirmed) {
 							try {
 								if (this.onSuccess) {
-									this.onSuccess(this.options)
+									await this.onSuccess(this.options)
 								}
 								this.close()
 							} catch (error) {
@@ -99,15 +99,15 @@ export default class CacheClearModal extends Modal {
 							}
 						} else {
 							confirmed = true
-							button
-								.setButtonText(i18n.t('settings.cache.confirm'))
-								.setWarning()
+							button.buttonEl.addClass('mod-warning')
+							button.setButtonText(i18n.t('settings.cache.confirm'))
 						}
 					})
 
 				button.buttonEl.addEventListener('blur', () => {
 					if (confirmed) {
 						confirmed = false
+						button.buttonEl.removeClass('mod-warning')
 						button.setButtonText(i18n.t('settings.cache.clear'))
 						removeClassTokens(button.buttonEl, ':uno: mod-warning')
 					}

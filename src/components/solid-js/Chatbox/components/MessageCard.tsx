@@ -264,7 +264,9 @@ export function MessageCard(props: {
 								class=":uno: cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
 								type="button"
 								title={t('chatbox.ui.actions.recallMessage')}
-								onClick={() => props.onRecallMessage?.(props.item.message.id)}
+								onClick={() => {
+									void props.onRecallMessage?.(props.item.message.id)
+								}}
 							>
 								<span
 									class=":uno: i-lucide-undo-2 size-3.5 shrink-0"

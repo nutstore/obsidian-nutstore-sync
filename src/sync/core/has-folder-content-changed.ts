@@ -1,5 +1,6 @@
 import { isSameTime } from '~/utils/is-same-time'
 import { isSub } from '~/utils/is-sub'
+import type { SyncRecordModel } from '~/model/sync-record.model'
 
 /**
  * Check if folder content has changed (based on sub-items check, not folder mtime)
@@ -12,7 +13,7 @@ import { isSub } from '~/utils/is-sub'
 export function hasFolderContentChanged(
 	folderPath: string,
 	stats: Array<{ path: string; mtime?: number; isDir: boolean }>,
-	syncRecords: Map<string, any>,
+	syncRecords: Map<string, SyncRecordModel>,
 	side: 'local' | 'remote',
 ): boolean {
 	for (const sub of stats) {

@@ -46,19 +46,15 @@ export default class AIPermissionModal extends Modal {
 		if (this.request.type !== 'fs' || !('path' in this.request.fs)) {
 			return
 		}
-		const rowEl = this.contentEl.createEl('div')
-		rowEl.style.marginBottom = '0.5rem'
+		const rowEl = this.contentEl.createDiv({ cls: ':uno: mb-2' })
 
 		rowEl.createEl('strong', {
 			text: getOperationLabel(this.request.fs.kind),
 		})
-		rowEl.createEl('code', { text: this.request.fs.path })
-		const pathEl = rowEl.lastChild as HTMLElement | null
-		if (pathEl) {
-			pathEl.style.display = 'block'
-			pathEl.style.marginTop = '0.25rem'
-			pathEl.style.wordBreak = 'break-all'
-		}
+		rowEl.createEl('code', {
+			cls: ':uno: block mt-1 break-all',
+			text: this.request.fs.path,
+		})
 	}
 
 	private renderDualPathRequest() {
@@ -69,63 +65,64 @@ export default class AIPermissionModal extends Modal {
 		) {
 			return
 		}
-		const rowEl = this.contentEl.createEl('div')
-		rowEl.style.marginBottom = '0.5rem'
+		const rowEl = this.contentEl.createDiv({ cls: ':uno: mb-2' })
 
 		rowEl.createEl('strong', {
 			text: getOperationLabel(this.request.fs.kind),
 		})
 
-		const sourceLabel = rowEl.createEl('div', {
+		rowEl.createDiv({
+			cls: ':uno: mt-1 font-semibold',
 			text: i18n.t('aiPermission.source'),
 		})
-		sourceLabel.style.marginTop = '0.25rem'
-		sourceLabel.style.fontWeight = '600'
 
-		const sourcePathEl = rowEl.createEl('code', {
+		rowEl.createEl('code', {
+			cls: ':uno: block break-all',
 			text: this.request.fs.src,
 		})
-		sourcePathEl.style.display = 'block'
-		sourcePathEl.style.wordBreak = 'break-all'
 
-		const destLabel = rowEl.createEl('div', {
+		rowEl.createDiv({
+			cls: ':uno: mt-2 font-semibold',
 			text: i18n.t('aiPermission.destination'),
 		})
-		destLabel.style.marginTop = '0.5rem'
-		destLabel.style.fontWeight = '600'
 
-		const destPathEl = rowEl.createEl('code', {
+		rowEl.createEl('code', {
+			cls: ':uno: block break-all',
 			text: this.request.fs.dest,
 		})
-		destPathEl.style.display = 'block'
-		destPathEl.style.wordBreak = 'break-all'
 	}
 
 	private renderSettingsRequest() {
 		if (this.request.type !== 'settings') {
 			return
 		}
-		const rowEl = this.contentEl.createEl('div')
-		rowEl.style.marginBottom = '0.5rem'
+		const rowEl = this.contentEl.createDiv({ cls: ':uno: mb-2' })
 
 		rowEl.createEl('strong', {
 			text: i18n.t('aiPermission.operations.updateSettings'),
 		})
 		const summary = this.request.settings.summary
 		if (summary) {
-			rowEl.createEl('code', { text: summary })
+			rowEl.createEl('code', {
+				cls: ':uno: block mt-1 break-all whitespace-pre-wrap',
+				text: summary,
+			})
 		} else {
 			rowEl.createEl('p', {
+				cls: ':uno: mt-1 break-all whitespace-pre-wrap',
 				text: i18n.t('aiPermission.settings.emptySummary'),
 			})
 		}
-		const codeEl = rowEl.lastChild as HTMLElement | null
-		if (codeEl) {
-			codeEl.style.display = 'block'
-			codeEl.style.marginTop = '0.25rem'
-			codeEl.style.wordBreak = 'break-all'
-			codeEl.style.whiteSpace = 'pre-wrap'
-		}
+	}
+
+	private renderPurpose() {
+		if (!this.request.purpose) return
+		const rowEl = this.contentEl.createDiv({ cls: ':uno: mb-2' })
+		rowEl.createEl('strong', { text: i18n.t('aiPermission.purpose') })
+		rowEl.createEl('p', {
+			cls: ':uno: mt-1 break-words',
+			text: this.request.purpose,
+		})
 	}
 
 	onOpen() {
@@ -135,12 +132,12 @@ export default class AIPermissionModal extends Modal {
 		contentEl.empty()
 
 		if (this.request.sessionTitle) {
-			const sessionEl = contentEl.createEl('p', {
+			contentEl.createEl('p', {
+				cls: ':uno: font-semibold',
 				text: i18n.t('aiPermission.sessionLabel', {
 					title: this.request.sessionTitle,
 				}),
 			})
-			sessionEl.style.fontWeight = '600'
 		}
 
 		contentEl.createEl('p', {
@@ -149,6 +146,7 @@ export default class AIPermissionModal extends Modal {
 		contentEl.createEl('p', {
 			text: i18n.t('aiPermission.sessionScopeHint'),
 		})
+		this.renderPurpose()
 
 		if (this.request.type === 'settings') {
 			this.renderSettingsRequest()
@@ -162,15 +160,13 @@ export default class AIPermissionModal extends Modal {
 		}
 
 		new Setting(contentEl)
-			.addButton((button) =>
-				button
-					.setButtonText(i18n.t('aiPermission.deny'))
-					.setWarning()
-					.onClick(() => {
-						this.result = 'deny'
-						this.close()
-					}),
-			)
+			.addButton((button) => {
+				button.buttonEl.addClass('mod-warning')
+				button.setButtonText(i18n.t('aiPermission.deny')).onClick(() => {
+					this.result = 'deny'
+					this.close()
+				})
+			})
 			.addButton((button) =>
 				button.setButtonText(i18n.t('aiPermission.allowOnce')).onClick(() => {
 					this.result = 'approve'
@@ -199,7 +195,7 @@ export default class AIPermissionModal extends Modal {
 		}
 	}
 
-	open(): Promise<AIPermissionResult> {
+	openAndWait(): Promise<AIPermissionResult> {
 		return new Promise((resolve) => {
 			this.resolve = resolve
 			super.open()

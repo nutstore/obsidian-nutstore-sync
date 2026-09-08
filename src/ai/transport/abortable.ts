@@ -29,7 +29,7 @@ export function raceWithAbort<T>(
 			},
 			(error) => {
 				cleanup()
-				reject(error)
+				reject(error instanceof Error ? error : new Error(String(error)))
 			},
 		)
 	})

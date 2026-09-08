@@ -14,6 +14,7 @@ import { encodeContent, toArrayBuffer } from './bash/fs'
 import { SETTINGS_MOUNT_POINT } from './bash/mount-points'
 import {
 	describeSettingsPatch,
+	getChangedSettingsPatch,
 	type NormalizedSettingsPatch,
 	parseSettingsWhitelistJson,
 	serializeSettingsWhitelist,
@@ -130,15 +131,19 @@ export class SettingsFs implements IFileSystem {
 		if (!parsed.ok) {
 			throw new Error(`EINVAL: ${parsed.error}`)
 		}
+		const changes = getChangedSettingsPatch(
+			this.input.getSettings(),
+			parsed.patch,
+		)
 		await this.input.permissionGuard?.({
 			type: 'settings',
 			settings: {
 				action: 'update',
-				summary: describeSettingsPatch(parsed.patch).join('; ') || '',
-				changes: parsed.patch,
+				summary: describeSettingsPatch(changes).join('\n') || '',
+				changes,
 			},
 		})
-		await this.input.updateSettings(parsed.patch)
+		await this.input.updateSettings(changes)
 		this.lastWriteMtime = new Date()
 	}
 

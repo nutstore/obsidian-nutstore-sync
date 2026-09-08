@@ -29,14 +29,14 @@ export default class AccountSettings extends BaseSettings {
 						this.plugin.settings.loginMode =
 							value === 'manual' ? 'manual' : 'sso'
 						await this.plugin.settingsService.saveSettings()
-						this.display()
+						void this.display()
 					}),
 			)
 
 		if (this.settings.isSSO) {
 			await this.displaySSOLoginSettings()
 		} else {
-			await this.displayManualLoginSettings()
+			this.displayManualLoginSettings()
 		}
 	}
 
@@ -112,15 +112,15 @@ export default class AccountSettings extends BaseSettings {
 				.setName(i18n.t('settings.ssoStatus.loggedIn'))
 				.setDesc(oauth.username)
 				.addButton((button) => {
+					button.buttonEl.addClass('mod-warning')
 					button
-						.setWarning()
 						.setButtonText(i18n.t('settings.ssoStatus.logout'))
 						.onClick(() => {
 							new LogoutConfirmModal(this.app, async () => {
 								this.plugin.settings.oauthResponseText = ''
 								await this.plugin.settingsService.saveSettings()
 								new Notice(i18n.t('settings.ssoStatus.logoutSuccess'))
-								this.display()
+								void this.display()
 							}).open()
 						})
 				})
@@ -132,23 +132,25 @@ export default class AccountSettings extends BaseSettings {
 				.setName(i18n.t('settings.ssoStatus.notLoggedIn'))
 				.addButton(async (button) => {
 					button.setButtonText(i18n.t('settings.login.name'))
-					const anchor = document.createElement('a')
+					const anchor = createEl('a')
 					anchor.target = '_blank'
 					button.buttonEl.parentElement?.appendChild(anchor)
 					anchor.appendChild(button.buttonEl)
 					anchor.href = await createOAuthUrl({
 						app: 'obsidian',
 					})
-					this.updateOAuthUrlTimer = window.setInterval(async () => {
-						const stillInDoc = document.contains(anchor)
-						if (stillInDoc) {
-							anchor.href = await createOAuthUrl({
-								app: 'obsidian',
-							})
-						} else {
-							window.clearInterval(this.updateOAuthUrlTimer!)
-							this.updateOAuthUrlTimer = null
-						}
+					this.updateOAuthUrlTimer = window.setInterval(() => {
+						void (async () => {
+							const stillInDoc = document.contains(anchor)
+							if (stillInDoc) {
+								anchor.href = await createOAuthUrl({
+									app: 'obsidian',
+								})
+							} else {
+								window.clearInterval(this.updateOAuthUrlTimer!)
+								this.updateOAuthUrlTimer = null
+							}
+						})()
 					}, 60 * 1000)
 				})
 		}

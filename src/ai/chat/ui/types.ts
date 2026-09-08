@@ -53,6 +53,7 @@ export interface ChatAgentView {
 }
 
 interface ChatboxViewModel {
+	loading: boolean
 	title: string
 	activeContextItems: UserContextItem[]
 	sessionHistory: ChatSessionHistoryItem[]

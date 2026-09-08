@@ -17,7 +17,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18.x'
+          node-version: '22.x'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@nutstore'
 
@@ -29,11 +29,17 @@ jobs:
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Update models API catalog
         run: pnpm run update:models-api
         continue-on-error: true
+
+      - name: Check models API catalog
+        run: pnpm run test:models-api
+
+      - name: Lint
+        run: pnpm run lint
 
       - name: Build plugin
         env:
@@ -44,6 +50,9 @@ jobs:
           NODE_ENV: production
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm run build
+
+      - name: Run unit tests
+        run: pnpm run test:unit
 
       - name: Check build artifacts
         run: |

@@ -200,7 +200,7 @@ function safeStringProperty(
 ): string {
 	try {
 		const value = (target as Record<string, unknown>)[key]
-		return typeof value === 'string' ? value : String(value ?? fallback)
+		return typeof value === 'string' ? value : fallback
 	} catch (error) {
 		return `[Thrown while reading ${key}: ${formatInspectionError(error, defaultValue)}]`
 	}
@@ -213,7 +213,7 @@ function safeOptionalStringProperty(
 	try {
 		const value = (target as Record<string, unknown>)[key]
 		if (value === undefined) return undefined
-		return typeof value === 'string' ? value : String(value)
+		return typeof value === 'string' ? value : undefined
 	} catch (error) {
 		return `[Thrown while reading ${key}: ${formatInspectionError(error)}]`
 	}

@@ -6,6 +6,7 @@ import {
 } from '~/ai/chat/agents/registry'
 import i18n from '~/i18n'
 import { agentIdDep, sessionDep } from './tool-context'
+import type { TaskOrigin } from '~/ai/chat/runtime/master-turn-scheduler'
 
 export interface DispatchTaskParams {
 	prompt: string
@@ -16,6 +17,7 @@ export interface DispatchTaskParams {
 
 export type DispatchTaskFn = (
 	params: DispatchTaskParams,
+	origin: TaskOrigin,
 ) => Promise<DispatchTaskResult>
 
 const taskOutputSchema = z.object({
@@ -71,6 +73,7 @@ export const taskTool = tool({
 		session: sessionDep,
 		agentId: agentIdDep,
 		dispatchTask: z.custom<DispatchTaskFn>(),
+		origin: z.custom<TaskOrigin>(),
 		dispatchableDefinitions: z.optional(z.custom<readonly AgentDefinition[]>()),
 	}),
 	outputSchema: taskOutputSchema,
@@ -79,10 +82,13 @@ export const taskTool = tool({
 		value: `Task dispatched. Task ID: ${output.taskId}. Do not attempt to read the task result yet. Continue only with work that neither overlaps with this task nor depends on its result. Otherwise, stop and wait for the task-result-ready system notification. When the notification arrives, the task has completed, failed, or been cancelled; use tool to read its resultPath.`,
 	}),
 	execute: async (params, { context }) =>
-		context.dispatchTask({
-			prompt: params.prompt,
-			subagentType: params.subagent_type,
-			callerAgentId: context.agentId,
-			sessionId: context.session.id,
-		}),
+		context.dispatchTask(
+			{
+				prompt: params.prompt,
+				subagentType: params.subagent_type,
+				callerAgentId: context.agentId,
+				sessionId: context.session.id,
+			},
+			context.origin,
+		),
 })

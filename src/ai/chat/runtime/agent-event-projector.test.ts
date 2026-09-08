@@ -4,6 +4,7 @@ import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
 import { describe, expect, it, vi } from 'vitest'
 import { AgentEventProjector } from '~/ai/chat/runtime/agent-event-projector'
 import type { SessionRuntimeState } from '~/ai/chat/runtime/chat-state'
+import { createMasterTurnScheduler } from '~/ai/chat/runtime/master-turn-scheduler'
 
 describe('AgentEventProjector', () => {
 	it('projects a running tool immediately and records its exact duration', async () => {
@@ -17,7 +18,8 @@ describe('AgentEventProjector', () => {
 		}
 		const runtime = {
 			runState: 'thinking',
-			stopRequested: false,
+			draft: { text: '', userContext: [] },
+			scheduler: createMasterTurnScheduler(),
 		} as SessionRuntimeState
 		const notify = vi.fn()
 		const projector = new AgentEventProjector({
@@ -25,15 +27,10 @@ describe('AgentEventProjector', () => {
 			agent,
 			runtime,
 			store: { persistSession: vi.fn(async () => undefined) } as never,
-			messageFactory: new MessageFactory(
-				{ app: {} } as never,
-				{} as never,
-				vi.fn(),
-			),
+			messageFactory: new MessageFactory({ app: {} } as never, vi.fn()),
 			notify,
 			assistantMeta: { providerId: 'provider', modelId: 'model' },
-			isDeleted: () => false,
-			isCancelled: () => false,
+			isTurnAlive: () => true,
 		})
 
 		await projector.project({
@@ -104,14 +101,11 @@ describe('AgentEventProjector', () => {
 		}
 		const runtime = {
 			runState: 'thinking',
-			stopRequested: false,
+			draft: { text: '', userContext: [] },
+			scheduler: createMasterTurnScheduler(),
 		} as SessionRuntimeState
 		const persistSession = vi.fn(async () => undefined)
-		const messageFactory = new MessageFactory(
-			{ app: {} } as never,
-			{} as never,
-			vi.fn(),
-		)
+		const messageFactory = new MessageFactory({ app: {} } as never, vi.fn())
 		const projector = new AgentEventProjector({
 			session,
 			agent,
@@ -120,8 +114,7 @@ describe('AgentEventProjector', () => {
 			messageFactory,
 			notify: vi.fn(),
 			assistantMeta: { providerId: 'provider', modelId: 'model' },
-			isDeleted: () => false,
-			isCancelled: () => false,
+			isTurnAlive: () => true,
 		})
 		await projector.project({
 			type: 'assistant-step',
@@ -174,5 +167,41 @@ describe('AgentEventProjector', () => {
 		)
 		expect(runtime.runState).toBe('waiting_for_tools')
 		expect(persistSession).toHaveBeenCalledTimes(2)
+	})
+
+	it('rejects events after the turn loses ownership', async () => {
+		const agent = createEmptyMasterAgent(1)
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'session',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master: agent },
+		}
+		let alive = true
+		const projector = new AgentEventProjector({
+			session,
+			agent,
+			store: { persistSession: vi.fn(async () => undefined) } as never,
+			messageFactory: new MessageFactory({ app: {} } as never, vi.fn()),
+			notify: vi.fn(),
+			assistantMeta: { providerId: 'provider', modelId: 'model' },
+			isTurnAlive: () => alive,
+		})
+
+		alive = false
+		await projector.project({ type: 'text-delta', delta: 'Hello 你好 🌿' })
+		await projector.project({
+			type: 'tool-execution-start',
+			toolCall: {
+				type: 'tool-call',
+				toolCallId: 'late-call',
+				toolName: 'lookup',
+				input: {},
+			} as never,
+		})
+
+		expect(agent.timeline).toEqual([])
+		expect(agent.toolTimings).toEqual({})
 	})
 })

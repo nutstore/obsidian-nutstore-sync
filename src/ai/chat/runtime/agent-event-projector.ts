@@ -53,8 +53,7 @@ interface AgentEventProjectorOptions {
 	messageFactory: MessageFactory
 	notify: () => void
 	assistantMeta: ChatMessageMeta
-	isDeleted: () => boolean
-	isCancelled: () => boolean
+	isTurnAlive: () => boolean
 }
 
 export class AgentEventProjector {
@@ -64,7 +63,7 @@ export class AgentEventProjector {
 	constructor(private options: AgentEventProjectorOptions) {}
 
 	async project(event: AgentProjectionEvent) {
-		if (this.options.isDeleted()) return
+		if (!this.options.isTurnAlive()) return
 
 		switch (event.type) {
 			case 'step-start':
@@ -194,7 +193,7 @@ export class AgentEventProjector {
 				return
 			}
 			case 'tool-results': {
-				if (this.options.isCancelled()) return
+				if (!this.options.isTurnAlive()) return
 				let titleUpdated = false
 				for (const outcome of event.outcomes) {
 					const target = this.options.messageFactory.findToolPart(
@@ -272,7 +271,7 @@ export class AgentEventProjector {
 	}
 
 	private projectTextDelta(delta: string) {
-		if (!delta || this.options.isCancelled()) return
+		if (!delta || !this.options.isTurnAlive()) return
 		const message = this.ensureAssistantMessage()
 		const part = message.parts.find((item) => item.type === 'text')
 		if (part?.type === 'text') part.text += delta
@@ -287,7 +286,7 @@ export class AgentEventProjector {
 	private ensureAssistantMessage() {
 		if (this.assistantMessage) return this.assistantMessage
 		this.assistantMessage = this.options.messageFactory.createMessage(
-			{ role: 'assistant', content: [] } as AssistantModelMessage,
+			{ role: 'assistant', content: [] },
 			{ meta: this.options.assistantMeta },
 		)
 		this.options.agent.timeline.push(this.assistantMessage)

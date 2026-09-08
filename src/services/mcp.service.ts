@@ -209,10 +209,10 @@ export default class McpService extends BaseService {
 				tools: tools.map((tool) => ({
 					name: tool.name,
 					description: tool.description,
-					inputSchema: (tool.inputSchema ?? {
+					inputSchema: tool.inputSchema ?? {
 						type: 'object',
 						properties: {},
-					}) as Record<string, unknown>,
+					},
 				})),
 			}
 		} catch (error) {
@@ -223,7 +223,7 @@ export default class McpService extends BaseService {
 
 	private async createClient(config: McpServerConfig): Promise<Client> {
 		if (config.type !== 'http') {
-			throw new Error(`Unsupported MCP server type: ${config.type}`)
+			throw new Error('Unsupported MCP server type')
 		}
 		const client = new Client(
 			{

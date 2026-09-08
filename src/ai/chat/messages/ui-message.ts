@@ -262,6 +262,34 @@ export function getMessageText(message: AppUIMessage) {
 		.join('\n')
 }
 
+/** Remove tool calls that cannot be resumed after their owning execution ends. */
+export function removeIncompleteToolCalls(agent: ChatAgentState) {
+	let changed = false
+	agent.timeline = agent.timeline.filter((message) => {
+		if (message.role !== 'assistant') return true
+		const nextParts = message.parts.filter((part) => {
+			if (part.type !== 'dynamic-tool') return true
+			const complete =
+				part.state === 'output-available' ||
+				part.state === 'output-error' ||
+				part.state === 'output-denied'
+			if (!complete) changed = true
+			return complete
+		})
+		if (nextParts.length !== message.parts.length) message.parts = nextParts
+		if (
+			!message.parts.length ||
+			(!getMessageText(message).trim() &&
+				message.parts.every((part) => part.type === 'step-start'))
+		) {
+			changed = true
+			return false
+		}
+		return true
+	})
+	return changed
+}
+
 export function getWorkspaceContextDeltas(message: AppUIMessage) {
 	return message.parts.flatMap((part) =>
 		part.type === 'data-workspace-context' ? part.data.deltas : [],
@@ -299,6 +327,33 @@ export function selectContextTimeline(
 	if (checkpoint?.type !== 'data-context-checkpoint') return messages
 	if (checkpoint.data.mode === 'reset') {
 		return messages.slice(checkpointIndex + 1)
+	}
+	if (checkpoint.data.summarizedThroughMessageId) {
+		const priorContext = selectContextTimeline(
+			messages.slice(0, checkpointIndex),
+		)
+		const summarizedThroughIndex = priorContext.findIndex(
+			(message) => message.id === checkpoint.data.summarizedThroughMessageId,
+		)
+		if (summarizedThroughIndex < 0) {
+			const retainedIds = checkpoint.data.retainedMessageIds
+			const retainedMessages = retainedIds
+				? retainedIds.flatMap((id) => {
+						const retained = priorContext.find((message) => message.id === id)
+						return retained ? [retained] : []
+					})
+				: priorContext
+			return [
+				checkpointMessage,
+				...retainedMessages,
+				...messages.slice(checkpointIndex + 1),
+			]
+		}
+		return [
+			checkpointMessage,
+			...priorContext.slice(summarizedThroughIndex + 1),
+			...messages.slice(checkpointIndex + 1),
+		]
 	}
 	if (checkpoint.data.preservedTurnCount === undefined) {
 		return messages.slice(checkpointIndex)
@@ -372,6 +427,12 @@ export function consumePendingInputs(agent: ChatAgentState) {
 	return inputs.length > 0
 }
 
+export function assertMasterPendingInputsEmpty(agent: ChatAgentState) {
+	if (agent.id === MASTER_AGENT_ID && agent.pendingInputs.length > 0) {
+		throw new Error('Master agent pendingInputs must remain empty')
+	}
+}
+
 /**
  * Build the model message transcript exactly as the agent loop does — the
  * shared builder behind both main turns and the compression summarizer call,
@@ -381,8 +442,8 @@ export async function buildAgentMessages(
 	agent: ChatAgentState,
 	tools: ToolSet,
 	userContextManager: UserContextManager,
+	timeline = selectContextTimeline(agent.timeline),
 ): Promise<ModelMessage[]> {
-	const timeline = selectContextTimeline(agent.timeline)
 	const messages = await Promise.all(
 		timeline.map(async (item) => {
 			const converted = await uiMessagesToModelMessages([item], tools)

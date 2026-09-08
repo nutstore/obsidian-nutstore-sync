@@ -5,6 +5,7 @@ import {
 	MASTER_AGENT_ID,
 	type AgentDefinitionSettings,
 } from '~/ai/chat/agents/registry'
+import { createVirtualFilesystemGuidance } from '~/ai/tools/bash/filesystem-guidance'
 
 export const MAX_TASK_DEPTH = 2
 export const MAX_CONCURRENT_TASKS_PER_SESSION = 3
@@ -50,7 +51,8 @@ export const COMPRESSION_PROMPT = [
 	'- [decisions and their rationale, constraints, user preferences, open questions, and data needed to continue]',
 	'',
 	'Rules:',
-	'- Write concise prose in the same language as the conversation. Use vault-relative paths for vault files (never the internal /vault/... prefix), and preserve exact note names, tags, links, error strings, identifiers, and numeric values.',
+	'- Write concise prose in the same language as the conversation. Use vault-relative paths for vault files, and preserve exact note names, tags, links, error strings, identifiers, and numeric values.',
+	'- Treat hidden dot-folders, including plugin data and the Obsidian config folder, as internal files. Do not include their paths or contents in the checkpoint unless the user explicitly asked about them.',
 	'- Capture user feedback and explicit instructions faithfully, especially corrections.',
 	'- Do NOT mention this summarization request or that the context was compacted.',
 	'- Output only the checkpoint text: do not call any tool or take any other action.',
@@ -97,10 +99,9 @@ export async function buildAgentSystemPrompt(
 
 function createVaultToolGuidance() {
 	return [
-		'For ambiguous user requests, you may broaden exploration when needed to improve answer quality.',
-		'Base answers on evidence from tool results, and cite key file paths or outputs.',
-		'Avoid unbounded exploration, but do not stop when evidence is still weak or conflicting.',
-		'Stop when evidence is sufficient for a grounded answer, or when further tool use is clearly repetitive.',
+		'Use tools only when they are needed to answer or act.',
+		'Start with the smallest relevant scope and broaden only when evidence is insufficient.',
+		'Base answers on tool results, cite key file paths or outputs, and stop when evidence is sufficient.',
 	].join(' ')
 }
 
@@ -126,6 +127,7 @@ export function createSystemPromptForAgent(
 		return [
 			sessionSystemPrompt,
 			definition.systemPrompt,
+			createVirtualFilesystemGuidance(),
 			createVaultToolGuidance(),
 			createTodoWriteGuidance(),
 			wrappedVaultInstructions,
@@ -136,6 +138,7 @@ export function createSystemPromptForAgent(
 
 	return [
 		definition.systemPrompt,
+		createVirtualFilesystemGuidance(),
 		createVaultToolGuidance(),
 		'When you finish, return a concise final answer. If the task fails, explain the failure clearly.',
 	]

@@ -41,6 +41,62 @@ describe('main system prompt Skills guidance', () => {
 		expect(prompt).toContain('Obsidian vault')
 		expect(prompt).toContain('WebDAV')
 	})
+
+	it('delegates long-term memory instead of exposing it to the main agent', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(prompt).toContain('memory subagent')
+		expect(prompt).toContain('dispatch a bounded memory task')
+		expect(prompt).toContain('long-term memory is disabled')
+		expect(prompt).toContain('Do not read, search, or modify')
+		expect(prompt).not.toContain('<memory-protocol>')
+	})
+})
+
+describe('virtual filesystem guidance', () => {
+	it('describes stable mounts without turning them into an exploration request', () => {
+		const definition = getAgentDefinition('master')
+		if (!definition) throw new Error('Expected master agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(prompt).toContain('<virtual-filesystem>')
+		expect(prompt).toContain('/ is the Obsidian vault base filesystem')
+		expect(prompt).toContain('/.agents/nutstore-sync/builtin-skills')
+		expect(prompt).toContain('/.config/nutstore-sync/settings.json')
+		expect(prompt).toContain(
+			'This is a routing map, not an instruction to enumerate or scan every mount',
+		)
+		expect(prompt).toContain(
+			'Start with the smallest relevant scope and broaden only when evidence is insufficient',
+		)
+		expect(prompt).not.toContain('/.agents/nutstore-sync/memory')
+		expect(prompt).not.toContain(
+			'For ambiguous user requests, you may broaden exploration',
+		)
+	})
+
+	it('gives the read-only explorer the same filesystem routing map', () => {
+		const definition = getAgentDefinition('explorer')
+		if (!definition) throw new Error('Expected explorer agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(prompt).toContain('<virtual-filesystem>')
+		expect(prompt).toContain('/.agents/nutstore-sync/tmp')
+		expect(prompt).toContain('read-only explorer subagent')
+	})
+
+	it('gives the memory agent its private protocol and constrained tools', () => {
+		const definition = getAgentDefinition('memory')
+		if (!definition) throw new Error('Expected memory agent definition')
+		const prompt = createSystemPromptForAgent(definition)
+
+		expect(definition.tools).toEqual(['bash'])
+		expect(prompt).toContain('<memory-protocol>')
+		expect(prompt).toContain('memory/archive/<YYYY>/<YYYY-MM-DD>.md')
+		expect(prompt).toContain('isolated context')
+	})
 })
 
 describe('user-facing path convention', () => {
@@ -50,16 +106,21 @@ describe('user-facing path convention', () => {
 		const prompt = createSystemPromptForAgent(definition)
 
 		expect(prompt).toContain('vault-relative path')
-		expect(prompt).toMatch(/never the \/vault absolute path/)
+		expect(prompt).toContain('notes/idea.md')
+		expect(prompt).not.toContain('/vault')
+		expect(prompt).toContain('Hidden dot-folders')
+		expect(prompt).toContain('do not expose their paths or contents')
 	})
 
-	it('instructs the explorer agent to cite vault files without the /vault prefix', () => {
+	it('instructs the explorer agent to cite real vault-relative paths', () => {
 		const definition = getAgentDefinition('explorer')
 		if (!definition) throw new Error('Expected explorer agent definition')
 		const prompt = createSystemPromptForAgent(definition)
 
 		expect(prompt).toContain('vault-relative path')
-		expect(prompt).toMatch(/never the internal \/vault\/\.\.\. virtual path/)
+		expect(prompt).toContain('matching the path the user sees inside the vault')
+		expect(prompt).not.toContain('/vault')
+		expect(prompt).toContain('Hidden dot-folders')
 	})
 })
 
@@ -107,7 +168,11 @@ describe('compression checkpoint', () => {
 		expect(COMPRESSION_PROMPT).toContain('## Current Work')
 		expect(COMPRESSION_PROMPT).toContain('## Next Step')
 		expect(COMPRESSION_PROMPT).toContain('## Critical Context')
-		expect(COMPRESSION_PROMPT).toContain('never the internal /vault/... prefix')
+		expect(COMPRESSION_PROMPT).toContain(
+			'Use vault-relative paths for vault files',
+		)
+		expect(COMPRESSION_PROMPT).not.toContain('/vault')
+		expect(COMPRESSION_PROMPT).toContain('hidden dot-folders')
 		expect(COMPRESSION_PROMPT).toContain(
 			'in the same language as the conversation',
 		)

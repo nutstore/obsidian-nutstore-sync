@@ -2,23 +2,16 @@ import type { ChatSession } from '~/ai/chat/domain'
 
 import type { ChatRunState, ChatSubmission } from '~/ai/chat/types'
 import type { ChatSessionIndexItem } from '~/ai/chat/domain'
-import type { IFileSystem } from 'just-bash/browser'
 import type { ViewImageAttachmentRegistry } from '~/ai/tools/view-image-attachments'
+import type { MasterTurnScheduler } from '~/ai/chat/runtime/master-turn-scheduler'
 
 export interface SessionRuntimeState {
 	runState: ChatRunState
 	processing?: Promise<void>
-	stopRequested?: boolean
-	abortController?: AbortController
-	bashScratch?: IFileSystem
+	manualCompressionAbortController?: AbortController
 	viewImageAttachments?: ViewImageAttachmentRegistry
 	draft: ChatSubmission
-	pending: ChatSubmission[]
-}
-
-interface TaskModelSelection {
-	providerId: string
-	modelId: string
+	scheduler: MasterTurnScheduler
 }
 
 export class ChatState {
@@ -30,10 +23,7 @@ export class ChatState {
 	pendingModelId?: string
 	activeSessionId?: string
 	readonly runtimeBySessionId = new Map<string, SessionRuntimeState>()
-	readonly taskModelSelection = new Map<
-		string,
-		TaskModelSelection | undefined
-	>()
 	chatModalHostEl?: HTMLElement
 	initialization?: Promise<void>
+	initialized = false
 }

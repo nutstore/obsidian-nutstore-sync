@@ -11,7 +11,7 @@ export default class DeleteConfirmModal extends Modal {
 		private tasks: RemoveLocalTask[],
 	) {
 		super(app)
-		this.selectedTasks = new Array(tasks.length).fill(true)
+		this.selectedTasks = Array.from({ length: tasks.length }, () => true)
 	}
 
 	onOpen() {
@@ -21,9 +21,8 @@ export default class DeleteConfirmModal extends Modal {
 		contentEl.empty()
 
 		const instruction = contentEl.createEl('p', {
-			cls: ':uno: delete-confirm-instruction',
+			cls: ':uno: whitespace-pre-wrap',
 		})
-		instruction.style.whiteSpace = 'pre-wrap'
 		instruction.setText(i18n.t('deleteConfirm.instruction'))
 
 		const tableContainer = contentEl.createDiv({
@@ -35,17 +34,18 @@ export default class DeleteConfirmModal extends Modal {
 
 		const thead = table.createEl('thead')
 		const headerRow = thead.createEl('tr')
-		const selectHeader = headerRow.createEl('th', {
+		headerRow.createEl('th', {
+			cls: ':uno: text-center',
 			text: i18n.t('deleteConfirm.select'),
 		})
-		selectHeader.style.textAlign = 'center'
 		headerRow.createEl('th', { text: i18n.t('deleteConfirm.filePath') })
 
 		const tbody = table.createEl('tbody')
 		this.tasks.forEach((task, index) => {
 			const row = tbody.createEl('tr')
-			const checkboxCell = row.createEl('td')
-			checkboxCell.style.textAlign = 'center'
+			const checkboxCell = row.createEl('td', {
+				cls: ':uno: text-center',
+			})
 			const checkbox = checkboxCell.createEl('input')
 			checkbox.type = 'checkbox'
 			checkbox.checked = this.selectedTasks[index]
@@ -64,8 +64,7 @@ export default class DeleteConfirmModal extends Modal {
 			row.createEl('td', { text: task.localPath })
 		})
 
-		const settingDiv = contentEl.createDiv()
-		settingDiv.style.marginTop = '1rem'
+		const settingDiv = contentEl.createDiv({ cls: ':uno: mt-4' })
 		new Setting(settingDiv)
 			.addButton((button) => {
 				button
@@ -84,7 +83,7 @@ export default class DeleteConfirmModal extends Modal {
 			})
 	}
 
-	async open(): Promise<{
+	openAndWait(): Promise<{
 		tasksToDelete: RemoveLocalTask[]
 		tasksToReupload: RemoveLocalTask[]
 	}> {

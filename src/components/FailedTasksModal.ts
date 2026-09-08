@@ -21,10 +21,10 @@ export default class FailedTasksModal extends Modal {
 		const { contentEl } = this
 		contentEl.empty()
 
-		const instruction = contentEl.createEl('p', {
-			cls: ':uno: failed-tasks-instruction',
+		contentEl.createEl('p', {
+			cls: ':uno: whitespace-pre-wrap',
+			text: i18n.t('failedTasks.instruction'),
 		})
-		instruction.setText(i18n.t('failedTasks.instruction'))
 
 		const tableContainer = contentEl.createDiv({
 			cls: ':uno: max-h-50vh overflow-y-auto',
@@ -47,8 +47,7 @@ export default class FailedTasksModal extends Modal {
 			row.createEl('td', { text: task.errorMessage })
 		})
 
-		const settingDiv = contentEl.createDiv()
-		settingDiv.style.marginTop = '1rem'
+		const settingDiv = contentEl.createDiv({ cls: ':uno: mt-4' })
 		new Setting(settingDiv).addButton((button) => {
 			button
 				.setButtonText(i18n.t('failedTasks.close'))

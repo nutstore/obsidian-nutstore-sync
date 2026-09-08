@@ -1,10 +1,13 @@
 import { Bash } from 'just-bash/browser'
-import type { IFileSystem } from 'just-bash/browser'
 import type { App } from 'obsidian'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { ReversibleOpRecorder } from './fs'
 import { archiveCommands } from './zip'
-import { createVaultFileSystem, VAULT_MOUNT_POINT } from '../vault-filesystem'
+import {
+	createVaultFileSystem,
+	VAULT_MOUNT_POINT,
+	type VaultFileSystemManager,
+} from '../vault-filesystem'
 import type { SettingsSnapshotFn, SettingsUpdater } from '../tool-context'
 
 export interface VaultBashExecOptions {
@@ -13,9 +16,9 @@ export interface VaultBashExecOptions {
 	rawScript?: boolean
 	permissionGuard?: PermissionGuard
 	onRead?: (vaultPath: string) => void
-	scratch?: IFileSystem
 	getSettingsSnapshot?: SettingsSnapshotFn
 	updateSettings?: SettingsUpdater
+	fileSystemManager?: VaultFileSystemManager
 }
 
 export async function createVaultBash(
@@ -23,19 +26,19 @@ export async function createVaultBash(
 	permissionGuard?: PermissionGuard,
 	recorder?: ReversibleOpRecorder,
 	onRead?: (vaultPath: string) => void,
-	scratch?: IFileSystem,
 	settingsIo?: {
 		getSettingsSnapshot?: SettingsSnapshotFn
 		updateSettings?: SettingsUpdater
 	},
+	fileSystemManager?: VaultFileSystemManager,
 ) {
 	const fs = await createVaultFileSystem(app, {
 		permissionGuard,
 		recorder,
 		onRead,
-		scratch,
 		getSettingsSnapshot: settingsIo?.getSettingsSnapshot,
 		updateSettings: settingsIo?.updateSettings,
+		fileSystemManager,
 	})
 	return new Bash({
 		fs,
@@ -55,11 +58,11 @@ export async function execVaultBash(
 		options.permissionGuard,
 		recorder,
 		options.onRead,
-		options.scratch,
 		{
 			getSettingsSnapshot: options.getSettingsSnapshot,
 			updateSettings: options.updateSettings,
 		},
+		options.fileSystemManager,
 	)
 	const result = await bash.exec(script, {
 		cwd: options.cwd ?? VAULT_MOUNT_POINT,

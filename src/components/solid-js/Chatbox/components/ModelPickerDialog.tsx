@@ -36,7 +36,7 @@ export function ModelPickerDialog(props: {
 						<button
 							class=":uno: text-sm text-[var(--text-muted)] hover:text-[var(--text-normal)]"
 							type="button"
-							onClick={props.onClose}
+							onClick={() => props.onClose()}
 						>
 							{t('chatbox.ui.actions.close')}
 						</button>

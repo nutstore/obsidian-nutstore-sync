@@ -257,6 +257,25 @@
 				"name": "完全访问权限",
 				"desc": "⚠️ 开启后，AI 可自动修改文件和插件设置，不再逐次询问确认"
 			},
+			"subagents": {
+				"heading": "子 Agent",
+				"explorer": {
+					"name": "Explorer",
+					"desc": "用于只读调查库内内容的 Agent。",
+					"model": {
+						"name": "Explorer 模型",
+						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
+					}
+				},
+				"memory": {
+					"name": "Memory",
+					"desc": "用于检索和维护跨会话偏好、约定和决定的 Agent。",
+					"model": {
+						"name": "Memory 模型",
+						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
+					}
+				}
+			},
 			"errors": {
 				"saveFailed": "AI 设置保存失败",
 				"saveFailedWithReason": "AI 设置保存失败：{{reason}}",
@@ -300,11 +319,11 @@
 			"receiveOnlyRevertLocalChanges": "仅接收：还原本地变更",
 			"modal": {
 				"title": "确认同步策略",
-				"twoWayDesc": "本地和云端互相同步，各自的新增和删除都会同步到对方。\n同一文件两端都改动时，按冲突策略处理。",
-				"sendOnlyDesc": "把本地的所有变更（新增、修改、删除）发送到云端。\n\n• 本地新增/修改的文件 → 上传到云端\n• 本地删除且云端未改动的文件 → 从云端删除\n• 云端独立新增或修改的文件 → 保留不动\n• 本地删除时云端也有改动 → 跳过该项（避免误删云端改动）\n\n适合：以本地为主、云端为辅的场景。",
-				"sendOnlyOverrideChangesDesc": "以本地当前完整状态覆盖云端。\n云端有但本地没有的文件会被删除。\n适合希望让云端与本地完全一致的场景。",
-				"receiveOnlyDesc": "把云端的所有变更（新增、修改、删除）接收到本地。\n\n• 云端新增/修改的文件 → 下载到本地\n• 云端删除且本地未改动的文件 → 从本地删除\n• 本地独立新增或修改的文件 → 保留不动\n• 云端删除时本地也有改动 → 跳过该项（避免误删本地改动）\n\n适合：只读设备，或以云端为准的场景。",
-				"receiveOnlyRevertLocalChangesDesc": "以云端当前完整状态还原本地。\n本地有但云端没有的文件会被删除。\n适合只读设备，或需要强制以云端内容为准时使用。",
+				"twoWayDesc": "同步规则：双向同步\n\n• 仅本地变更 → 更新云端\n• 仅云端变更 → 更新本地\n• 本地和云端都变更 → 按已配置的冲突策略处理\n• 一侧删除、另一侧未变更 → 将删除同步到另一侧\n• 一侧删除、另一侧已变更 → 保留已变更内容，并恢复被删除的一侧",
+				"sendOnlyDesc": "同步规则：本地 → 云端（保护云端独立变更）\n\n• 本地新增或修改，且云端未独立删除 → 上传到云端\n• 云端独立新增或修改 → 保留云端，不下载\n• 本地和云端都修改 → 跳过并保留云端\n• 本地删除、云端未变更 → 删除云端\n• 本地删除、云端也变更 → 跳过并保留云端\n• 已有同步记录的文件若已在云端删除 → 保留云端删除，不自动恢复；需要“仅发送：覆盖云端”才恢复\n\n适合：以本地为主，同时保护云端独立变更。",
+				"sendOnlyOverrideChangesDesc": "同步规则：云端 ← 本地当前状态\n\n• 本地存在的文件 → 创建或覆盖云端文件\n• 云端存在、本地不存在 → 删除云端\n• 同一路径两边不一致 → 以本地为准\n\n⚠️ 可能删除云端多余文件。\n适合：需要让云端与本地完全一致时使用。",
+				"receiveOnlyDesc": "同步规则：云端 → 本地（保护本地独立变更）\n\n• 云端新增或修改，且本地没有需要保护的删除 → 下载到本地\n• 本地独立新增或修改 → 保留本地，不上传\n• 本地和云端都修改 → 跳过并保留本地\n• 云端删除、本地未变更 → 删除本地\n• 云端删除、本地也变更 → 跳过并保留本地\n• 已有同步记录的文件若已在本地删除 → 保留本地删除，不自动恢复；需要“仅接收：还原本地”才恢复\n\n适合：以云端为主，同时保护本地独立变更。",
+				"receiveOnlyRevertLocalChangesDesc": "同步规则：本地 ← 云端当前状态\n\n• 云端存在的文件 → 创建或覆盖本地文件\n• 本地存在、云端不存在 → 删除本地\n• 同一路径两边不一致 → 以云端为准\n\n⚠️ 可能删除本地多余文件。\n适合：需要让本地与云端完全一致时使用。",
 				"confirm": "确认",
 				"cancel": "取消"
 			}
@@ -426,6 +445,7 @@
 		"title": "AI 权限请求",
 		"sessionLabel": "会话「{{title}}」正在请求权限",
 		"message": "AI 正在请求执行以下文件操作：",
+		"purpose": "用途",
 		"sessionScopeHint": "“自动同意该操作”仅在当前会话生效，重启 Obsidian 后将恢复询问。",
 		"allowOnce": "同意",
 		"alwaysAllow": "自动同意该操作",
@@ -513,11 +533,6 @@
 		},
 		"start": "⌛️ 开始同步",
 		"complete": "✅ 同步完成",
-		"result": {
-			"title": "同步成功",
-			"success": "所有同步任务均已完成",
-			"noChanges": "当前没有需要同步的文件"
-		},
 		"completeWithFailed": "❌ 同步完成，但有 {{failedCount}} 个任务失败",
 		"failedWithError": "同步失败，错误信息: {{error}}",
 		"progress": "同步进度: {{percent}}%",
@@ -533,11 +548,11 @@
 		"currentFile": "{{path}}",
 		"filePath": "{{path}}",
 		"progressTitle": "同步进度",
-		"progressStats": "已完成: {{completed}} / {{total}} 个任务",
-		"completedFilesTitle": "已完成的任务",
+		"progressCompleteTitle": "同步完成",
+		"progressLabel": "同步进度",
+		"cacheProgressLabel": "缓存更新进度",
 		"syncingFiles": "正在同步文件...",
 		"updatingCache": "正在更新本地缓存...",
-		"cacheUpdated": "本地缓存已更新。",
 		"failedStatus": "同步失败",
 		"cancelled": "同步已取消",
 		"suggestUseClientForManyTasks": "提示：当同步任务较多时，建议使用坚果云客户端同步，可获得更好的性能和稳定性，插件更适合在移动端使用！",
@@ -568,6 +583,8 @@
 		"confirmModal": {
 			"title": "同步确认",
 			"policyTitle": "本次同步策略",
+			"policyBasis": "判断基准：将当前本地与云端状态分别和上次同步记录比较。\n没有同步记录时，宽松模式会把同路径、同类型且大小相同的文件视为一致；严格模式按所选策略处理。",
+			"policyRecordNote": "“保留”或“跳过”不会标记为已同步，下一次仍会按同步记录重新判断。",
 			"message": "⚠️ 请注意：\n\n1. 同步操作可能会修改或删除本地文件\n2. 建议在同步前手动备份重要文件\n3. 如果出现文件冲突，可能需要手动解决\n4. 首次同步需要处理所有文件，可能会比较慢，请耐心等待\n\n确定要开始同步吗？",
 			"confirm": "确认同步",
 			"cancel": "取消",
@@ -652,7 +669,8 @@
 			"emptyContent": "（无文本内容）",
 			"toolCalls": "工具调用",
 			"toolName": "工具名称",
-			"toolCallId": "工具调用 ID"
+			"toolCallId": "工具调用 ID",
+			"duration": "运行时间"
 		},
 		"repeatedToolCallsStopped": "Agent 连续 {{count}} 次调用了完全相同的工具与参数，已停止继续调用。",
 		"task": {
@@ -705,6 +723,7 @@
 				"binary": "二进制文件，无法显示文本差异"
 			},
 			"states": {
+				"loading": "正在恢复聊天…",
 				"empty": "开始发送一条消息",
 				"dragFilePrompt": "松手以添加文件",
 				"thinking": "思考中",
@@ -791,7 +810,8 @@
 			"sessionNotFound": "目标会话已不存在",
 			"corruptSessionFile": "会话文件已损坏，已跳过加载：{{path}}",
 			"agentNotDispatchable": "该 Agent 类型不可派发：{{agentType}}",
-			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用"
+			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用",
+			"contextCompressionFailed": "上下文压缩未返回摘要"
 		}
 	},
 	"taskSelectionVirtualList": {

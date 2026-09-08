@@ -31,7 +31,7 @@ describe('decideDropRoute', () => {
 	})
 
 	it('routes to paths even when files are also present (vault drag carries both)', () => {
-		const file = new File(['x'], 'foo.md', { type: 'text/markdown' })
+		const file = { name: '中性🌿.md' } as File
 		const event = makeDragEvent({
 			types: ['text/plain', 'Files'],
 			data: { 'text/plain': 'notes/foo.md' },
@@ -43,7 +43,7 @@ describe('decideDropRoute', () => {
 	})
 
 	it('falls back to external files when no path payload is present', () => {
-		const file = new File(['x'], 'external.png', { type: 'image/png' })
+		const file = { name: '中性🌿.png' } as File
 		const event = makeDragEvent({
 			types: ['Files'],
 			files: [file],

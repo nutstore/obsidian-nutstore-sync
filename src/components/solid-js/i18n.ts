@@ -6,7 +6,7 @@ type ComponentMessages = typeof en
 
 const messagesByLocale: Record<Locale, ComponentMessages> = {
 	en,
-	zh: zh as ComponentMessages,
+	zh: zh,
 }
 
 type ComponentDict = i18n.Flatten<ComponentMessages>
@@ -23,7 +23,9 @@ function toLocale(language: string): Locale {
 }
 
 const dict: ComponentDict = i18n.flatten(
-	messagesByLocale[toLocale(navigator.language)],
+	messagesByLocale[
+		toLocale(typeof navigator === 'undefined' ? 'en' : navigator.language)
+	],
 )
 
 export const t = i18n.translator(() => dict, i18n.resolveTemplate)

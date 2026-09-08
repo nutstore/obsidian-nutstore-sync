@@ -34,6 +34,14 @@ export type ChatMessageContentPart =
 interface ContextCheckpointData {
 	mode: 'summary' | 'reset'
 	summary?: string
+	/**
+	 * Last message represented by this summary. Newer messages remain in the
+	 * model context even when the summary was generated in the background.
+	 */
+	summarizedThroughMessageId?: string
+	/** Message ids retained outside the summary when the checkpoint was made. */
+	retainedMessageIds?: string[]
+	/** @deprecated Checkpoints created before snapshot compaction use this. */
 	preservedTurnCount?: number
 }
 
@@ -179,11 +187,16 @@ export interface ToolTiming {
 export interface ChatAgentState {
 	id: string
 	type: string
+	/** Model captured when this subagent was dispatched. */
+	model?: { providerId: string; modelId: string }
 	status: ChatAgentStatus
 	createdAt: number
 	startedAt?: number
 	finishedAt?: number
+	/** Persisted result artifact for a terminal task that can notify its parent. */
+	resultPath?: string
 	timeline: AppUIMessage[]
+	/** Continuation inbox for non-master subagents; the master scheduler owns master input. */
 	pendingInputs: AppUIMessage[]
 	operations: Record<string, ReversibleToolOp[]>
 	toolTimings: Record<string, ToolTiming>

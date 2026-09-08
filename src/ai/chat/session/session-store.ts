@@ -4,12 +4,12 @@ import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 import { ChatSessionIndexItem } from '~/ai/chat/domain'
 import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import type { ChatState } from '~/ai/chat/runtime/chat-state'
-import type { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import type { ChatMetaRecord } from '~/storage'
 import {
 	SessionFileCorruptError,
 	SessionsFileBackend,
+	getChatSessionPath,
 	type ChatMetaFile,
 	type ChatSessionFilePayload,
 } from '~/ai/chat/session/session-files'
@@ -24,9 +24,9 @@ import {
 	normalizeLegacySession,
 } from '~/ai/chat/session/session-migration'
 import type { ChatAgentState, ReversibleToolOp } from '~/ai/chat/types'
-import { getSessionSubagents } from '~/ai/chat/domain'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
+import { normalizeRehydratedExecution } from '~/ai/chat/session/rehydration-execution'
 import logger from '~/utils/logger'
 
 /**
@@ -37,7 +37,7 @@ import logger from '~/utils/logger'
  */
 export interface SessionLegacyStore {
 	listSessionKeys(): Promise<string[]>
-	getSession(id: string): Promise<unknown | undefined>
+	getSession(id: string): Promise<unknown>
 	unsetSession(id: string): Promise<void>
 	getMeta(): Promise<{
 		meta: ChatMetaRecord | null
@@ -51,20 +51,63 @@ interface LegacyMigrationResult {
 	migrated: boolean
 }
 
+export class SessionUnavailableError extends Error {
+	constructor(
+		public readonly sessionId: string,
+		options?: { cause?: unknown },
+	) {
+		super(i18n.t('chatbox.errors.sessionNotFound'), options)
+		this.name = 'SessionUnavailableError'
+	}
+}
+
 export class SessionStore {
 	private persistQueues = new Map<string, Promise<void>>()
 
 	constructor(
 		private state: ChatState,
-		private runtimeStates: RuntimeStates,
 		private selection: Selection,
 		private backend: SessionsFileBackend,
 		private legacy: SessionLegacyStore,
+		private resetSessionExecution: (
+			sessionId: string,
+			session: ChatSession,
+		) => void = () => {},
 	) {}
 
 	async loadSessionIndex() {
 		const legacyMigration = await this.ensureMigratedFromLegacy()
-		await this.reconcileSessionIndex(legacyMigration)
+		const diskIds = new Set(await this.backend.listSessionIds())
+		const meta = await this.backend.readMetaFile()
+		const cachedIndex = legacyMigration?.migrated
+			? null
+			: buildSessionIndexFromMeta(meta, diskIds)
+		if (cachedIndex) {
+			this.state.sessionIndex = cachedIndex
+			this.state.activeSessionId =
+				meta?.activeSessionId && diskIds.has(meta.activeSessionId)
+					? meta.activeSessionId
+					: cachedIndex[0]?.id
+			return
+		}
+		await this.reconcileSessionIndex(legacyMigration, { diskIds, meta })
+	}
+
+	async loadInitialSession() {
+		await this.loadSessionIndex()
+		const activeSessionId = this.state.activeSessionId
+		if (!activeSessionId) return undefined
+
+		try {
+			return await this.loadSessionById(activeSessionId)
+		} catch (error) {
+			if (!(error instanceof SessionUnavailableError)) throw error
+		}
+
+		await this.reconcileSessionIndex(null)
+		const fallbackSessionId = this.state.activeSessionId
+		if (!fallbackSessionId) return undefined
+		return this.loadSessionById(fallbackSessionId)
 	}
 
 	/** Incrementally migrates IndexedDB sessions missing from vault storage. */
@@ -123,9 +166,14 @@ export class SessionStore {
 
 	private async reconcileSessionIndex(
 		legacyMigration: LegacyMigrationResult | null,
+		known?: {
+			diskIds: Set<string>
+			meta: ChatMetaFile | null
+		},
 	) {
-		const diskIds = new Set(await this.backend.listSessionIds())
-		const meta = await this.backend.readMetaFile()
+		const diskIds =
+			known?.diskIds ?? new Set(await this.backend.listSessionIds())
+		const meta = known?.meta ?? (await this.backend.readMetaFile())
 		const validItems = new Map<string, ChatSessionIndexItem>()
 		for (const id of diskIds) {
 			try {
@@ -175,6 +223,23 @@ export class SessionStore {
 	}
 
 	async loadSessionById(sessionId: string) {
+		try {
+			return await this.loadSessionByIdUnchecked(sessionId)
+		} catch (error) {
+			if (!(error instanceof SessionUnavailableError)) throw error
+			try {
+				await this.reconcileSessionIndex(null)
+			} catch (reconcileError) {
+				logger.warn(
+					`Failed to reconcile unavailable chat session ${sessionId}`,
+					reconcileError,
+				)
+			}
+			throw error
+		}
+	}
+
+	private async loadSessionByIdUnchecked(sessionId: string) {
 		const cached = this.state.loadedSessions.get(sessionId)
 		if (cached) {
 			return cached
@@ -191,7 +256,7 @@ export class SessionStore {
 					}),
 					10000,
 				)
-				throw new Error(i18n.t('chatbox.errors.sessionNotFound'), {
+				throw new SessionUnavailableError(sessionId, {
 					cause: error,
 				})
 			}
@@ -201,7 +266,17 @@ export class SessionStore {
 		let stored: ChatSession | LegacyChatSession | undefined
 		let embeddedTitle: string | undefined
 		if (payload) {
-			stored = decodeChatSessionFromStorage(payload.session)
+			try {
+				stored = decodeChatSessionFromStorage(payload.session)
+			} catch (error) {
+				new Notice(
+					i18n.t('chatbox.errors.corruptSessionFile', {
+						path: getChatSessionPath(sessionId),
+					}),
+					10000,
+				)
+				throw new SessionUnavailableError(sessionId, { cause: error })
+			}
 			embeddedTitle = payload.title
 		} else {
 			try {
@@ -214,13 +289,12 @@ export class SessionStore {
 			}
 		}
 		if (!stored) {
-			throw new Error(i18n.t('chatbox.errors.sessionNotFound'))
+			throw new SessionUnavailableError(sessionId)
 		}
 
 		const { session, changed } = this.rehydrateSession(stored)
+		this.resetSessionExecution(sessionId, session)
 		this.state.loadedSessions.set(sessionId, session)
-		const runtime = this.runtimeStates.get(sessionId)
-		runtime.pending = []
 
 		const existing = this.state.sessionIndex.find(
 			(item) => item.id === sessionId,
@@ -240,8 +314,12 @@ export class SessionStore {
 		return session
 	}
 
-	async persistSession(session: ChatSession) {
-		if (this.state.deletedSessionIds.has(session.id)) {
+	async persistSession(
+		session: ChatSession,
+		isCurrent: () => boolean = () =>
+			this.state.loadedSessions.get(session.id) === session,
+	) {
+		if (this.state.deletedSessionIds.has(session.id) || !isCurrent()) {
 			return
 		}
 		const sessionId = session.id
@@ -250,9 +328,9 @@ export class SessionStore {
 		const write = previous
 			.catch(() => undefined)
 			.then(async () => {
-				if (this.state.deletedSessionIds.has(sessionId)) return
+				if (this.state.deletedSessionIds.has(sessionId) || !isCurrent()) return
 				const snapshot = await encodeChatSessionForStorage(session)
-				if (this.state.deletedSessionIds.has(sessionId)) return
+				if (this.state.deletedSessionIds.has(sessionId) || !isCurrent()) return
 				await this.backend.writeSessionFile(sessionId, {
 					session: snapshot,
 					title,
@@ -320,14 +398,7 @@ export class SessionStore {
 			this.selection.sanitizeSessionSelection(rehydrated) ||
 			opsRewritten
 
-		for (const agent of getSessionSubagents(rehydrated)) {
-			if (agent.status !== 'queued' && agent.status !== 'running') {
-				continue
-			}
-			agent.status = 'cancelled'
-			agent.finishedAt = Date.now()
-			changed = true
-		}
+		changed = normalizeRehydratedExecution(rehydrated) || changed
 
 		return {
 			session: rehydrated,
@@ -374,21 +445,45 @@ export class SessionStore {
 				}
 				return normalized
 			}
+			const storedPendingInputs = Array.isArray(agent.pendingInputs)
+				? agent.pendingInputs
+				: []
+			const pendingInputs =
+				agent.id === MASTER_AGENT_ID
+					? // Master continuation is runtime-only now; do not revive persisted
+						// execution input after reload.
+						[]
+					: storedPendingInputs.map(normalizeMessage)
+			const timeline = Array.isArray(agent.timeline)
+				? agent.timeline.map(normalizeMessage)
+				: []
+			const model =
+				agent.model &&
+				typeof agent.model.providerId === 'string' &&
+				typeof agent.model.modelId === 'string'
+					? {
+							providerId: agent.model.providerId,
+							modelId: agent.model.modelId,
+						}
+					: undefined
+			if (agent.id === MASTER_AGENT_ID && storedPendingInputs.length > 0) {
+				changed = true
+			}
+			if (agent.model !== undefined && !model) changed = true
 			return {
 				id: agent.id,
 				type:
 					agent.type ||
 					(agent.id === MASTER_AGENT_ID ? MASTER_AGENT_ID : 'subagent'),
+				model,
 				status: agent.id === MASTER_AGENT_ID ? 'idle' : agent.status,
 				createdAt: agent.createdAt || session.createdAt,
 				startedAt: normalizeTimestamp(agent.startedAt),
 				finishedAt: normalizeTimestamp(agent.finishedAt),
-				timeline: Array.isArray(agent.timeline)
-					? agent.timeline.map(normalizeMessage)
-					: [],
-				pendingInputs: Array.isArray(agent.pendingInputs)
-					? agent.pendingInputs.map(normalizeMessage)
-					: [],
+				resultPath:
+					typeof agent.resultPath === 'string' ? agent.resultPath : undefined,
+				timeline,
+				pendingInputs,
 				operations: Object.fromEntries(
 					Object.entries(agent.operations ?? {}).map(
 						([messageId, operations]) => [
@@ -430,9 +525,6 @@ export class SessionStore {
 				updatedAt: session.updatedAt || session.createdAt,
 				model: session.model ? { ...session.model } : undefined,
 				systemPrompt: session.systemPrompt,
-				inferenceParams: session.inferenceParams
-					? { ...session.inferenceParams }
-					: undefined,
 				disabledMcpServers: Array.isArray(session.disabledMcpServers)
 					? session.disabledMcpServers.filter(
 							(name): name is string => typeof name === 'string',
@@ -483,4 +575,31 @@ export class SessionStore {
 
 function numberOrZero(value: unknown): number {
 	return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function buildSessionIndexFromMeta(
+	meta: ChatMetaFile | null,
+	diskIds: Set<string>,
+): ChatSessionIndexItem[] | null {
+	if (!meta || meta.orderedSessionIds.length !== diskIds.size) return null
+
+	const indexedIds = new Set<string>()
+	const items: ChatSessionIndexItem[] = []
+	for (const id of meta.orderedSessionIds) {
+		const info = meta.sessions[id]
+		if (
+			!diskIds.has(id) ||
+			indexedIds.has(id) ||
+			!info ||
+			typeof info.title !== 'string' ||
+			!Number.isFinite(info.createdAt) ||
+			!Number.isFinite(info.updatedAt)
+		) {
+			return null
+		}
+		indexedIds.add(id)
+		items.push({ id, ...info })
+	}
+
+	return Object.keys(meta.sessions).length === diskIds.size ? items : null
 }

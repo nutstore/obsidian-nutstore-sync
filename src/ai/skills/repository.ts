@@ -1,5 +1,6 @@
-import { App, normalizePath, parseYaml } from 'obsidian'
+import { App, normalizePath } from 'obsidian'
 import { BUILTIN_SKILLS } from '~/ai/skills/builtin'
+import { parseYamlFrontmatter } from '~/ai/skills/frontmatter'
 import { AGENTS_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 import type {
 	BuiltinSkill,
@@ -12,7 +13,6 @@ export const VAULT_SKILLS_ROOT = `${AGENTS_MOUNT_POINT}/skills`
 export const MAX_SKILL_MARKDOWN_BYTES = 64 * 1024
 
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
-const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/
 
 interface SkillFrontmatter {
 	name?: unknown
@@ -79,10 +79,8 @@ function validateMetadata(
 	}
 }
 
-function parseFrontmatter(content: string) {
-	const match = FRONTMATTER_PATTERN.exec(content)
-	if (!match) return undefined
-	return parseYaml(match[1]) as SkillFrontmatter
+function parseFrontmatter(content: string): SkillFrontmatter | undefined {
+	return parseYamlFrontmatter(content)
 }
 
 export class SkillRepository {
@@ -121,7 +119,19 @@ export class SkillRepository {
 				for (const folder of folders) {
 					const directoryName = folder.split('/').at(-1) ?? ''
 					const skillPath = normalizePath(`${folder}/SKILL.md`)
-					const stat = await adapter.stat(skillPath)
+					let stat
+					try {
+						stat = await adapter.stat(skillPath)
+					} catch (error) {
+						diagnostics.push({
+							path: skillPath,
+							message:
+								error instanceof Error
+									? error.message
+									: 'Unable to inspect Vault Skill.',
+						})
+						continue
+					}
 					if (!stat || stat.type !== 'file') continue
 
 					let frontmatter: SkillFrontmatter | undefined

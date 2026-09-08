@@ -42,7 +42,7 @@ function inferFilePartModality(
 	if (mediaType === 'audio' || topLevel === 'audio') return 'audio'
 	if (mediaType === 'video' || topLevel === 'video') return 'video'
 	if (mediaType === 'application/pdf') return 'pdf'
-	return undefined
+	return 'file'
 }
 
 function getPartModality(
@@ -92,7 +92,8 @@ function adaptUserContentByModalities(
 	}
 	return content.flatMap((part) => {
 		const modality = getPartModality(part)
-		if (modality && allowed.has(modality)) {
+		const isGenericFileAllowed = part.type === 'file' && allowed.has('file')
+		if ((modality && allowed.has(modality)) || isGenericFileAllowed) {
 			return [part]
 		}
 		return allowed.has('text')
@@ -110,12 +111,12 @@ function adaptMessagesByInputModalities(
 			? {
 					...message,
 					content: adaptUserContentByModalities(
-						message.content as UserModelMessage['content'],
+						message.content,
 						inputModalities,
 					),
 				}
 			: message,
-	) as ModelMessage[]
+	)
 }
 
 function mergeAdjacentUserMessages(messages: ModelMessage[]): ModelMessage[] {

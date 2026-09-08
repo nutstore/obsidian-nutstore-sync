@@ -32,7 +32,7 @@ interface ScoredItem {
 
 const ALL_TYPE = '__all__'
 const ROW_ESTIMATE = 95
-const SEPARATOR = /[/\\.,\s_\-]/
+const SEPARATOR = /[/\\.,\s_-]/
 const estimateSize = () => ROW_ESTIMATE
 
 function subsequenceScore(text: string, q: string): number {
@@ -205,7 +205,7 @@ export default function TaskSelectionVirtualList(
 		if (pendingRows.size > 0) {
 			const rows = [...pendingRows]
 			pendingRows.clear()
-			setTimeout(() => {
+			window.setTimeout(() => {
 				for (const [index, node] of rows) {
 					if (node.isConnected) {
 						virtualizer.resizeItem(index, node.offsetHeight)

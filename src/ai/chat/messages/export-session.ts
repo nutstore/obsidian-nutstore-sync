@@ -22,6 +22,7 @@ import i18n from '~/i18n'
 import { writeLocalBinary, writeLocalText } from '~/utils/local-vault-io'
 import logger from '~/utils/logger'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
+import { formatDuration } from '~/utils/format-duration'
 
 interface ExportSessionParams {
 	vault: Vault
@@ -343,6 +344,11 @@ async function buildDisplayBlockMarkdown(
 	const lines = [
 		`- ${i18n.t('chatbox.exportMeta.toolName')}: \`${block.toolCall.toolName}\``,
 		`- ${i18n.t('chatbox.exportMeta.toolCallId')}: \`${block.toolCall.toolCallId}\``,
+		...(block.timing
+			? [
+					`- ${i18n.t('chatbox.exportMeta.duration')}: \`${formatDuration((block.timing.finishedAt ?? Date.now()) - block.timing.startedAt)}\``,
+				]
+			: []),
 	]
 	const todos = block.todos
 	if (block.toolCall.toolName === 'todowrite' && todos) {
@@ -423,8 +429,10 @@ async function buildSessionMarkdown(
 		'',
 	]
 
+	const masterAgent = getMasterAgent(session)
 	for (const { message: record, blocks } of projectTimelineMessageGroups(
-		getMasterAgent(session).timeline,
+		masterAgent.timeline,
+		masterAgent.toolTimings,
 	)) {
 		const userContextLines =
 			record.role === 'user'

@@ -20,7 +20,7 @@ export function createFileList() {
 	const [version, setVersion] = createSignal(0)
 	return {
 		refresh() {
-			setVersion((v) => ++v)
+			setVersion((version) => version + 1)
 		},
 		FileList(props: FileListProps) {
 			const [items, setItems] = createSignal<FileStat[]>([])

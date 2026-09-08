@@ -14,9 +14,17 @@ import {
 
 describe('ai config', () => {
 	it('matches the models-api provider catalog shape', () => {
-		const catalog = JSON.parse(readFileSync('src/ai/models-api.json', 'utf8'))
+		const catalog = JSON.parse(
+			readFileSync(new URL('../models-api.json', import.meta.url), 'utf8'),
+		)
 
-		expect(aiProviderDefinitionsSchema.parse(catalog)).toBeTruthy()
+		const parsed = aiProviderDefinitionsSchema.parse(catalog)
+		expect(Object.keys(parsed).length).toBeGreaterThan(0)
+		for (const [providerId, provider] of Object.entries(parsed)) {
+			expect(provider.id).toBe(providerId)
+			expect(provider.name.trim()).not.toBe('')
+			expect(Object.keys(provider.models).length).toBeGreaterThan(0)
+		}
 	})
 
 	it('creates an empty provider config', () => {
@@ -119,6 +127,26 @@ describe('ai config', () => {
 
 		expect(providers['provider-1'].id).toBe('provider-1')
 		expect(providers['provider-1'].models['model-1'].id).toBe('model-1')
+	})
+
+	it('accepts generic file input modality', () => {
+		const providers = sanitizeProviders({
+			'provider-1': {
+				models: {
+					'model-1': {
+						modalities: {
+							input: ['text', 'file'],
+							output: ['text'],
+						},
+					},
+				},
+			},
+		})
+
+		expect(providers['provider-1'].models['model-1'].modalities.input).toEqual([
+			'text',
+			'file',
+		])
 	})
 
 	it('creates provider configs from presets without sharing model objects', () => {

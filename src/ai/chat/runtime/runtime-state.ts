@@ -2,7 +2,7 @@ import type {
 	ChatState,
 	SessionRuntimeState,
 } from '~/ai/chat/runtime/chat-state'
-import { createAbortError } from '~/ai/transport/abort'
+import { createMasterTurnScheduler } from '~/ai/chat/runtime/master-turn-scheduler'
 
 export class RuntimeStates {
 	constructor(private state: ChatState) {}
@@ -16,11 +16,27 @@ export class RuntimeStates {
 					text: '',
 					userContext: [],
 				},
-				pending: [],
+				scheduler: createMasterTurnScheduler(),
 			}
 			this.state.runtimeBySessionId.set(sessionId, runtime)
 		}
 		return runtime
+	}
+
+	/** Runtime execution never survives a session rehydration. */
+	resetExecution(sessionId: string) {
+		const previous = this.state.runtimeBySessionId.get(sessionId)
+		if (!previous) return
+		previous.scheduler.active?.abortController.abort()
+		previous.manualCompressionAbortController?.abort()
+		this.state.runtimeBySessionId.set(sessionId, {
+			runState: 'idle',
+			draft: {
+				text: previous.draft.text,
+				userContext: previous.draft.userContext.slice(),
+			},
+			scheduler: createMasterTurnScheduler(),
+		})
 	}
 
 	getAutoApproveRequests(sessionId: string) {
@@ -31,23 +47,14 @@ export class RuntimeStates {
 		}
 		return requests
 	}
+}
 
-	createAbortController(sessionId: string) {
-		const runtime = this.get(sessionId)
-		const controller = new AbortController()
-		runtime.abortController = controller
-		return controller
-	}
-
-	clearAbortController(sessionId: string, controller?: AbortController) {
-		const runtime = this.get(sessionId)
-		if (!controller || runtime.abortController === controller) {
-			runtime.abortController = undefined
-		}
-	}
-
-	abortActiveRequest(sessionId: string, reason?: string) {
-		const runtime = this.get(sessionId)
-		runtime.abortController?.abort(createAbortError(reason || 'Aborted'))
-	}
+/** `runState` is a UI projection, not an execution ownership signal. */
+export function isSessionExecutionPending(runtime: SessionRuntimeState) {
+	return Boolean(
+		runtime.processing ||
+		runtime.manualCompressionAbortController ||
+		runtime.scheduler.active ||
+		runtime.scheduler.queued.length > 0,
+	)
 }

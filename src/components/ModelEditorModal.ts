@@ -23,6 +23,7 @@ const INPUT_MODALITY_OPTIONS: AIModelConfig['modalities']['input'] = [
 	'pdf',
 	'video',
 	'audio',
+	'file',
 ]
 
 export default class ModelEditorModal extends Modal {

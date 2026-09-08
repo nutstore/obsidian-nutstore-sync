@@ -19,7 +19,7 @@ export default class TaskListConfirmModal extends Modal {
 		private tasks: BaseTask[],
 	) {
 		super(app)
-		this.selectedTasks = new Array(tasks.length).fill(true)
+		this.selectedTasks = Array.from({ length: tasks.length }, () => true)
 	}
 
 	onOpen() {
@@ -56,16 +56,16 @@ export default class TaskListConfirmModal extends Modal {
 			onToggleMany,
 		})
 
-		const settingDiv = contentEl.createDiv()
-		settingDiv.style.marginTop = '1rem'
+		const settingDiv = contentEl.createDiv({ cls: ':uno: mt-4' })
 		new Setting(settingDiv)
 			.addButton((button) => {
-				updateContinueButtonText = () =>
+				updateContinueButtonText = () => {
 					button.setButtonText(
 						i18n.t('taskList.continue', {
 							count: this.selectedTasks.filter(Boolean).length,
 						}),
 					)
+				}
 				updateContinueButtonText()
 				button.setCta().onClick(() => {
 					this.result = true
@@ -80,7 +80,7 @@ export default class TaskListConfirmModal extends Modal {
 			})
 	}
 
-	async open(): Promise<{ confirm: boolean; tasks: BaseTask[] }> {
+	openAndWait(): Promise<{ confirm: boolean; tasks: BaseTask[] }> {
 		return new Promise((resolve) => {
 			this.resolveOpen = resolve
 			super.open()

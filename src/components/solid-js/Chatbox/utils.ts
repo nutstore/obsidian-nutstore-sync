@@ -1,27 +1,51 @@
 import type { ChatDisplayToolCallBlock, ChatRunState } from '~/ai/chat/types'
+export { formatDuration } from '~/utils/format-duration'
 import { t } from '../i18n'
 
-export function formatTime(timestamp: number) {
-	return new Intl.DateTimeFormat(undefined, {
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit',
-	}).format(timestamp)
+function formatTimeFallback(timestamp: number) {
+	const date = new Date(timestamp)
+	const pad = (value: number) => String(value).padStart(2, '0')
+	return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-export function formatDuration(durationMs: number) {
-	const milliseconds = Math.max(0, Math.round(durationMs))
-	if (milliseconds < 1000) return `${milliseconds}ms`
-	const seconds = Math.floor(milliseconds / 1000)
-	if (seconds < 60) return `${seconds}s`
-	const minutes = Math.floor(seconds / 60)
-	const remainingSeconds = seconds % 60
-	if (minutes < 60)
-		return `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s`
-	const hours = Math.floor(minutes / 60)
-	const remainingMinutes = minutes % 60
-	return `${hours}h ${String(remainingMinutes).padStart(2, '0')}m`
+export function formatTime(timestamp: number) {
+	try {
+		if (
+			typeof Intl !== 'undefined' &&
+			typeof Intl.DateTimeFormat === 'function'
+		) {
+			return new Intl.DateTimeFormat(undefined, {
+				month: '2-digit',
+				day: '2-digit',
+				hour: '2-digit',
+				minute: '2-digit',
+			}).format(timestamp)
+		}
+	} catch {
+		// Fall back for old or partial WebView Intl implementations.
+	}
+	return formatTimeFallback(timestamp)
+}
+
+interface ChatInputKeyEvent {
+	key: string
+	shiftKey: boolean
+	isComposing: boolean
+	/** Legacy WebKit/IME composition sentinel. */
+	keyCode: number
+}
+
+export function shouldSubmitChatInput(
+	event: ChatInputKeyEvent,
+	compositionActive: boolean,
+) {
+	return (
+		event.key === 'Enter' &&
+		!event.shiftKey &&
+		!compositionActive &&
+		!event.isComposing &&
+		event.keyCode !== 229
+	)
 }
 
 export function formatUsage(input?: number, output?: number, total?: number) {
@@ -87,7 +111,7 @@ export function stringifyJsonValue(value: unknown) {
 	try {
 		return JSON.stringify(value ?? {}, null, 2)
 	} catch {
-		return String(value ?? {})
+		return value instanceof Error ? value.message : '[Unserializable value]'
 	}
 }
 

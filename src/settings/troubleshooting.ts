@@ -4,6 +4,7 @@ import CacheClearModal from '~/components/CacheClearModal'
 import { IN_DEV } from '~/consts'
 import i18n from '~/i18n'
 import { blobStore } from '~/storage/blob'
+import { formatLocalTimestampForFilename } from '~/utils/local-date'
 import logger from '~/utils/logger'
 import logsStringify from '~/utils/logs-stringify'
 import BaseSettings from './settings.base'
@@ -111,11 +112,12 @@ export default class TroubleshootingSettings extends BaseSettings {
 
 	private async saveLogsToNote() {
 		try {
-			const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+			const now = new Date()
+			const timestamp = formatLocalTimestampForFilename(now)
 			const fileName = `nutstore-logs-${timestamp}.md`
 			const dirPath = 'nutstore-sync/logs'
 			const filePath = `${dirPath}/${fileName}`
-			const content = `# Nutstore Plugin Logs\n\nGenerated at: ${new Date().toLocaleString()}\n\nPlugin version: ${this.plugin.manifest.version}\n\n---\n\n${this.logs}`
+			const content = `# Nutstore Plugin Logs\n\nGenerated at: ${now.toLocaleString()}\n\nPlugin version: ${this.plugin.manifest.version}\n\n---\n\n${this.logs}`
 
 			const folderExists = await this.app.vault.adapter.exists(dirPath)
 			if (!folderExists) {
@@ -134,8 +136,8 @@ export default class TroubleshootingSettings extends BaseSettings {
 	private async generateBlobGarbage() {
 		function createRandomBytes(size: number) {
 			const bytes = new Uint8Array(size)
-			if (globalThis.crypto?.getRandomValues) {
-				globalThis.crypto.getRandomValues(bytes)
+			if (window.crypto?.getRandomValues) {
+				window.crypto.getRandomValues(bytes)
 				return bytes
 			}
 			for (let i = 0; i < bytes.length; i++) {

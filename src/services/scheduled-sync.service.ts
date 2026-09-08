@@ -34,8 +34,8 @@ export default class ScheduledSyncService extends BaseService {
 		const clampedIntervalMs = clamp(intervalMs, 0, 2 ** 31 - 1)
 
 		if (clampedIntervalMs > 0) {
-			this.autoSyncTimer = window.setInterval(async () => {
-				await this.syncExecutor.executeSync({
+			this.autoSyncTimer = window.setInterval(() => {
+				void this.syncExecutor.executeSync({
 					mode: SyncStartMode.AUTO_SYNC,
 				})
 			}, clampedIntervalMs)
@@ -53,16 +53,18 @@ export default class ScheduledSyncService extends BaseService {
 		const settings = this.plugin.settings
 
 		if (!this.startupSyncCompleted && settings.startupSyncDelaySeconds > 0) {
-			this.startupSyncTimer = window.setTimeout(async () => {
+			this.startupSyncTimer = window.setTimeout(() => {
 				this.startupSyncTimer = null
 				this.startupSyncCompleted = true
-				try {
-					await this.syncExecutor.executeSync({
-						mode: SyncStartMode.AUTO_SYNC,
-					})
-				} finally {
-					this.startTimer(this.plugin.settings.autoSyncIntervalSeconds)
-				}
+				void (async () => {
+					try {
+						await this.syncExecutor.executeSync({
+							mode: SyncStartMode.AUTO_SYNC,
+						})
+					} finally {
+						this.startTimer(this.plugin.settings.autoSyncIntervalSeconds)
+					}
+				})()
 			}, settings.startupSyncDelaySeconds * 1000)
 			return
 		}

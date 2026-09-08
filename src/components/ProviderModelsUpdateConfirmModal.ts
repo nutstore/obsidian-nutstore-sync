@@ -56,7 +56,7 @@ export default class ProviderModelsUpdateConfirmModal extends Modal {
 			)
 	}
 
-	async open(): Promise<boolean> {
+	openAndWait(): Promise<boolean> {
 		super.open()
 		return new Promise((resolve) => {
 			const originalOnClose = this.onClose.bind(this)

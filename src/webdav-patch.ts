@@ -6,7 +6,7 @@
 import { getReasonPhrase } from 'http-status-codes/build/cjs/utils-functions'
 import { Platform, RequestUrlParam } from 'obsidian'
 import { getPatcher, RequestOptionsWithState } from 'webdav'
-import { VALID_REQURL } from '~/consts'
+import { VALID_REQURL } from '~/obsidian-capabilities'
 import requestUrl from './utils/request-url'
 
 /**
@@ -26,7 +26,7 @@ function objKeyToLower(obj: Record<string, string>) {
  * @returns true if all are iso 8859 1 chars
  */
 function onlyAscii(str: string) {
-	// eslint-disable-next-line no-control-regex
+	// eslint-disable-next-line no-control-regex -- ISO-8859-1 validation intentionally includes control bytes.
 	return !/[^\u0000-\u00ff]/g.test(str)
 }
 

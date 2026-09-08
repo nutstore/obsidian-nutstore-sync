@@ -1,4 +1,4 @@
-import type { FilePart, ModelMessage } from 'ai'
+import type { FilePart, ModelMessage, UserModelMessage } from 'ai'
 import i18n from '~/i18n'
 import type { ChatSession } from '~/ai/chat/domain'
 import { getMessageText } from '~/ai/chat/messages/ui-message'
@@ -112,7 +112,7 @@ export function migrateMessageFromV0(msg: unknown): ModelMessage {
 					output: { type: 'text', value: textValue },
 				},
 			],
-		} as ModelMessage
+		}
 	}
 
 	if (role === 'user') {
@@ -143,16 +143,17 @@ export function needsV0Migration(msg: unknown): boolean {
 	)
 }
 
-function migrateImagePartsToFiles(content: unknown): unknown {
-	if (!Array.isArray(content)) return content
+function migrateImagePartsToFiles(
+	content: UserModelMessage['content'],
+): UserModelMessage['content'] {
+	if (typeof content === 'string') return content
 	let changed = false
 	const next = content.map((part) => {
-		const p = part as Record<string, unknown>
-		if (p?.type === 'image' && 'image' in p) {
+		if (part.type === 'image') {
 			changed = true
-			return toImageFilePart(p.image as FilePart['data'], {
-				mediaType: normalizeImageMediaType(p.mediaType),
-				providerOptions: p.providerOptions as FilePart['providerOptions'],
+			return toImageFilePart(part.image, {
+				mediaType: normalizeImageMediaType(part.mediaType),
+				providerOptions: part.providerOptions,
 			})
 		}
 		return part
@@ -160,28 +161,16 @@ function migrateImagePartsToFiles(content: unknown): unknown {
 	return changed ? next : content
 }
 
-export function migrateDeprecatedImageParts(msg: unknown): ModelMessage {
-	if (!msg || typeof msg !== 'object') {
-		return msg as ModelMessage
-	}
-	const m = msg as Record<string, unknown>
-	const content = m.content
-	const migrated = migrateImagePartsToFiles(content)
-	if (migrated === content) {
-		return msg as ModelMessage
-	}
-	return { ...(msg as object), content: migrated } as ModelMessage
+export function migrateDeprecatedImageParts(msg: ModelMessage): ModelMessage {
+	if (msg.role !== 'user') return msg
+	const migrated = migrateImagePartsToFiles(msg.content)
+	if (migrated === msg.content) return msg
+	return { ...msg, content: migrated }
 }
 
-export function needsDeprecatedImagePartMigration(msg: unknown): boolean {
-	if (!msg || typeof msg !== 'object') return false
-	const m = msg as Record<string, unknown>
-	const content = m.content
-	if (!Array.isArray(content)) return false
-	return content.some((part) => {
-		const p = part as Record<string, unknown>
-		return p?.type === 'image' && 'image' in p
-	})
+export function needsDeprecatedImagePartMigration(msg: ModelMessage): boolean {
+	if (msg.role !== 'user' || typeof msg.content === 'string') return false
+	return msg.content.some((part) => part.type === 'image')
 }
 
 export function deriveTitle(session: ChatSession) {

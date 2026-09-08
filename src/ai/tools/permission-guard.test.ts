@@ -3,6 +3,7 @@ import {
 	createPermissionGuard,
 	createReadonlyPermissionGuard,
 	createFullAccessPermissionGuard,
+	withPermissionPurpose,
 } from './permission-guard'
 
 const { modalOpenMock, modalCtorMock } = vi.hoisted(() => ({
@@ -54,6 +55,34 @@ beforeEach(() => {
 })
 
 describe('createPermissionGuard', () => {
+	it('passes the bound purpose to the modal without changing auto-approval', async () => {
+		const { guard } = createGuard('session-1')
+		const purposeGuard = withPermissionPurpose(
+			guard,
+			'更新中性备注 🌱 / Update neutral note',
+		)!
+		modalOpenMock.mockResolvedValueOnce('auto-approve-operation')
+
+		await purposeGuard({
+			type: 'fs',
+			fs: { kind: 'write', path: 'notes/中性🌱.md' },
+		})
+		await purposeGuard({
+			type: 'fs',
+			fs: { kind: 'write', path: 'notes/another.md' },
+		})
+
+		expect(modalCtorMock).toHaveBeenCalledWith({
+			app: {},
+			request: {
+				type: 'fs',
+				fs: { kind: 'write', path: 'notes/中性🌱.md' },
+				purpose: '更新中性备注 🌱 / Update neutral note',
+			},
+		})
+		expect(modalOpenMock).toHaveBeenCalledTimes(1)
+	})
+
 	it('approve only affects the current request', async () => {
 		const { guard } = createGuard('session-1')
 		modalOpenMock

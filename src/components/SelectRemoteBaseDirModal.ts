@@ -11,7 +11,7 @@ export default class SelectRemoteBaseDirModal extends Modal {
 	constructor(
 		app: App,
 		private plugin: NutstorePlugin,
-		private onConfirm: (path: string) => void,
+		private onConfirm: (path: string) => void | Promise<void>,
 	) {
 		super(app)
 	}
@@ -19,7 +19,7 @@ export default class SelectRemoteBaseDirModal extends Modal {
 	async onOpen() {
 		const { contentEl } = this
 
-		const explorer = document.createElement('div')
+		const explorer = createDiv()
 		contentEl.appendChild(explorer)
 
 		const webdav = await this.plugin.webDAVService.createWebDAVClient()
@@ -43,10 +43,11 @@ export default class SelectRemoteBaseDirModal extends Modal {
 				explorer.remove()
 				this.close()
 			},
-			onConfirm: async (path) => {
-				await Promise.resolve(this.onConfirm(stdRemotePath(path)))
-				explorer.remove()
-				this.close()
+			onConfirm: (path) => {
+				void Promise.resolve(this.onConfirm(stdRemotePath(path))).then(() => {
+					explorer.remove()
+					this.close()
+				})
 			},
 		})
 	}

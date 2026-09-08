@@ -13,19 +13,106 @@ import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
 import {
+	resolveModelOutputLimit,
+	resolveSummaryOutputTokenBudget,
+} from '~/ai/core/inference'
+import {
 	prepareMessagesForModel,
 	resolveLanguageModel,
 } from '~/ai/core/runtime'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
 
 const FALLBACK_CONTEXT_WINDOW = 256 * 1024
-const MIN_AUTO_COMPRESSION_THRESHOLD = 4096 * 4
-const AUTO_COMPRESSION_CONTEXT_RATIO = 0.1
+const MIN_CONTEXT_SAFETY_MARGIN = 4096
+const CONTEXT_SAFETY_MARGIN_RATIO = 0.05
+const MIN_COMPACTION_LEAD_TOKENS = 4096
+const COMPACTION_LEAD_CONTEXT_RATIO = 0.05
 const RECENT_TURNS_CONTEXT_RATIO = 0.05
 const MIN_RECENT_TURNS_TOKEN_BUDGET = 2048
 const MAX_RECENT_TURNS_TOKEN_BUDGET = 4096 * 4
 const MAX_RECENT_TURNS = 8
 const ESTIMATED_UTF8_BYTES_PER_TOKEN = 3
+
+export type SummaryToolSet = ToolSet
+
+/**
+ * A summary replays prior tool calls for transcript conversion only.  Its
+ * tools must therefore retain schemas while dropping every executable entry
+ * point, including when a manual caller supplies an unfiltered tool set.
+ */
+function createSummaryToolSchemas(
+	tools: ToolSet | undefined,
+): SummaryToolSet | undefined {
+	if (!tools) return undefined
+	return Object.fromEntries(
+		Object.entries(tools).map(([name, tool]) => {
+			const { execute: _execute, ...schema } = tool
+			return [name, schema]
+		}),
+	)
+}
+
+export type ContextPressure = 'normal' | 'soft' | 'hard'
+
+/** Immutable compression source selected at the trigger point. */
+export interface ContextCompressionPlan {
+	summarizedThroughMessageId: string
+	/** Exact source prefix identity, used to reject stale background results. */
+	sourceMessageIds: string[]
+	/** Exact retained suffix identity, used if the anchor is later deleted. */
+	retainedMessageIds: string[]
+	messages: AppUIMessage[]
+}
+
+export type ContextCompressionResult =
+	| 'committed'
+	| 'unavailable'
+	| 'cancelled'
+	| 'failed'
+	| 'stale'
+
+export class ContextCompressionFailedError extends Error {
+	constructor(message: string) {
+		super(message)
+		this.name = 'ContextCompressionFailedError'
+	}
+}
+
+interface GenerateContextCompressionOptions {
+	provider: AIProviderConfig
+	model: AIModelConfig
+	session: ChatSession
+	plan: ContextCompressionPlan
+	/** System prompt identical to the main loop's, so the summarizer replays the warm prefix. */
+	system?: string
+	/** Per-agent tool schemas, retained only to interpret the transcript. */
+	tools?: SummaryToolSet
+	/** Builds the source transcript exactly like the agent loop (user-context aware). */
+	buildMessages?: (
+		messages: AppUIMessage[],
+		tools: ToolSet,
+	) => Promise<ModelMessage[]>
+	isCancelled?: () => boolean
+	abortSignal?: AbortSignal
+}
+
+interface CommitContextCompressionOptions {
+	session: ChatSession
+	agent: ChatAgentState
+	plan: ContextCompressionPlan
+	summary: string
+	store: SessionStore
+	messageFactory: MessageFactory
+}
+
+interface CompressContextRunnerOptions extends Omit<
+	GenerateContextCompressionOptions,
+	'plan'
+> {
+	agent: ChatAgentState
+	store: SessionStore
+	messageFactory: MessageFactory
+}
 
 export function resolveContextWindow(model?: AIModelConfig) {
 	const configuredLimit = model?.limit?.context
@@ -34,11 +121,9 @@ export function resolveContextWindow(model?: AIModelConfig) {
 		: FALLBACK_CONTEXT_WINDOW
 }
 
-function resolveAutoCompressionThreshold(contextWindow: number) {
-	return Math.max(
-		contextWindow * AUTO_COMPRESSION_CONTEXT_RATIO,
-		MIN_AUTO_COMPRESSION_THRESHOLD,
-	)
+function resolveModelInputLimit(model: AIModelConfig | undefined) {
+	const configuredLimit = model?.limit?.input
+	return configuredLimit && configuredLimit > 0 ? configuredLimit : undefined
 }
 
 function resolveRecentTurnsTokenBudget(contextWindow: number) {
@@ -51,6 +136,20 @@ function resolveRecentTurnsTokenBudget(contextWindow: number) {
 	)
 }
 
+function resolveSafetyMargin(contextWindow: number) {
+	return Math.max(
+		MIN_CONTEXT_SAFETY_MARGIN,
+		Math.floor(contextWindow * CONTEXT_SAFETY_MARGIN_RATIO),
+	)
+}
+
+function resolveCompactionLead(contextWindow: number) {
+	return Math.max(
+		MIN_COMPACTION_LEAD_TOKENS,
+		Math.floor(contextWindow * COMPACTION_LEAD_CONTEXT_RATIO),
+	)
+}
+
 function isContextCheckpoint(message: AppUIMessage) {
 	return message.parts.some((part) => part.type === 'data-context-checkpoint')
 }
@@ -58,6 +157,11 @@ function isContextCheckpoint(message: AppUIMessage) {
 function estimateSerializedTokens(value: unknown) {
 	const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength
 	return Math.ceil(bytes / ESTIMATED_UTF8_BYTES_PER_TOKEN)
+}
+
+/** Stable local estimate used only to verify that compaction made progress. */
+export function estimateContextTokens(agent: ChatAgentState) {
+	return estimateSerializedTokens(selectContextTimeline(agent.timeline))
 }
 
 export async function findRecentTurnStartIndex(
@@ -100,17 +204,14 @@ export async function findRecentTurnStartIndex(
 	return firstPreservedTurn
 }
 
-export function shouldAutoCompressAgent(
-	agent: ChatAgentState,
-	model?: AIModelConfig,
-) {
+function resolveLatestContextUsage(agent: ChatAgentState) {
 	const contextTimeline = selectContextTimeline(agent.timeline)
 	const checkpointCreatedAt = contextTimeline[0]?.parts.some(
 		(part) => part.type === 'data-context-checkpoint',
 	)
 		? contextTimeline[0].metadata?.createdAt
 		: undefined
-	const latestUsage = [...contextTimeline]
+	return [...contextTimeline]
 		.reverse()
 		.find(
 			(message) =>
@@ -119,39 +220,90 @@ export function shouldAutoCompressAgent(
 				(checkpointCreatedAt === undefined ||
 					(message.metadata.createdAt ?? 0) > checkpointCreatedAt),
 		)?.metadata?.llm?.usage
-	const usedTokens = resolveUsedContextTokens(latestUsage)
-	if (usedTokens <= 0) return false
-	const contextWindow = resolveContextWindow(model)
-	return (
-		contextWindow - usedTokens < resolveAutoCompressionThreshold(contextWindow)
-	)
 }
 
-interface CompressContextRunnerOptions {
-	provider: AIProviderConfig
-	model: AIModelConfig
-	session: ChatSession
-	agent: ChatAgentState
-	store: SessionStore
-	messageFactory: MessageFactory
-	/** System prompt identical to the main loop's, so the summarizer replays the warm prefix. */
-	system?: string
-	/** Per-agent tools identical to the main loop's, for the same prefix reason. */
-	tools?: ToolSet
-	/** Builds the message transcript exactly like the agent loop (user-context aware). */
-	buildMessages?: (
-		agent: ChatAgentState,
-		tools: ToolSet,
-	) => Promise<ModelMessage[]>
-	isCancelled?: () => boolean
-	abortSignal?: AbortSignal
+export function resolveContextPressure(
+	agent: ChatAgentState,
+	model?: AIModelConfig,
+): ContextPressure {
+	const usedTokens = resolveUsedContextTokens(resolveLatestContextUsage(agent))
+	if (usedTokens <= 0) return 'normal'
+
+	const contextWindow = resolveContextWindow(model)
+	const outputBudget = resolveModelOutputLimit(model) ?? 0
+	const modelInputLimit = resolveModelInputLimit(model)
+	const availableInputTokens = Math.max(0, contextWindow - outputBudget)
+	const inputCapacity = Math.min(
+		modelInputLimit ?? availableInputTokens,
+		availableInputTokens,
+	)
+	const hardLimit = Math.max(
+		0,
+		inputCapacity - resolveSafetyMargin(contextWindow),
+	)
+	const softLimit = Math.max(
+		0,
+		hardLimit - resolveCompactionLead(contextWindow),
+	)
+	if (usedTokens >= hardLimit) return 'hard'
+	return usedTokens >= softLimit ? 'soft' : 'normal'
+}
+
+/** True only when continuing without a committed summary risks the next call. */
+export function shouldAutoCompressAgent(
+	agent: ChatAgentState,
+	model?: AIModelConfig,
+) {
+	return resolveContextPressure(agent, model) === 'hard'
+}
+
+/** True when background compaction should start before reaching the hard limit. */
+export function shouldStartContextCompaction(
+	agent: ChatAgentState,
+	model?: AIModelConfig,
+) {
+	return resolveContextPressure(agent, model) !== 'normal'
 }
 
 /**
- * Resolve the system prompt + per-agent tools both callers (auto and manual)
- * reuse so the summarizer request is a byte-for-byte prefix of the last routed
- * turn. Degrades gracefully ({} on failure) so a tool-creation hiccup never
- * blocks compression.
+ * Select a completed prefix to summarize. The selected message ids are stable
+ * even if new turns arrive while the remote summarizer is running.
+ */
+export async function createContextCompressionPlan(
+	agent: ChatAgentState,
+	model: AIModelConfig,
+	options: { allowFullContext?: boolean } = {},
+): Promise<ContextCompressionPlan | undefined> {
+	const contextTimeline = selectContextTimeline(agent.timeline)
+	if (contextTimeline.length === 0) return undefined
+	const preservedTurnIndex = await findRecentTurnStartIndex(
+		contextTimeline,
+		resolveRecentTurnsTokenBudget(resolveContextWindow(model)),
+	)
+	const summaryEndIndex =
+		preservedTurnIndex > 0
+			? preservedTurnIndex
+			: options.allowFullContext
+				? contextTimeline.length
+				: 0
+	if (summaryEndIndex === 0) return undefined
+
+	const messages = contextTimeline.slice(0, summaryEndIndex)
+	const summarizedThroughMessageId = messages.at(-1)?.id
+	if (!summarizedThroughMessageId) return undefined
+	return {
+		summarizedThroughMessageId,
+		sourceMessageIds: messages.map((message) => message.id),
+		retainedMessageIds: contextTimeline
+			.slice(summaryEndIndex)
+			.map((message) => message.id),
+		messages,
+	}
+}
+
+/**
+ * Resolve the system prompt + per-agent tools both manual and background
+ * callers reuse so the summarizer request retains the main loop's prefix.
  */
 export async function resolveSummaryContext(
 	agent: ChatAgentState,
@@ -159,65 +311,90 @@ export async function resolveSummaryContext(
 	model: AIModelConfig,
 	toolExecutor: ToolExecutor,
 	app: App,
-): Promise<{ system?: string; tools?: ToolSet }> {
+): Promise<{
+	system?: string
+	tools?: SummaryToolSet
+}> {
 	try {
 		const definition = toolExecutor.getAgentDefinition(agent.type)
 		const [system, tools] = await Promise.all([
 			buildAgentSystemPrompt(app, agent.type, session.systemPrompt),
 			toolExecutor.createTools(0, definition, session, model),
 		])
-		return { system, tools }
+		return {
+			system,
+			tools: createSummaryToolSchemas(tools),
+		}
 	} catch {
 		return {}
 	}
 }
 
-export async function runContextCompression({
-	provider,
-	model,
-	session,
-	agent,
-	store,
-	messageFactory,
-	system,
-	tools,
-	buildMessages,
-	isCancelled,
-	abortSignal,
-}: CompressContextRunnerOptions) {
-	const contextTimeline = selectContextTimeline(agent.timeline)
-	if (contextTimeline.length === 0) return
-	const { model: languageModel } = resolveLanguageModel(provider, model.id)
+/** Generate a summary from a frozen source plan without mutating the session. */
+export async function generateContextCompression(
+	options: GenerateContextCompressionOptions,
+): Promise<string | undefined> {
+	const tools = createSummaryToolSchemas(options.tools)
+	const { model: languageModel } = resolveLanguageModel(
+		options.provider,
+		options.model.id,
+	)
 	const messageSequence =
-		buildMessages && tools
-			? await buildMessages(agent, tools)
-			: await uiMessagesToModelMessages(contextTimeline, tools)
+		options.buildMessages && tools
+			? await options.buildMessages(options.plan.messages, tools)
+			: await uiMessagesToModelMessages(options.plan.messages, tools)
 	const preparedMessages = prepareMessagesForModel(
-		provider,
-		model.id,
+		options.provider,
+		options.model.id,
 		messageSequence,
 	)
-	// Append the compaction instruction as a separate final user message AFTER
-	// preparation: adjacent-user merging must never fold it into the last turn,
-	// so the summarizer request stays a genuine prefix of the last routed turn.
-	const summarizerMessages: ModelMessage[] = [
-		...preparedMessages,
-		{
-			role: 'user',
-			content: [{ type: 'text', text: COMPRESSION_PROMPT }],
-		},
-	]
-	const response = await generateText({
+	// This instruction belongs only to the summarizer branch, never the live timeline.
+	const response = await generateText<SummaryToolSet>({
 		model: languageModel,
-		...(system === undefined ? {} : { system }),
+		...(options.system === undefined ? {} : { system: options.system }),
 		...(tools === undefined ? {} : { tools }),
-		messages: summarizerMessages,
-		abortSignal,
-		temperature: session.inferenceParams?.temperature,
-		maxOutputTokens: session.inferenceParams?.maxTokens,
+		toolChoice: 'none',
+		messages: [
+			...preparedMessages,
+			{
+				role: 'user',
+				content: [{ type: 'text', text: COMPRESSION_PROMPT }],
+			},
+		],
+		abortSignal: options.abortSignal,
+		maxOutputTokens: resolveSummaryOutputTokenBudget(options.model),
 	})
-	if (isCancelled?.()) return
-	const summary = response.text.trim() || COMPRESSION_PROMPT
+	if (options.isCancelled?.()) return undefined
+	const summary = response.text.trim()
+	return summary || undefined
+}
+
+export function isContextCompressionPlanCurrent(
+	plan: ContextCompressionPlan,
+	agent: ChatAgentState,
+) {
+	const currentPrefix = selectContextTimeline(agent.timeline).slice(
+		0,
+		plan.sourceMessageIds.length,
+	)
+	return (
+		currentPrefix.length === plan.sourceMessageIds.length &&
+		currentPrefix.every(
+			(message, index) => message.id === plan.sourceMessageIds[index],
+		)
+	)
+}
+
+/** Commit a ready summary at a runtime safe point. */
+export async function commitContextCompression({
+	session,
+	agent,
+	plan,
+	summary,
+	store,
+	messageFactory,
+}: CommitContextCompressionOptions) {
+	if (!isContextCompressionPlanCurrent(plan, agent)) return false
 	const todos = findLatestTodos(session)
 	const todoLines = todos.map(
 		(todo) => `- [${todo.status}] ${todo.content} (${todo.priority})`,
@@ -232,21 +409,40 @@ export async function runContextCompression({
 					'</CurrentTodoList>',
 				].join('\n')
 			: summary
-	const preservedTurnIndex = await findRecentTurnStartIndex(
-		contextTimeline,
-		resolveRecentTurnsTokenBudget(resolveContextWindow(model)),
-	)
-	const preservedTurnCount = contextTimeline
-		.slice(preservedTurnIndex)
-		.filter(
-			(message) => message.role === 'user' && !isContextCheckpoint(message),
-		).length
 	messageFactory.appendContextBoundary(session, agent, {
 		mode: 'summary',
 		summary: finalSummary,
-		preservedTurnCount,
+		summarizedThroughMessageId: plan.summarizedThroughMessageId,
+		retainedMessageIds: plan.retainedMessageIds,
 	})
 	store.upsertSessionIndexItem(session, deriveTitle(session))
 	await store.persistSession(session)
 	await store.persistMetaAndIndex()
+	return true
+}
+
+/** Manual compression keeps its synchronous UX but uses the same plan/commit path. */
+export async function runContextCompression({
+	agent,
+	store,
+	messageFactory,
+	...options
+}: CompressContextRunnerOptions): Promise<ContextCompressionResult> {
+	const plan = await createContextCompressionPlan(agent, options.model, {
+		allowFullContext: true,
+	})
+	if (!plan) return 'unavailable'
+	if (options.isCancelled?.()) return 'cancelled'
+	const summary = await generateContextCompression({ ...options, plan })
+	if (options.isCancelled?.()) return 'cancelled'
+	if (!summary) return 'failed'
+	const committed = await commitContextCompression({
+		session: options.session,
+		agent,
+		plan,
+		summary,
+		store,
+		messageFactory,
+	})
+	return committed ? 'committed' : 'stale'
 }

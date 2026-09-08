@@ -29,18 +29,45 @@ interface PersistedUrlRecord {
 	href: string
 }
 
-/** base64url-wrapped raw binary: ArrayBuffer or any ArrayBufferView. */
+/** Kinds emitted by current writes. Older V2 records may contain other views. */
+type PersistedBinaryKind = 'arraybuffer' | 'Uint8Array'
+
 interface PersistedBinaryRecord {
 	[BINARY_RECORD_MARKER_V2]: true
-	kind: 'arraybuffer' | 'dataview' | string
+	kind: string
 	data: string
+}
+
+type WritablePersistedBinaryRecord = Omit<PersistedBinaryRecord, 'kind'> & {
+	kind: PersistedBinaryKind
+}
+
+type LegacyViewConstructor = new (buffer: ArrayBuffer) => ArrayBufferView
+
+const LEGACY_VIEW_CONSTRUCTORS: Record<string, LegacyViewConstructor> = {
+	Int8Array,
+	Uint8Array,
+	Uint8ClampedArray,
+	Int16Array,
+	Uint16Array,
+	Int32Array,
+	Uint32Array,
+	Float32Array,
+	Float64Array,
+}
+
+if (typeof BigInt64Array !== 'undefined') {
+	LEGACY_VIEW_CONSTRUCTORS.BigInt64Array = BigInt64Array
+}
+if (typeof BigUint64Array !== 'undefined') {
+	LEGACY_VIEW_CONSTRUCTORS.BigUint64Array = BigUint64Array
 }
 
 type PersistedValue<T> = T extends Blob
 	? PersistedBlobRecord
 	: T extends URL
 		? PersistedUrlRecord
-		: T extends ArrayBuffer | ArrayBufferView
+		: T extends ArrayBuffer | Uint8Array
 			? PersistedBinaryRecord
 			: T extends readonly (infer Item)[]
 				? PersistedValue<Item>[]
@@ -77,7 +104,7 @@ function base64UrlToArrayBuffer(value: string): ArrayBuffer {
 	return buffer
 }
 
-function viewBytes(view: ArrayBufferView): ArrayBuffer {
+function viewBytes(view: Uint8Array): ArrayBuffer {
 	return view.buffer.slice(
 		view.byteOffset,
 		view.byteOffset + view.byteLength,
@@ -85,8 +112,8 @@ function viewBytes(view: ArrayBufferView): ArrayBuffer {
 }
 
 function createBinaryRecord(
-	value: ArrayBuffer | ArrayBufferView,
-): PersistedBinaryRecord {
+	value: ArrayBuffer | Uint8Array,
+): WritablePersistedBinaryRecord {
 	if (value instanceof ArrayBuffer) {
 		return {
 			[BINARY_RECORD_MARKER_V2]: true,
@@ -96,7 +123,7 @@ function createBinaryRecord(
 	}
 	return {
 		[BINARY_RECORD_MARKER_V2]: true,
-		kind: value instanceof DataView ? 'dataview' : value.constructor.name,
+		kind: 'Uint8Array',
 		data: arrayBufferToBase64Url(viewBytes(value)),
 	}
 }
@@ -160,8 +187,13 @@ async function encodeBlobs(value: unknown): Promise<unknown> {
 			href: value.href,
 		} satisfies PersistedUrlRecord
 	}
-	if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+	if (value instanceof ArrayBuffer || value instanceof Uint8Array) {
 		return createBinaryRecord(value)
+	}
+	if (ArrayBuffer.isView(value)) {
+		throw new TypeError(
+			'Only ArrayBuffer and Uint8Array are supported in chat session persistence',
+		)
 	}
 	if (Array.isArray(value)) {
 		return Promise.all(value.map(encodeBlobs))
@@ -189,14 +221,15 @@ function decodeBinaryRecord(
 	if (value.kind === 'dataview') {
 		return new DataView(buffer)
 	}
-	const viewCtor = (globalThis as Record<string, unknown>)[value.kind]
-	if (typeof viewCtor === 'function') {
+	if (value.kind === 'Buffer' && typeof Buffer !== 'undefined') {
+		return Buffer.from(buffer)
+	}
+	const viewCtor = LEGACY_VIEW_CONSTRUCTORS[value.kind]
+	if (viewCtor) {
 		try {
-			return new (viewCtor as new (buffer: ArrayBuffer) => ArrayBufferView)(
-				buffer,
-			)
+			return new viewCtor(buffer)
 		} catch {
-			/* fall through to a plain ArrayBuffer */
+			/* Preserve the bytes when a legacy view constructor is unavailable. */
 		}
 	}
 	return buffer
@@ -236,7 +269,7 @@ function decodeBlobs(value: unknown): unknown {
 
 /**
  * A whole ChatSession is persisted as a plain JSON file. Nested Blob/File
- * values, ArrayBuffers and ArrayBufferViews cannot survive JSON.stringify, so
+ * values, ArrayBuffers and Uint8Arrays cannot survive JSON.stringify, so
  * every binary payload is base64url-encoded and restored at the session
  * boundary instead. V1 records are still accepted on decode for lossless
  * migration from IndexedDB storage.

@@ -1,21 +1,23 @@
 import { LogEntry } from '~/services/logger.service'
 import deepStringify from './deep-stringify'
 
-function isLogEntry(val: any): val is LogEntry {
+function isLogEntry(val: unknown): val is LogEntry {
+	if (typeof val !== 'object' || val === null) {
+		return false
+	}
 	try {
+		const entry = val as Record<string, unknown>
 		return (
-			typeof val === 'object' &&
-			val !== null &&
-			typeof val.timestamp === 'string' &&
-			typeof val.level === 'string' &&
-			Array.isArray(val.args)
+			typeof entry.timestamp === 'string' &&
+			typeof entry.level === 'string' &&
+			Array.isArray(entry.args)
 		)
 	} catch {
 		return false
 	}
 }
 
-function serializeArg(arg: any): string {
+function serializeArg(arg: unknown): string {
 	try {
 		if (arg === null) return 'null'
 		if (arg === undefined) return 'undefined'
@@ -32,7 +34,7 @@ function serializeArg(arg: any): string {
 	}
 }
 
-export default function logsStringify(logs: any): string | undefined {
+export default function logsStringify(logs: unknown): string | undefined {
 	try {
 		if (logs === null || logs === undefined) return undefined
 		if (typeof logs === 'string') return logs
@@ -49,7 +51,7 @@ export default function logsStringify(logs: any): string | undefined {
 	}
 }
 
-function safeSerializeArgs(args: any[]): string {
+function safeSerializeArgs(args: unknown[]): string {
 	try {
 		return args.map(serializeArg).join(' ')
 	} catch (error) {

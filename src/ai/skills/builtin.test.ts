@@ -55,4 +55,20 @@ describe('built-in Skills', () => {
 			'Do not unnecessarily restrict which tools the agent may use.',
 		)
 	})
+
+	it('keeps the long-term-memory protocol out of the public Skill catalog', () => {
+		expect(
+			BUILTIN_SKILLS.some((item) => item.name === 'long-term-memory'),
+		).toBe(false)
+	})
+
+	it('mounts every built-in Skill under the read-only skills filesystem', async () => {
+		const fs = await createBuiltinSkillsFs()
+		const names = BUILTIN_SKILLS.map((skill) => skill.name)
+		const mounted = await Promise.all(
+			names.map(async (name) => fs.readFile(`/${name}/SKILL.md`)),
+		)
+		expect(mounted.length).toBe(names.length)
+		expect(mounted.every((content) => content.length > 0)).toBe(true)
+	})
 })

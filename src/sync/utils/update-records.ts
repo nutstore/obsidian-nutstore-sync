@@ -4,6 +4,7 @@ import { emitSyncUpdateMtimeProgress } from '~/events'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import { syncRecordKV } from '~/storage'
 import { blobStore } from '~/storage/blob'
+import type { SyncRecordModel } from '~/model/sync-record.model'
 import { SyncRecord } from '~/storage/sync-record'
 import type { SyncLogger } from '~/sync/log'
 import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
@@ -80,7 +81,7 @@ export async function updateMtimeInRecord(
 	const startAt = Date.now()
 
 	const debouncedSetRecords = debounce(
-		(records) => syncRecord.setRecords(records),
+		(records: Map<string, SyncRecordModel>) => syncRecord.setRecords(records),
 		3000,
 		{
 			trailing: true,
@@ -162,7 +163,7 @@ export async function updateMtimeInRecord(
 		await Promise.all(batch)
 		progress.completed += taskChunk.length
 		emitSyncUpdateMtimeProgress(progress.total, progress.completed)
-		debouncedSetRecords(records)
+		void debouncedSetRecords(records)
 	}
 
 	await debouncedSetRecords.flush()

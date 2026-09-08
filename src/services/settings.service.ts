@@ -19,8 +19,8 @@ import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from '~/utils/download-chunk-size'
 import { migrateLegacyFilterRules } from '~/utils/glob-match'
 import logger from '~/utils/logger'
-import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
+import { BaseService } from './service.interface'
 
 export default class SettingsService extends BaseService {
 	private reloadSettingsPromise: Promise<void> | null = null
@@ -44,12 +44,12 @@ export default class SettingsService extends BaseService {
 	}
 
 	async loadSettings() {
-		const storedSettings = await this.plugin.loadData()
-		this.plugin.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			storedSettings,
-		) as NutstoreSettings
+		const loadedSettings = (await this.plugin.loadData()) as unknown
+		const storedSettings =
+			loadedSettings && typeof loadedSettings === 'object'
+				? (loadedSettings as Partial<NutstoreSettings>)
+				: {}
+		this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS, storedSettings)
 		if (
 			storedSettings?.conflictStrategy !== undefined &&
 			!Object.values(ConflictStrategy).includes(storedSettings.conflictStrategy)
@@ -77,7 +77,19 @@ export default class SettingsService extends BaseService {
 			providers: {},
 			defaultModel: undefined,
 			yolo: false,
+			subagents: {
+				explorer: { enabled: false },
+				memory: { enabled: false },
+			},
 		}
+		this.plugin.settings.ai.subagents ??= {
+			explorer: { enabled: false },
+			memory: { enabled: false },
+		}
+		this.plugin.settings.ai.subagents.explorer ??= { enabled: false }
+		this.plugin.settings.ai.subagents.memory ??= { enabled: false }
+		this.plugin.settings.ai.subagents.explorer.enabled ??= false
+		this.plugin.settings.ai.subagents.memory.enabled ??= false
 		this.plugin.settings.ai.nutstoreLlmGateway ??= {}
 		if (Array.isArray(this.plugin.settings.ai.providers)) {
 			this.plugin.settings.ai.providers = {}
@@ -143,7 +155,7 @@ export default class SettingsService extends BaseService {
 				JSON.parse(raw),
 			) as NutstoreLocalSettings
 			this.plugin.localSettings.ai ??= {}
-		} catch (_e) {
+		} catch {
 			this.plugin.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
 		}
 	}

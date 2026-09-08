@@ -12,7 +12,6 @@ import {
 	normalizePath,
 	TFile,
 	TFolder,
-	type App,
 	type TAbstractFile,
 	type Vault,
 } from 'obsidian'
@@ -21,13 +20,20 @@ import type {
 	AIDualPathFileOperation,
 	AISinglePathFileOperation,
 } from '~/ai/tools/file-operation'
+import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import type { ReversibleFileSnapshot, ReversibleToolOp } from '~/ai/chat/types'
 import { decodeReversibleFileSnapshot } from '~/ai/chat/messages/reversible-content'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
-import { existsLocalPath } from '~/utils/local-vault-io'
+import {
+	existsLocalPath,
+	isAdapterPath,
+	readLocalBinary,
+	removeLocalPath,
+	writeLocalBinary,
+} from '~/utils/local-vault-io'
 import { statVaultItem } from '~/utils/stat-vault-item'
-import { VAULT_MOUNT_POINT } from './mount-points'
+import { AGENTS_VAULT_PATH } from './mount-points'
 
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
@@ -158,23 +164,42 @@ async function copyRecursive(
 	await fs.writeFile(dest, content)
 }
 
-export async function listVaultPaths(app: App) {
-	const paths = new Set<string>(['/'])
-	const queue = [...app.vault.getRoot().children]
+interface VaultPathIndex {
+	getAllPaths(): string[]
+	recordPath(path: string): void
+	forgetPath(path: string): void
+}
 
-	while (queue.length > 0) {
-		const current = queue.shift()
-		if (!current) {
-			continue
-		}
+class MutableVaultPathIndex implements VaultPathIndex {
+	private readonly paths = new Set<string>(['/'])
 
-		paths.add(`/${normalizePath(current.path)}`)
-		if (current instanceof TFolder) {
-			queue.push(...current.children)
+	constructor(initialPaths: string[] = []) {
+		for (const path of initialPaths) this.recordPath(path)
+	}
+
+	recordPath(inputPath: string) {
+		const normalized = ensureNotEscapingRoot(inputPath)
+		this.paths.add('/')
+		let current = ''
+		for (const part of normalized.split('/').filter(Boolean)) {
+			current = `${current}/${part}`
+			this.paths.add(current)
 		}
 	}
 
-	return [...paths]
+	forgetPath(inputPath: string) {
+		const normalized = ensureNotEscapingRoot(inputPath)
+		for (const path of [...this.paths]) {
+			if (path === normalized || path.startsWith(`${normalized}/`)) {
+				this.paths.delete(path)
+			}
+		}
+		this.paths.add('/')
+	}
+
+	getAllPaths() {
+		return [...this.paths].sort()
+	}
 }
 
 export class ReversibleOpRecorder {
@@ -265,19 +290,18 @@ export class ReversibleOpRecorder {
 }
 
 export class ObsidianVaultFs implements IFileSystem {
-	private readonly snapshot = new Set<string>()
 	private _batchDepth = 0
+	private readonly pathIndex: VaultPathIndex
 
 	constructor(
 		private readonly vault: Vault,
-		initialPaths: string[] = [],
+		initialPaths: string[] | VaultPathIndex = [],
 		private readonly permissionGuard?: PermissionGuard,
 		private readonly onRead?: (vaultPath: string) => void,
 	) {
-		for (const path of initialPaths) {
-			this.snapshot.add(ensureNotEscapingRoot(path))
-		}
-		this.snapshot.add('/')
+		this.pathIndex = Array.isArray(initialPaths)
+			? new MutableVaultPathIndex(initialPaths)
+			: initialPaths
 	}
 
 	private async withBatch<T>(fn: () => Promise<T>): Promise<T> {
@@ -319,9 +343,7 @@ export class ObsidianVaultFs implements IFileSystem {
 
 	private toPermissionPath(path: string) {
 		const normalized = ensureNotEscapingRoot(path)
-		return normalized === '/'
-			? VAULT_MOUNT_POINT
-			: `${VAULT_MOUNT_POINT}${normalized}`
+		return normalized
 	}
 
 	private toVaultPath(inputPath: string) {
@@ -343,25 +365,63 @@ export class ObsidianVaultFs implements IFileSystem {
 		)
 	}
 
-	private recordPath(inputPath: string) {
+	private isInternalDirectory(inputPath: string) {
 		const normalized = ensureNotEscapingRoot(inputPath)
-		const parts = normalized.split('/').filter(Boolean)
-		this.snapshot.add('/')
-		let current = ''
-		for (const part of parts) {
-			current = `${current}/${part}`
-			this.snapshot.add(current)
+		const configDir = `/${normalizePath(this.vault.configDir)}`
+		return normalized === `/${AGENTS_VAULT_PATH}` || normalized === configDir
+	}
+
+	private async listDirectory(inputPath: string) {
+		const normalized = ensureNotEscapingRoot(inputPath)
+		const adapterPath = this.toVaultPath(normalized)
+		if (typeof this.vault.adapter.list === 'function') {
+			if (
+				this.isInternalDirectory(normalized) &&
+				!(await this.vault.adapter.exists(adapterPath))
+			) {
+				return { files: [], folders: [] }
+			}
+			const listed = await listAvailableAdapterEntries(
+				this.vault.adapter,
+				adapterPath,
+			)
+			if (normalized === '/') {
+				const folders = new Set(listed.folders)
+				folders.add(AGENTS_VAULT_PATH)
+				folders.add(normalizePath(this.vault.configDir))
+				return { files: listed.files, folders: [...folders] }
+			}
+			return listed
 		}
+
+		const target =
+			adapterPath === ''
+				? this.vault.getRoot()
+				: this.vault.getAbstractFileByPath(adapterPath)
+		if (!(target instanceof TFolder)) {
+			if (this.isInternalDirectory(normalized)) {
+				return { files: [], folders: [] }
+			}
+			throw new Error(`ENOTDIR: not a directory, scandir '${inputPath}'`)
+		}
+		const files: string[] = []
+		const folders: string[] = []
+		for (const child of target.children) {
+			if (child instanceof TFile) files.push(child.path)
+			if (child instanceof TFolder) folders.push(child.path)
+		}
+		if (normalized === '/') {
+			folders.push(AGENTS_VAULT_PATH, normalizePath(this.vault.configDir))
+		}
+		return { files, folders }
+	}
+
+	private recordPath(inputPath: string) {
+		this.pathIndex.recordPath(inputPath)
 	}
 
 	private forgetPath(inputPath: string) {
-		const normalized = ensureNotEscapingRoot(inputPath)
-		for (const path of [...this.snapshot]) {
-			if (path === normalized || path.startsWith(`${normalized}/`)) {
-				this.snapshot.delete(path)
-			}
-		}
-		this.snapshot.add('/')
+		this.pathIndex.forgetPath(inputPath)
 	}
 
 	private assertExists(path: string) {
@@ -394,12 +454,9 @@ export class ObsidianVaultFs implements IFileSystem {
 				`EISDIR: illegal operation on a directory, read '${path}'`,
 			)
 		}
-		const target = this.vault.getAbstractFileByPath(this.toVaultPath(path))
-		if (!(target instanceof TFile)) {
-			throw new Error(`ENOENT: no such file or directory, read '${path}'`)
-		}
-		const buffer = await this.vault.readBinary(target as never)
-		return new Uint8Array(buffer as ArrayBuffer)
+		return new Uint8Array(
+			await readLocalBinary(this.vault, this.toVaultPath(path)),
+		)
 	}
 
 	async writeFile(
@@ -413,18 +470,11 @@ export class ObsidianVaultFs implements IFileSystem {
 				recursive: true,
 			})
 			const encoded = encodeContent(content, options)
-			const vaultPath = this.toVaultPath(path)
-			const target = this.vault.getAbstractFileByPath(vaultPath)
-			if (target) {
-				if (!(target instanceof TFile)) {
-					throw new Error(
-						`EISDIR: illegal operation on a directory, write '${path}'`,
-					)
-				}
-				await this.vault.modifyBinary(target as never, toArrayBuffer(encoded))
-			} else {
-				await this.vault.createBinary(vaultPath, toArrayBuffer(encoded))
-			}
+			await writeLocalBinary(
+				this.vault,
+				this.toVaultPath(path),
+				toArrayBuffer(encoded),
+			)
 			this.recordPath(path)
 		})
 	}
@@ -452,12 +502,26 @@ export class ObsidianVaultFs implements IFileSystem {
 		if (normalized === '/') {
 			return true
 		}
+		if (this.isInternalDirectory(normalized)) return true
 		return await existsLocalPath(this.vault, this.toVaultPath(normalized))
 	}
 
 	async stat(path: string): Promise<FsStat> {
 		const normalized = ensureNotEscapingRoot(path)
 		if (normalized === '/') {
+			return {
+				isFile: false,
+				isDirectory: true,
+				isSymbolicLink: false,
+				mode: DIR_MODE,
+				size: 0,
+				mtime: new Date(0),
+			}
+		}
+		if (
+			this.isInternalDirectory(normalized) &&
+			!(await this.vault.adapter.exists(this.toVaultPath(normalized)))
+		) {
 			return {
 				isFile: false,
 				isDirectory: true,
@@ -508,16 +572,9 @@ export class ObsidianVaultFs implements IFileSystem {
 		if (!stat.isDirectory) {
 			throw new Error(`ENOTDIR: not a directory, scandir '${path}'`)
 		}
-		const target =
-			this.toVaultPath(path) === ''
-				? this.vault.getRoot()
-				: this.vault.getAbstractFileByPath(this.toVaultPath(path))
-		if (!(target instanceof TFolder)) {
-			throw new Error(`ENOTDIR: not a directory, scandir '${path}'`)
-		}
-		return [...target.children]
-			.map((item) => item.name)
-			.filter((item): item is string => Boolean(item))
+		const listed = await this.listDirectory(path)
+		return [...listed.files, ...listed.folders]
+			.map((item) => pathPosix.basename(normalizePath(item)))
 			.sort()
 	}
 
@@ -526,21 +583,21 @@ export class ObsidianVaultFs implements IFileSystem {
 		if (!stat.isDirectory) {
 			throw new Error(`ENOTDIR: not a directory, scandir '${path}'`)
 		}
-		const target =
-			this.toVaultPath(path) === ''
-				? this.vault.getRoot()
-				: this.vault.getAbstractFileByPath(this.toVaultPath(path))
-		if (!(target instanceof TFolder)) {
-			throw new Error(`ENOTDIR: not a directory, scandir '${path}'`)
-		}
-		return [...target.children]
-			.map((item) => ({
-				name: item.name,
-				isFile: item instanceof TFile,
-				isDirectory: item instanceof TFolder,
+		const listed = await this.listDirectory(path)
+		return [
+			...listed.files.map((item) => ({
+				name: pathPosix.basename(normalizePath(item)),
+				isFile: true,
+				isDirectory: false,
 				isSymbolicLink: false,
-			}))
-			.sort((left, right) => left.name.localeCompare(right.name))
+			})),
+			...listed.folders.map((item) => ({
+				name: pathPosix.basename(normalizePath(item)),
+				isFile: false,
+				isDirectory: true,
+				isSymbolicLink: false,
+			})),
+		].sort((left, right) => left.name.localeCompare(right.name))
 	}
 
 	async rm(path: string, options?: RmOptions): Promise<void> {
@@ -557,13 +614,16 @@ export class ObsidianVaultFs implements IFileSystem {
 			throw new Error(`ENOENT: no such file or directory, remove '${path}'`)
 		}
 
-		const target = this.vault.getAbstractFileByPath(
-			this.toVaultPath(normalized),
-		)
-		if (!target) {
-			throw new Error(`ENOENT: no such file or directory, remove '${path}'`)
+		const vaultPath = this.toVaultPath(normalized)
+		if (isAdapterPath(this.vault, vaultPath)) {
+			await removeLocalPath(this.vault, vaultPath, options?.recursive ?? false)
+		} else {
+			const target = this.vault.getAbstractFileByPath(vaultPath)
+			if (!target) {
+				throw new Error(`ENOENT: no such file or directory, remove '${path}'`)
+			}
+			await this.deleteAbstractFile(target)
 		}
-		await this.deleteAbstractFile(target)
 		this.forgetPath(normalized)
 	}
 
@@ -581,11 +641,29 @@ export class ObsidianVaultFs implements IFileSystem {
 			await this.mkdir(pathPosix.dirname(ensureNotEscapingRoot(dest)), {
 				recursive: true,
 			})
-			const target = this.vault.getAbstractFileByPath(this.toVaultPath(src))
-			if (!target) {
-				throw new Error(`ENOENT: no such file or directory, move '${src}'`)
+			const sourceIsAdapterPath = isAdapterPath(
+				this.vault,
+				this.toVaultPath(src),
+			)
+			const destinationIsAdapterPath = isAdapterPath(
+				this.vault,
+				this.toVaultPath(dest),
+			)
+			if (sourceIsAdapterPath !== destinationIsAdapterPath) {
+				await copyRecursive(this, src, dest, { recursive: true })
+				await this.rm(src, { recursive: true })
+			} else if (sourceIsAdapterPath) {
+				await this.vault.adapter.rename(
+					this.toVaultPath(src),
+					this.toVaultPath(dest),
+				)
+			} else {
+				const target = this.vault.getAbstractFileByPath(this.toVaultPath(src))
+				if (!target) {
+					throw new Error(`ENOENT: no such file or directory, move '${src}'`)
+				}
+				await this.vault.rename(target, this.toVaultPath(dest))
 			}
-			await this.vault.rename(target, this.toVaultPath(dest))
 			this.forgetPath(src)
 			this.recordPath(dest)
 		})
@@ -596,7 +674,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	getAllPaths(): string[] {
-		return [...this.snapshot].sort()
+		return this.pathIndex.getAllPaths()
 	}
 
 	async chmod(path: string, _mode: number): Promise<void> {

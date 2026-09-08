@@ -27,11 +27,13 @@ import {
 	prepareMessagesForModel,
 	resolveLanguageModel,
 } from '~/ai/core/runtime'
+import { resolveModelOutputLimit } from '~/ai/core/inference'
 import {
 	REPEATED_TOOL_CALL_THRESHOLD,
 	updateToolCallRepeatState,
 	type ToolCallRepeatState,
 } from '~/ai/core/tool-call-repeat'
+import type { TaskOrigin } from '~/ai/chat/runtime/master-turn-scheduler'
 import type {
 	AIModelConfig,
 	AIProviderConfig,
@@ -42,13 +44,12 @@ import {
 	createViewImageAttachmentMessage,
 	InMemoryViewImageAttachmentRegistry,
 } from '~/ai/tools/view-image-attachments'
+import { createAbortError } from '~/ai/transport/abort'
 import i18n from '~/i18n'
 
-export type AgentRunResult =
+export type AgentTurnResult =
 	| { status: 'completed'; text: string }
-	| { status: 'failed'; error: string }
-	| { status: 'cancelled' }
-	| { status: 'suspended'; continuation: ToolCallRepeatState }
+	| { status: 'needs-compaction'; continuation: ToolCallRepeatState }
 
 interface RunAgentTurnOptions {
 	session: ChatSession
@@ -58,8 +59,8 @@ interface RunAgentTurnOptions {
 	depth: number
 	assistantMeta: ChatMessageMeta
 	runtime?: SessionRuntimeState
-	isCancelled: () => boolean
-	isDeleted: () => boolean
+	isTurnAlive: () => boolean
+	taskOrigin: TaskOrigin
 	continuation?: ToolCallRepeatState
 	abortSignal?: AbortSignal
 	shouldSuspendAfterToolStep?: () => boolean | Promise<boolean>
@@ -78,7 +79,7 @@ export class AgentRunner {
 		private app: App,
 	) {}
 
-	async runTurn(options: RunAgentTurnOptions): Promise<AgentRunResult> {
+	async runTurn(options: RunAgentTurnOptions): Promise<AgentTurnResult> {
 		const { session, agent } = options
 		const definition = this.toolExecutor.getAgentDefinition(agent.type)
 		const tools = await this.toolExecutor.createTools(
@@ -111,8 +112,7 @@ export class AgentRunner {
 			messageFactory: this.messageFactory,
 			notify: this.notify,
 			assistantMeta: options.assistantMeta,
-			isDeleted: options.isDeleted,
-			isCancelled: options.isCancelled,
+			isTurnAlive: options.isTurnAlive,
 		})
 
 		const { model } = resolveLanguageModel(options.provider, options.model.id)
@@ -129,6 +129,7 @@ export class AgentRunner {
 		}
 		const fileToolsContext = {
 			app: stableContext.app,
+			fileSystemManager: stableContext.fileSystemManager,
 			permissionGuard: stableContext.permissionGuard,
 			readTracker,
 			recordMetadata,
@@ -136,19 +137,17 @@ export class AgentRunner {
 		const toolsContext = {
 			bash: {
 				...fileToolsContext,
-				scratch: stableContext.scratch,
 				getSettingsSnapshot: stableContext.getSettingsSnapshot,
 				updateSettings: stableContext.updateSettings,
 			},
 			apply_patch: {
 				...fileToolsContext,
-				scratch: stableContext.scratch,
 				getSettingsSnapshot: stableContext.getSettingsSnapshot,
 				updateSettings: stableContext.updateSettings,
 			},
 			view_image: {
 				app: stableContext.app,
-				scratch: stableContext.scratch,
+				fileSystemManager: stableContext.fileSystemManager,
 				readTracker,
 				viewImageAttachments,
 			},
@@ -159,6 +158,7 @@ export class AgentRunner {
 						task: {
 							session,
 							agentId: agent.id,
+							origin: options.taskOrigin,
 							dispatchTask: stableContext.dispatchTask,
 							dispatchableDefinitions: stableContext.dispatchableDefinitions,
 						},
@@ -194,8 +194,7 @@ export class AgentRunner {
 			tools,
 			toolsContext,
 			stopWhen: [isLoopFinished(), repeatedToolCalls, suspendAtStepBoundary],
-			temperature: session.inferenceParams?.temperature,
-			maxOutputTokens: session.inferenceParams?.maxTokens,
+			maxOutputTokens: resolveModelOutputLimit(options.model),
 			prepareStep: async ({ messages, steps }) => {
 				readTracker.resetSnapshot()
 				await projector.project({ type: 'step-start' })
@@ -220,7 +219,7 @@ export class AgentRunner {
 				if (!event) return
 				await projector.project({
 					type: 'tool-execution-start',
-					toolCall: event.toolCall as ToolCallPart,
+					toolCall: event.toolCall,
 				})
 			},
 			onToolExecutionEnd: async (event) => {
@@ -278,22 +277,21 @@ export class AgentRunner {
 			}
 		}
 
-		if (options.isCancelled()) {
-			return { status: 'cancelled' }
+		if (!options.isTurnAlive()) {
+			throw createAbortError('Agent turn cancelled')
 		}
 		if (shouldSuspend) {
 			return {
-				status: 'suspended',
+				status: 'needs-compaction',
 				continuation: repeatState,
 			}
 		}
 		if (repeatState.isRepeatedTooManyTimes) {
-			return {
-				status: 'failed',
-				error: i18n.t('chatbox.repeatedToolCallsStopped', {
+			throw new Error(
+				i18n.t('chatbox.repeatedToolCallsStopped', {
 					count: REPEATED_TOOL_CALL_THRESHOLD,
 				}),
-			}
+			)
 		}
 		if (!finalMessage) {
 			throw new Error('Agent completed without an assistant response')
@@ -310,13 +308,17 @@ export class AgentRunner {
 	 * Resolve the system prompt + per-agent tools used by the summarizer so the
 	 * compression call replays a genuine prefix of the last routed request.
 	 * Delegates to {@link resolveSummaryContext} with this runner's own
-	 * tool executor and Obsidian app.
+	 * tool executor and Obsidian app. Compression receives schemas only: its
+	 * model call cannot execute tools or dispatch subagents.
 	 */
 	async resolveSummaryContext(
 		agent: ChatAgentState,
 		session: ChatSession,
 		model: AIModelConfig,
-	): Promise<{ system?: string; tools?: ToolSet }> {
+	): Promise<{
+		system?: string
+		tools?: ToolSet
+	}> {
 		return resolveSummaryContext(
 			agent,
 			session,

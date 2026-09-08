@@ -1,4 +1,4 @@
-export abstract class StorageInterface<T = any> {
+export abstract class StorageInterface<T = unknown> {
 	abstract setItem(key: string, value: T): Promise<T>
 	abstract getItem(key: string): Promise<T | null>
 	abstract removeItem(key: string): Promise<void>
@@ -6,7 +6,7 @@ export abstract class StorageInterface<T = any> {
 	abstract clear(): Promise<void>
 }
 
-export interface RecoverableStorageConfig<T = any> {
+export interface RecoverableStorageConfig<T = unknown> {
 	getFreshInstance: () => StorageInterface<T>
 	shouldRecover?: (error: unknown) => boolean
 	maxRetries?: number
@@ -40,7 +40,7 @@ export function isIndexedDbConnectionLostError(error: unknown): boolean {
 	)
 }
 
-function isRecoverableStorageConfig<T = any>(
+function isRecoverableStorageConfig<T = unknown>(
 	value: StorageInterface<T> | RecoverableStorageConfig<T>,
 ): value is RecoverableStorageConfig<T> {
 	return (
@@ -51,9 +51,9 @@ function isRecoverableStorageConfig<T = any>(
 	)
 }
 
-export type UseStorageType<T = any> = ReturnType<typeof useStorage<T>>
+export type UseStorageType<T = unknown> = ReturnType<typeof useStorage<T>>
 
-export default function useStorage<T = any>(
+export default function useStorage<T = unknown>(
 	input: StorageInterface<T> | RecoverableStorageConfig<T>,
 ) {
 	const config = isRecoverableStorageConfig(input)
@@ -116,7 +116,7 @@ export default function useStorage<T = any>(
 		return data
 	}
 
-	async function restore(data: Record<string, any>) {
+	async function restore(data: Record<string, T>) {
 		if (!data || typeof data !== 'object') {
 			throw new Error('Invalid data format for restore')
 		}

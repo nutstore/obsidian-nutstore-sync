@@ -7,7 +7,9 @@ export const aiModelModalitySchema = z.enum([
 	'audio',
 	'video',
 	'pdf',
+	'file',
 ])
+export type AIModelModality = z.infer<typeof aiModelModalitySchema>
 export const aiModelCostSchema = z.object({
 	input: z.number(),
 	output: z.number(),

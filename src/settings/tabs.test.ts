@@ -27,8 +27,12 @@ describe('SETTINGS_TABS', () => {
 	it.each(SETTINGS_TABS)(
 		'tab "$key" should have i18n text in both en and zh',
 		(tab) => {
-			expect(getByPath(en, tab.i18nKey)).toBeTruthy()
-			expect(getByPath(zh, tab.i18nKey)).toBeTruthy()
+			const enText = getByPath(en, tab.i18nKey)
+			const zhText = getByPath(zh, tab.i18nKey)
+			expect(typeof enText).toBe('string')
+			expect(typeof zhText).toBe('string')
+			if (typeof enText === 'string') expect(enText.trim()).not.toBe('')
+			if (typeof zhText === 'string') expect(zhText.trim()).not.toBe('')
 		},
 	)
 })

@@ -72,7 +72,8 @@ describe('deepStringify', () => {
 			expect(parsed.code).toBe(404)
 			expect(parsed.cause.name).toBe('TypeError')
 			expect(parsed.cause.message).toBe('not found')
-			expect(parsed.cause.stack).toBeTruthy()
+			expect(typeof parsed.cause.stack).toBe('string')
+			expect(parsed.cause.stack).toContain('not found')
 		})
 
 		it('serializes Error nested inside an array', () => {
@@ -171,7 +172,7 @@ describe('deepStringify', () => {
 
 		it('handles RegExp', () => {
 			const result = deepStringify(/abc/gi)
-			expect(result).toBeDefined()
+			expect(result).toBe('"/abc/gi"')
 		})
 
 		it('serializes BigInt as a tagged string', () => {

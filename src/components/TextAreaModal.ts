@@ -24,7 +24,7 @@ export default class TextAreaModal extends Modal {
 					.setCta()
 					.setButtonText(i18n.t('textAreaModal.copy'))
 					.onClick(() => {
-						navigator.clipboard.writeText(this.text).then(() => {
+						void navigator.clipboard.writeText(this.text).then(() => {
 							new Notice(i18n.t('textAreaModal.copied'))
 						})
 					})

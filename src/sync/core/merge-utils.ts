@@ -100,7 +100,7 @@ function diff3MergeStrings(
 	const result: string[][] = []
 	for (const region of regions) {
 		if (region.ok) {
-			result.push(region.ok as string[])
+			result.push(region.ok)
 		}
 	}
 	return result.flat().join('\n')
@@ -281,7 +281,8 @@ function mergeTextWithYjs(base: string, local: string, remote: string): string {
 	Y.applyUpdate(mergedDoc, createBranchUpdate(local))
 	Y.applyUpdate(mergedDoc, createBranchUpdate(remote))
 
-	return mergedDoc.getText('content').toString()
+	const mergedText = mergedDoc.getText('content')
+	return mergedText.toJSON()
 }
 
 export async function resolveByIntelligentMerge(

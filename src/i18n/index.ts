@@ -19,7 +19,7 @@ declare module 'i18next' {
 	}
 }
 
-i18n.init({
+void i18n.init({
 	ns: ['translation'],
 	defaultNS,
 	resources,

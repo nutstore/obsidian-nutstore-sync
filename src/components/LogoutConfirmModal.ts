@@ -2,9 +2,9 @@ import { App, Modal, Setting } from 'obsidian'
 import i18n from '../i18n'
 
 export default class LogoutConfirmModal extends Modal {
-	private onConfirm: () => void
+	private onConfirm: () => void | Promise<void>
 
-	constructor(app: App, onConfirm: () => void) {
+	constructor(app: App, onConfirm: () => void | Promise<void>) {
 		super(app)
 		this.onConfirm = onConfirm
 	}
@@ -21,15 +21,13 @@ export default class LogoutConfirmModal extends Modal {
 					.setButtonText(i18n.t('settings.logout.cancel'))
 					.onClick(() => this.close()),
 			)
-			.addButton((button) =>
-				button
-					.setButtonText(i18n.t('settings.logout.confirm'))
-					.setWarning()
-					.onClick(() => {
-						this.close()
-						this.onConfirm()
-					}),
-			)
+			.addButton((button) => {
+				button.buttonEl.addClass('mod-warning')
+				button.setButtonText(i18n.t('settings.logout.confirm')).onClick(() => {
+					this.close()
+					void this.onConfirm()
+				})
+			})
 	}
 
 	onClose() {
