@@ -2,6 +2,21 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 引入子代理（Subagent）设置、模型选择回退机制及长期记忆归档功能。 | Introduced subagent settings, model selection resolution with fallback, and long-term memory archive injection.
+- 在同步决策中集成文件变更检测逻辑，并重构同步进度弹窗与策略描述。 | Added file change detection to sync processes and refactored sync progress modals and policy descriptions.
+- 增强任务恢复机制，支持会话重启后深度任务与主任务的延续。 | Enhanced task restoration to support deep and master task continuations after session rehydration.
+- 重构 AI 聊天运行时与持久化层，新增历史记录与新会话按钮，并默认折叠文件差异块。 | Restructured AI chat runtime and persistence, adding history/new session buttons and defaulting to collapsed file diffs.
+- 优化代理工具至库根文件系统，注入当前日期上下文，并为代理提供虚拟文件系统指导。 | Unified agent tools on vault-root, injected current date context, and added virtual filesystem guidance for agents.
+- 更新模型 API 脚本以支持 TypeScript 和多模态输入，并增强工具上下文解析。 | Migrated models API to TypeScript with multimodal support and improved tool context resolution.
+- 实现初始库路径检索及云端适配器中的瞬态技能处理。 | Implemented initial vault path retrieval and handled transient skill entries in the cloud adapter.
+- 在权限请求中添加用途字段，并为 Bash 写入添加 UTF-8 保留测试及通配符行为说明。 | Added purpose fields to permission requests and UTF-8 preservation tests for Bash operations.
+- 修复插件卸载时的冲突行为、递归删除目录及 AI 聊天本地日期处理问题。 | Fixed conflict actions on plugin unload, recursive directory removal, and AI chat local date handling.
+- 更新最低应用版本要求至 1.7.2，并升级依赖项以修复安全漏洞。 | Updated minimum app version to 1.7.2 and resolved critical security vulnerabilities in dependencies.
+- 重构代理循环状态机，并优化 UnoCSS 配置与构建插件。 | Refactored agent loop state machine and optimized UnoCSS configuration and build plugins.
+
+
 ## [1.4.2] - 2026-08-21
 
 - 修复移动端设备下编辑器样式的过滤问题 | fix: filter editor style in small screen devices
