@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.5.0] - 2026-09-08
 
 - 引入子代理（Subagent）设置、模型选择回退机制及长期记忆归档功能。 | Introduced subagent settings, model selection resolution with fallback, and long-term memory archive injection.
 - 在同步决策中集成文件变更检测逻辑，并重构同步进度弹窗与策略描述。 | Added file change detection to sync processes and refactored sync progress modals and policy descriptions.
