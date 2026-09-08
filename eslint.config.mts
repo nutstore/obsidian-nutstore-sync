@@ -74,23 +74,6 @@ export default defineConfig([
 
 	...obsidianRecommended,
 
-	// Type-aware linting uses the repository's single root TypeScript project so
-	// its ambient declarations are loaded together with every linted source file.
-	{
-		files: typedFiles,
-		languageOptions: {
-			parserOptions: {
-				project: './tsconfig.json',
-				tsconfigRootDir: configDir,
-			},
-		},
-		rules: {
-			// This rule mis-models detached elements created from an owner Document
-			// and suggests Window helpers that are absent from Obsidian's Window type.
-			'obsidianmd/prefer-create-el': 'off',
-		},
-	},
-
 	// Tooling executes in Node, not in Obsidian's browser-like runtime.
 	{
 		files: nodeFiles,
@@ -110,22 +93,24 @@ export default defineConfig([
 		},
 	},
 
-	// Solid owns TSX-specific semantics.
-	{
-		files: ['**/*.tsx'],
-		...solidConfig,
-	},
-
-	// eslint-plugin-unused-imports owns the complete unused-declaration domain
-	// for TypeScript files so imports are not reported twice.
+	// Use one TypeScript project so all source files share ambient declarations.
 	{
 		files: typedFiles,
+		languageOptions: {
+			parserOptions: {
+				project: './tsconfig.json',
+				tsconfigRootDir: configDir,
+			},
+		},
 		plugins: {
 			'unused-imports': unusedImports,
 		},
 		rules: {
+			// Owner Document creation has no equivalent in Obsidian's Window helpers.
+			'obsidianmd/prefer-create-el': 'off',
 			'no-undef': 'off',
 
+			// unused-imports handles both imports and variables without duplicate reports.
 			'@typescript-eslint/no-unused-vars': 'off',
 			'@typescript-eslint/no-unsafe-assignment': 'off',
 			'@typescript-eslint/no-unsafe-argument': 'off',
@@ -155,10 +140,12 @@ export default defineConfig([
 		},
 	},
 
-	// Core ESLint cannot see assignments performed by Solid JSX ref bindings.
 	{
+		...solidConfig,
 		files: ['**/*.tsx'],
 		rules: {
+			...solidConfig.rules,
+			// Core ESLint cannot see assignments performed by Solid JSX ref bindings.
 			'no-unassigned-vars': 'off',
 		},
 	},
@@ -172,8 +159,6 @@ export default defineConfig([
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/await-thenable': 'off',
 			'@typescript-eslint/no-unnecessary-type-assertion': 'off',
-			'@typescript-eslint/no-unsafe-argument': 'off',
-			'@typescript-eslint/no-unsafe-assignment': 'off',
 			'@typescript-eslint/no-unsafe-call': 'off',
 			'@typescript-eslint/no-unsafe-member-access': 'off',
 			'@typescript-eslint/no-unsafe-return': 'off',
