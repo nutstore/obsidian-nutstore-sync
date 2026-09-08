@@ -8,23 +8,16 @@ import {
 	type MkdirOptions,
 	type RmOptions,
 } from 'just-bash/browser'
-import {
-	normalizePath,
-	TFile,
-	TFolder,
-	type TAbstractFile,
-	type Vault,
-} from 'obsidian'
+import { normalizePath, TFile, TFolder, type App } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
+import { decodeReversibleFileSnapshot } from '~/ai/chat/messages/reversible-content'
+import type { ReversibleFileSnapshot, ReversibleToolOp } from '~/ai/chat/types'
+import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type {
 	AIDualPathFileOperation,
 	AISinglePathFileOperation,
 } from '~/ai/tools/file-operation'
-import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
-import type { ReversibleFileSnapshot, ReversibleToolOp } from '~/ai/chat/types'
-import { decodeReversibleFileSnapshot } from '~/ai/chat/messages/reversible-content'
-import { mkdirsVault } from '~/utils/mkdirs-vault'
 import {
 	existsLocalPath,
 	isAdapterPath,
@@ -32,6 +25,7 @@ import {
 	removeLocalPath,
 	writeLocalBinary,
 } from '~/utils/local-vault-io'
+import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { AGENTS_VAULT_PATH } from './mount-points'
 
@@ -294,7 +288,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	private readonly pathIndex: VaultPathIndex
 
 	constructor(
-		private readonly vault: Vault,
+		private readonly app: Pick<App, 'vault' | 'fileManager'>,
 		initialPaths: string[] | VaultPathIndex = [],
 		private readonly permissionGuard?: PermissionGuard,
 		private readonly onRead?: (vaultPath: string) => void,
@@ -302,6 +296,10 @@ export class ObsidianVaultFs implements IFileSystem {
 		this.pathIndex = Array.isArray(initialPaths)
 			? new MutableVaultPathIndex(initialPaths)
 			: initialPaths
+	}
+
+	private get vault() {
+		return this.app.vault
 	}
 
 	private async withBatch<T>(fn: () => Promise<T>): Promise<T> {
@@ -349,20 +347,6 @@ export class ObsidianVaultFs implements IFileSystem {
 	private toVaultPath(inputPath: string) {
 		const normalized = ensureNotEscapingRoot(inputPath)
 		return normalized === '/' ? '' : normalizePath(normalized.slice(1))
-	}
-
-	private async deleteAbstractFile(target: TAbstractFile) {
-		if (typeof this.vault.trash === 'function') {
-			await this.vault.trash(target, false)
-			return
-		}
-		if (typeof this.vault.delete === 'function') {
-			await this.vault.delete(target, false)
-			return
-		}
-		throw new Error(
-			`ENOTSUP: vault delete is not available for '${target.path}'`,
-		)
 	}
 
 	private isInternalDirectory(inputPath: string) {
@@ -615,15 +599,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		}
 
 		const vaultPath = this.toVaultPath(normalized)
-		if (isAdapterPath(this.vault, vaultPath)) {
-			await removeLocalPath(this.vault, vaultPath, options?.recursive ?? false)
-		} else {
-			const target = this.vault.getAbstractFileByPath(vaultPath)
-			if (!target) {
-				throw new Error(`ENOENT: no such file or directory, remove '${path}'`)
-			}
-			await this.deleteAbstractFile(target)
-		}
+		await removeLocalPath(this.app, vaultPath, options?.recursive ?? false)
 		this.forgetPath(normalized)
 	}
 

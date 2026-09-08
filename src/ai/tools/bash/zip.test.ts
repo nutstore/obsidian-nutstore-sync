@@ -3,7 +3,7 @@ import { Bash, InMemoryFs } from 'just-bash/browser'
 import { describe, expect, it } from 'vitest'
 import { archiveCommands } from './zip'
 
-const content = 'English text 与中文内容\nSecond neutral line 第二行\n'
+const content = 'English text 与中文内容 🌱\nSecond neutral line 第二行\n'
 
 function createBash(files: Record<string, string | Uint8Array>) {
 	return new Bash({
@@ -52,11 +52,11 @@ describe('zip and unzip commands', () => {
 		const bash = createBash({})
 
 		const result = await bash.exec(
-			"printf 'English 与中文内容\\n' | zip - - | unzip -p -",
+			"printf 'English 与中文内容 🌱\\n' | zip - - | unzip -p -",
 		)
 
 		expect(result).toMatchObject({ stderr: '', exitCode: 0 })
-		expect(result.stdout).toBe('English 与中文内容\n')
+		expect(result.stdout).toBe('English 与中文内容 🌱\n')
 	})
 
 	it('requires an explicit overwrite policy for existing files', async () => {

@@ -1,4 +1,4 @@
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Notice, Setting, setIcon } from 'obsidian'
 import {
 	createModelConfig,

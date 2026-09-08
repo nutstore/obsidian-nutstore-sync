@@ -63,7 +63,11 @@ export default abstract class BaseSyncDecider {
 			createNoopTask: (options: TaskOptions) =>
 				new NoopTask({ ...commonTaskOptions, ...options }),
 			createRemoveLocalTask: (options: TaskOptions) =>
-				new RemoveLocalTask({ ...commonTaskOptions, ...options }),
+				new RemoveLocalTask({
+					...commonTaskOptions,
+					...options,
+					fileManager: this.sync.app.fileManager,
+				}),
 			createRemoveRemoteTask: (options: TaskOptions) =>
 				new RemoveRemoteTask({ ...commonTaskOptions, ...options }),
 			createMkdirLocalTask: (options: TaskOptions) =>

@@ -1,5 +1,5 @@
 import { parse as bytesParse } from 'bytes-iec'
-import { clamp, isNil } from 'lodash-es'
+import { clamp, isNil } from 'es-toolkit/compat'
 import { DropdownComponent, Notice, Setting, TextComponent } from 'obsidian'
 import SelectRemoteBaseDirModal from '~/components/SelectRemoteBaseDirModal'
 import SyncPolicyModal from '~/components/SyncPolicyModal'
@@ -21,6 +21,35 @@ const MAX_FILE_SIZE = '500MB'
 const MAX_BYTES = bytesParse(MAX_FILE_SIZE, { mode: 'jedec' })!
 
 export default class CommonSettings extends BaseSettings {
+	getSearchTerms(): string[] {
+		return [
+			i18n.t('settings.remoteDir.name'),
+			i18n.t('settings.remoteDir.desc'),
+			i18n.t('settings.syncPolicy.name'),
+			i18n.t('settings.syncPolicy.desc'),
+			i18n.t('settings.skipLargeFiles.name'),
+			i18n.t('settings.skipLargeFiles.desc'),
+			i18n.t('settings.mobileAppDownloadFileChunkSize.name'),
+			i18n.t('settings.mobileAppDownloadFileChunkSize.desc'),
+			i18n.t('settings.conflictStrategy.name'),
+			i18n.t('settings.conflictStrategy.desc'),
+			i18n.t('settings.confirmBeforeSync.name'),
+			i18n.t('settings.confirmBeforeSync.desc'),
+			i18n.t('settings.confirmBeforeDeleteInAutoSync.name'),
+			i18n.t('settings.confirmBeforeDeleteInAutoSync.desc'),
+			i18n.t('settings.realtimeSync.name'),
+			i18n.t('settings.realtimeSync.desc'),
+			i18n.t('settings.startupSyncDelay.name'),
+			i18n.t('settings.startupSyncDelay.desc'),
+			i18n.t('settings.autoSyncInterval.name'),
+			i18n.t('settings.autoSyncInterval.desc'),
+			i18n.t('settings.syncMode.name'),
+			i18n.t('settings.syncMode.desc'),
+			i18n.t('settings.language.name'),
+			i18n.t('settings.language.desc'),
+		]
+	}
+
 	async display() {
 		this.containerEl.empty()
 		new Setting(this.containerEl)

@@ -12,6 +12,15 @@ function isConfigDirSyncMode(value: string): value is ConfigDirSyncMode {
 }
 
 export default class FilterSettings extends BaseSettings {
+	getSearchTerms(): string[] {
+		return [
+			i18n.t('settings.configDirSync.name'),
+			i18n.t('settings.configDirSync.desc', { configDir: '' }),
+			i18n.t('settings.filters.name'),
+			i18n.t('settings.filters.desc'),
+		]
+	}
+
 	async display() {
 		this.containerEl.empty()
 		new Setting(this.containerEl)

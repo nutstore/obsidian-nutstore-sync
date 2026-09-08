@@ -1,4 +1,4 @@
-import { normalizePath, TFile, Vault } from 'obsidian'
+import { type App, normalizePath, TFile, Vault } from 'obsidian'
 
 function isAdapterPathNormalized(vault: Vault, normalizedPath: string) {
 	const pathForCheck = normalizedPath.replace(/^\/+/, '').replace(/\/+$/, '')
@@ -116,11 +116,14 @@ export async function writeLocalTextAtomic(
 	await writeLocalText(vault, normalizePath(path), data)
 }
 
+// Visible files follow the host's deletion preference; hidden internal paths
+// are not indexed by FileManager and must be removed through the adapter.
 export async function removeLocalPath(
-	vault: Vault,
+	app: Pick<App, 'vault' | 'fileManager'>,
 	path: string,
 	recursive = false,
 ) {
+	const { vault, fileManager } = app
 	const normalizedPath = normalizePath(path)
 	if (isAdapterPathNormalized(vault, normalizedPath)) {
 		const stat = await vault.adapter.stat(normalizedPath)
@@ -138,5 +141,5 @@ export async function removeLocalPath(
 	if (!file) {
 		return
 	}
-	await vault.trash(file, false)
+	await fileManager.trashFile(file)
 }

@@ -77,3 +77,13 @@ declare module 'obsidian' {
 		cm?: EditorView
 	}
 }
+
+// Obsidian installs its DOM factories in each window, but the SDK only declares
+// the unqualified globals. Preserve their public signatures for popout realms.
+declare global {
+	interface Window {
+		createEl: typeof createEl
+		createDiv: typeof createDiv
+		createSpan: typeof createSpan
+	}
+}

@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
-import { isNil, partial } from 'lodash-es'
+import { isNil, partial } from 'es-toolkit/compat'
 import { basename, join } from 'path-browserify'
 import { FileStat } from 'webdav'
 import type { NutstoreSettings } from '~/settings'

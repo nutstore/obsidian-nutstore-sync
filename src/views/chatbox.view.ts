@@ -83,7 +83,7 @@ export default class ChatboxView extends ItemView {
 			component.load()
 
 			const fallbackText = markdown
-			const renderedEl = el.ownerDocument.createElement('div')
+			const renderedEl = el.ownerDocument.win.createDiv()
 			const sourcePath = this.getMarkdownSourcePath(true)
 
 			try {

@@ -10,15 +10,18 @@ interface PaneResizerProps {
 export function PaneResizer(props: PaneResizerProps) {
 	const [isResizing, setIsResizing] = createSignal(false)
 	let startY = 0
-	let activeDoc: Document | undefined
+	let overlay: HTMLDivElement | undefined
+	let releasePointer: (() => void) | undefined
 	let removeListeners: (() => void) | undefined
 
 	function stopResize() {
 		removeListeners?.()
 		removeListeners = undefined
+		releasePointer?.()
+		releasePointer = undefined
 		setIsResizing(false)
-		activeDoc?.body.classList.remove('chatbox-resize-active')
-		activeDoc = undefined
+		overlay?.remove()
+		overlay = undefined
 	}
 
 	function onPointerDown(event: PointerEvent) {
@@ -31,19 +34,27 @@ export function PaneResizer(props: PaneResizerProps) {
 		props.onResizeStart?.()
 		const onResize = props.onResize
 		const onResizeEnd = props.onResizeEnd
-		const doc =
-			(event.currentTarget as { ownerDocument?: Document } | null)
-				?.ownerDocument ?? document
-		activeDoc = doc
+		const target = event.currentTarget as HTMLDivElement
+		const doc = target.ownerDocument
+		// Keep pointer-up on the divider so the browser can synthesize dblclick.
+		target.setPointerCapture(event.pointerId)
+		releasePointer = () => {
+			if (target.hasPointerCapture(event.pointerId)) {
+				target.releasePointerCapture(event.pointerId)
+			}
+		}
 		startY = event.clientY
 		setIsResizing(true)
-		doc.body.classList.add('chatbox-resize-active')
+		// A drag surface keeps the cursor stable over controls and embedded frames.
+		overlay = doc.body.createDiv({ cls: 'chatbox-resize-overlay' })
 
 		const onPointerMove = (moveEvent: PointerEvent) => {
+			if (moveEvent.pointerId !== event.pointerId) return
 			onResize(startY - moveEvent.clientY)
 		}
 
-		const onPointerUp = () => {
+		const onPointerUp = (upEvent: PointerEvent) => {
+			if (upEvent.pointerId !== event.pointerId) return
 			onResizeEnd?.()
 			stopResize()
 		}

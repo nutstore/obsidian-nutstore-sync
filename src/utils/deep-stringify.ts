@@ -9,12 +9,12 @@ import {
 	isString,
 	isSymbol,
 	isUndefined,
-} from 'lodash-es'
+} from 'es-toolkit/compat'
 // No need to import Set, use built-in TS Set type
 
 /**
  * Deeply stringifies a JavaScript value into a JSON string, similar to JSON.stringify,
- * leveraging lodash-es functions and written in TypeScript.
+ * using compatibility helpers for cross-realm values.
  * - Handles circular references by throwing an error.
  * - Handles getter errors by stringifying the error message as the property's value.
  * - Uses native JSON.stringify for robust string escaping.

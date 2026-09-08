@@ -364,74 +364,66 @@
 }
 
 .ns-settings-tabs {
-	--ns-settings-tab-height: 2rem;
-	--ns-settings-tab-active-height: 2.375rem;
+	--ns-settings-tab-height: max(var(--input-height), 36px);
 	display: flex;
 	align-items: flex-end;
 	gap: var(--size-4-1);
-	box-sizing: border-box;
-	height: var(--ns-settings-tab-active-height);
+	overflow-x: auto;
+	padding-top: var(--size-4-1);
 	margin-bottom: var(--size-4-4);
-	padding: 0 var(--size-4-2);
-	border-bottom: 1px solid var(--background-modifier-border);
+	box-shadow: inset 0 -1px var(--background-modifier-border);
 }
 
-.ns-settings-tab {
-	position: relative;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	height: var(--ns-settings-tab-height);
-	padding: 0 var(--size-4-4);
-	margin-bottom: -1px;
+.ns-settings-tabs > button.ns-settings-tab {
+	appearance: none;
+	box-sizing: border-box;
+	flex: 0 0 auto;
+	min-height: var(--ns-settings-tab-height);
+	height: auto;
+	padding: var(--size-4-2) var(--size-4-5);
+	white-space: nowrap;
 	border: 1px solid transparent;
-	border-bottom: none;
+	border-bottom-color: var(--background-modifier-border);
 	border-radius: var(--radius-m) var(--radius-m) 0 0;
 	background: transparent;
 	box-shadow: none;
-	color: var(--text-muted);
+	color: var(--tab-text-color, var(--text-muted));
 	font-size: var(--font-ui-small);
-	cursor: pointer;
-	transition:
-		background-color 120ms ease,
-		color 120ms ease,
-		height 150ms ease;
+	font-weight: var(--tab-font-weight, var(--font-normal));
+	cursor: var(--cursor);
 }
 
-.ns-settings-tab:not(.is-active):hover {
+.ns-settings-tabs > button.ns-settings-tab:not(.is-active):hover {
 	background: var(--background-modifier-hover);
-	box-shadow: none;
 	color: var(--text-normal);
 }
 
-.ns-settings-tab:focus-visible {
-	outline: 2px solid var(--interactive-accent);
-	outline-offset: -2px;
+.ns-settings-tabs > button.ns-settings-tab:focus-visible {
+	outline: 2px solid var(--background-modifier-border-focus);
+	outline-offset: -3px;
 }
 
-.ns-settings-tab.is-active {
-	height: var(--ns-settings-tab-active-height);
+.ns-settings-tabs > button.ns-settings-tab.is-active {
+	min-height: calc(var(--ns-settings-tab-height) + var(--size-4-1));
 	border-color: var(--background-modifier-border);
+	border-bottom-color: var(--background-primary);
 	background: var(--background-primary);
-	color: var(--text-normal);
-	font-weight: 600;
+	color: var(--tab-text-color-focused-active, var(--text-normal));
 }
 
-.ns-settings-tab.is-active:hover {
-	background: var(--background-primary);
-	box-shadow: none;
-	color: var(--text-normal);
+/* The host toggles inline display during refresh; panel visibility must survive it. */
+.ns-settings-panel-hidden,
+.ns-settings-navigation-placeholder {
+	display: none;
 }
 
-.ns-settings-tab.is-active::before {
-	content: '';
-	position: absolute;
-	top: 0;
-	left: var(--size-4-2);
-	right: var(--size-4-2);
-	height: 2px;
-	border-radius: 999px;
-	background: var(--interactive-accent);
+.ns-settings-tabs.is-mobile {
+	--ns-settings-tab-height: max(var(--input-height), 44px);
+}
+
+.ns-settings-tabs.is-mobile > button.ns-settings-tab {
+	flex: 1 0 auto;
+	padding-inline: var(--size-4-3);
 }
 
 .setting-optional .setting-item-name::after {
@@ -588,7 +580,7 @@
 .modal-container.ns-chatbox-contained-modal-container {
 	position: absolute;
 	inset: 0;
-	z-index: 220;
+	z-index: var(--layer-modal);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -641,12 +633,15 @@
 	padding-bottom: 0.5rem;
 }
 
+.modal .setting-item-control button.model-editor-modality-tag {
+	width: auto;
+}
+
 .model-editor-modality-tag {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	flex: 0 0 auto;
-	width: auto !important;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 999px;
 	padding: 0.25rem 0.625rem;
@@ -839,10 +834,13 @@
 	background: var(--interactive-accent);
 }
 
-.chatbox-resize-active,
-.chatbox-resize-active * {
-	cursor: ns-resize !important;
-	user-select: none !important;
+.chatbox-resize-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: var(--layer-dragged-item);
+	cursor: ns-resize;
+	user-select: none;
+	touch-action: none;
 }
 
 .chatbox-input-pane--resizable {
@@ -871,9 +869,6 @@
 	.chatbox-context-header {
 		max-height: clamp(2.5rem, 18vh, 6rem);
 	}
-}
-.menu {
-	z-index: 230 !important;
 }
 
 @keyframes nutstore-sync-progress-indeterminate {

@@ -567,7 +567,7 @@ async function extractZip(
 			const output = entries
 				.filter((entry) => !entry.name.endsWith('/'))
 				.map((entry) => files[entry.name])
-				.filter((file): file is Uint8Array => file !== undefined)
+				.filter((file) => file !== undefined)
 				.map(bytesToLatin1)
 				.join('')
 			return { stdout: output, stderr: '', exitCode: 0, stdoutKind: 'bytes' }

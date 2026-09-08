@@ -1,4 +1,4 @@
-import { clamp } from 'lodash-es'
+import { clamp } from 'es-toolkit/compat'
 import { SyncStartMode } from '~/sync'
 import type NutstorePlugin from '..'
 import { BaseService } from './service.interface'

@@ -15,6 +15,25 @@ import logger from '~/utils/logger'
 import BaseSettings from './settings.base'
 
 export default class AISettings extends BaseSettings {
+	getSearchTerms(): string[] {
+		return [
+			i18n.t('settings.ai.providers.name'),
+			i18n.t('settings.ai.defaultModel.name'),
+			i18n.t('settings.ai.defaultModel.desc'),
+			i18n.t('settings.ai.mcp.name'),
+			i18n.t('settings.ai.yolo.name'),
+			i18n.t('settings.ai.yolo.desc'),
+			i18n.t('settings.ai.subagents.explorer.name'),
+			i18n.t('settings.ai.subagents.explorer.desc'),
+			i18n.t('settings.ai.subagents.explorer.model.name'),
+			i18n.t('settings.ai.subagents.explorer.model.desc'),
+			i18n.t('settings.ai.subagents.memory.name'),
+			i18n.t('settings.ai.subagents.memory.desc'),
+			i18n.t('settings.ai.subagents.memory.model.name'),
+			i18n.t('settings.ai.subagents.memory.model.desc'),
+		]
+	}
+
 	private subagentsContainerEl?: HTMLElement
 
 	async display() {

@@ -1,17 +1,15 @@
-type ProcessLike = typeof globalThis.process & {
+// This module initializes the plugin's WebView realm. Tests provide a window
+// explicitly instead of making the production runtime depend on Node globals.
+interface ProcessLike {
+	cwd: () => string
 	env?: Record<string, string | undefined>
 }
 
-type RuntimeGlobal = typeof globalThis & {
+type RuntimeWindow = Window & {
 	process?: ProcessLike
-	queueMicrotask?: (callback: VoidFunction) => void
 }
 
-// Obsidian runs in a browser window, while unit tests run in a plain Node
-// global. Resolve the host once so this module remains usable in both.
-const runtimeGlobal = (
-	typeof window === 'undefined' ? globalThis : window
-) as RuntimeGlobal
+const runtimeGlobal = window as RuntimeWindow
 
 const processLike: ProcessLike = runtimeGlobal.process ?? {
 	cwd() {

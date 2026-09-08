@@ -1,5 +1,4 @@
 import { Notice, Setting } from 'obsidian'
-import { isNotNil } from 'ramda'
 import CacheClearModal from '~/components/CacheClearModal'
 import { IN_DEV } from '~/consts'
 import i18n from '~/i18n'
@@ -10,6 +9,19 @@ import logsStringify from '~/utils/logs-stringify'
 import BaseSettings from './settings.base'
 
 export default class TroubleshootingSettings extends BaseSettings {
+	getSearchTerms(): string[] {
+		return [
+			i18n.t('settings.cache.clearName'),
+			i18n.t('settings.cache.clearDesc'),
+			i18n.t('settings.log.name'),
+			i18n.t('settings.log.desc'),
+			i18n.t('settings.log.clearName'),
+			i18n.t('settings.log.clearDesc'),
+			i18n.t('settings.cache.generateBlobGarbageName'),
+			i18n.t('settings.cache.generateBlobGarbageDesc'),
+		]
+	}
+
 	private readonly blobGarbageCount = 5000
 	private readonly blobGarbageSizeBytes = 64 * 1024
 
@@ -106,7 +118,7 @@ export default class TroubleshootingSettings extends BaseSettings {
 	private get logs() {
 		return this.plugin.loggerService.logs
 			.map(logsStringify)
-			.filter(isNotNil)
+			.filter((log) => log !== null && log !== undefined)
 			.join('\n\n')
 	}
 

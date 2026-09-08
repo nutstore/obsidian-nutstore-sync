@@ -1,5 +1,9 @@
 packages:
   - packages/*
+catalog:
+  zod: ^4.5.4
+overrides:
+  zod: 'catalog:'
 allowBuilds:
   '@mongodb-js/zstd': true
   '@parcel/watcher': true

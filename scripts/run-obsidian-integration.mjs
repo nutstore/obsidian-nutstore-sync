@@ -97,7 +97,7 @@ def evaluate(url, expression):
     send_frame(connection, json.dumps({
         'id': 1,
         'method': 'Runtime.evaluate',
-        'params': {'expression': expression, 'returnByValue': True},
+        'params': {'expression': expression, 'returnByValue': True, 'awaitPromise': True},
     }))
     while True:
         opcode, payload = receive_frame(connection)
@@ -116,7 +116,19 @@ while time.monotonic() < deadline:
         target = next(item for item in targets if item.get('type') == 'page')
         response = evaluate(
             target['webSocketDebuggerUrl'],
-            "localStorage.setItem('enable-plugin-' + app.appId, 'true'); app.appId",
+            """(async () => {
+                // Wait until startup has finished its own plugin scan before
+                // explicitly loading community plugins in this same process.
+                if (!app.workspace.layoutReady) throw new Error('Layout is not ready');
+                localStorage.setItem('enable-plugin-' + app.appId, 'true');
+                if (!app.plugins.plugins['nutstore-sync-integration-harness']) {
+                    await app.plugins.initialize();
+                }
+                if (!app.plugins.plugins['nutstore-sync-integration-harness']) {
+                    throw new Error('Integration harness did not load');
+                }
+                return app.appId;
+            })()""",
         )
         if 'exceptionDetails' not in response.get('result', {}):
             print(response['result']['result'].get('value', ''))
@@ -243,9 +255,20 @@ async function waitForResult(sandbox) {
 	const fs = sandbox.fs()
 	const path = `/root/nutstore-vault/${RESULT_PATH}`
 	const deadline = Date.now() + STARTUP_TIMEOUT_MS
+	let activeCheck
+	let latestStep
+	let reportedSteps = 0
 	while (Date.now() < deadline) {
 		try {
 			const parsed = JSON.parse(await fs.readToString(path))
+			for (const step of (parsed.lifecycleSteps ?? []).slice(reportedSteps)) {
+				console.log(
+					`[obsidian-e2e] ${step.name}: ${step.status} (${step.elapsedMs.toFixed(1)} ms)`,
+				)
+			}
+			reportedSteps = parsed.lifecycleSteps?.length ?? 0
+			activeCheck = parsed.activeCheck
+			latestStep = parsed.lifecycleSteps?.at(-1)
 			// The harness writes a `started: true` sentinel on load and only
 			// clears it in the final result, so keep polling until it finishes.
 			if (!parsed.started) return parsed
@@ -254,7 +277,9 @@ async function waitForResult(sandbox) {
 		}
 		await delay(250)
 	}
-	fail('Timed out waiting for the integration harness result')
+	fail(
+		`Timed out waiting for the integration harness result${activeCheck ? `; active check: ${activeCheck.name} (${Date.now() - Date.parse(activeCheck.startedAt)} ms since start)` : ''}${latestStep ? `; last lifecycle step: ${latestStep.name} (${latestStep.status}, ${Date.now() - Date.parse(latestStep.startedAt)} ms since start)` : ''}`,
+	)
 }
 
 async function retainGuestArtifacts(sandbox, artifactRoot) {
@@ -304,10 +329,8 @@ async function main() {
 		await prepareGuestProfile(sandbox)
 		obsidian = await startObsidian(sandbox)
 		await enableCommunityPlugins(sandbox)
-		await delay(1_000)
-		await obsidian.signal(15)
-		await obsidian.wait()
-		obsidian = await startObsidian(sandbox)
+		// The harness may already be running: restarting here interrupts checks
+		// and leaves a partial result from a process that no longer exists.
 		const result = await waitForResult(sandbox)
 		const failures = result.results.filter((entry) => entry.error)
 		if (!result.passed || failures.length > 0) {

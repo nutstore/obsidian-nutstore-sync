@@ -101,7 +101,7 @@ async function createScopedVaultFileSystem(
 		normalizePath(app.vault.configDir),
 	)
 	const vaultFs = new ObsidianVaultFs(
-		app.vault,
+		app,
 		await getInitialVaultPaths(app),
 		options.permissionGuard,
 		onRead,

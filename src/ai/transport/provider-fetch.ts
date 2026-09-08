@@ -19,6 +19,7 @@ function buildDisableCorsLink(providerId: string) {
 }
 
 export function createProviderFetch(provider: AIProviderConfig): typeof fetch {
+	// This explicit user choice requires native streaming and browser CORS.
 	const baseFetch: typeof fetch = provider.allowBrowserCors
 		? fetch
 		: obsidianFetch

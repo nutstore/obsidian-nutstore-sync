@@ -1,4 +1,4 @@
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Notice, Setting } from 'obsidian'
 import { type HttpMcpServerConfig, isValidMcpServerName } from '~/ai/mcp/types'
 import i18n from '~/i18n'

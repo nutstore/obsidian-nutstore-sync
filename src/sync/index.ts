@@ -1,4 +1,4 @@
-import { chunk } from 'lodash-es'
+import { chunk } from 'es-toolkit/compat'
 import { Notice, Platform, Vault, moment, normalizePath } from 'obsidian'
 import { dirname } from 'path-browserify'
 import { Subscription } from 'rxjs'

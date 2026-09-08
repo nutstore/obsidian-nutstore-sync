@@ -10,6 +10,21 @@ import logger from '~/utils/logger'
 import BaseSettings from './settings.base'
 
 export default class AccountSettings extends BaseSettings {
+	getSearchTerms(): string[] {
+		return [
+			i18n.t('settings.loginMode.name'),
+			i18n.t('settings.help.name'),
+			i18n.t('settings.enterpriseBaseUrl.name'),
+			i18n.t('settings.account.name'),
+			i18n.t('settings.account.desc'),
+			i18n.t('settings.credential.name'),
+			i18n.t('settings.credential.desc'),
+			i18n.t('settings.login.name'),
+			i18n.t('settings.checkConnection.name'),
+			i18n.t('settings.checkConnection.desc'),
+		]
+	}
+
 	private updateOAuthUrlTimer: number | null = null
 
 	async display() {
@@ -133,7 +148,7 @@ export default class AccountSettings extends BaseSettings {
 				.addButton(async (button) => {
 					button.setButtonText(i18n.t('settings.login.name'))
 					const ownerDocument = button.buttonEl.ownerDocument
-					const anchor = ownerDocument.createElement('a')
+					const anchor = ownerDocument.win.createEl('a')
 					anchor.target = '_blank'
 					button.buttonEl.parentElement?.appendChild(anchor)
 					anchor.appendChild(button.buttonEl)

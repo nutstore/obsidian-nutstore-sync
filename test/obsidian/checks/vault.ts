@@ -199,7 +199,7 @@ export async function skipsStaleVaultSkillEntries(app: App) {
 			'Stale Vault Skill did not produce a diagnostic',
 		)
 
-		const fs = new ObsidianVaultFs(app.vault)
+		const fs = new ObsidianVaultFs(app)
 		const entries = await fs.readdir(`/${SKILLS_ROOT}`)
 		assert(
 			entries.includes('steady-skill') && entries.includes('中性文件🌱.md'),
@@ -218,5 +218,53 @@ export async function skipsStaleVaultSkillEntries(app: App) {
 	} finally {
 		adapter.list = originalList
 		adapter.stat = originalStat
+	}
+}
+
+export async function respectsVaultDeletionPreference(app: App) {
+	const { ObsidianVaultFs } = await import('~/ai/tools/bash/fs')
+	const { removeLocalPath } = await import('~/utils/local-vault-io')
+	const fs = new ObsidianVaultFs(app)
+	const paths = ['Neutral removal.md', '中性删除.md', 'Removal 删除 🌱.md']
+	const originalTrash = app.fileManager.trashFile
+	const calls: string[] = []
+	app.fileManager.trashFile = async (file) => {
+		calls.push(file.path)
+		await originalTrash.call(app.fileManager, file)
+	}
+	try {
+		for (const [index, path] of paths.entries()) {
+			await app.vault.create(path, 'Neutral content 中性内容 🌱')
+			if (index === 0) await removeLocalPath(app, path)
+			else await fs.rm(`/${path}`)
+			assert(
+				!app.vault.getAbstractFileByPath(path),
+				'Deleted file remains in the Vault index',
+			)
+		}
+		assert(
+			JSON.stringify(calls) === JSON.stringify(paths),
+			'Deletion bypassed FileManager preferences',
+		)
+
+		const retainedPath = 'Retained 保留 🌱.md'
+		await app.vault.create(
+			retainedPath,
+			'Neutral retained content 中性保留内容 🌱',
+		)
+		app.fileManager.trashFile = () =>
+			Promise.reject(new Error('Neutral deletion failure'))
+		let rejected = false
+		try {
+			await fs.rm(`/${retainedPath}`)
+		} catch {
+			rejected = true
+		}
+		assert(
+			rejected && !!app.vault.getAbstractFileByPath(retainedPath),
+			'Failed trash silently fell back to permanent deletion',
+		)
+	} finally {
+		app.fileManager.trashFile = originalTrash
 	}
 }

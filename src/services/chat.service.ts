@@ -133,7 +133,7 @@ export default class ChatService extends BaseService {
 		this.store = new SessionStore(
 			this.state,
 			this.selection,
-			new SessionsFileBackend(plugin.app.vault),
+			new SessionsFileBackend(plugin.app),
 			legacyStore,
 			(sessionId, session) => {
 				this.runtimeStates.resetExecution(sessionId)

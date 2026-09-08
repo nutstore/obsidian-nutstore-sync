@@ -25,12 +25,7 @@ import RemoveLocalTask from '../sync/tasks/remove-local.task'
 import RemoveRemoteTask from '../sync/tasks/remove-remote.task'
 
 type SyncProgressModalState =
-	| 'preparing'
-	| 'syncing'
-	| 'complete'
-	| 'warning'
-	| 'error'
-	| 'cancelled'
+	'preparing' | 'syncing' | 'complete' | 'warning' | 'error' | 'cancelled'
 
 export default class SyncProgressModal extends Modal {
 	private progressTitle!: HTMLElement
@@ -81,8 +76,8 @@ export default class SyncProgressModal extends Modal {
 			!this.progressLabel ||
 			!this.currentFile ||
 			!this.filesList ||
-			!this.stopButtonComponent ||
-			!this.hideButtonComponent
+			this.stopButtonComponent === undefined ||
+			this.hideButtonComponent === undefined
 		) {
 			return
 		}
