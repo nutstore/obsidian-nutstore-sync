@@ -5,6 +5,7 @@ import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
+import { getFileChanges } from '../core/file-changes'
 import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
@@ -159,8 +160,12 @@ export async function sendOnlyDecider(
 				pushLocalFile(p, local.size, remote.size)
 				continue
 			}
-			const localChanged = !isSameTime(local.mtime, record.local.mtime)
-			const remoteChanged = !isSameTime(remote.mtime, record.remote.mtime)
+			const { localChanged, remoteChanged } = await getFileChanges(
+				input,
+				local,
+				remote,
+				record,
+			)
 			const shouldPush = mode.overrideChanges
 				? localChanged || remoteChanged
 				: localChanged && !remoteChanged
