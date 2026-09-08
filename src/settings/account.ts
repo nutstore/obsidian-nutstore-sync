@@ -128,7 +128,7 @@ export default class AccountSettings extends BaseSettings {
 			addClassTokens(el.infoEl, ':uno: max-w-full')
 			this.displayCheckConnection()
 		} else {
-			new Setting(this.containerEl)
+			const loginSetting = new Setting(this.containerEl)
 				.setName(i18n.t('settings.ssoStatus.notLoggedIn'))
 				.addButton(async (button) => {
 					button.setButtonText(i18n.t('settings.login.name'))
@@ -153,6 +153,15 @@ export default class AccountSettings extends BaseSettings {
 						})()
 					}, 60 * 1000)
 				})
+
+			const isWebViewerEnabled =
+				this.app.internalPlugins?.getEnabledPluginById('webviewer') != null
+			if (isWebViewerEnabled) {
+				loginSetting.descEl.createSpan({
+					text: i18n.t('settings.ssoStatus.webViewerWarning'),
+					cls: ':uno: text-[var(--text-warning)]',
+				})
+			}
 		}
 	}
 

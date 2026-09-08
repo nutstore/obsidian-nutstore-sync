@@ -28,6 +28,17 @@ interface ObsidianSetting {
 	openTabById(pluginId: string): void
 }
 
+/**
+ * Internal core-plugin registry.
+ *
+ * This exists on supported desktop releases but is not part of Obsidian's
+ * public API. Its absence must be handled at runtime for older and mobile
+ * clients.
+ */
+interface ObsidianInternalPlugins {
+	getEnabledPluginById(id: string): unknown
+}
+
 declare module 'obsidian' {
 	interface App {
 		/**
@@ -38,6 +49,11 @@ declare module 'obsidian' {
 		 * Always check for existence before using.
 		 */
 		setting?: ObsidianSetting
+
+		/**
+		 * Internal core-plugin registry. This is absent on some clients.
+		 */
+		internalPlugins?: ObsidianInternalPlugins
 	}
 
 	interface MenuItem {

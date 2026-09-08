@@ -57,7 +57,8 @@
 			"loggedIn": "已登录",
 			"notLoggedIn": "未登录",
 			"logout": "退出登录",
-			"logoutSuccess": "已退出登录"
+			"logoutSuccess": "已退出登录",
+			"webViewerWarning": "警告：Web Viewer 可能导致授权失败。请先在 Obsidian 核心插件中关闭它，再进行授权。"
 		},
 		"logout": {
 			"confirmTitle": "确认退出",

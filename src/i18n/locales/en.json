@@ -58,7 +58,8 @@
 			"loggedIn": "Logged in",
 			"notLoggedIn": "Not logged in",
 			"logout": "Logout",
-			"logoutSuccess": "Logged out successfully"
+			"logoutSuccess": "Logged out successfully",
+			"webViewerWarning": "Warning: Web Viewer may cause authorization to fail. Disable it in Obsidian's core plugins before authorizing."
 		},
 		"backupWarning": {
 			"name": "Backup warning",
