@@ -387,7 +387,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	isVisible() {
 		return (
 			this.containerEl.isConnected &&
-			document.contains(this.containerEl) &&
+			this.containerEl.ownerDocument.contains(this.containerEl) &&
 			this.containerEl.offsetParent !== null
 		)
 	}
