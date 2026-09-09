@@ -183,8 +183,9 @@ export async function rendersSyncProgress(app: App) {
 			'.nutstore-sync-progress__footer button',
 		)
 		assert(
-			stopButton?.classList.contains('hidden'),
-			`Sync progress modal kept its stop control after completion: ${stopButton?.className ?? 'missing'}`,
+			stopButton instanceof HTMLButtonElement &&
+				window.getComputedStyle(stopButton).display === 'none',
+			`Sync progress modal kept its stop control after completion: ${stopButton?.outerHTML ?? 'missing'}`,
 		)
 	} finally {
 		progress.closeProgressModal()
