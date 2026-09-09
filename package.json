@@ -69,6 +69,7 @@
 		"@eslint/js": "^10.0.1",
 		"@eslint/json": "^1.2.0",
 		"@eslint/markdown": "^8.0.3",
+		"@gfx/zopfli": "1.0.15",
 		"@iconify-json/lucide": "^1.2.129",
 		"@swc/cli": "^0.8.1",
 		"@swc/core": "^1.16.2",

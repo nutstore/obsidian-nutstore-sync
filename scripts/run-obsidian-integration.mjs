@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import esbuild from 'esbuild'
-import { rawTextPlugin } from './esbuild/plugins/raw-text.mjs'
+import { compressedAssetsPlugin } from './esbuild/plugins/compressed-assets.mjs'
 import {
 	createObsidianSandbox,
 	startObsidian,
@@ -166,7 +166,7 @@ async function buildHarness(outfile) {
 			'~': join(ROOT, 'src'),
 			'node:zlib': join(ROOT, 'src/shims/node-zlib.ts'),
 		},
-		plugins: [rawTextPlugin],
+		plugins: [compressedAssetsPlugin({ prod: false })],
 	})
 }
 

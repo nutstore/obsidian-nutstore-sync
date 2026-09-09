@@ -1,5 +1,6 @@
 import { transform } from '@swc/core'
 import esbuild from 'esbuild'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import process from 'node:process'
 import { removeInlineSourceMap } from './output-source.mjs'
@@ -8,11 +9,12 @@ const require = createRequire(import.meta.url)
 const coreJsVersion = require('core-js/package.json').version
 const coreJsCompatVersion = coreJsVersion.split('.').slice(0, 2).join('.')
 
-export const OBSIDIAN_RUNTIME_TARGETS = {
-	chrome: '69',
-	electron: '30',
-	ios: '12',
-}
+// Syntax lowering and API polyfills must target the same WebViews. The final
+// SWC CLI build reads this file too; keep the compatibility policy there only.
+const swcConfig = JSON.parse(
+	readFileSync(new URL('../../../.swcrc', import.meta.url), 'utf8'),
+)
+export const OBSIDIAN_RUNTIME_TARGETS = swcConfig.env.targets
 
 const CORE_JS_MODULE_PATTERN =
 	/(?:import\s+["']|require\(["'])(core-js\/modules\/[^"']+\.js)/g
@@ -27,6 +29,9 @@ const coreJsBundleCache = new Map()
  */
 export async function detectCoreJsPolyfills(source) {
 	const transformed = await transform(removeInlineSourceMap(source), {
+		// Detection must inspect all source APIs before the final optimizer runs.
+		swcrc: false,
+		configFile: false,
 		jsc: {
 			parser: { syntax: 'ecmascript' },
 		},
