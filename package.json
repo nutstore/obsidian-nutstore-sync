@@ -8,7 +8,7 @@
 		"build": "run-s lint build:plugin",
 		"build:plugin": "node esbuild.config.mjs production && swc ./dist/main.js -o main.js",
 		"lint": "run-p lint:eslint lint:tsc lint:deps",
-		"lint:deps": "pnpm audit --audit-level=low",
+		"lint:deps": "pnpm audit --prod --audit-level=low",
 		"lint:eslint": "eslint . --max-warnings=0",
 		"lint:tsc": "tsc -noEmit -skipLibCheck",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
