@@ -25,14 +25,14 @@ jobs:
           scope: '@nutstore'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: latest-9
+          version: 12.3.4
 
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Update models API catalog
         run: pnpm run update:models-api
