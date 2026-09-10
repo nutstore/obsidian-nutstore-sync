@@ -12,6 +12,9 @@ jobs:
     permissions:
       contents: write
       packages: read
+      id-token: write
+      attestations: write
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -53,6 +56,16 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           zip ${{ github.event.repository.name }}-${tag}.zip main.js manifest.json styles.css
           tar -czf ${{ github.event.repository.name }}-${tag}.tar.gz main.js manifest.json styles.css
+
+      - name: Attest release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+            ${{ github.event.repository.name }}-${{ github.ref_name }}.zip
+            ${{ github.event.repository.name }}-${{ github.ref_name }}.tar.gz
 
       - name: Create release
         env:
