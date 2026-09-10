@@ -231,12 +231,44 @@ export async function rendersSearchableSettings(app: App) {
 					!buttons()[0].closest('.setting-items'),
 					'Tab navigation is nested inside the native settings card',
 				)
+				const expectedHeadingsByTab = [
+					[
+						labels.settings.sections.account,
+						labels.settings.sections.sync,
+						labels.settings.sections.automation,
+						labels.settings.sections.transfer,
+						labels.settings.sections.interface,
+						labels.settings.sections.filters,
+					],
+					[labels.settings.sections.ai, labels.settings.ai.subagents.heading],
+					[labels.settings.troubleshooting.title],
+				]
+				for (const [
+					tabIndex,
+					expectedHeadings,
+				] of expectedHeadingsByTab.entries()) {
+					buttons()[tabIndex].click()
+					const visibleHeadings = Array.from(
+						container.querySelectorAll<HTMLElement>(
+							'.setting-item.setting-item-heading',
+						),
+					)
+						.filter((heading) => heading.offsetHeight > 0)
+						.map((heading) => heading.textContent?.trim() ?? '')
+					assert(
+						JSON.stringify(visibleHeadings) ===
+							JSON.stringify(expectedHeadings),
+						`Tab ${tabIndex} displayed headings from another tab: ${JSON.stringify(visibleHeadings)}`,
+					)
+				}
 				buttons()[0].click()
 				assert(
 					buttons()[0].getAttribute('aria-selected') === 'true',
 					'Sync tab did not activate',
 				)
-				const definitions = settingTab.settingItems
+				const definitions = settingTab.settingItems.flatMap((item) =>
+					'type' in item && item.type === 'group' ? (item.items ?? []) : [item],
+				)
 				assert(
 					!definitions.some((item) => 'type' in item && item.type === 'page'),
 					'Settings reverted to directory navigation',

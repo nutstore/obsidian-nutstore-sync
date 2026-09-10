@@ -1,10 +1,10 @@
 import {
 	App,
-	PluginSettingTab,
 	Platform,
-	Setting,
+	PluginSettingTab,
 	requireApiVersion,
 	type SettingDefinitionItem,
+	type SettingDefinitionRender,
 } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { AIProviderConfigs, AIProviderDefinitions } from '~/ai/core/types'
@@ -16,13 +16,20 @@ import type { NutstoreLlmGatewayAuthSettings } from '~/services/nutstore-llm-gat
 import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from '~/utils/download-chunk-size'
 import { GlobFilterRule } from '~/utils/glob-match'
-import AccountSettings from './account'
-import AISettings from './ai'
-import CommonSettings from './common'
-import FilterSettings from './filter'
+import { toggleClassTokens } from '~/utils/class-tokens'
+import AccountSettings from './sync/account'
+import AISettings from './ai/settings'
+import SubagentSettingsSection from './ai/subagents'
+import AutomationSettings from './sync/automation'
+import FilterSettings from './sync/filter'
+import InterfaceSettings from './sync/interface'
+import SynchronizationSettings from './sync/synchronization'
+import TransferSettings from './sync/transfer'
+import PluginRuntimeInfoSettings from './troubleshooting/plugin-runtime-info'
 import BaseSettings from './settings.base'
+import SyncBackupReminderSettings from './sync/backup-reminder'
 import { SETTINGS_TABS, SettingsTabKey } from './tabs'
-import TroubleshootingSettings from './troubleshooting'
+import TroubleshootingSettings from './troubleshooting/settings'
 
 export enum SyncMode {
 	STRICT = 'strict',
@@ -255,27 +262,30 @@ export const DEFAULT_LOCAL_SETTINGS: NutstoreLocalSettings = {
 	ai: {},
 }
 
-interface SettingsSectionEntry {
-	name: () => string
-	section: BaseSettings
-	containerEl: HTMLElement
-}
-
 export class NutstoreSettingTab extends PluginSettingTab {
 	plugin: NutstorePlugin
 	accountSettings: AccountSettings
-	commonSettings: CommonSettings
+	synchronizationSettings: SynchronizationSettings
+	automationSettings: AutomationSettings
+	transferSettings: TransferSettings
+	interfaceSettings: InterfaceSettings
 	filterSettings: FilterSettings
 	troubleshootingSettings: TroubleshootingSettings
+	pluginRuntimeInfoSettings: PluginRuntimeInfoSettings
 	aiSettings: AISettings
-	warningContainerEl: HTMLElement
+	subagentSettings: SubagentSettingsSection
+	syncBackupReminderSettings: SyncBackupReminderSettings
 	private tabBarEl: HTMLElement
 	private activeTab: SettingsTabKey = 'sync'
-	private readonly tabSections: Record<SettingsTabKey, SettingsSectionEntry[]>
+	private readonly tabSections: Record<SettingsTabKey, BaseSettings[]>
 
 	private readonly definitionTargets = new Map<
 		SettingDefinitionItem,
-		{ tab: SettingsTabKey; element?: HTMLElement }
+		{
+			tab: SettingsTabKey
+			element?: HTMLElement
+			groupEl?: HTMLElement
+		}
 	>()
 
 	private readonly subscriptions: Subscription[] = [
@@ -291,7 +301,13 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		super(app, plugin)
 		this.plugin = plugin
 		this.tabBarEl = this.containerEl.createDiv()
-		this.warningContainerEl = this.containerEl.createDiv()
+		const syncBackupReminderContainerEl = this.containerEl.createDiv()
+		this.syncBackupReminderSettings = new SyncBackupReminderSettings(
+			this.app,
+			this.plugin,
+			this,
+			syncBackupReminderContainerEl,
+		)
 		const accountContainerEl = this.containerEl.createDiv()
 		this.accountSettings = new AccountSettings(
 			this.app,
@@ -299,12 +315,33 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			this,
 			accountContainerEl,
 		)
-		const commonContainerEl = this.containerEl.createDiv()
-		this.commonSettings = new CommonSettings(
+		const synchronizationContainerEl = this.containerEl.createDiv()
+		this.synchronizationSettings = new SynchronizationSettings(
 			this.app,
 			this.plugin,
 			this,
-			commonContainerEl,
+			synchronizationContainerEl,
+		)
+		const automationContainerEl = this.containerEl.createDiv()
+		this.automationSettings = new AutomationSettings(
+			this.app,
+			this.plugin,
+			this,
+			automationContainerEl,
+		)
+		const transferContainerEl = this.containerEl.createDiv()
+		this.transferSettings = new TransferSettings(
+			this.app,
+			this.plugin,
+			this,
+			transferContainerEl,
+		)
+		const interfaceContainerEl = this.containerEl.createDiv()
+		this.interfaceSettings = new InterfaceSettings(
+			this.app,
+			this.plugin,
+			this,
+			interfaceContainerEl,
 		)
 		const filterContainerEl = this.containerEl.createDiv()
 		this.filterSettings = new FilterSettings(
@@ -315,7 +352,21 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		)
 		const aiContainerEl = this.containerEl.createDiv()
 		this.aiSettings = new AISettings(this.app, this.plugin, this, aiContainerEl)
+		const subagentsContainerEl = this.containerEl.createDiv()
+		this.subagentSettings = new SubagentSettingsSection(
+			this.app,
+			this.plugin,
+			this,
+			subagentsContainerEl,
+		)
 		const troubleshootingContainerEl = this.containerEl.createDiv()
+		const pluginRuntimeInfoContainerEl = this.containerEl.createDiv()
+		this.pluginRuntimeInfoSettings = new PluginRuntimeInfoSettings(
+			this.app,
+			this.plugin,
+			this,
+			pluginRuntimeInfoContainerEl,
+		)
 		this.troubleshootingSettings = new TroubleshootingSettings(
 			this.app,
 			this.plugin,
@@ -324,35 +375,18 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		)
 		this.tabSections = {
 			sync: [
-				{
-					name: () => i18n.t('settings.sections.account'),
-					section: this.accountSettings,
-					containerEl: accountContainerEl,
-				},
-				{
-					name: () => i18n.t('settings.sections.common'),
-					section: this.commonSettings,
-					containerEl: commonContainerEl,
-				},
-				{
-					name: () => i18n.t('settings.sections.filters'),
-					section: this.filterSettings,
-					containerEl: filterContainerEl,
-				},
+				this.syncBackupReminderSettings,
+				this.accountSettings,
+				this.synchronizationSettings,
+				this.automationSettings,
+				this.transferSettings,
+				this.interfaceSettings,
+				this.filterSettings,
 			],
-			ai: [
-				{
-					name: () => i18n.t('settings.sections.ai'),
-					section: this.aiSettings,
-					containerEl: aiContainerEl,
-				},
-			],
+			ai: [this.aiSettings, this.subagentSettings],
 			troubleshooting: [
-				{
-					name: () => i18n.t('settings.troubleshooting.title'),
-					section: this.troubleshootingSettings,
-					containerEl: troubleshootingContainerEl,
-				},
+				this.pluginRuntimeInfoSettings,
+				this.troubleshootingSettings,
 			],
 		}
 	}
@@ -361,53 +395,41 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	// belongs to our panels; definition.visible would also remove search entries.
 	getSettingDefinitions(): SettingDefinitionItem[] {
 		this.definitionTargets.clear()
-		const definitions: SettingDefinitionItem[] = [
-			{
-				name: '',
-				searchable: false,
-				render: (setting, group) => {
-					setting.settingEl.empty()
-					setting.settingEl.removeClass('setting-item')
-					setting.settingEl.addClass('ns-settings-navigation-placeholder')
-					// listEl is the native settings card. Navigation belongs above it.
-					if (requireApiVersion('1.13.0')) group.listEl.before(this.tabBarEl)
-					this.renderTabBar()
-				},
-			},
-		]
+		this.renderTabBar()
+		const definitions: SettingDefinitionItem[] = []
 		for (const tab of SETTINGS_TABS) {
-			const entries = this.tabSections[tab.key]
-			const panels = [
-				...(tab.key === 'sync'
-					? [
-							{
-								name: () => i18n.t('settings.backupWarning.name'),
-								containerEl: this.warningContainerEl,
-								section: undefined,
-							},
-						]
-					: []),
-				...entries,
-			]
-			for (const { name, section, containerEl } of panels) {
-				const target: { tab: SettingsTabKey; element?: HTMLElement } = {
+			for (const section of this.tabSections[tab.key]) {
+				const { name, containerEl, searchable, showGroupHeading } = section
+				const target: {
+					tab: SettingsTabKey
+					element?: HTMLElement
+					groupEl?: HTMLElement
+				} = {
 					tab: tab.key,
 				}
-				const definition: SettingDefinitionItem = {
+				const definition: SettingDefinitionRender = {
 					name: name(),
-					aliases: [i18n.t(tab.i18nKey), ...(section?.getSearchTerms() ?? [])],
-					render: (setting) => {
+					searchable,
+					aliases: searchable
+						? [i18n.t(tab.i18nKey), ...section.getSearchTerms()]
+						: [],
+					render: (setting, group) => {
+						if (requireApiVersion('1.13.0')) {
+							const groupEl = group.listEl.closest<HTMLElement>(
+								'.ns-settings-section',
+							)
+							if (groupEl) {
+								target.groupEl = groupEl
+								this.mountTabBar(group.listEl)
+								this.setSectionVisibility(groupEl, tab.key === this.activeTab)
+							}
+						}
 						setting.settingEl.empty()
 						setting.settingEl.removeClass('setting-item')
 						setting.settingEl.appendChild(containerEl)
 						target.element = setting.settingEl
-						setting.settingEl.toggleClass(
-							'ns-settings-panel-hidden',
-							tab.key !== this.activeTab,
-						)
 						containerEl.show()
-						if (section) void section.display()
-						else this.renderWarning()
+						void section.display()
 						return () => {
 							target.element = undefined
 							if (section === this.accountSettings)
@@ -418,10 +440,24 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					},
 				}
 				this.definitionTargets.set(definition, target)
-				definitions.push(definition)
+				definitions.push({
+					type: 'group',
+					heading: showGroupHeading ? name() : undefined,
+					cls: 'ns-settings-section',
+					items: [definition],
+				})
 			}
 		}
 		return definitions
+	}
+
+	private mountTabBar(anchorEl: HTMLElement) {
+		if (requireApiVersion('1.13.0')) {
+			if (!this.tabBarEl.isConnected) {
+				anchorEl.before(this.tabBarEl)
+				this.renderTabBar()
+			}
+		}
 	}
 
 	// Obsidian 1.13 calls this host hook before scrolling to a search result,
@@ -435,23 +471,25 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		this.activeTab = target.tab
 		this.renderTabBar()
 		this.updatePanelVisibility()
-		for (const { containerEl } of this.tabSections[target.tab])
-			containerEl.show()
-		if (target.tab === 'sync') this.warningContainerEl.show()
+		for (const section of this.tabSections[target.tab])
+			section.containerEl.show()
 		return target.element
 	}
 
 	private updatePanelVisibility() {
-		for (const { tab, element } of this.definitionTargets.values()) {
-			element?.toggleClass('ns-settings-panel-hidden', tab !== this.activeTab)
+		for (const { tab, groupEl } of this.definitionTargets.values()) {
+			if (groupEl) this.setSectionVisibility(groupEl, tab === this.activeTab)
 		}
 	}
 
-	private renderWarning() {
-		this.warningContainerEl.empty()
-		new Setting(this.warningContainerEl)
-			.setName(i18n.t('settings.backupWarning.name'))
-			.setDesc(i18n.t('settings.backupWarning.desc'))
+	private setSectionVisibility(groupEl: HTMLElement, visible: boolean) {
+		const containsNavigation = groupEl.contains(this.tabBarEl)
+		toggleClassTokens(groupEl, ':uno: hidden', !visible && !containsNavigation)
+		if (!containsNavigation) return
+		for (const child of Array.from(groupEl.children)) {
+			if (child !== this.tabBarEl)
+				toggleClassTokens(child, ':uno: hidden', !visible)
+		}
 	}
 
 	display() {
@@ -460,19 +498,15 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	}
 
 	private async renderActiveTabContent() {
-		const isSyncTab = this.activeTab === 'sync'
-		if (isSyncTab) this.warningContainerEl.show()
-		else this.warningContainerEl.hide()
-		if (isSyncTab) this.renderWarning()
 		this.updatePanelVisibility()
 		for (const tab of SETTINGS_TABS) {
 			const isActive = tab.key === this.activeTab
-			for (const { containerEl } of this.tabSections[tab.key]) {
-				if (isActive) containerEl.show()
-				else containerEl.hide()
+			for (const section of this.tabSections[tab.key]) {
+				if (isActive) section.containerEl.show()
+				else section.containerEl.hide()
 			}
 		}
-		for (const { section } of this.tabSections[this.activeTab]) {
+		for (const section of this.tabSections[this.activeTab]) {
 			await section.display()
 		}
 	}
@@ -535,8 +569,9 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		return Object.values(this.tabSections)
 			.flat()
 			.some(
-				({ containerEl }) =>
-					containerEl.isConnected && containerEl.offsetParent !== null,
+				(section) =>
+					section.containerEl.isConnected &&
+					section.containerEl.offsetParent !== null,
 			)
 	}
 

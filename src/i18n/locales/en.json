@@ -126,7 +126,10 @@
 		},
 		"sections": {
 			"account": "Account",
-			"common": "General",
+			"sync": "Synchronization",
+			"automation": "Automatic sync",
+			"transfer": "File transfer",
+			"interface": "Interface",
 			"filters": "Filter rules",
 			"ai": "AI"
 		},

@@ -1,5 +1,4 @@
-import { apiVersion, Notice, Platform, setIcon, Setting } from 'obsidian'
-import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
+import { Notice, Setting } from 'obsidian'
 import CacheClearModal from '~/components/CacheClearModal'
 import { IN_DEV } from '~/consts'
 import i18n from '~/i18n'
@@ -7,12 +6,14 @@ import { blobStore } from '~/storage/blob'
 import { formatLocalTimestampForFilename } from '~/utils/local-date'
 import logger from '~/utils/logger'
 import logsStringify from '~/utils/logs-stringify'
-import BaseSettings from './settings.base'
+import BaseSettings from '../settings.base'
 
 export default class TroubleshootingSettings extends BaseSettings {
+	readonly name = () => i18n.t('settings.troubleshooting.title')
+	readonly showGroupHeading = true
+
 	getSearchTerms(): string[] {
 		return [
-			i18n.t('settings.troubleshooting.pluginInfo'),
 			i18n.t('settings.cache.clearName'),
 			i18n.t('settings.cache.clearDesc'),
 			i18n.t('settings.log.name'),
@@ -29,11 +30,6 @@ export default class TroubleshootingSettings extends BaseSettings {
 
 	async display() {
 		this.containerEl.empty()
-		this.displayPluginInfo()
-
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.troubleshooting.title'))
-			.setHeading()
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.cache.clearName'))
@@ -114,56 +110,6 @@ export default class TroubleshootingSettings extends BaseSettings {
 							}
 						})
 				})
-		}
-	}
-
-	private displayPluginInfo() {
-		const card = this.containerEl.createDiv({ cls: 'nutstore-plugin-info' })
-		card.setAttribute('role', 'group')
-		card.setAttribute(
-			'aria-label',
-			i18n.t('settings.troubleshooting.pluginInfo'),
-		)
-		const header = card.createDiv({ cls: 'nutstore-plugin-info__header' })
-		const icon = header.createDiv({ cls: 'nutstore-plugin-info__icon' })
-		icon.setAttribute('aria-hidden', 'true')
-		setIcon(icon, CHATBOX_AI_ICON_ID)
-		const identity = header.createDiv({ cls: 'nutstore-plugin-info__identity' })
-		identity.createDiv({
-			cls: 'nutstore-plugin-info__name',
-			text: this.plugin.manifest.name,
-		})
-		identity.createDiv({
-			cls: 'nutstore-plugin-info__version',
-			text: `v${this.plugin.manifest.version}`,
-		})
-
-		const platform = Platform.isIosApp
-			? 'iOS'
-			: Platform.isAndroidApp
-				? 'Android'
-				: Platform.isMacOS
-					? 'macOS'
-					: Platform.isWin
-						? 'Windows'
-						: Platform.isLinux
-							? 'Linux'
-							: i18n.t('settings.troubleshooting.unknownPlatform')
-		const details = card.createEl('dl', {
-			cls: 'nutstore-plugin-info__details',
-		})
-		const fields = [
-			['Obsidian', apiVersion],
-			[i18n.t('settings.troubleshooting.platform'), platform],
-			[
-				i18n.t('settings.troubleshooting.language'),
-				i18n.resolvedLanguage === 'zh' ? '简体中文' : 'English',
-			],
-		]
-		for (const [label, value] of fields) {
-			const field = details.createDiv({ cls: 'nutstore-plugin-info__field' })
-			field.createEl('dt', { text: label })
-			field.createEl('dd', { text: value })
 		}
 	}
 

@@ -84,7 +84,10 @@
 		},
 		"sections": {
 			"account": "账号设置",
-			"common": "通用设置",
+			"sync": "同步设置",
+			"automation": "自动同步",
+			"transfer": "文件传输",
+			"interface": "界面",
 			"filters": "过滤规则",
 			"ai": "AI 设置"
 		},

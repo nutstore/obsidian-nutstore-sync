@@ -7,9 +7,12 @@ import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import { OAuthResponse } from '~/utils/decrypt-ticket-response'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
-import BaseSettings from './settings.base'
+import BaseSettings from '../settings.base'
 
 export default class AccountSettings extends BaseSettings {
+	readonly name = () => i18n.t('settings.sections.account')
+	readonly showGroupHeading = true
+
 	getSearchTerms(): string[] {
 		return [
 			i18n.t('settings.loginMode.name'),
@@ -29,9 +32,6 @@ export default class AccountSettings extends BaseSettings {
 
 	async display() {
 		this.containerEl.empty()
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.sections.account'))
-			.setHeading()
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.loginMode.name'))

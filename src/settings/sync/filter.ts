@@ -3,7 +3,7 @@ import FilterEditorModal from '~/components/FilterEditorModal'
 import { getConfigDirPruningRule } from '~/utils/config-dir-rules'
 import type { GlobFilterRule } from '~/utils/glob-match'
 import i18n from '~/i18n'
-import BaseSettings from './settings.base'
+import BaseSettings from '../settings.base'
 
 type ConfigDirSyncMode = 'none' | 'bookmarks' | 'all'
 
@@ -12,6 +12,9 @@ function isConfigDirSyncMode(value: string): value is ConfigDirSyncMode {
 }
 
 export default class FilterSettings extends BaseSettings {
+	readonly name = () => i18n.t('settings.sections.filters')
+	readonly showGroupHeading = true
+
 	getSearchTerms(): string[] {
 		return [
 			i18n.t('settings.configDirSync.name'),
@@ -23,9 +26,6 @@ export default class FilterSettings extends BaseSettings {
 
 	async display() {
 		this.containerEl.empty()
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.sections.filters'))
-			.setHeading()
 
 		const configDir = this.plugin.app.vault.configDir
 

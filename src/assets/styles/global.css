@@ -411,12 +411,6 @@
 	color: var(--tab-text-color-focused-active, var(--text-normal));
 }
 
-/* The host toggles inline display during refresh; panel visibility must survive it. */
-.ns-settings-panel-hidden,
-.ns-settings-navigation-placeholder {
-	display: none;
-}
-
 .ns-settings-tabs.is-mobile {
 	--ns-settings-tab-height: max(var(--input-height), 44px);
 }
@@ -931,9 +925,9 @@
 .nutstore-plugin-info__details {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-	gap: 16px;
-	margin: 18px 0 0;
-	padding-top: 16px;
+	gap: 6px;
+	margin: 8px 0 0;
+	padding-top: 8px;
 	border-top: 1px solid var(--background-modifier-border);
 }
 
@@ -951,4 +945,25 @@
 	margin: 6px 0 0;
 	color: var(--text-normal);
 	font-size: var(--font-ui-small);
+}
+
+@media (max-width: 640px) {
+	.nutstore-plugin-info__details {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+
+	.nutstore-plugin-info__field {
+		display: flex;
+		align-items: baseline;
+		gap: 4px;
+	}
+
+	.nutstore-plugin-info__field dt::after {
+		content: ':';
+	}
+
+	.nutstore-plugin-info__field dd {
+		margin: 0;
+	}
 }
