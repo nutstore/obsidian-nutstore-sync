@@ -6,6 +6,7 @@ import {
 } from './checks/chat'
 import {
 	detachesChatboxWhenProductionPluginIsDisabled,
+	listsOnlyVaultSkillsInSettings,
 	loadsProductionPlugin,
 	reloadsProductionPlugin,
 	rendersSearchableSettings,
@@ -16,6 +17,7 @@ import {
 	excludesUnrelatedHiddenPathsFromGlobSnapshot,
 	expandsAgentDomainPathsInBash,
 	expandsExistingVaultPathsInBash,
+	filtersDisabledSkillsFromAgentCatalog,
 	preservesBashHeredocUtf8,
 	resolvesResourceDataUrls,
 	respectsVaultDeletionPreference,
@@ -113,6 +115,10 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			() => skipsStaleVaultSkillEntries(this.app),
 		)
 		await run(
+			'hides disabled Vault Skills while keeping built-in Skills active',
+			() => filtersDisabledSkillsFromAgentCatalog(this.app),
+		)
+		await run(
 			'respects deletion preferences without a permanent-delete fallback',
 			() => respectsVaultDeletionPreference(this.app),
 		)
@@ -124,6 +130,9 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		await run(
 			'renders searchable settings through shared section renderers',
 			() => rendersSearchableSettings(this.app),
+		)
+		await run('lists only Vault Skills in the Skills settings', () =>
+			listsOnlyVaultSkillsInSettings(this.app),
 		)
 
 		await run('tolerates a corrupt chat meta file', () =>

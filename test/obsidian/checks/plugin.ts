@@ -1,11 +1,15 @@
 import { requireApiVersion, type App } from 'obsidian'
 import type { NutstoreSettingTab } from '~/settings'
+import type NutstorePlugin from '~/index'
 import en from '~/i18n/locales/en.json'
 import zh from '~/i18n/locales/zh.json'
 import { CHATBOX_VIEW_TYPE } from '~/views/chatbox.view'
 import { assert } from './assert'
 
-interface ProductionPlugin {
+interface ProductionPlugin extends Pick<
+	NutstorePlugin,
+	'settings' | 'settingsService' | 'loadData'
+> {
 	settingTab: NutstoreSettingTab
 	isSyncing: boolean
 	commandService: {
@@ -35,6 +39,104 @@ function getProductionPlugin(app: App): ProductionPlugin {
 
 export async function loadsProductionPlugin(app: App) {
 	getProductionPlugin(app)
+}
+
+export async function listsOnlyVaultSkillsInSettings(app: App) {
+	const plugin = getProductionPlugin(app)
+	const { settingTab } = plugin
+	const { BUILTIN_SKILLS } = await import('~/ai/skills/builtin')
+	const { SKILLS_ROOT } = await import('~/ai/skills/repository')
+	const skillDir = `${SKILLS_ROOT}/settings-probe-skill`
+	const originalDisabled = [...plugin.settings.ai.disabledSkills]
+	const originalSave = plugin.settingsService.saveSettings
+	let pendingSave: Promise<void> | undefined
+	const host = (
+		app as unknown as {
+			setting: { open(): void; close(): void; openTabById(id: string): void }
+		}
+	).setting
+	const adapter = app.vault.adapter
+
+	if (!(await adapter.exists(SKILLS_ROOT))) await adapter.mkdir(SKILLS_ROOT)
+	await adapter.mkdir(skillDir)
+	await adapter.write(
+		`${skillDir}/SKILL.md`,
+		'---\nname: settings-probe-skill\ndescription: Neutral Skill / 中性技能 🌱\n---\n',
+	)
+
+	try {
+		plugin.settings.ai.disabledSkills = originalDisabled.filter(
+			(name) => name !== 'settings-probe-skill',
+		)
+		plugin.settingsService.saveSettings = function () {
+			pendingSave = originalSave.call(this)
+			return pendingSave
+		}
+		host.open()
+		host.openTabById('nutstore-sync')
+		const section = settingTab.skillSettings
+		section.containerEl.show()
+		await section.display()
+		const settingsText = section.containerEl.textContent ?? ''
+		assert(
+			settingsText.includes('settings-probe-skill'),
+			'Skills settings did not list a Vault Skill',
+		)
+		for (const skill of BUILTIN_SKILLS) {
+			assert(
+				!settingsText.includes(skill.name),
+				`Skills settings listed built-in Skill '${skill.name}'`,
+			)
+		}
+		assert(
+			settingsText.includes('Neutral Skill / 中性技能 🌱'),
+			'Skills settings did not preserve the UTF-8 description',
+		)
+		for (const enabled of [false, true]) {
+			const row = Array.from(
+				section.containerEl.querySelectorAll('.setting-item'),
+			).find(
+				(element) =>
+					element.querySelector('.setting-item-name')?.textContent ===
+					'settings-probe-skill',
+			)
+			const toggle = row?.querySelector<HTMLElement>('.checkbox-container')
+			assert(toggle, 'Vault Skill toggle was not rendered')
+			assert(
+				toggle.classList.contains('is-enabled') === !enabled,
+				'Toggle did not reflect the saved state',
+			)
+			pendingSave = undefined
+			const input = toggle.querySelector<HTMLInputElement>(
+				'input[type="checkbox"]',
+			)
+			assert(input, 'Skill toggle has no checkbox input')
+			input.click()
+			assert(pendingSave, 'Toggling a Skill did not save settings')
+			await pendingSave
+			const stored = (await plugin.loadData()) as {
+				ai: { disabledSkills: string[] }
+			}
+			assert(
+				stored.ai.disabledSkills.includes('settings-probe-skill') === !enabled,
+				'Skill activation was not persisted',
+			)
+			await section.display()
+			const renderedToggle = section.containerEl.querySelector<HTMLElement>(
+				'.checkbox-container',
+			)
+			assert(
+				renderedToggle?.classList.contains('is-enabled') === enabled,
+				'Rendered toggle did not reflect the persisted activation',
+			)
+		}
+	} finally {
+		host.close()
+		plugin.settingsService.saveSettings = originalSave
+		plugin.settings.ai.disabledSkills = originalDisabled
+		await originalSave.call(plugin.settingsService)
+		await adapter.rmdir(skillDir, true)
+	}
 }
 
 export async function reloadsProductionPlugin(app: App) {
@@ -240,7 +342,11 @@ export async function rendersSearchableSettings(app: App) {
 						labels.settings.sections.interface,
 						labels.settings.sections.filters,
 					],
-					[labels.settings.sections.ai, labels.settings.ai.subagents.heading],
+					[
+						labels.settings.sections.ai,
+						labels.settings.ai.subagents.heading,
+						labels.settings.ai.skills.heading,
+					],
 					[labels.settings.troubleshooting.title],
 				]
 				for (const [

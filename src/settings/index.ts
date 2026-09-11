@@ -19,6 +19,7 @@ import { GlobFilterRule } from '~/utils/glob-match'
 import { toggleClassTokens } from '~/utils/class-tokens'
 import AccountSettings from './sync/account'
 import AISettings from './ai/settings'
+import SkillsSettingsSection from './ai/skills'
 import SubagentSettingsSection from './ai/subagents'
 import AutomationSettings from './sync/automation'
 import FilterSettings from './sync/filter'
@@ -166,6 +167,8 @@ export interface NutstoreSettings {
 			explorer: SubagentSettings
 			memory: SubagentSettings
 		}
+		/** Skill names excluded from the agent catalog by SkillRepository. */
+		disabledSkills: string[]
 		nutstoreLlmGateway?: NutstoreLlmGatewayAuthSettings
 	}
 	configDirSyncMode?: 'none' | 'bookmarks' | 'all'
@@ -244,6 +247,7 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 			explorer: { enabled: false },
 			memory: { enabled: false },
 		},
+		disabledSkills: [],
 		nutstoreLlmGateway: {},
 	},
 	configDirSyncMode: 'none',
@@ -274,6 +278,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	pluginRuntimeInfoSettings: PluginRuntimeInfoSettings
 	aiSettings: AISettings
 	subagentSettings: SubagentSettingsSection
+	skillSettings: SkillsSettingsSection
 	syncBackupReminderSettings: SyncBackupReminderSettings
 	private tabBarEl: HTMLElement
 	private activeTab: SettingsTabKey = 'sync'
@@ -359,6 +364,13 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			this,
 			subagentsContainerEl,
 		)
+		const skillsContainerEl = this.containerEl.createDiv()
+		this.skillSettings = new SkillsSettingsSection(
+			this.app,
+			this.plugin,
+			this,
+			skillsContainerEl,
+		)
 		const troubleshootingContainerEl = this.containerEl.createDiv()
 		const pluginRuntimeInfoContainerEl = this.containerEl.createDiv()
 		this.pluginRuntimeInfoSettings = new PluginRuntimeInfoSettings(
@@ -383,7 +395,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 				this.interfaceSettings,
 				this.filterSettings,
 			],
-			ai: [this.aiSettings, this.subagentSettings],
+			ai: [this.aiSettings, this.subagentSettings, this.skillSettings],
 			troubleshooting: [
 				this.pluginRuntimeInfoSettings,
 				this.troubleshootingSettings,

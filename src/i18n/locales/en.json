@@ -322,6 +322,14 @@
 					}
 				}
 			},
+			"skills": {
+				"heading": "Skills",
+				"empty": "No Vault Skills discovered in this vault.",
+				"enabled": "Enabled",
+				"diagnostics": {
+					"heading": "Skill diagnostics"
+				}
+			},
 			"errors": {
 				"saveFailed": "Failed to save AI settings",
 				"saveFailedWithReason": "Failed to save AI settings: {{reason}}",

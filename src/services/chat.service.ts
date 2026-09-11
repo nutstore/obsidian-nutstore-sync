@@ -62,6 +62,7 @@ import {
 	collectOtherBusySessionIds,
 } from '~/ai/chat/ui/view-projection'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import { BUILTIN_SKILLS } from '~/ai/skills/builtin'
 import { SkillRepository } from '~/ai/skills/repository'
 import { createAbortError, isAbortError } from '~/ai/transport/abort'
 import SessionExportModal from '~/components/SessionExportModal'
@@ -122,7 +123,11 @@ export default class ChatService extends BaseService {
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
-		this.skillRepository = new SkillRepository(plugin.app)
+		this.skillRepository = new SkillRepository(
+			plugin.app,
+			BUILTIN_SKILLS,
+			(name) => plugin.settings.ai.disabledSkills.includes(name),
+		)
 		this.selection = new Selection(
 			() => plugin.settings.ai,
 			this.state,
@@ -301,6 +306,11 @@ export default class ChatService extends BaseService {
 			await Promise.all(persisted)
 		}
 		this.notify()
+	}
+
+	async listConfigurableSkills() {
+		await this.skillRepository.refresh()
+		return this.skillRepository.discoverConfigurable()
 	}
 
 	getViewProps(): ChatboxProps {

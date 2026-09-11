@@ -221,6 +221,100 @@ export async function skipsStaleVaultSkillEntries(app: App) {
 	}
 }
 
+export async function filtersDisabledSkillsFromAgentCatalog(app: App) {
+	const { SkillRepository, SKILLS_ROOT } =
+		await import('~/ai/skills/repository')
+	const { BUILTIN_SKILLS } = await import('~/ai/skills/builtin')
+	const adapter = app.vault.adapter
+	const activeFolder = `${SKILLS_ROOT}/active-skill`
+	const hiddenFolder = `${SKILLS_ROOT}/hidden-skill`
+	const activeSkill = `${activeFolder}/SKILL.md`
+	const hiddenSkill = `${hiddenFolder}/SKILL.md`
+	const builtinName = BUILTIN_SKILLS[0]?.name
+	assert(builtinName, 'No built-in Skill is shipped to check activation policy')
+
+	const overrideFolder = `${SKILLS_ROOT}/${builtinName}`
+	const disabled = new Set(['hidden-skill', builtinName])
+
+	if (!(await adapter.exists(SKILLS_ROOT))) await adapter.mkdir(SKILLS_ROOT)
+	await adapter.mkdir(activeFolder)
+	await adapter.mkdir(hiddenFolder)
+	await adapter.write(
+		activeSkill,
+		'---\nname: active-skill\ndescription: Neutral active Skill / 中性启用技能 🌱\n---\n',
+	)
+	await adapter.write(
+		hiddenSkill,
+		'---\nname: hidden-skill\ndescription: Neutral hidden Skill / 中性停用技能 🌱\n---\n',
+	)
+
+	try {
+		const repository = new SkillRepository(app, BUILTIN_SKILLS, (name) =>
+			disabled.has(name),
+		)
+		await repository.refresh()
+		const catalog = repository.getCatalog().map((skill) => skill.name)
+		assert(
+			catalog.includes(builtinName),
+			'Built-in Skill was hidden from the agent catalog by a disabled name',
+		)
+		assert(
+			catalog.includes('active-skill'),
+			'Enabled Vault Skill was hidden from the agent catalog',
+		)
+		assert(
+			!catalog.includes('hidden-skill'),
+			'Disabled Vault Skill stayed in the agent catalog',
+		)
+		assert(
+			repository
+				.discover()
+				.skills.some((skill) => skill.name === 'hidden-skill'),
+			'Disabled Vault Skill disappeared from discovery',
+		)
+		disabled.delete('hidden-skill')
+		assert(
+			repository.getCatalog().find((skill) => skill.name === 'hidden-skill')
+				?.description === 'Neutral hidden Skill / 中性停用技能 🌱',
+			'Re-enabling a Skill did not immediately restore its UTF-8 metadata',
+		)
+		disabled.add('active-skill')
+		assert(
+			!repository.getCatalog().some((skill) => skill.name === 'active-skill'),
+			'Disabling a Skill required a refresh',
+		)
+
+		await adapter.mkdir(overrideFolder)
+		await adapter.write(
+			`${overrideFolder}/SKILL.md`,
+			`---\nname: ${builtinName}\ndescription: Neutral override / 中性覆盖 🌱\n---\n`,
+		)
+		await repository.refresh()
+		assert(
+			repository
+				.discoverConfigurable()
+				.skills.find((skill) => skill.name === builtinName)?.description ===
+				'Neutral override / 中性覆盖 🌱',
+			'Same-named Vault Skill was not configurable or lost its UTF-8 metadata',
+		)
+		assert(
+			!repository.getCatalog().some((skill) => skill.name === builtinName),
+			'Disabled override remained advertised or fell back to the built-in Skill',
+		)
+		disabled.delete(builtinName)
+		assert(
+			repository.getCatalog().find((skill) => skill.name === builtinName)
+				?.description === 'Neutral override / 中性覆盖 🌱',
+			'Re-enabling the override did not restore the Vault Skill immediately',
+		)
+	} finally {
+		await adapter.rmdir(activeFolder, true)
+		await adapter.rmdir(hiddenFolder, true)
+		if (await adapter.exists(overrideFolder))
+			await adapter.rmdir(overrideFolder, true)
+	}
+}
+
 export async function respectsVaultDeletionPreference(app: App) {
 	const { ObsidianVaultFs } = await import('~/ai/tools/bash/fs')
 	const { removeLocalPath } = await import('~/utils/local-vault-io')

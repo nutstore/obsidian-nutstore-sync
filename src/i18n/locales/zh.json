@@ -280,6 +280,14 @@
 					}
 				}
 			},
+			"skills": {
+				"heading": "技能",
+				"empty": "未在库中发现可管理的技能。",
+				"enabled": "启用",
+				"diagnostics": {
+					"heading": "技能诊断"
+				}
+			},
 			"errors": {
 				"saveFailed": "AI 设置保存失败",
 				"saveFailedWithReason": "AI 设置保存失败：{{reason}}",
