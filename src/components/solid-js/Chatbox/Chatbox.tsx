@@ -1,6 +1,5 @@
 import { Notice } from 'obsidian'
 import {
-	For,
 	Show,
 	createEffect,
 	createMemo,
@@ -22,6 +21,7 @@ import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { ContextRing } from './components/ContextRing'
 import { McpServersDialog } from './components/McpServersDialog'
+import { TurnTimeline } from './components/TurnTimeline'
 import { MessageCard } from './components/MessageCard'
 import { ModelPickerDialog } from './components/ModelPickerDialog'
 import { PaneResizer } from './components/PaneResizer'
@@ -910,13 +910,19 @@ function Chatbox(props: ChatboxProps) {
 							}
 						>
 							<div class=":uno: flex flex-col gap-3">
-								<For each={props.timeline}>
-									{(item) => (
+								<TurnTimeline
+									timeline={props.timeline}
+									sessionId={props.activeSessionId}
+									runState={props.runState}
+								>
+									{(row, process) => (
 										<MessageCard
-											item={item}
+											item={row().item}
+											displayBlocks={row().blocks}
+											process={process}
 											now={now()}
 											renderMarkdown={props.renderMarkdown}
-											streaming={item.message.id === streamingMessageId()}
+											streaming={row().item.message.id === streamingMessageId()}
 											onDeleteMessage={requestDeleteMessage}
 											onRegenerateMessage={requestRegenerateMessage}
 											onRecallMessage={requestRecallMessage}
@@ -926,7 +932,7 @@ function Chatbox(props: ChatboxProps) {
 											onResolveResourceDataUrl={props.onResolveResourceDataUrl}
 										/>
 									)}
-								</For>
+								</TurnTimeline>
 								<RunStateCard
 									runState={props.runState}
 									onStop={props.onStopActiveRun}

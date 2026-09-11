@@ -967,3 +967,108 @@
 		margin: 0;
 	}
 }
+
+.chatbox-collapsible[open] > summary > div > .chatbox-collapsible-chevron {
+	transform: rotate(180deg);
+}
+
+.chatbox-process-title-active {
+	display: inline-block;
+	background-image: linear-gradient(
+		90deg,
+		var(--text-faint) 30%,
+		var(--text-accent) 50%,
+		var(--text-faint) 70%
+	);
+	/* Keep the 30–70% wave outside the text at both animation endpoints. */
+	background-size: 400% 100%;
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	animation: text-shimmer 1.25s linear infinite;
+}
+
+@keyframes text-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: 0% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chatbox-process-title-active {
+		animation: none;
+		background-image: none;
+		color: var(--text-normal);
+	}
+}
+
+.chatbox-collapsible-plain > summary {
+	justify-content: flex-start;
+	gap: 0.5rem;
+	padding: 0.25rem;
+	font-size: 0.6875rem;
+}
+
+.chatbox-collapsible-plain > summary .chatbox-collapsible-title {
+	color: var(--text-muted);
+}
+
+.chatbox-collapsible-plain > summary > .chatbox-collapsible-leading-chevron,
+.chatbox-collapsible-plain > summary .chatbox-collapsible-icon,
+.chatbox-collapsible-plain > summary .chatbox-collapsible-icon > span {
+	width: 0.875rem;
+	height: 0.875rem;
+}
+
+/* Indentation communicates nesting without stacking card surfaces. */
+.chatbox-document-content {
+	padding-inline-start: 1rem;
+}
+
+.chatbox-process-content .ns-chatbox-markdown.markdown-rendered {
+	font-size: 0.75rem;
+	line-height: 1.25rem;
+	color: var(--text-muted);
+}
+
+.chatbox-process-flow .chatbox-todo-list {
+	border: none;
+	border-radius: 0;
+	background: transparent;
+}
+
+.chatbox-process-flow .chatbox-file-changes {
+	margin-top: 0;
+}
+
+.chatbox-process-flow .chatbox-todo-list > div {
+	border-top: none;
+}
+
+.chatbox-process-flow .chatbox-todo-header,
+.chatbox-process-flow .chatbox-todo-list li {
+	font-size: 0.6875rem;
+}
+
+.chatbox-process-flow .chatbox-todo-text {
+	color: var(--text-muted);
+}
+
+.chatbox-process-flow .chatbox-todo-icon,
+.chatbox-process-flow .chatbox-todo-icon > span {
+	width: 0.875rem;
+	height: 0.875rem;
+}
+
+.chatbox-collapsible-plain > summary > div:last-child {
+	margin-inline-start: auto;
+}
+
+.chatbox-collapsible-plain[open]
+	> summary
+	> .chatbox-collapsible-leading-chevron {
+	transform: rotate(90deg);
+}

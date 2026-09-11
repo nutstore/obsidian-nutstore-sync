@@ -127,9 +127,12 @@ function MessageDisplayBlock(props: {
 
 export function MessageCard(props: {
 	item: ChatTimelineMessageItem
+	/** Optional UI slice; actions and copying still use the original message. */
+	displayBlocks?: ChatDisplayBlock[]
 	now: number
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 	streaming?: boolean
+	process?: boolean
 	onDeleteMessage?: ChatboxProps['onDeleteMessage']
 	onRegenerateMessage?: ChatboxProps['onRegenerateMessage']
 	onRecallMessage?: ChatboxProps['onRecallMessage']
@@ -190,7 +193,11 @@ export function MessageCard(props: {
 					: undefined
 			}
 		>
-			<Show when={props.item.showHeader && !isSystemNotification()}>
+			<Show
+				when={
+					!props.process && props.item.showHeader && !isSystemNotification()
+				}
+			>
 				<div class=":uno: mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
 					<div class=":uno: flex items-center gap-1 font-medium text-[var(--text-normal)]">
 						<span
@@ -203,7 +210,7 @@ export function MessageCard(props: {
 				</div>
 			</Show>
 			<div class=":uno: flex flex-col gap-2">
-				<For each={props.item.displayBlocks}>
+				<For each={props.displayBlocks ?? props.item.displayBlocks}>
 					{(block) => (
 						<MessageDisplayBlock
 							block={block}
@@ -236,6 +243,7 @@ export function MessageCard(props: {
 			</Show>
 			<Show
 				when={
+					!props.process &&
 					!isSystemNotification() &&
 					(props.item.message.role === 'assistant' ||
 						props.item.message.role === 'user')

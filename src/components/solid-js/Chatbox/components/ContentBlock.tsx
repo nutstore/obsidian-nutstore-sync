@@ -1,8 +1,9 @@
 import type { TextPart } from 'ai'
-import { For, Match, Switch } from 'solid-js'
+import { For, Match, Switch, useContext } from 'solid-js'
 import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
 import type { ChatDisplayContentBlock } from '~/ai/chat/types'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
+import { CollapsibleAppearance } from './CollapsibleBlock'
 import { MarkdownContent } from './MarkdownContent'
 
 function isTextPart(
@@ -16,8 +17,15 @@ export function ContentBlock(props: {
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 	streaming?: boolean
 }) {
+	const appearance = useContext(CollapsibleAppearance)
 	return (
-		<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-3 py-2.5">
+		<div
+			class={
+				appearance === 'plain'
+					? ':uno: chatbox-process-content min-w-0 py-1'
+					: ':uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-3 py-2.5'
+			}
+		>
 			<div class=":uno: flex flex-col gap-3">
 				<For each={props.block.parts}>
 					{(part) => (
