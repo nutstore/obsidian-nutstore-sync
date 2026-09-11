@@ -1,5 +1,4 @@
-packages:
-  - packages/*
+pmOnFail: ignore
 catalog:
   zod: ^4.5.4
 overrides:
