@@ -6,12 +6,13 @@ import { RuntimeStates } from '~/ai/chat/runtime/runtime-state'
 import { SessionProcessor } from '~/ai/chat/runtime/session-processor'
 import { createMasterTurnScheduler } from '~/ai/chat/runtime/master-turn-scheduler'
 import type { AppUIMessage } from '~/ai/chat/types'
+import type { AgentRunner } from '~/ai/chat/runtime/agent-runner'
 
 const TEXT_ONE = 'Hello 你好 🌿 one'
 const TEXT_TWO = 'Hello 你好 🌿 two'
 
 function createHarness(
-	runTurn: (options: { abortSignal?: AbortSignal }) => Promise<unknown>,
+	runTurn: (options: Parameters<AgentRunner['runTurn']>[0]) => Promise<unknown>,
 	prepareUserContext: (
 		items: unknown[],
 	) => Promise<{ dedupedItems: unknown[] }> = async (items) => ({
@@ -118,6 +119,147 @@ function createHarness(
 }
 
 describe('SessionProcessor master turn worker', () => {
+	it('sends all queued messages together at a tool boundary without aborting originating work', async () => {
+		let release!: () => void
+		const boundary = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const origins: AbortSignal[] = []
+		const runTurn = vi.fn(
+			async (options: Parameters<AgentRunner['runTurn']>[0]) => {
+				origins.push(options.taskOrigin.signal)
+				if (origins.length === 1) {
+					expect(options.shouldYieldAfterToolStep?.()).toBe(false)
+					await boundary
+					expect(options.shouldYieldAfterToolStep?.()).toBe(true)
+				}
+				if (origins.length === 2) {
+					expect(options.agent.timeline).toHaveLength(3)
+				}
+				return { status: 'completed', text: TEXT_TWO }
+			},
+		)
+		const { master, processor, runtime, messageFactory } =
+			createHarness(runTurn)
+		processor.enqueueUserSubmission('session', {
+			text: TEXT_ONE,
+			userContext: [],
+		})
+		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		processor.enqueueUserSubmission('session', {
+			text: TEXT_TWO,
+			userContext: [],
+		})
+		processor.enqueueUserSubmission('session', {
+			text: 'Compare 比较 🌱',
+			userContext: [],
+		})
+		expect(master.timeline).toHaveLength(1)
+		release()
+		await runtime.processing
+		expect(runTurn).toHaveBeenCalledTimes(2)
+		expect(master.timeline.map((message) => message.parts[0])).toEqual([
+			{ type: 'text', text: TEXT_ONE },
+			{ type: 'text', text: TEXT_TWO },
+			{ type: 'text', text: 'Compare 比较 🌱' },
+		])
+		expect(origins.every((signal) => !signal.aborted)).toBe(true)
+		expect(messageFactory.removeIncompleteToolCalls).not.toHaveBeenCalled()
+		expect(runtime.scheduler.queued).toEqual([])
+	})
+
+	it('does not lose later user input when preparing one item in a claimed batch fails', async () => {
+		let releaseFirstTurn!: () => void
+		const firstTurn = new Promise<void>((resolve) => {
+			releaseFirstTurn = resolve
+		})
+		const runTurn = vi.fn(async () => {
+			if (runTurn.mock.calls.length === 1) await firstTurn
+			return { status: 'completed', text: 'Completed 完成 🌿' }
+		})
+		let preparation = 0
+		const prepare = vi.fn(async (items: unknown[]) => {
+			preparation += 1
+			if (preparation === 3)
+				throw new Error('Context unavailable 上下文不可用 🌧️')
+			return { dedupedItems: items }
+		})
+		const { master, processor, runtime } = createHarness(runTurn, prepare)
+
+		processor.enqueueUserSubmission('session', {
+			text: 'Initial 初始 🌱',
+			userContext: [],
+		})
+		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		processor.enqueueUserSubmission('session', {
+			text: 'First queued 第一条 🌿',
+			userContext: [],
+		})
+		processor.enqueueUserSubmission('session', {
+			text: 'Second queued 第二条 🌻',
+			userContext: [],
+		})
+
+		releaseFirstTurn()
+		await runtime.processing
+
+		expect(
+			master.timeline.flatMap((message) =>
+				message.parts.flatMap((part) =>
+					part.type === 'text' ? [part.text] : [],
+				),
+			),
+		).toEqual([
+			'Initial 初始 🌱',
+			'First queued 第一条 🌿',
+			'Second queued 第二条 🌻',
+		])
+	})
+
+	it('does not lose later user input when persisting one item in a claimed batch fails', async () => {
+		let releaseFirstTurn!: () => void
+		const firstTurn = new Promise<void>((resolve) => {
+			releaseFirstTurn = resolve
+		})
+		const runTurn = vi.fn(async () => {
+			if (runTurn.mock.calls.length === 1) await firstTurn
+			return { status: 'completed', text: 'Completed 完成 🌿' }
+		})
+		const { master, processor, runtime, store } = createHarness(runTurn)
+
+		processor.enqueueUserSubmission('session', {
+			text: 'Initial 初始 🌱',
+			userContext: [],
+		})
+		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		processor.enqueueUserSubmission('session', {
+			text: 'First queued 第一条 🌿',
+			userContext: [],
+		})
+		processor.enqueueUserSubmission('session', {
+			text: 'Second queued 第二条 🌻',
+			userContext: [],
+		})
+		store.persistSession.mockRejectedValueOnce(
+			new Error('Storage unavailable 存储暂不可用 🌧️'),
+		)
+
+		releaseFirstTurn()
+		await runtime.processing
+
+		expect(
+			master.timeline.flatMap((message) =>
+				message.parts.flatMap((part) =>
+					part.type === 'text' ? [part.text] : [],
+				),
+			),
+		).toEqual([
+			'Initial 初始 🌱',
+			'First queued 第一条 🌿',
+			'Second queued 第二条 🌻',
+		])
+	})
+
 	it('cancels T1 without replaying it and drains queued T2', async () => {
 		let callCount = 0
 		const runTurn = vi.fn(({ abortSignal }: { abortSignal?: AbortSignal }) => {
@@ -180,8 +322,7 @@ describe('SessionProcessor master turn worker', () => {
 
 	it('drains queued work after an unexpected worker rejection', async () => {
 		let releaseFirstTurn:
-			| ((result: { status: string; text: string }) => void)
-			| undefined
+			((result: { status: string; text: string }) => void) | undefined
 		const runTurn = vi.fn(() => {
 			if (runTurn.mock.calls.length === 1) {
 				return new Promise<{ status: string; text: string }>((resolve) => {
@@ -257,8 +398,7 @@ describe('SessionProcessor master turn worker', () => {
 
 	it('materializes a claimed user submission after Stop without starting the model', async () => {
 		let releasePrepare:
-			| ((value: { dedupedItems: unknown[] }) => void)
-			| undefined
+			((value: { dedupedItems: unknown[] }) => void) | undefined
 		const prepare = vi.fn(
 			() =>
 				new Promise<{ dedupedItems: unknown[] }>((resolve) => {

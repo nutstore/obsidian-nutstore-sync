@@ -972,6 +972,75 @@
 	transform: rotate(180deg);
 }
 
+.chatbox-pending {
+	min-width: 0;
+	padding: 0.5rem 0.75rem;
+	border-radius: 0.75rem;
+	background: var(--background-primary-alt);
+}
+
+.chatbox-pending-heading {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	color: var(--text-muted);
+	font-size: 0.6875rem;
+	font-weight: 500;
+}
+
+.chatbox-pending-count {
+	min-width: 1rem;
+	padding: 0 0.25rem;
+	border-radius: 1rem;
+	background: var(--background-modifier-hover);
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.chatbox-pending-items {
+	max-height: 12rem;
+	margin: 0.5rem 0 0;
+	padding: 0 0 0 0.375rem;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	list-style: none;
+}
+
+.chatbox-pending-item {
+	position: relative;
+	margin: 0;
+	padding: 0 0.25rem 0.625rem 0.875rem;
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.chatbox-pending-item:last-child {
+	padding-bottom: 0.125rem;
+}
+
+.chatbox-pending-item::before {
+	position: absolute;
+	top: 0.375rem;
+	left: -0.1875rem;
+	width: 0.3125rem;
+	height: 0.3125rem;
+	border-radius: 50%;
+	background: var(--text-faint);
+	content: '';
+}
+
+.chatbox-pending-item:first-child::before {
+	background: var(--text-accent);
+}
+
+.chatbox-pending-text {
+	color: var(--text-normal);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+
 .chatbox-process-title-active {
 	display: inline-block;
 	background-image: linear-gradient(

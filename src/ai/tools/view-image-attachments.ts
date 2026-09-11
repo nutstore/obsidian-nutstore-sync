@@ -1,8 +1,8 @@
-import type { FilePart, ToolCallPart, UserModelMessage } from 'ai'
+import type { FilePart, UserModelMessage } from 'ai'
 
 export interface ViewImageAttachmentRegistry {
 	register(toolCallId: string, file: FilePart): void
-	takeUninjected(toolCalls: ToolCallPart[]): FilePart[]
+	takeUninjected(toolCalls: ReadonlyArray<{ toolCallId: string }>): FilePart[]
 }
 
 export class InMemoryViewImageAttachmentRegistry implements ViewImageAttachmentRegistry {
@@ -13,7 +13,7 @@ export class InMemoryViewImageAttachmentRegistry implements ViewImageAttachmentR
 		this.attachments.set(toolCallId, file)
 	}
 
-	takeUninjected(toolCalls: ToolCallPart[]) {
+	takeUninjected(toolCalls: ReadonlyArray<{ toolCallId: string }>) {
 		const files: FilePart[] = []
 		for (const toolCall of toolCalls) {
 			if (this.injectedToolCallIds.has(toolCall.toolCallId)) continue

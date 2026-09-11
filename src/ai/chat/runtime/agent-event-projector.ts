@@ -8,6 +8,7 @@ import type { ChatSession } from '~/ai/chat/domain'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
+import { isTerminalToolPart } from '~/ai/chat/messages/ui-message'
 import type { SessionRuntimeState } from '~/ai/chat/runtime/chat-state'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type {
@@ -168,9 +169,7 @@ export class AgentEventProjector {
 							(candidate) =>
 								candidate.type === 'dynamic-tool' &&
 								candidate.toolCallId === part.toolCallId &&
-								(candidate.state === 'output-available' ||
-									candidate.state === 'output-error' ||
-									candidate.state === 'output-denied'),
+								isTerminalToolPart(candidate),
 						)
 						if (existing) message.parts[index] = existing
 					}

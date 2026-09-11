@@ -718,7 +718,7 @@
 				"toolCall": "Tool call",
 				"params": "Params",
 				"result": "Result",
-				"queuedSubmissions": "Queued Submissions",
+				"queuedSubmissions": "Up next",
 				"contextArea": "Context",
 				"reasoning": "Reasoning",
 				"todoList": "Todo List",

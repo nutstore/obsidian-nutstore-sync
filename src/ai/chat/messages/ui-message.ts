@@ -262,6 +262,17 @@ export function getMessageText(message: AppUIMessage) {
 		.join('\n')
 }
 
+/** Tool part states whose outcome is final and can be replayed to the model. */
+export function isTerminalToolPart(
+	part: Extract<AppUIMessagePart, { type: 'dynamic-tool' }>,
+) {
+	return (
+		part.state === 'output-available' ||
+		part.state === 'output-error' ||
+		part.state === 'output-denied'
+	)
+}
+
 /** Remove tool calls that cannot be resumed after their owning execution ends. */
 export function removeIncompleteToolCalls(agent: ChatAgentState) {
 	let changed = false
@@ -269,10 +280,7 @@ export function removeIncompleteToolCalls(agent: ChatAgentState) {
 		if (message.role !== 'assistant') return true
 		const nextParts = message.parts.filter((part) => {
 			if (part.type !== 'dynamic-tool') return true
-			const complete =
-				part.state === 'output-available' ||
-				part.state === 'output-error' ||
-				part.state === 'output-denied'
+			const complete = isTerminalToolPart(part)
 			if (!complete) changed = true
 			return complete
 		})
