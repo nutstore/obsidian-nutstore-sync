@@ -13,6 +13,7 @@ import type { ChatSession } from '~/ai/chat/domain'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import { messageToText } from '~/ai/chat/messages/message-utils'
 import {
+	isTerminalToolPart,
 	selectContextTimeline,
 	uiMessagesToModelMessages,
 } from '~/ai/chat/messages/ui-message'
@@ -51,6 +52,23 @@ export type AgentTurnResult =
 	| { status: 'completed'; text: string }
 	| { status: 'needs-compaction'; continuation: ToolCallRepeatState }
 
+/**
+ * Tool calls of the most recent assistant step. A run that yielded at a tool
+ * boundary never reached the next prepareStep, so these calls can still hold
+ * uninjected tool images when the transcript is replayed.
+ */
+function findLastAssistantToolCalls(messages: ModelMessage[]): ToolCallPart[] {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index]
+		if (message.role !== 'assistant' || !Array.isArray(message.content))
+			continue
+		return message.content.filter(
+			(part): part is ToolCallPart => part.type === 'tool-call',
+		)
+	}
+	return []
+}
+
 interface RunAgentTurnOptions {
 	session: ChatSession
 	agent: ChatAgentState
@@ -64,6 +82,8 @@ interface RunAgentTurnOptions {
 	continuation?: ToolCallRepeatState
 	abortSignal?: AbortSignal
 	shouldSuspendAfterToolStep?: () => boolean | Promise<boolean>
+	/** Finish at a fully paired tool boundary so the scheduler can admit new input. */
+	shouldYieldAfterToolStep?: () => boolean
 	buildMessages?: (
 		agent: ChatAgentState,
 		tools: ToolSet,
@@ -185,6 +205,17 @@ export class AgentRunner {
 			steps,
 		}) => {
 			if (!steps.at(-1)?.toolCalls.length) return false
+			// Provider tools may defer their results to another step. Never insert
+			// a new user message while any call still lacks its terminal outcome.
+			if (
+				agent.timeline.some((message) =>
+					message.parts.some(
+						(part) => part.type === 'dynamic-tool' && !isTerminalToolPart(part),
+					),
+				)
+			)
+				return false
+			if (options.shouldYieldAfterToolStep?.()) return true
 			shouldSuspend = (await options.shouldSuspendAfterToolStep?.()) ?? false
 			return shouldSuspend
 		}
@@ -195,11 +226,13 @@ export class AgentRunner {
 			toolsContext,
 			stopWhen: [isLoopFinished(), repeatedToolCalls, suspendAtStepBoundary],
 			maxOutputTokens: resolveModelOutputLimit(options.model),
-			prepareStep: async ({ messages, steps }) => {
+			prepareStep: async ({ messages }) => {
 				readTracker.resetSnapshot()
 				await projector.project({ type: 'step-start' })
+				// A scheduler handoff can end the previous run before prepareStep
+				// attached its tool images. Recover them from the rebuilt transcript.
 				const attachments = viewImageAttachments.takeUninjected(
-					(steps.at(-1)?.toolCalls ?? []) as ToolCallPart[],
+					findLastAssistantToolCalls(messages),
 				)
 				const attachmentMessage = createViewImageAttachmentMessage(attachments)
 				if (!attachmentMessage) return {}

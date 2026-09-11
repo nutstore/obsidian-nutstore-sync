@@ -1,4 +1,4 @@
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Notice, Setting } from 'obsidian'
 import { findPresetModelById } from '~/ai/catalog/config'
 import { AIModelConfig } from '~/ai/core/types'

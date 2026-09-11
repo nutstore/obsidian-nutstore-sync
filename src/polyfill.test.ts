@@ -1,40 +1,41 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const originalProcess = globalThis.process
-const originalQueueMicrotask = globalThis.queueMicrotask
-
 afterEach(() => {
-	globalThis.process = originalProcess
-	globalThis.queueMicrotask = originalQueueMicrotask
+	vi.unstubAllGlobals()
 	vi.resetModules()
 })
 
 describe('polyfill', () => {
 	it('adds process.env when it is missing', async () => {
-		;(globalThis as typeof globalThis & { process: any }).process = {
+		const process: { cwd: () => string; env?: Record<string, string> } = {
 			cwd() {
 				return '/mobile'
 			},
 		}
 
+		vi.stubGlobal('window', { process, queueMicrotask, setTimeout })
 		vi.resetModules()
 		await import('./polyfill')
 
-		expect(globalThis.process).toBeDefined()
-		expect(typeof globalThis.process.cwd).toBe('function')
-		expect(globalThis.process.cwd()).toBe('/mobile')
-		expect(globalThis.process.env).toEqual({})
+		expect(process).toBeDefined()
+		expect(typeof process.cwd).toBe('function')
+		expect(process.cwd()).toBe('/mobile')
+		expect(process.env).toEqual({})
 	})
 
 	it('adds queueMicrotask when it is missing', async () => {
-		;(globalThis as { queueMicrotask?: typeof queueMicrotask }).queueMicrotask =
-			undefined
+		const runtime = {
+			process: { cwd: () => '/' },
+			setTimeout,
+			queueMicrotask: undefined as typeof queueMicrotask | undefined,
+		}
+		vi.stubGlobal('window', runtime)
 
 		vi.resetModules()
 		await import('./polyfill')
 
 		const callback = vi.fn()
-		globalThis.queueMicrotask(() => callback('Hello 你好 🌿'))
+		runtime.queueMicrotask!(() => callback('Hello 你好 🌿'))
 		await Promise.resolve()
 
 		expect(callback).toHaveBeenCalledOnce()

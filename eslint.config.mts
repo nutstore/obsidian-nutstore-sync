@@ -67,27 +67,59 @@ const markdownPlugin = markdown as unknown as NonNullable<
 	Config['plugins']
 >[string]
 
+const restrictedGlobals = obsidianRecommended
+	.map((config) => config.rules?.['no-restricted-globals'])
+	.filter((rule) => Array.isArray(rule))
+	.at(-1)
+if (
+	!Array.isArray(restrictedGlobals) ||
+	!restrictedGlobals.some(
+		(option: unknown) =>
+			typeof option === 'object' &&
+			option !== null &&
+			'name' in option &&
+			option.name === 'fetch',
+	)
+) {
+	throw new Error(
+		'Expected an upstream fetch restriction for native fetch callers',
+	)
+}
+const nativeFetchGlobals = restrictedGlobals
+	.slice(1)
+	.filter(
+		(option: unknown) =>
+			!(
+				typeof option === 'object' &&
+				option !== null &&
+				'name' in option &&
+				option.name === 'fetch'
+			),
+	)
+
 export default defineConfig([
 	{
-		ignores: ['node_modules/**', 'dist/**', 'main.js', 'coverage/**'],
+		ignores: [
+			'node_modules/**',
+			'dist/**',
+			'main.js',
+			'styles.css',
+			'coverage/**',
+		],
 	},
 
 	...obsidianRecommended,
 
-	// Type-aware linting uses the repository's single root TypeScript project so
-	// its ambient declarations are loaded together with every linted source file.
+	// Providers explicitly opt into browser CORS/streaming. Image export avoids
+	// requestUrl's mobile base64 bridge copies and resolves local resource URLs.
+	// These two callers require native fetch; preserve all other restrictions.
 	{
-		files: typedFiles,
-		languageOptions: {
-			parserOptions: {
-				project: './tsconfig.json',
-				tsconfigRootDir: configDir,
-			},
-		},
+		files: [
+			'src/ai/transport/provider-fetch.ts',
+			'src/ai/chat/messages/export-session.ts',
+		],
 		rules: {
-			// This rule mis-models detached elements created from an owner Document
-			// and suggests Window helpers that are absent from Obsidian's Window type.
-			'obsidianmd/prefer-create-el': 'off',
+			'no-restricted-globals': ['error', ...nativeFetchGlobals],
 		},
 	},
 
@@ -110,26 +142,25 @@ export default defineConfig([
 		},
 	},
 
-	// Solid owns TSX-specific semantics.
-	{
-		files: ['**/*.tsx'],
-		...solidConfig,
-	},
-
-	// eslint-plugin-unused-imports owns the complete unused-declaration domain
-	// for TypeScript files so imports are not reported twice.
+	// Use one TypeScript project so all source files share ambient declarations.
 	{
 		files: typedFiles,
+		languageOptions: {
+			parserOptions: {
+				project: './tsconfig.json',
+				tsconfigRootDir: configDir,
+			},
+		},
 		plugins: {
 			'unused-imports': unusedImports,
 		},
 		rules: {
 			'no-undef': 'off',
 
+			// unused-imports handles both imports and variables without duplicate reports.
 			'@typescript-eslint/no-unused-vars': 'off',
 			'@typescript-eslint/no-unsafe-assignment': 'off',
 			'@typescript-eslint/no-unsafe-argument': 'off',
-			'@typescript-eslint/no-misused-promises': 'off',
 
 			'unused-imports/no-unused-imports': 'error',
 			'unused-imports/no-unused-vars': [
@@ -155,10 +186,12 @@ export default defineConfig([
 		},
 	},
 
-	// Core ESLint cannot see assignments performed by Solid JSX ref bindings.
 	{
+		...solidConfig,
 		files: ['**/*.tsx'],
 		rules: {
+			...solidConfig.rules,
+			// Core ESLint cannot see assignments performed by Solid JSX ref bindings.
 			'no-unassigned-vars': 'off',
 		},
 	},
@@ -172,8 +205,6 @@ export default defineConfig([
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/await-thenable': 'off',
 			'@typescript-eslint/no-unnecessary-type-assertion': 'off',
-			'@typescript-eslint/no-unsafe-argument': 'off',
-			'@typescript-eslint/no-unsafe-assignment': 'off',
 			'@typescript-eslint/no-unsafe-call': 'off',
 			'@typescript-eslint/no-unsafe-member-access': 'off',
 			'@typescript-eslint/no-unsafe-return': 'off',
@@ -183,18 +214,6 @@ export default defineConfig([
 			'obsidianmd/no-global-this': 'off',
 			'obsidianmd/no-nodejs-modules': 'off',
 			'obsidianmd/prefer-file-manager-trash-file': 'off',
-		},
-	},
-
-	{
-		files: [
-			'src/ai/chat/messages/export-session.ts',
-			'src/ai/transport/provider-fetch.ts',
-		],
-		rules: {
-			// These adapters need the Fetch response/stream contract; requestUrl does
-			// not expose an equivalent interface.
-			'no-restricted-globals': 'off',
 		},
 	},
 
@@ -214,55 +233,6 @@ export default defineConfig([
 		rules: {
 			// Reads the deprecated field solely to migrate persisted legacy sessions.
 			'@typescript-eslint/no-deprecated': 'off',
-		},
-	},
-
-	{
-		files: ['src/polyfill.ts'],
-		rules: {
-			// This bootstrap must attach process to the host global in Node tests and
-			// browser windows; the window-only recommendation cannot express that.
-			'obsidianmd/no-global-this': 'off',
-		},
-	},
-
-	{
-		files: ['src/ai/tools/bash/fs.ts', 'src/utils/local-vault-io.ts'],
-		rules: {
-			// These reusable low-level adapters intentionally depend only on Vault;
-			// callers that own an App use FileManager.trashFile directly.
-			'obsidianmd/prefer-file-manager-trash-file': 'off',
-		},
-	},
-
-	{
-		files: ['src/settings/**/*.ts'],
-		rules: {
-			// The declarative settings API requires Obsidian 1.13, while this plugin
-			// intentionally supports the declared 1.7.2 minimum.
-			'obsidianmd/settings-tab/prefer-setting-definitions': 'off',
-			'obsidianmd/settings-tab/prefer-update-over-display': 'off',
-		},
-	},
-
-	// package.json is already parsed and owned by eslint-plugin-obsidianmd's
-	// recommended config. Only override its dependency policy here instead of
-	// registering another @eslint/json plugin instance for the same file.
-	{
-		files: ['package.json'],
-		rules: {
-			'depend/ban-dependencies': [
-				'error',
-				{
-					presets: ['native', 'microutilities', 'preferred'],
-					allowed: [
-						'builtin-modules',
-						'dotenv',
-						'eslint-plugin-import',
-						'lodash-es',
-					],
-				},
-			],
 		},
 	},
 
@@ -338,7 +308,7 @@ export default defineConfig([
 			// outside the generic CSS validator's model.
 			'css/no-invalid-at-rules': 'off',
 			'css/no-invalid-properties': 'off',
-			'css/no-important': 'off',
+			'css/no-important': 'error',
 			'css/use-baseline': 'off',
 		},
 	},

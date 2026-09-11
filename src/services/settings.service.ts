@@ -1,4 +1,4 @@
-import { debounce } from 'lodash-es'
+import { debounce } from 'es-toolkit/compat'
 import { normalizePath, Notice } from 'obsidian'
 import {
 	sanitizeDefaultSelections,
@@ -77,6 +77,7 @@ export default class SettingsService extends BaseService {
 			providers: {},
 			defaultModel: undefined,
 			yolo: false,
+			disabledSkills: [],
 			subagents: {
 				explorer: { enabled: false },
 				memory: { enabled: false },
@@ -90,6 +91,16 @@ export default class SettingsService extends BaseService {
 		this.plugin.settings.ai.subagents.memory ??= { enabled: false }
 		this.plugin.settings.ai.subagents.explorer.enabled ??= false
 		this.plugin.settings.ai.subagents.memory.enabled ??= false
+		this.plugin.settings.ai.disabledSkills = [
+			...new Set(
+				(Array.isArray(this.plugin.settings.ai.disabledSkills)
+					? this.plugin.settings.ai.disabledSkills
+					: []
+				).filter(
+					(name): name is string => typeof name === 'string' && name.length > 0,
+				),
+			),
+		]
 		this.plugin.settings.ai.nutstoreLlmGateway ??= {}
 		if (Array.isArray(this.plugin.settings.ai.providers)) {
 			this.plugin.settings.ai.providers = {}

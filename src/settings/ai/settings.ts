@@ -12,17 +12,25 @@ import ProvidersManagerModal from '~/components/ProvidersManagerModal'
 import McpServersManagerModal from '~/components/McpServersManagerModal'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
-import BaseSettings from './settings.base'
+import BaseSettings from '../settings.base'
 
 export default class AISettings extends BaseSettings {
-	private subagentsContainerEl?: HTMLElement
+	readonly name = () => i18n.t('settings.sections.ai')
+	readonly showGroupHeading = true
+
+	getSearchTerms(): string[] {
+		return [
+			i18n.t('settings.ai.providers.name'),
+			i18n.t('settings.ai.defaultModel.name'),
+			i18n.t('settings.ai.defaultModel.desc'),
+			i18n.t('settings.ai.mcp.name'),
+			i18n.t('settings.ai.yolo.name'),
+			i18n.t('settings.ai.yolo.desc'),
+		]
+	}
 
 	async display() {
 		this.containerEl.empty()
-
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.sections.ai'))
-			.setHeading()
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.ai.providers.name'))
@@ -140,95 +148,6 @@ export default class AISettings extends BaseSettings {
 						await this.persist(false)
 					}),
 			)
-		this.containerEl.createEl('h3', {
-			text: i18n.t('settings.ai.subagents.heading'),
-		})
-		this.subagentsContainerEl = this.containerEl.createDiv()
-		this.renderSubagentSettings()
-	}
-
-	private renderSubagentSettings() {
-		const containerEl = this.subagentsContainerEl
-		if (!containerEl) return
-		containerEl.empty()
-		this.addSubagentSettings(containerEl, 'explorer')
-		this.addSubagentSettings(containerEl, 'memory')
-	}
-
-	private addSubagentSettings(
-		containerEl: HTMLElement,
-		type: 'explorer' | 'memory',
-	) {
-		const config = this.plugin.settings.ai.subagents[type]
-		const keys = `settings.ai.subagents.${type}` as const
-		new Setting(containerEl)
-			.setName(i18n.t(`${keys}.name`))
-			.setDesc(i18n.t(`${keys}.desc`))
-			.addToggle((toggle) =>
-				toggle.setValue(config.enabled).onChange(async (enabled) => {
-					config.enabled = enabled
-					await this.persist(false)
-					this.renderSubagentSettings()
-				}),
-			)
-		if (!config.enabled) return
-
-		new Setting(containerEl)
-			.setName(i18n.t(`${keys}.model.name`))
-			.setDesc(i18n.t(`${keys}.model.desc`))
-			.addDropdown((dropdown) => {
-				dropdown.addOption('', i18n.t('settings.ai.none'))
-				for (const provider of listProviders(
-					this.plugin.settings.ai.providers,
-				)) {
-					dropdown.addOption(
-						provider.id,
-						provider.name || i18n.t('settings.ai.unnamedProvider'),
-					)
-				}
-				dropdown
-					.setValue(config.model?.providerId || '')
-					.onChange(async (providerId) => {
-						if (!providerId) {
-							config.model = undefined
-						} else {
-							const provider = getProviderById(
-								this.plugin.settings.ai.providers,
-								providerId,
-							)
-							const model =
-								getModelById(provider, config.model?.modelId) ||
-								getFirstModel(provider)
-							config.model = model
-								? { providerId, modelId: model.id }
-								: undefined
-						}
-						await this.persist()
-						this.renderSubagentSettings()
-					})
-			})
-			.addDropdown((dropdown) => {
-				const provider = getProviderById(
-					this.plugin.settings.ai.providers,
-					config.model?.providerId,
-				)
-				dropdown.addOption('', i18n.t('settings.ai.none'))
-				for (const model of listModels(provider)) {
-					dropdown.addOption(
-						model.id,
-						model.name || i18n.t('settings.ai.unnamedModel'),
-					)
-				}
-				dropdown
-					.setValue(config.model?.modelId || '')
-					.setDisabled(!provider)
-					.onChange(async (modelId) => {
-						const providerId = config.model?.providerId
-						config.model =
-							providerId && modelId ? { providerId, modelId } : undefined
-						await this.persist()
-					})
-			})
 	}
 
 	private listUserManagedProviders() {

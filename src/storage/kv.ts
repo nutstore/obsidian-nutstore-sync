@@ -1,21 +1,13 @@
-import localforage from 'localforage'
 import type { ChatSessionIndexItem } from '~/ai/chat/domain'
 import type { PersistedChatSession } from '~/ai/chat/session/session-persistence'
 import { StatModel } from '~/model/stat.model'
 import { SyncRecordModel } from '~/model/sync-record.model'
-import useStorage from './use-storage'
+import { createIndexedDbStorage } from './indexed-db-storage'
 
 const DB_NAME = 'Nutstore_Plugin_Cache'
 
 function createRecoverableStorage<T>(storeName: string) {
-	return useStorage<T>({
-		getFreshInstance: () =>
-			localforage.createInstance({
-				name: DB_NAME,
-				storeName,
-			}),
-		maxRetries: 1,
-	})
+	return createIndexedDbStorage<T>(DB_NAME, storeName)
 }
 
 export const syncRecordKV =

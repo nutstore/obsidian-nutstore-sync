@@ -28,6 +28,17 @@ interface ObsidianSetting {
 	openTabById(pluginId: string): void
 }
 
+/**
+ * Internal core-plugin registry.
+ *
+ * This exists on supported desktop releases but is not part of Obsidian's
+ * public API. Its absence must be handled at runtime for older and mobile
+ * clients.
+ */
+interface ObsidianInternalPlugins {
+	getEnabledPluginById(id: string): unknown
+}
+
 declare module 'obsidian' {
 	interface App {
 		/**
@@ -38,6 +49,11 @@ declare module 'obsidian' {
 		 * Always check for existence before using.
 		 */
 		setting?: ObsidianSetting
+
+		/**
+		 * Internal core-plugin registry. This is absent on some clients.
+		 */
+		internalPlugins?: ObsidianInternalPlugins
 	}
 
 	interface MenuItem {
@@ -59,5 +75,15 @@ declare module 'obsidian' {
 		 * Internal/undocumented, but present at runtime in markdown editors.
 		 */
 		cm?: EditorView
+	}
+}
+
+// Obsidian installs its DOM factories in each window, but the SDK only declares
+// the unqualified globals. Preserve their public signatures for popout realms.
+declare global {
+	interface Window {
+		createEl: typeof createEl
+		createDiv: typeof createDiv
+		createSpan: typeof createSpan
 	}
 }

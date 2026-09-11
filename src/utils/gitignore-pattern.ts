@@ -1,4 +1,4 @@
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep } from 'es-toolkit/compat'
 import path from 'path-browserify'
 
 export interface GlobMatchUserOptions {

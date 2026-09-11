@@ -58,7 +58,8 @@
 			"loggedIn": "Logged in",
 			"notLoggedIn": "Not logged in",
 			"logout": "Logout",
-			"logoutSuccess": "Logged out successfully"
+			"logoutSuccess": "Logged out successfully",
+			"webViewerWarning": "Warning: Web Viewer may cause authorization to fail. Disable it in Obsidian's core plugins before authorizing."
 		},
 		"backupWarning": {
 			"name": "Backup warning",
@@ -125,7 +126,10 @@
 		},
 		"sections": {
 			"account": "Account",
-			"common": "General",
+			"sync": "Synchronization",
+			"automation": "Automatic sync",
+			"transfer": "File transfer",
+			"interface": "Interface",
 			"filters": "Filter rules",
 			"ai": "AI"
 		},
@@ -318,6 +322,14 @@
 					}
 				}
 			},
+			"skills": {
+				"heading": "Skills",
+				"empty": "No Vault Skills discovered in this vault.",
+				"enabled": "Enabled",
+				"diagnostics": {
+					"heading": "Skill diagnostics"
+				}
+			},
 			"errors": {
 				"saveFailed": "Failed to save AI settings",
 				"saveFailedWithReason": "Failed to save AI settings: {{reason}}",
@@ -404,7 +416,11 @@
 			"clearDesc": "Delete all console output records"
 		},
 		"troubleshooting": {
-			"title": "Troubleshoot"
+			"title": "Troubleshoot",
+			"pluginInfo": "Plugin and environment information",
+			"platform": "Platform",
+			"language": "Interface language",
+			"unknownPlatform": "Unknown platform"
 		},
 		"cache": {
 			"title": "Cache management",
@@ -710,7 +726,7 @@
 				"toolCall": "Tool call",
 				"params": "Params",
 				"result": "Result",
-				"queuedSubmissions": "Queued Submissions",
+				"queuedSubmissions": "Up next",
 				"contextArea": "Context",
 				"reasoning": "Reasoning",
 				"todoList": "Todo List",
@@ -726,7 +742,8 @@
 				"loading": "Restoring chat…",
 				"empty": "Start by sending a message",
 				"dragFilePrompt": "Drop to add file",
-				"thinking": "Thinking",
+				"thoughtProcess": "Execution process",
+				"thinking": "Processing",
 				"compressing": "Compressing",
 				"processingTools": "Processing Tools",
 				"noProvider": "No provider",

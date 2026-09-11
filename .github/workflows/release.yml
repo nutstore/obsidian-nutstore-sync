@@ -12,6 +12,9 @@ jobs:
     permissions:
       contents: write
       packages: read
+      id-token: write
+      attestations: write
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -25,14 +28,14 @@ jobs:
           scope: '@nutstore'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: latest-9
+          version: 12.3.4
 
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Update models API catalog
         run: pnpm run update:models-api
@@ -53,6 +56,16 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           zip ${{ github.event.repository.name }}-${tag}.zip main.js manifest.json styles.css
           tar -czf ${{ github.event.repository.name }}-${tag}.tar.gz main.js manifest.json styles.css
+
+      - name: Attest release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+            ${{ github.event.repository.name }}-${{ github.ref_name }}.zip
+            ${{ github.event.repository.name }}-${{ github.ref_name }}.tar.gz
 
       - name: Create release
         env:

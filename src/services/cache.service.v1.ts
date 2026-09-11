@@ -164,7 +164,7 @@ export default class CacheServiceV1 extends BaseService {
 		}
 		return deflateSync(new TextEncoder().encode(serializedStr), {
 			level: 9,
-		}) as Uint8Array<ArrayBuffer>
+		})
 	}
 
 	private decodeStorage(fileContent: BufferLike): ExportedStorage {

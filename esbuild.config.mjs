@@ -1,11 +1,10 @@
-import dotenv from 'dotenv'
 import esbuild from 'esbuild'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import process from 'node:process'
 import { createBuildPlugins } from './scripts/esbuild/plugins/index.mjs'
 
 const pkgJson = JSON.parse(readFileSync('./package.json', 'utf-8'))
-dotenv.config()
+if (existsSync('.env')) process.loadEnvFile('.env')
 
 const prod = process.argv[2] === 'production'
 process.env.NODE_ENV = prod ? 'production' : 'development'

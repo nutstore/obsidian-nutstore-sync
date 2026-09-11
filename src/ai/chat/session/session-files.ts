@@ -1,4 +1,4 @@
-import { normalizePath, Vault } from 'obsidian'
+import { normalizePath, type App } from 'obsidian'
 import type { PersistedChatSession } from '~/ai/chat/session/session-persistence'
 import {
 	readLocalText,
@@ -77,7 +77,11 @@ function stringifyJsonFile(value: unknown) {
 }
 
 export class SessionsFileBackend {
-	constructor(private vault: Vault) {}
+	constructor(private app: Pick<App, 'vault' | 'fileManager'>) {}
+
+	private get vault() {
+		return this.app.vault
+	}
 
 	private get adapter() {
 		return this.vault.adapter
@@ -132,7 +136,7 @@ export class SessionsFileBackend {
 	}
 
 	async deleteSessionFile(id: string) {
-		await removeLocalPath(this.vault, getChatSessionPath(id))
+		await removeLocalPath(this.app, getChatSessionPath(id))
 	}
 
 	async listSessionIds(): Promise<string[]> {

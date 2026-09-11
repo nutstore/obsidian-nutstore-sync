@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import { decode as decodeHtmlEntities } from 'html-entities'
-import { isNil } from 'lodash-es'
+import { isNil } from 'es-toolkit/compat'
 import type { NutstoreSettings } from '~/settings'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'

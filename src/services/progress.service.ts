@@ -1,4 +1,4 @@
-import { throttle } from 'lodash-es'
+import { throttle } from 'es-toolkit/compat'
 import { Notice } from 'obsidian'
 import SyncProgressModal from '../components/SyncProgressModal'
 import {

@@ -20,6 +20,7 @@ import {
 	cancelActiveTurn,
 	claimNextTurn,
 	completeActiveTurn,
+	discardCancelledAgentInputs,
 	discardQueuedTurns,
 	enqueueAgentInput,
 	enqueueRegenerate,
@@ -216,6 +217,9 @@ export class SessionProcessor {
 			)
 		}
 		runtime.processing = undefined
+		// Cancelled agent inputs can no longer run; drop them so no queue state
+		// outlives the worker that was waiting on it.
+		discardCancelledAgentInputs(runtime)
 		if (
 			hasQueuedTurns(runtime) &&
 			!this.state.deletedSessionIds.has(sessionId) &&
@@ -253,8 +257,8 @@ export class SessionProcessor {
 		runtime: SessionRuntimeState,
 		active: ActiveMasterTurn,
 	) {
-		const { turn, abortController } = active
-		const { turnId } = turn
+		const { inputs, abortController } = active
+		const { turnId } = inputs[0]
 		const agent = this.messageFactory.getActiveAgent(session)
 		const taskOrigin: TaskOrigin = {
 			turnId,
@@ -282,6 +286,13 @@ export class SessionProcessor {
 					modelName: string
 			  }
 			| undefined
+		let inputMaterializationError: Error | undefined
+		const rememberInputMaterializationError = (error: unknown) => {
+			inputMaterializationError ??=
+				error instanceof Error
+					? error
+					: new Error('Input materialization failed', { cause: error })
+		}
 
 		runtime.runState = 'thinking'
 		this.notify()
@@ -291,66 +302,88 @@ export class SessionProcessor {
 				return
 			}
 
-			switch (turn.kind) {
-				case 'user-submission': {
-					const preparedContext =
-						await this.userContextManager.prepareUserContextForMessage(
-							turn.submission.userContext,
-						)
-					if (!canMaterialize()) {
-						await this.cancelTurn(session, runtime, active, agent)
-						return
-					}
-					const message = await this.messageFactory.appendUserMessage(
-						agent,
-						turn.submission.text,
-						session,
-						preparedContext.dedupedItems.length > 0
-							? preparedContext.dedupedItems
-							: undefined,
-						canMaterialize,
-					)
-					if (!message) {
-						await this.cancelTurn(session, runtime, active, agent)
-						return
-					}
-					this.store.upsertSessionIndexItem(session, deriveTitle(session))
-					await this.store.persistSession(session)
-					void this.store.persistMetaAndIndex()
-					this.notify()
-					break
-				}
-				case 'agent-input':
-					if (
-						!this.messageFactory.appendAgentInput(
-							agent,
-							turn.input,
-							session,
-							isAlive,
-						)
-					) {
-						await this.cancelTurn(session, runtime, active, agent)
-						return
-					}
-					await this.store.persistSession(session)
-					this.notify()
-					break
-				case 'regenerate':
-					regeneration = await this.messageOps.beginRegeneration(
-						session,
-						turn.targetMessageId,
-						isAlive,
-					)
-					if (!regeneration) {
-						if (!isAlive()) {
+			for (const input of active.inputs) {
+				if (input.kind === 'agent-input' && input.origin.signal.aborted)
+					continue
+				switch (input.kind) {
+					case 'user-submission': {
+						let preparedContext:
+							| Awaited<
+									ReturnType<UserContextManager['prepareUserContextForMessage']>
+							  >
+							| undefined
+						try {
+							preparedContext =
+								await this.userContextManager.prepareUserContextForMessage(
+									input.submission.userContext,
+								)
+						} catch (error) {
+							rememberInputMaterializationError(error)
+						}
+						if (!canMaterialize()) {
 							await this.cancelTurn(session, runtime, active, agent)
 							return
 						}
-						throw new Error('Regeneration target is no longer available')
+						const message = await this.messageFactory.appendUserMessage(
+							agent,
+							input.submission.text,
+							session,
+							preparedContext && preparedContext.dedupedItems.length > 0
+								? preparedContext.dedupedItems
+								: undefined,
+							canMaterialize,
+						)
+						if (!message) {
+							await this.cancelTurn(session, runtime, active, agent)
+							return
+						}
+						this.store.upsertSessionIndexItem(session, deriveTitle(session))
+						try {
+							await this.store.persistSession(session)
+						} catch (error) {
+							rememberInputMaterializationError(error)
+						}
+						void this.store.persistMetaAndIndex()
+						this.notify()
+						break
 					}
-					this.notify()
-					break
+					case 'agent-input':
+						if (
+							!this.messageFactory.appendAgentInput(
+								agent,
+								input.input,
+								session,
+								isAlive,
+							)
+						) {
+							await this.cancelTurn(session, runtime, active, agent)
+							return
+						}
+						try {
+							await this.store.persistSession(session)
+						} catch (error) {
+							rememberInputMaterializationError(error)
+						}
+						this.notify()
+						break
+					case 'regenerate':
+						regeneration = await this.messageOps.beginRegeneration(
+							session,
+							input.targetMessageId,
+							isAlive,
+						)
+						if (!regeneration) {
+							if (!isAlive()) {
+								await this.cancelTurn(session, runtime, active, agent)
+								return
+							}
+							throw new Error('Regeneration target is no longer available')
+						}
+						this.notify()
+						break
+				}
 			}
+			if (inputMaterializationError) throw inputMaterializationError
 
 			if (!isAlive()) {
 				await this.cancelTurn(session, runtime, active, agent, regeneration)
@@ -403,6 +436,10 @@ export class SessionProcessor {
 						buildMessages: (currentAgent, tools) =>
 							this.buildMessagesForAgent(currentAgent, tools),
 						shouldSuspendAfterToolStep: shouldSuspendAtSafePoint,
+						// Regeneration owns a detached timeline suffix until commit;
+						// finish that transaction before admitting another input.
+						shouldYieldAfterToolStep: () =>
+							!regeneration && isAlive() && hasQueuedTurns(runtime),
 					})
 				},
 			})
@@ -478,12 +515,9 @@ export class SessionProcessor {
 		regeneration?: RegenerationTransaction,
 		regenerationCommitted = false,
 	) {
+		const { turnId } = active.inputs[0]
 		if (this.state.loadedSessions.get(session.id) !== session) {
-			cancelActiveTurn(
-				runtime,
-				active.turn.turnId,
-				active.abortController.signal,
-			)
+			cancelActiveTurn(runtime, turnId, active.abortController.signal)
 			return
 		}
 		this.cancelExecutionTree(session, active, 'Turn cancelled', agent.id)
@@ -501,11 +535,7 @@ export class SessionProcessor {
 			if (regeneration) await this.store.persistMetaAndIndex()
 			await this.store.persistSession(session)
 		} finally {
-			cancelActiveTurn(
-				runtime,
-				active.turn.turnId,
-				active.abortController.signal,
-			)
+			cancelActiveTurn(runtime, turnId, active.abortController.signal)
 		}
 	}
 
@@ -523,8 +553,9 @@ export class SessionProcessor {
 			modelName: string
 		},
 	) {
+		const { turnId } = active.inputs[0]
 		if (this.state.loadedSessions.get(session.id) !== session) {
-			failActiveTurn(runtime, active.turn.turnId, active.abortController.signal)
+			failActiveTurn(runtime, turnId, active.abortController.signal)
 			return
 		}
 		this.cancelExecutionTree(session, active, 'Turn failed', agent.id)
@@ -544,7 +575,7 @@ export class SessionProcessor {
 			if (regeneration) await this.store.persistMetaAndIndex()
 			await this.store.persistSession(session)
 		} finally {
-			failActiveTurn(runtime, active.turn.turnId, active.abortController.signal)
+			failActiveTurn(runtime, turnId, active.abortController.signal)
 		}
 	}
 
@@ -589,14 +620,15 @@ export class SessionProcessor {
 		reason: string,
 		agentId?: string,
 	) {
+		const { turnId } = active.inputs[0]
 		this.compactionCoordinator.cancel(session.id, agentId)
 		if (!active.abortController.signal.aborted) {
 			active.abortController.abort(createAbortError(reason))
 		}
-		this.discardAgentInputsForOrigin(session.id, active.turn.turnId)
+		this.discardAgentInputsForOrigin(session.id, turnId)
 		const changed = this.subagentCancellation.cancelAllNonTerminalAgents(
 			session,
-			active.turn.turnId,
+			turnId,
 		)
 		if (!changed) return
 		void this.store.persistSession(session)

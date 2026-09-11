@@ -3,6 +3,7 @@ import {
 	BUILTIN_SKILLS,
 	BUILTIN_SKILLS_ROOT,
 	createBuiltinSkillsFs,
+	isBuiltinSkillPath,
 } from './builtin'
 
 describe('built-in Skills', () => {
@@ -60,6 +61,16 @@ describe('built-in Skills', () => {
 		expect(
 			BUILTIN_SKILLS.some((item) => item.name === 'long-term-memory'),
 		).toBe(false)
+	})
+
+	it('classifies every shipped Skill path as built-in', () => {
+		for (const skill of BUILTIN_SKILLS) {
+			expect(isBuiltinSkillPath(skill.path)).toBe(true)
+		}
+		expect(isBuiltinSkillPath('/.agents/skills/example-skill/SKILL.md')).toBe(
+			false,
+		)
+		expect(isBuiltinSkillPath(BUILTIN_SKILLS_ROOT)).toBe(false)
 	})
 
 	it('mounts every built-in Skill under the read-only skills filesystem', async () => {

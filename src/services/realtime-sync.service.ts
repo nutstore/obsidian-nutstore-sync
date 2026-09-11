@@ -1,4 +1,4 @@
-import { debounce } from 'lodash-es'
+import { debounce } from 'es-toolkit/compat'
 import { SyncStartMode } from '~/sync'
 import waitUntil from '~/utils/wait-until'
 import { BaseService } from './service.interface'

@@ -6,7 +6,11 @@ import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
 import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
 import SkippedTask from '~/sync/tasks/skipped.task'
 import { BaseTask } from '~/sync/tasks/task.interface'
-import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
+import {
+	addClassTokens,
+	removeClassTokens,
+	toggleClassTokens,
+} from '~/utils/class-tokens'
 import getTaskName from '~/utils/get-task-name'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
@@ -25,12 +29,7 @@ import RemoveLocalTask from '../sync/tasks/remove-local.task'
 import RemoveRemoteTask from '../sync/tasks/remove-remote.task'
 
 type SyncProgressModalState =
-	| 'preparing'
-	| 'syncing'
-	| 'complete'
-	| 'warning'
-	| 'error'
-	| 'cancelled'
+	'preparing' | 'syncing' | 'complete' | 'warning' | 'error' | 'cancelled'
 
 export default class SyncProgressModal extends Modal {
 	private progressTitle!: HTMLElement
@@ -81,8 +80,8 @@ export default class SyncProgressModal extends Modal {
 			!this.progressLabel ||
 			!this.currentFile ||
 			!this.filesList ||
-			!this.stopButtonComponent ||
-			!this.hideButtonComponent
+			this.stopButtonComponent === undefined ||
+			this.hideButtonComponent === undefined
 		) {
 			return
 		}
@@ -246,7 +245,11 @@ export default class SyncProgressModal extends Modal {
 			state === 'error' ||
 			state === 'cancelled'
 
-		this.stopButtonComponent.buttonEl.toggleClass('hidden', isTerminal)
+		toggleClassTokens(
+			this.stopButtonComponent.buttonEl,
+			':uno: hidden',
+			isTerminal,
+		)
 		this.hideButtonComponent.setButtonText(
 			i18n.t(isTerminal ? 'sync.closeButton' : 'sync.hideButton'),
 		)

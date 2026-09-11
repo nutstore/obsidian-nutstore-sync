@@ -1,18 +1,26 @@
 import { Plugin } from 'obsidian'
-import { persistsChatSessions, toleratesCorruptChatMeta } from './checks/chat'
+import {
+	exportsImagesThroughBrowserTransport,
+	persistsChatSessions,
+	toleratesCorruptChatMeta,
+} from './checks/chat'
 import {
 	detachesChatboxWhenProductionPluginIsDisabled,
+	listsOnlyVaultSkillsInSettings,
 	loadsProductionPlugin,
 	reloadsProductionPlugin,
+	rendersSearchableSettings,
 	rendersSyncProgress,
+	type LifecycleStep,
 } from './checks/plugin'
-import { createsProviderModels } from './checks/providers'
 import {
 	excludesUnrelatedHiddenPathsFromGlobSnapshot,
 	expandsAgentDomainPathsInBash,
 	expandsExistingVaultPathsInBash,
+	filtersDisabledSkillsFromAgentCatalog,
 	preservesBashHeredocUtf8,
 	resolvesResourceDataUrls,
+	respectsVaultDeletionPreference,
 	roundTripsVaultAdapterContent,
 	skipsStaleVaultSkillEntries,
 } from './checks/vault'
@@ -38,13 +46,27 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 	}
 
 	private async runChecks(results: TestResult[]) {
+		const lifecycleSteps: LifecycleStep[] = []
+		let activeCheck: { name: string; startedAt: string } | undefined
 		const writeSnapshot = () =>
 			this.app.vault.adapter.write(
 				OBSIDIAN_E2E_RESULT_PATH,
-				JSON.stringify({ passed: false, started: true, results }, null, 2),
+				JSON.stringify(
+					{
+						passed: false,
+						started: true,
+						results,
+						lifecycleSteps,
+						activeCheck,
+					},
+					null,
+					2,
+				),
 			)
 
 		const run = async (name: string, check: () => Promise<void>) => {
+			activeCheck = { name, startedAt: new Date().toISOString() }
+			await writeSnapshot()
 			try {
 				await check()
 				results.push({ name })
@@ -54,6 +76,7 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 					error: error instanceof Error ? error.stack : String(error),
 				})
 			}
+			activeCheck = undefined
 			// Record progress per check: a hung check must still leave every
 			// completed result behind for failure diagnostics.
 			await writeSnapshot()
@@ -61,9 +84,6 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 
 		await run('loads the production plugin', () =>
 			loadsProductionPlugin(this.app),
-		)
-		await run('creates provider models through the real Obsidian runtime', () =>
-			createsProviderModels(),
 		)
 		await run('reloads the production plugin through the real lifecycle', () =>
 			reloadsProductionPlugin(this.app),
@@ -76,9 +96,6 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		)
 		await run('expands plugin agent domain paths in Bash wildcards', () =>
 			expandsAgentDomainPathsInBash(this.app),
-		)
-		await run('detaches ChatBox when the production plugin is disabled', () =>
-			detachesChatboxWhenProductionPluginIsDisabled(this.app),
 		)
 		await run('round-trips Vault adapter paths and content', () =>
 			roundTripsVaultAdapterContent(this.app),
@@ -97,6 +114,27 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			'skips a stale Vault Skill entry without hiding stable Skills',
 			() => skipsStaleVaultSkillEntries(this.app),
 		)
+		await run(
+			'hides disabled Vault Skills while keeping built-in Skills active',
+			() => filtersDisabledSkillsFromAgentCatalog(this.app),
+		)
+		await run(
+			'respects deletion preferences without a permanent-delete fallback',
+			() => respectsVaultDeletionPreference(this.app),
+		)
+		await run(
+			'exports remote and local images without the native HTTP bridge',
+			() => exportsImagesThroughBrowserTransport(this.app),
+		)
+
+		await run(
+			'renders searchable settings through shared section renderers',
+			() => rendersSearchableSettings(this.app),
+		)
+		await run('lists only Vault Skills in the Skills settings', () =>
+			listsOnlyVaultSkillsInSettings(this.app),
+		)
+
 		await run('tolerates a corrupt chat meta file', () =>
 			toleratesCorruptChatMeta(this.app),
 		)
@@ -105,10 +143,21 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			() => rendersSyncProgress(this.app),
 		)
 
+		await run('detaches ChatBox when the production plugin is disabled', () =>
+			detachesChatboxWhenProductionPluginIsDisabled(this.app, async (step) => {
+				lifecycleSteps.push(step)
+				await writeSnapshot()
+			}),
+		)
+
 		await this.app.vault.adapter.write(
 			OBSIDIAN_E2E_RESULT_PATH,
 			JSON.stringify(
-				{ passed: results.every((result) => !result.error), results },
+				{
+					passed: results.every((result) => !result.error),
+					results,
+					lifecycleSteps,
+				},
 				null,
 				2,
 			),

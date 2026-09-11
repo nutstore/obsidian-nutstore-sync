@@ -27,8 +27,13 @@ export type MasterTurn =
 	  }
 
 export interface ActiveMasterTurn {
-	turn: MasterTurn
+	/** Inputs admitted as one batch. The first entry owns the active turn. */
+	inputs: MasterTurn[]
 	abortController: AbortController
+}
+
+function isCancelledAgentInput(turn: MasterTurn) {
+	return turn.kind === 'agent-input' && turn.origin.signal.aborted
 }
 
 export interface MasterTurnScheduler {
@@ -89,9 +94,22 @@ export function claimNextTurn(runtime: SessionRuntimeState) {
 	if (runtime.scheduler.active) return undefined
 	while (runtime.scheduler.queued.length > 0) {
 		const turn = runtime.scheduler.queued.shift()!
-		if (turn.kind === 'agent-input' && turn.origin.signal.aborted) continue
+		if (isCancelledAgentInput(turn)) continue
+		// Claim the current input batch atomically. Regeneration changes the
+		// timeline and therefore forms a boundary between input batches.
+		const inputs = [turn]
+		if (turn.kind !== 'regenerate') {
+			while (
+				runtime.scheduler.queued.length > 0 &&
+				runtime.scheduler.queued[0].kind !== 'regenerate'
+			) {
+				const input = runtime.scheduler.queued.shift()!
+				if (isCancelledAgentInput(input)) continue
+				inputs.push(input)
+			}
+		}
 		const active: ActiveMasterTurn = {
-			turn,
+			inputs,
 			abortController: new AbortController(),
 		}
 		runtime.scheduler.active = active
@@ -107,7 +125,8 @@ export function ownsActiveTurn(
 ) {
 	const active = runtime.scheduler.active
 	return (
-		active?.turn.turnId === turnId && active.abortController.signal === signal
+		active?.inputs[0].turnId === turnId &&
+		active.abortController.signal === signal
 	)
 }
 
@@ -160,8 +179,12 @@ export function discardQueuedTurns(
 	)
 }
 
+export function discardCancelledAgentInputs(runtime: SessionRuntimeState) {
+	discardQueuedTurns(runtime, isCancelledAgentInput)
+}
+
 export function hasQueuedTurns(runtime: SessionRuntimeState) {
-	return runtime.scheduler.queued.length > 0
+	return runtime.scheduler.queued.some((turn) => !isCancelledAgentInput(turn))
 }
 
 export function getQueuedUserSubmissions(runtime: SessionRuntimeState) {

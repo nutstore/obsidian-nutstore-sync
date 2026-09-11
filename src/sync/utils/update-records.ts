@@ -1,4 +1,4 @@
-import { chunk, debounce, isNil } from 'lodash-es'
+import { chunk, debounce, isNil } from 'es-toolkit/compat'
 import { Vault } from 'obsidian'
 import { emitSyncUpdateMtimeProgress } from '~/events'
 import { NutstoreFileSystem } from '~/fs/nutstore'

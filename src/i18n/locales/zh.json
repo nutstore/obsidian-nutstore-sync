@@ -57,7 +57,8 @@
 			"loggedIn": "已登录",
 			"notLoggedIn": "未登录",
 			"logout": "退出登录",
-			"logoutSuccess": "已退出登录"
+			"logoutSuccess": "已退出登录",
+			"webViewerWarning": "警告：Web Viewer 可能导致授权失败。请先在 Obsidian 核心插件中关闭它，再进行授权。"
 		},
 		"logout": {
 			"confirmTitle": "确认退出",
@@ -83,7 +84,10 @@
 		},
 		"sections": {
 			"account": "账号设置",
-			"common": "通用设置",
+			"sync": "同步设置",
+			"automation": "自动同步",
+			"transfer": "文件传输",
+			"interface": "界面",
 			"filters": "过滤规则",
 			"ai": "AI 设置"
 		},
@@ -276,6 +280,14 @@
 					}
 				}
 			},
+			"skills": {
+				"heading": "技能",
+				"empty": "未在库中发现可管理的技能。",
+				"enabled": "启用",
+				"diagnostics": {
+					"heading": "技能诊断"
+				}
+			},
 			"errors": {
 				"saveFailed": "AI 设置保存失败",
 				"saveFailedWithReason": "AI 设置保存失败：{{reason}}",
@@ -404,7 +416,11 @@
 			"clearDesc": "删除所有控制台输出记录"
 		},
 		"troubleshooting": {
-			"title": "排障"
+			"title": "排障",
+			"pluginInfo": "插件与环境信息",
+			"platform": "运行平台",
+			"language": "界面语言",
+			"unknownPlatform": "未知平台"
 		},
 		"cache": {
 			"title": "缓存管理",
@@ -710,7 +726,7 @@
 				"toolCall": "工具调用",
 				"params": "参数",
 				"result": "结果",
-				"queuedSubmissions": "排队内容",
+				"queuedSubmissions": "待发送",
 				"contextArea": "上下文",
 				"reasoning": "推理",
 				"todoList": "待办列表",
@@ -726,7 +742,8 @@
 				"loading": "正在恢复聊天…",
 				"empty": "开始发送一条消息",
 				"dragFilePrompt": "松手以添加文件",
-				"thinking": "思考中",
+				"thoughtProcess": "执行过程",
+				"thinking": "处理中",
 				"compressing": "压缩中",
 				"processingTools": "工具处理中",
 				"noProvider": "未选择 Provider",

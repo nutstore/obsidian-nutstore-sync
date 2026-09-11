@@ -131,6 +131,9 @@ async function resolveImageArrayBuffer(imagePart: FilePart) {
 	if (!url) {
 		throw new Error('Unable to read non-URL image content')
 	}
+	// Keep binary downloads in the WebView: requestUrl's mobile bridge adds
+	// base64 copies and can exhaust memory for large images. This also resolves
+	// browser-owned data/blob/app URLs without a native HTTP round trip.
 	const response = await fetch(url)
 	if (!response.ok) {
 		throw new Error(`Unable to read image content: ${response.status}`)

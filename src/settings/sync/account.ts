@@ -7,16 +7,31 @@ import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import { OAuthResponse } from '~/utils/decrypt-ticket-response'
 import { is503Error } from '~/utils/is-503-error'
 import logger from '~/utils/logger'
-import BaseSettings from './settings.base'
+import BaseSettings from '../settings.base'
 
 export default class AccountSettings extends BaseSettings {
+	readonly name = () => i18n.t('settings.sections.account')
+	readonly showGroupHeading = true
+
+	getSearchTerms(): string[] {
+		return [
+			i18n.t('settings.loginMode.name'),
+			i18n.t('settings.help.name'),
+			i18n.t('settings.enterpriseBaseUrl.name'),
+			i18n.t('settings.account.name'),
+			i18n.t('settings.account.desc'),
+			i18n.t('settings.credential.name'),
+			i18n.t('settings.credential.desc'),
+			i18n.t('settings.login.name'),
+			i18n.t('settings.checkConnection.name'),
+			i18n.t('settings.checkConnection.desc'),
+		]
+	}
+
 	private updateOAuthUrlTimer: number | null = null
 
 	async display() {
 		this.containerEl.empty()
-		new Setting(this.containerEl)
-			.setName(i18n.t('settings.sections.account'))
-			.setHeading()
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.loginMode.name'))
@@ -128,11 +143,12 @@ export default class AccountSettings extends BaseSettings {
 			addClassTokens(el.infoEl, ':uno: max-w-full')
 			this.displayCheckConnection()
 		} else {
-			new Setting(this.containerEl)
+			const loginSetting = new Setting(this.containerEl)
 				.setName(i18n.t('settings.ssoStatus.notLoggedIn'))
 				.addButton(async (button) => {
 					button.setButtonText(i18n.t('settings.login.name'))
-					const anchor = createEl('a')
+					const ownerDocument = button.buttonEl.ownerDocument
+					const anchor = ownerDocument.win.createEl('a')
 					anchor.target = '_blank'
 					button.buttonEl.parentElement?.appendChild(anchor)
 					anchor.appendChild(button.buttonEl)
@@ -141,7 +157,7 @@ export default class AccountSettings extends BaseSettings {
 					})
 					this.updateOAuthUrlTimer = window.setInterval(() => {
 						void (async () => {
-							const stillInDoc = document.contains(anchor)
+							const stillInDoc = ownerDocument.contains(anchor)
 							if (stillInDoc) {
 								anchor.href = await createOAuthUrl({
 									app: 'obsidian',
@@ -153,6 +169,15 @@ export default class AccountSettings extends BaseSettings {
 						})()
 					}, 60 * 1000)
 				})
+
+			const isWebViewerEnabled =
+				this.app.internalPlugins?.getEnabledPluginById('webviewer') != null
+			if (isWebViewerEnabled) {
+				loginSetting.descEl.createSpan({
+					text: i18n.t('settings.ssoStatus.webViewerWarning'),
+					cls: ':uno: text-[var(--text-warning)]',
+				})
+			}
 		}
 	}
 

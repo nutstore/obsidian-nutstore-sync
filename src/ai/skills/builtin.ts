@@ -12,6 +12,11 @@ import type { BuiltinSkill } from './types'
 
 export const BUILTIN_SKILLS_ROOT = BUILTIN_SKILLS_MOUNT_POINT
 
+/** Built-in identity follows the mount path, not the Skill name. */
+export function isBuiltinSkillPath(path: string) {
+	return path.startsWith(`${BUILTIN_SKILLS_ROOT}/`)
+}
+
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 	{
 		name: 'nutstore-sync-guide',

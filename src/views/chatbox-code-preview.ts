@@ -23,19 +23,19 @@ export function enhanceHtmlCodeBlocks(container: HTMLElement): void {
 		const pre = code.parentElement
 		if (!pre) continue
 
-		const wrapper = doc.createElement('div')
+		const wrapper = doc.win.createDiv()
 		wrapper.className = 'ns-chatbox-runnable-code'
 
-		const header = doc.createElement('div')
+		const header = doc.win.createDiv()
 		header.className = 'ns-chatbox-runnable-code-header'
-		const lang = doc.createElement('span')
+		const lang = doc.win.createSpan()
 		lang.className = 'ns-chatbox-runnable-code-lang'
 		lang.textContent = 'HTML'
-		const toggle = doc.createElement('button')
+		const toggle = doc.win.createEl('button')
 		toggle.type = 'button'
 		toggle.className = 'ns-chatbox-runnable-code-toggle'
-		const toggleIcon = doc.createElement('span')
-		const toggleText = doc.createElement('span')
+		const toggleIcon = doc.win.createSpan()
+		const toggleText = doc.win.createSpan()
 		toggle.append(toggleIcon, toggleText)
 		header.append(lang, toggle)
 		wrapper.appendChild(header)
@@ -43,10 +43,10 @@ export function enhanceHtmlCodeBlocks(container: HTMLElement): void {
 		pre.replaceWith(wrapper)
 		wrapper.appendChild(pre)
 
-		const preview = doc.createElement('div')
+		const preview = doc.win.createDiv()
 		preview.className = 'ns-chatbox-runnable-code-preview'
 		preview.hidden = true
-		const iframe = doc.createElement('iframe')
+		const iframe = doc.win.createEl('iframe')
 		iframe.setAttribute(
 			'sandbox',
 			'allow-scripts allow-modals allow-forms allow-popups allow-downloads allow-pointer-lock',
