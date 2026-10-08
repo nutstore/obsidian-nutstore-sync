@@ -9,7 +9,7 @@ import {
 import i18n from '~/i18n'
 import BaseSettings from '../settings.base'
 
-type SubagentType = 'explorer' | 'memory'
+type SubagentType = 'explorer'
 
 /** Settings for the specialized agents that the chat agent may dispatch. */
 export default class SubagentSettingsSection extends BaseSettings {
@@ -22,17 +22,12 @@ export default class SubagentSettingsSection extends BaseSettings {
 			i18n.t('settings.ai.subagents.explorer.desc'),
 			i18n.t('settings.ai.subagents.explorer.model.name'),
 			i18n.t('settings.ai.subagents.explorer.model.desc'),
-			i18n.t('settings.ai.subagents.memory.name'),
-			i18n.t('settings.ai.subagents.memory.desc'),
-			i18n.t('settings.ai.subagents.memory.model.name'),
-			i18n.t('settings.ai.subagents.memory.model.desc'),
 		]
 	}
 
 	async display() {
 		this.containerEl.empty()
 		this.addSettings('explorer')
-		this.addSettings('memory')
 	}
 
 	private addSettings(type: SubagentType) {

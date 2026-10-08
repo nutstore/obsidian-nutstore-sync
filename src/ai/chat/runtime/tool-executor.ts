@@ -34,6 +34,7 @@ import type {
 	SettingsSnapshotFn,
 	SettingsUpdater,
 } from '~/ai/tools/tool-context'
+import type { MemoryRepository } from '~/ai/memory/repository'
 import type McpService from '~/services/mcp.service'
 import type { NutstoreSettings } from '~/settings'
 
@@ -46,6 +47,7 @@ export interface StableToolsContext {
 	dispatchableDefinitions?: readonly AgentDefinition[]
 	getSettingsSnapshot?: SettingsSnapshotFn
 	updateSettings?: SettingsUpdater
+	memory: MemoryRepository
 }
 
 export class ToolExecutor {
@@ -64,6 +66,7 @@ export class ToolExecutor {
 			getSettingsSnapshot: SettingsSnapshotFn
 			updateSettings: SettingsUpdater
 		},
+		private memory: MemoryRepository,
 	) {
 		this.fileSystemManager = new VaultFileSystemManager(app)
 	}
@@ -86,16 +89,22 @@ export class ToolExecutor {
 		return resolveChatModalMountTarget(this.state.chatModalHostEl)
 	}
 
+	private getAgentDefinitionSettings() {
+		const settings = this.getSettings()
+		return {
+			fullAccess: Boolean(settings.yolo),
+			subagents: settings.subagents,
+			memory: settings.memory,
+		}
+	}
+
 	getAgentDefinitions() {
-		return createAgentDefinitions({
-			fullAccess: Boolean(this.getSettings().yolo),
-			subagents: this.getSettings().subagents,
-		})
+		return createAgentDefinitions(this.getAgentDefinitionSettings())
 	}
 
 	getSubagentModelSelection(agentType: string) {
 		const selection =
-			agentType === 'explorer' || agentType === 'memory'
+			agentType === 'explorer'
 				? this.getSettings().subagents?.[agentType]
 				: undefined
 		return selection?.model ? { ...selection.model } : undefined
@@ -172,12 +181,12 @@ export class ToolExecutor {
 			communication: this.communication,
 			dispatchTask: (params, origin) =>
 				this.dispatchTaskHandler(params, origin),
-			dispatchableDefinitions: listDispatchableDefinitions({
-				fullAccess: Boolean(this.getSettings().yolo),
-				subagents: this.getSettings().subagents,
-			}),
+			dispatchableDefinitions: listDispatchableDefinitions(
+				this.getAgentDefinitionSettings(),
+			),
 			getSettingsSnapshot: this.settingsIo.getSettingsSnapshot,
 			updateSettings: this.settingsIo.updateSettings,
+			memory: this.memory,
 		}
 	}
 

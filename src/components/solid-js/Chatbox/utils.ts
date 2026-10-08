@@ -1,6 +1,7 @@
 import type { SystemNotificationData } from '~/ai/chat/types'
 import type { ChatDisplayToolCallBlock, ChatRunState } from '~/ai/chat/types'
 export { formatDuration } from '~/utils/format-duration'
+import { describeMemoryEdit } from '~/ai/memory/memory-note'
 import { t } from '../i18n'
 
 function formatTimeFallback(timestamp: number) {
@@ -93,10 +94,33 @@ export function toolCallPurpose(
 	return undefined
 }
 
+function memoryToolTitle(input: unknown) {
+	if (!input || typeof input !== 'object' || Array.isArray(input)) return
+	const strings = (value: unknown) =>
+		Array.isArray(value)
+			? value.filter((item): item is string => typeof item === 'string')
+			: []
+	const { remember, forget } = input as Record<string, unknown>
+	const title = describeMemoryEdit(
+		{ remember: strings(remember), forget: strings(forget) },
+		(action) =>
+			action === 'remember'
+				? t('chatbox.memory.remember')
+				: t('chatbox.memory.forget'),
+	)
+	return title || undefined
+}
+
 export function toolCallDisplayTitle(
 	toolCall: ChatDisplayToolCallBlock['toolCall'],
 ) {
-	return toolCallPurpose(toolCall) ?? toolCall.toolName
+	return (
+		toolCallPurpose(toolCall) ??
+		(toolCall.toolName === 'memory'
+			? memoryToolTitle(toolCall.input)
+			: undefined) ??
+		toolCall.toolName
+	)
 }
 
 export function fencedCode(language: string, value: string) {

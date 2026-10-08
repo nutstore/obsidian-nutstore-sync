@@ -20,6 +20,7 @@ import GcService from './services/gc.service'
 import I18nService from './services/i18n.service'
 import LoggerService from './services/logger.service'
 import McpService from './services/mcp.service'
+import MemoryService from './services/memory.service'
 import ModelsPresetService from './services/models-preset.service'
 import NutstoreLlmGatewayService from './services/nutstore-llm-gateway.service'
 import { ProgressService } from './services/progress.service'
@@ -62,6 +63,7 @@ export default class NutstorePlugin extends Plugin {
 	public settingsService = new SettingsService(this)
 	public syncExecutorService = new SyncExecutorService(this)
 	public gcService = new GcService(this)
+	public memoryService = new MemoryService(this)
 	public chatService = new ChatService(this)
 	public aiConflictResolverService = new AIConflictResolverService(this)
 	public realtimeSyncService = new RealtimeSyncService(
@@ -91,6 +93,7 @@ export default class NutstorePlugin extends Plugin {
 			this.protocolService,
 			this.realtimeSyncService,
 			this.mcpService,
+			this.memoryService,
 			this.chatService,
 			this.aiConflictResolverService,
 			this.scheduledSyncService,

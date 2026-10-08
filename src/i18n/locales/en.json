@@ -335,6 +335,19 @@
 				"name": "Full access",
 				"desc": "⚠️ When on, the AI can edit files and change plugin settings without asking for confirmation each time."
 			},
+			"memory": {
+				"heading": "Memory",
+				"enabled": {
+					"name": "Enable memory",
+					"desc": "The AI remembers preferences, conventions, decisions and ongoing work across chats. Changes appear in the chat and can be undone by recalling the message and restoring its changes. Memory is stored in the plugin directory and can be viewed and edited here."
+				},
+				"path": {
+					"name": "Memory note",
+					"desc": "Markdown file inside .agents/nutstore-sync/. Created when the AI first remembers something.",
+					"invalid": "Memory must be a .md file inside .agents/nutstore-sync/."
+				},
+				"open": "Edit"
+			},
 			"subagents": {
 				"heading": "Subagents",
 				"explorer": {
@@ -342,14 +355,6 @@
 					"desc": "A read-only agent for investigating vault contents.",
 					"model": {
 						"name": "Explorer model",
-						"desc": "Leave blank to inherit the model of the agent that dispatches the task."
-					}
-				},
-				"memory": {
-					"name": "Memory",
-					"desc": "An agent for retrieving and maintaining cross-session preferences, conventions and decisions.",
-					"model": {
-						"name": "Memory model",
 						"desc": "Leave blank to inherit the model of the agent that dispatches the task."
 					}
 				}
@@ -868,6 +873,10 @@
 			"agentNotDispatchable": "Agent type cannot be dispatched: {{agentType}}",
 			"taskSessionUnavailable": "The task session or model configuration is no longer available",
 			"contextCompressionFailed": "Context compression returned no summary"
+		},
+		"memory": {
+			"remember": "Remember",
+			"forget": "Forget"
 		}
 	},
 	"taskSelectionVirtualList": {
@@ -897,5 +906,13 @@
 		"labels": {
 			"currentPath": "Current Path"
 		}
+	},
+	"memory": {
+		"openCommand": "Edit AI memory",
+		"openFailed": "Could not open the memory note {{path}}.",
+		"saveFailed": "Could not save memory file {{path}}.",
+		"changed": "Memory has changed. Copy your edits and reopen memory before saving.",
+		"saveAndClose": "Save and close",
+		"cancel": "Cancel"
 	}
 }

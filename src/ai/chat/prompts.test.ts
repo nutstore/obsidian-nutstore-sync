@@ -42,16 +42,20 @@ describe('main system prompt Skills guidance', () => {
 		expect(prompt).toContain('WebDAV')
 	})
 
-	it('delegates long-term memory instead of exposing it to the main agent', () => {
-		const definition = getAgentDefinition('master')
-		if (!definition) throw new Error('Expected master agent definition')
-		const prompt = createSystemPromptForAgent(definition)
+	it('explains the memory note only while memory is enabled', () => {
+		const enabled = getAgentDefinition('master', {
+			fullAccess: false,
+			memory: { enabled: true },
+		})
+		const disabled = getAgentDefinition('master')
+		if (!enabled || !disabled) throw new Error('Expected master definitions')
 
-		expect(prompt).toContain('memory subagent')
-		expect(prompt).toContain('dispatch a bounded memory task')
-		expect(prompt).toContain('long-term memory is disabled')
-		expect(prompt).toContain('Do not read, search, or modify')
-		expect(prompt).not.toContain('<memory-protocol>')
+		const prompt = createSystemPromptForAgent(enabled)
+		expect(prompt).toContain('complete current content of the memory note')
+		expect(prompt).toContain('Change memory only with that tool')
+		expect(prompt).toContain('on your own initiative')
+		expect(prompt).toContain('without asking first')
+		expect(createSystemPromptForAgent(disabled)).not.toContain('memory note')
 	})
 })
 
@@ -71,7 +75,6 @@ describe('virtual filesystem guidance', () => {
 		expect(prompt).toContain(
 			'Start with the smallest relevant scope and broaden only when evidence is insufficient',
 		)
-		expect(prompt).not.toContain('/.agents/nutstore-sync/memory')
 		expect(prompt).not.toContain(
 			'For ambiguous user requests, you may broaden exploration',
 		)
@@ -85,22 +88,6 @@ describe('virtual filesystem guidance', () => {
 		expect(prompt).toContain('<virtual-filesystem>')
 		expect(prompt).toContain('/.agents/nutstore-sync/tmp')
 		expect(prompt).toContain('read-only explorer subagent')
-	})
-
-	it('gives the memory agent its private protocol and constrained tools', () => {
-		const definition = getAgentDefinition('memory')
-		if (!definition) throw new Error('Expected memory agent definition')
-		const prompt = createSystemPromptForAgent(definition)
-
-		expect(definition.tools).toEqual([
-			'bash',
-			'list_agents',
-			'send_message',
-			'followup_task',
-		])
-		expect(prompt).toContain('<memory-protocol>')
-		expect(prompt).toContain('memory/archive/<YYYY>/<YYYY-MM-DD>.md')
-		expect(prompt).toContain('isolated context')
 	})
 })
 

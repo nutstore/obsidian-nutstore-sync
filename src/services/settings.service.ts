@@ -5,6 +5,10 @@ import {
 	sanitizeProviders,
 } from '~/ai/catalog/config'
 import {
+	normalizeMemoryNotePath,
+	type MemorySettings,
+} from '~/ai/memory/memory-note'
+import {
 	applyNormalizedSettingsPatch,
 	type NormalizedSettingsPatch,
 } from '~/ai/tools/settings-whitelist'
@@ -80,17 +84,21 @@ export default class SettingsService extends BaseService {
 			disabledSkills: [],
 			subagents: {
 				explorer: { enabled: false },
-				memory: { enabled: false },
 			},
+			memory: { ...DEFAULT_SETTINGS.ai.memory },
 		}
 		this.plugin.settings.ai.subagents ??= {
 			explorer: { enabled: false },
-			memory: { enabled: false },
 		}
 		this.plugin.settings.ai.subagents.explorer ??= { enabled: false }
-		this.plugin.settings.ai.subagents.memory ??= { enabled: false }
 		this.plugin.settings.ai.subagents.explorer.enabled ??= false
-		this.plugin.settings.ai.subagents.memory.enabled ??= false
+		const memory: Partial<MemorySettings> = this.plugin.settings.ai.memory ?? {}
+		this.plugin.settings.ai.memory = {
+			enabled: memory.enabled ?? DEFAULT_SETTINGS.ai.memory.enabled,
+			path:
+				normalizeMemoryNotePath(memory.path ?? '') ??
+				DEFAULT_SETTINGS.ai.memory.path,
+		}
 		this.plugin.settings.ai.disabledSkills = [
 			...new Set(
 				(Array.isArray(this.plugin.settings.ai.disabledSkills)

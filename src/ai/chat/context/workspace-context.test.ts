@@ -4,6 +4,7 @@ import {
 	captureWorkspaceContexts,
 	computeChangedContexts,
 } from '~/ai/chat/context/workspace-context'
+import { MemoryRepository } from '~/ai/memory/repository'
 import type { SkillRepository } from '~/ai/skills/repository'
 import type { AppUIMessage, WorkspaceContextDelta } from '~/ai/chat/types'
 
@@ -25,9 +26,13 @@ function asPreviousMessage(deltas: WorkspaceContextDelta[]): AppUIMessage {
 }
 
 function captureAt(date: Date) {
-	return captureWorkspaceContexts(createApp(), undefined, {
-		now: () => date,
-	})
+	return captureWorkspaceContexts(
+		createApp(),
+		{},
+		{
+			now: () => date,
+		},
+	)
 }
 
 describe('workspace date context', () => {
@@ -93,7 +98,9 @@ describe('workspace skill context', () => {
 			},
 		]
 		const repository = { getCatalog: () => catalog } as SkillRepository
-		const current = captureWorkspaceContexts(createApp(), repository)
+		const current = captureWorkspaceContexts(createApp(), {
+			skills: repository,
+		})
 
 		expect(current.find((entry) => entry.key === 'skills')).toEqual({
 			key: 'skills',
@@ -103,7 +110,7 @@ describe('workspace skill context', () => {
 		expect(computeChangedContexts([], current)).toEqual(current)
 	})
 
-	it('does not inject long-term memory into normal workspace context', () => {
+	it('does not inject memory without a memory source', () => {
 		const repository = {
 			getCatalog: () => [
 				{
@@ -114,8 +121,10 @@ describe('workspace skill context', () => {
 			],
 		} as SkillRepository
 
-		const current = captureWorkspaceContexts(createApp(), repository)
-		expect(current.some((entry) => entry.key.startsWith('memory:'))).toBe(false)
+		const current = captureWorkspaceContexts(createApp(), {
+			skills: repository,
+		})
+		expect(current.some((entry) => entry.key.startsWith('memory'))).toBe(false)
 	})
 
 	it('emits an empty catalog to clear previously disclosed skills', () => {
@@ -129,7 +138,9 @@ describe('workspace skill context', () => {
 		const repository = {
 			getCatalog: () => [],
 		} as unknown as SkillRepository
-		const current = captureWorkspaceContexts(createApp(), repository)
+		const current = captureWorkspaceContexts(createApp(), {
+			skills: repository,
+		})
 		const previousMessages = [
 			asPreviousMessage([
 				{
@@ -145,5 +156,95 @@ describe('workspace skill context', () => {
 			content: [],
 			hash: hashObject([]),
 		})
+	})
+})
+
+describe('workspace memory context', () => {
+	function createMemory(files: Record<string, string>, enabled = true) {
+		const app = {
+			vault: {
+				adapter: {
+					exists: async (path: string) => path in files,
+					read: async (path: string) => files[path],
+				},
+			},
+		} as never
+		return new MemoryRepository(app, () => ({
+			enabled,
+			path: '.agents/nutstore-sync/偏好/记忆 🧠.md',
+		}))
+	}
+
+	it('discloses the note once and again only after it changes', async () => {
+		const files = {
+			'.agents/nutstore-sync/偏好/记忆 🧠.md':
+				'- Prefers metric units 偏好公制单位 📏\n',
+		}
+		const memory = createMemory(files)
+		await memory.refresh()
+		const first = captureWorkspaceContexts(createApp(), { memory })
+		const disclosure = {
+			path: '.agents/nutstore-sync/偏好/记忆 🧠.md',
+			content: '- Prefers metric units 偏好公制单位 📏',
+		}
+		expect(first.find((entry) => entry.key === 'memory')).toEqual({
+			key: 'memory',
+			content: disclosure,
+			hash: hashObject(disclosure),
+		})
+		const history = [asPreviousMessage(first)]
+		expect(computeChangedContexts(history, first)).toEqual([])
+
+		files['.agents/nutstore-sync/偏好/记忆 🧠.md'] +=
+			'- Weekly review on Fridays 每周五复盘 🗓️\n'
+		await memory.refresh()
+		expect(
+			computeChangedContexts(
+				history,
+				captureWorkspaceContexts(createApp(), { memory }),
+			),
+		).toEqual([expect.objectContaining({ key: 'memory' })])
+	})
+
+	it('discloses an emptied note so forgotten memory leaves the context', async () => {
+		const files: Record<string, string> = {
+			'.agents/nutstore-sync/偏好/记忆 🧠.md': '- Old preference 旧偏好 📦\n',
+		}
+		const memory = createMemory(files)
+		await memory.refresh()
+		const history = [
+			asPreviousMessage(captureWorkspaceContexts(createApp(), { memory })),
+		]
+
+		delete files['.agents/nutstore-sync/偏好/记忆 🧠.md']
+		await memory.refresh()
+		expect(
+			computeChangedContexts(
+				history,
+				captureWorkspaceContexts(createApp(), { memory }),
+			),
+		).toEqual([
+			expect.objectContaining({
+				key: 'memory',
+				content: { path: '.agents/nutstore-sync/偏好/记忆 🧠.md', content: '' },
+			}),
+		])
+	})
+
+	it('omits memory while it is disabled and ignores keys absent from the capture', async () => {
+		const memory = createMemory(
+			{ '.agents/nutstore-sync/偏好/记忆 🧠.md': '- Hidden 隐藏 🙈\n' },
+			false,
+		)
+		await memory.refresh()
+		const current = captureWorkspaceContexts(createApp(), { memory })
+		expect(current.some((entry) => entry.key === 'memory')).toBe(false)
+		const history = [
+			asPreviousMessage([
+				{ key: 'memory', content: 'Old 旧 📦', hash: hashObject('Old 旧 📦') },
+				...current,
+			]),
+		]
+		expect(computeChangedContexts(history, current)).toEqual([])
 	})
 })

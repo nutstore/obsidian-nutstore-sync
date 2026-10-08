@@ -293,6 +293,19 @@
 				"name": "完全访问权限",
 				"desc": "⚠️ 开启后，AI 可自动修改文件和插件设置，不再逐次询问确认"
 			},
+			"memory": {
+				"heading": "记忆",
+				"enabled": {
+					"name": "启用记忆",
+					"desc": "AI 会跨会话记住偏好、约定、决定和进行中的工作。每次改动都会显示在对话中，撤回消息并还原修改即可撤销。记忆保存在插件目录中，可在此查看和编辑。"
+				},
+				"path": {
+					"name": "记忆笔记",
+					"desc": "位于 .agents/nutstore-sync/ 内的 Markdown 文件。AI 第一次记住内容时创建。",
+					"invalid": "记忆必须是 .agents/nutstore-sync/ 内的 .md 文件。"
+				},
+				"open": "编辑"
+			},
 			"subagents": {
 				"heading": "子 Agent",
 				"explorer": {
@@ -300,14 +313,6 @@
 					"desc": "用于只读调查库内内容的 Agent。",
 					"model": {
 						"name": "Explorer 模型",
-						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
-					}
-				},
-				"memory": {
-					"name": "Memory",
-					"desc": "用于检索和维护跨会话偏好、约定和决定的 Agent。",
-					"model": {
-						"name": "Memory 模型",
 						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
 					}
 				}
@@ -868,6 +873,10 @@
 			"agentNotDispatchable": "该 Agent 类型不可派发：{{agentType}}",
 			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用",
 			"contextCompressionFailed": "上下文压缩未返回摘要"
+		},
+		"memory": {
+			"remember": "记住",
+			"forget": "忘记"
 		}
 	},
 	"taskSelectionVirtualList": {
@@ -897,5 +906,13 @@
 		"labels": {
 			"currentPath": "当前路径"
 		}
+	},
+	"memory": {
+		"openCommand": "编辑 AI 记忆",
+		"openFailed": "无法打开记忆笔记 {{path}}。",
+		"saveFailed": "无法保存记忆文件 {{path}}。",
+		"changed": "记忆文件已发生变化。请复制你的修改，重新打开后再编辑保存。",
+		"saveAndClose": "保存并关闭",
+		"cancel": "取消"
 	}
 }

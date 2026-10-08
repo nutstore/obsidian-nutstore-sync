@@ -4,9 +4,8 @@ const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/
 
 /**
  * Extract and parse the YAML frontmatter at the top of a Markdown file.
- * Returns `undefined` when the file has no frontmatter block. Both the Skill
- * repository (name/description) and the memory index (date/index) route
- * through this single parser.
+ * Returns `undefined` when the file has no frontmatter block. The Skill
+ * repository reads name/description through this single parser.
  *
  * YAML parsing is delegated to `parseYaml` from the Obsidian runtime itself
  * (the same parser the app uses for every note's frontmatter), so this module

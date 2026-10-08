@@ -344,6 +344,7 @@ export async function rendersSearchableSettings(app: App) {
 					],
 					[
 						labels.settings.sections.ai,
+						labels.settings.ai.memory.heading,
 						labels.settings.ai.subagents.heading,
 						labels.settings.ai.skills.heading,
 					],

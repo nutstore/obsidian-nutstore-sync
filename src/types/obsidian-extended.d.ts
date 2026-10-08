@@ -22,6 +22,11 @@ interface ObsidianSetting {
 	open(): void
 
 	/**
+	 * Closes the settings modal
+	 */
+	close(): void
+
+	/**
 	 * Opens a specific plugin's settings tab
 	 * @param pluginId - The plugin manifest ID
 	 */

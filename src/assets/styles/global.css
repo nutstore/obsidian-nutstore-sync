@@ -1584,3 +1584,8 @@
 	> .chatbox-collapsible-leading-chevron {
 	transform: rotate(90deg);
 }
+
+/* The memory path is configured in settings; its editor only changes content. */
+.ns-memory-editor-modal .inline-title {
+	display: none;
+}

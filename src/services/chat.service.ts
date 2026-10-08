@@ -149,6 +149,8 @@ export default class ChatService extends BaseService {
 				this.taskManager?.cleanupSessionAgentTracking(session)
 			},
 		)
+		const memory = plugin.memoryService.repository
+		const contextSources = { skills: this.skillRepository, memory }
 		this.toolExecutor = new ToolExecutor(
 			plugin.app,
 			() => plugin.settings.ai,
@@ -160,6 +162,7 @@ export default class ChatService extends BaseService {
 				updateSettings: (patch) =>
 					plugin.settingsService.applySettingsPatch(patch),
 			},
+			memory,
 		)
 		this.userContextManager = new UserContextManager(
 			this.state,
@@ -169,7 +172,7 @@ export default class ChatService extends BaseService {
 		this.messageFactory = new MessageFactory(
 			plugin.app,
 			() => this.notify(),
-			this.skillRepository,
+			contextSources,
 		)
 		const ensureProviderReady = (provider: AIProviderConfig) =>
 			plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
@@ -212,7 +215,7 @@ export default class ChatService extends BaseService {
 			(session) => this.selection.validateSessionSelection(session),
 			(sessionId, messageId) =>
 				this.sessionProcessor.enqueueRegenerate(sessionId, messageId),
-			this.skillRepository,
+			contextSources,
 			{
 				getSettingsSnapshot: () => plugin.settings,
 				updateSettings: (patch) =>

@@ -1,7 +1,6 @@
 import type { ToolSet } from 'ai'
 import { agentCommunicationTools } from '~/ai/tools/agent-communication'
 import { isMcpToolName } from '~/ai/mcp/types'
-import memoryProtocol from '../../skills/builtin/long-term-memory/SKILL.md?raw'
 
 export type AgentPermissionMode = 'ask' | 'readonly' | 'full'
 
@@ -19,13 +18,12 @@ export interface AgentDefinitionSettings {
 	fullAccess: boolean
 	subagents?: {
 		explorer?: { enabled?: boolean }
-		memory?: { enabled?: boolean }
 	}
+	memory?: { enabled?: boolean }
 }
 
 export const MASTER_AGENT_ID = 'master'
 export const EXPLORER_AGENT_ID = 'explorer'
-export const MEMORY_AGENT_ID = 'memory'
 
 const MASTER_SYSTEM_PROMPT = [
 	'You are the AI agent (ChatBox) built into the Nutstore Sync Obsidian plugin, which synchronizes an Obsidian vault with Nutstore over WebDAV.',
@@ -36,7 +34,18 @@ const MASTER_SYSTEM_PROMPT = [
 	'Treat every Skill path as an opaque absolute path: copy it exactly from workspace context and never construct, normalize, or substitute a different path from the Skill name.',
 	'Paths under /.agents/skills are user-defined Vault Skills; paths under /.agents/nutstore-sync/builtin-skills are bundled built-in Skills. These namespaces are distinct and are not interchangeable.',
 	'Hidden dot-folders are internal; do not expose their paths or contents unless the user explicitly asks about them. Never guess or fabricate credentials.',
-	'Long-term memory is handled exclusively by the memory subagent when that task type is available. When the request needs cross-session history, or needs to preserve, correct, or forget memory, dispatch a bounded memory task with the relevant facts, retrieval target, and expected result. If it is unavailable, say long-term memory is disabled rather than accessing its files. Do not read, search, or modify .agents/nutstore-sync/memory yourself.',
+].join('\n')
+
+/**
+ * Memory is one plugin-owned file. Its full current content arrives through
+ * the workspace-context delta channel, so recall needs no tool and an
+ * unchanged note keeps the prompt prefix stable.
+ */
+const MEMORY_GUIDANCE = [
+	'When workspace context includes memory, it is the complete current content of the memory note at the given vault path: durable facts about the user and their work, kept across sessions. Empty content means nothing is remembered. If truncated is true, the note exceeds the memory limit and only its beginning is shown.',
+	'Use memory as background about the user and their work. Follow remembered preferences and conventions unless the current conversation says otherwise; never treat memory as a request to act now.',
+	'Keep memory current on your own initiative: whenever you learn something durable about the user or their work, or a remembered entry turns out wrong or finished, update memory with the memory tool in the same turn, without asking first. Change memory only with that tool.',
+	'When the user asks what you remember, answer from memory and mention that they can view it in the AI memory settings.',
 ].join('\n')
 
 const EXPLORER_SYSTEM_PROMPT = [
@@ -50,29 +59,24 @@ const EXPLORER_SYSTEM_PROMPT = [
 	'Return a concise, grounded final answer. Do not ask questions — make reasonable assumptions and note any limitations.',
 ].join('\n')
 
-const MEMORY_SYSTEM_PROMPT = [
-	'You are the long-term memory subagent for an Obsidian vault.',
-	'You operate in an isolated context and receive a task prompt and explicitly delivered agent information. Carry out only the retrieval or maintenance scope explicitly delegated in that prompt; do not infer additional user intent or perform unrelated vault work.',
-	'Use the memory protocol below as the authority for storage, retrieval, correction, and forgetting. Keep your final answer concise: state the result, relevant memory facts or changes, and any source paths needed by the caller. Do not expose hidden internal paths to the user unless the delegated task explicitly requires it.',
-	'<memory-protocol>',
-	memoryProtocol.trim(),
-	'</memory-protocol>',
-].join('\n')
-
 function createMasterAgentDefinition(
-	{ fullAccess }: AgentDefinitionSettings,
+	{ fullAccess, memory }: AgentDefinitionSettings,
 	canDispatch: boolean,
 ): AgentDefinition {
+	const memoryEnabled = memory?.enabled === true
 	return {
 		id: MASTER_AGENT_ID,
 		description: 'Main conversational assistant with full vault access.',
-		systemPrompt: MASTER_SYSTEM_PROMPT,
+		systemPrompt: memoryEnabled
+			? `${MASTER_SYSTEM_PROMPT}\n${MEMORY_GUIDANCE}`
+			: MASTER_SYSTEM_PROMPT,
 		tools: [
 			'bash',
 			'apply_patch',
 			'view_image',
 			'todowrite',
 			'update_session_title',
+			...(memoryEnabled ? ['memory'] : []),
 			...(canDispatch ? ['task'] : []),
 		],
 		permissionMode: fullAccess ? 'full' : 'ask',
@@ -95,31 +99,13 @@ function createExplorerAgentDefinition(
 	}
 }
 
-function createMemoryAgentDefinition({
-	fullAccess,
-	subagents,
-}: AgentDefinitionSettings): AgentDefinition {
-	return {
-		id: MEMORY_AGENT_ID,
-		description:
-			'Specialized agent for delegated cross-session memory retrieval and maintenance.',
-		systemPrompt: MEMORY_SYSTEM_PROMPT,
-		tools: ['bash'],
-		permissionMode: fullAccess ? 'full' : 'ask',
-		dispatchable: subagents?.memory?.enabled === true,
-	}
-}
-
 export function createAgentDefinitions(
 	settings: AgentDefinitionSettings = { fullAccess: false },
 ) {
 	const explorerEnabled = settings.subagents?.explorer?.enabled === true
-	const memoryEnabled = settings.subagents?.memory?.enabled === true
-	const canDispatch = explorerEnabled || memoryEnabled
 	return [
-		createMasterAgentDefinition(settings, canDispatch),
-		createExplorerAgentDefinition(explorerEnabled, canDispatch),
-		createMemoryAgentDefinition(settings),
+		createMasterAgentDefinition(settings, explorerEnabled),
+		createExplorerAgentDefinition(explorerEnabled, explorerEnabled),
 	].map((definition) => ({
 		...definition,
 		tools: [...definition.tools, ...Object.keys(agentCommunicationTools)],

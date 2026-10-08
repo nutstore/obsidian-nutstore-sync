@@ -189,6 +189,12 @@ export class AgentRunner {
 				viewImageAttachments,
 			},
 			update_session_title: { recordMetadata },
+			memory: {
+				app: stableContext.app,
+				fileSystemManager: stableContext.fileSystemManager,
+				recordMetadata,
+				memory: stableContext.memory,
+			},
 			...(tools.todowrite ? { todowrite: { session, recordMetadata } } : {}),
 			...(tools.task
 				? {

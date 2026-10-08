@@ -164,4 +164,17 @@ describe('toolCallDisplayTitle', () => {
 			expect(toolCallDisplayTitle(makeToolCall(input))).toBe('bash')
 		}
 	})
+
+	it('titles memory calls with the entries they remember and forget', () => {
+		const title = toolCallDisplayTitle(
+			makeToolCall(
+				{ remember: ['Prefers metric 偏好公制 📏'], forget: ['Old 旧 📦', 7] },
+				'memory',
+			),
+		)
+		expect(title).toContain('Prefers metric 偏好公制 📏')
+		expect(title).toContain('Old 旧 📦')
+		expect(title).not.toContain('7')
+		expect(toolCallDisplayTitle(makeToolCall({}, 'memory'))).toBe('memory')
+	})
 })

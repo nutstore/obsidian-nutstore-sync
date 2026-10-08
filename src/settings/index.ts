@@ -8,6 +8,10 @@ import {
 } from 'obsidian'
 import { Subscription } from 'rxjs'
 import { AIProviderConfigs, AIProviderDefinitions } from '~/ai/core/types'
+import {
+	DEFAULT_MEMORY_NOTE_PATH,
+	type MemorySettings,
+} from '~/ai/memory/memory-note'
 import { onNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import { onSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'
@@ -19,6 +23,7 @@ import { GlobFilterRule } from '~/utils/glob-match'
 import { toggleClassTokens } from '~/utils/class-tokens'
 import AccountSettings from './sync/account'
 import AISettings from './ai/settings'
+import MemorySettingsSection from './ai/memory'
 import SkillsSettingsSection from './ai/skills'
 import SubagentSettingsSection from './ai/subagents'
 import AutomationSettings from './sync/automation'
@@ -165,8 +170,8 @@ export interface NutstoreSettings {
 		yolo?: boolean
 		subagents: {
 			explorer: SubagentSettings
-			memory: SubagentSettings
 		}
+		memory: MemorySettings
 		/** Skill names excluded from the agent catalog by SkillRepository. */
 		disabledSkills: string[]
 		nutstoreLlmGateway?: NutstoreLlmGatewayAuthSettings
@@ -245,8 +250,8 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 		yolo: false,
 		subagents: {
 			explorer: { enabled: false },
-			memory: { enabled: false },
 		},
+		memory: { enabled: true, path: DEFAULT_MEMORY_NOTE_PATH },
 		disabledSkills: [],
 		nutstoreLlmGateway: {},
 	},
@@ -277,6 +282,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	troubleshootingSettings: TroubleshootingSettings
 	pluginRuntimeInfoSettings: PluginRuntimeInfoSettings
 	aiSettings: AISettings
+	memorySettings: MemorySettingsSection
 	subagentSettings: SubagentSettingsSection
 	skillSettings: SkillsSettingsSection
 	syncBackupReminderSettings: SyncBackupReminderSettings
@@ -357,6 +363,13 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		)
 		const aiContainerEl = this.containerEl.createDiv()
 		this.aiSettings = new AISettings(this.app, this.plugin, this, aiContainerEl)
+		const memoryContainerEl = this.containerEl.createDiv()
+		this.memorySettings = new MemorySettingsSection(
+			this.app,
+			this.plugin,
+			this,
+			memoryContainerEl,
+		)
 		const subagentsContainerEl = this.containerEl.createDiv()
 		this.subagentSettings = new SubagentSettingsSection(
 			this.app,
@@ -395,7 +408,12 @@ export class NutstoreSettingTab extends PluginSettingTab {
 				this.interfaceSettings,
 				this.filterSettings,
 			],
-			ai: [this.aiSettings, this.subagentSettings, this.skillSettings],
+			ai: [
+				this.aiSettings,
+				this.memorySettings,
+				this.subagentSettings,
+				this.skillSettings,
+			],
 			troubleshooting: [
 				this.pluginRuntimeInfoSettings,
 				this.troubleshootingSettings,

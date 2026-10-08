@@ -10,7 +10,6 @@ import {
 	EXPLORER_AGENT_ID,
 	getAgentDefinition,
 	MASTER_AGENT_ID,
-	MEMORY_AGENT_ID,
 } from '~/ai/chat/agents/registry'
 import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
 import { BASH_TMP_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
@@ -1273,7 +1272,7 @@ describe('TaskManager parent notifications', () => {
 		expect(master.pendingInputs).toEqual([])
 	})
 
-	it('rejects non-dispatchable agent types, including disabled memory', async () => {
+	it('rejects non-dispatchable agent types, including a disabled explorer', async () => {
 		const master = createEmptyMasterAgent(1)
 		const session: ChatSession = {
 			schemaVersion: 2,
@@ -1307,7 +1306,7 @@ describe('TaskManager parent notifications', () => {
 			{} as never,
 		)
 
-		for (const subagentType of [MASTER_AGENT_ID, MEMORY_AGENT_ID]) {
+		for (const subagentType of [MASTER_AGENT_ID, EXPLORER_AGENT_ID]) {
 			await expect(
 				manager.dispatchTask(
 					{

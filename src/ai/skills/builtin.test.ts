@@ -57,12 +57,6 @@ describe('built-in Skills', () => {
 		)
 	})
 
-	it('keeps the long-term-memory protocol out of the public Skill catalog', () => {
-		expect(
-			BUILTIN_SKILLS.some((item) => item.name === 'long-term-memory'),
-		).toBe(false)
-	})
-
 	it('classifies every shipped Skill path as built-in', () => {
 		for (const skill of BUILTIN_SKILLS) {
 			expect(isBuiltinSkillPath(skill.path)).toBe(true)

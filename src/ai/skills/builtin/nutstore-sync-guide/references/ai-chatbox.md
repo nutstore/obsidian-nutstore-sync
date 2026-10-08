@@ -10,6 +10,25 @@ Before making a change, the agent requests approval by default. The user can
 approve an individual operation, approve an operation type for the current
 session, or enable YOLO mode in settings to auto-approve operations.
 
+## Memory
+
+When memory is enabled in the AI settings (it is by default), the agent
+remembers the user's preferences, conventions, decisions, and ongoing work
+across sessions. It records what it learns on its own, without asking first,
+and also follows explicit requests.
+Everything it remembers lives in one Markdown file, `.agents/nutstore-sync/MEMORY.md` in
+the plugin directory. Configured memory paths must stay inside that directory. Each top-level list item
+is one memory; anything else in the note is left untouched. The note is
+created the first time something is remembered.
+
+- The user can also ask the agent to remember, correct, or forget something
+  in plain language. Memory changes never wait for approval; instead each one
+  appears in the chat and can be undone by recalling the message with its
+  changes restored.
+- The user can view and edit memory from the AI settings or with the **Edit AI
+  memory** command. The file is stored in the hidden plugin directory.
+- The agent reads the current memory file before each user message.
+
 ## Run HTML in chat
 
 When the agent's reply contains an HTML code block, the chat shows a Run

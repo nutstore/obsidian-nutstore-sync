@@ -5,7 +5,6 @@ import {
 	EXPLORER_AGENT_ID,
 	filterToolsForAgent,
 	MASTER_AGENT_ID,
-	MEMORY_AGENT_ID,
 } from './registry'
 
 function findDefinition(
@@ -21,11 +20,11 @@ describe('createAgentDefinitions', () => {
 	it('rebuilds definitions from current settings without elevating explorer', () => {
 		const askDefinitions = createAgentDefinitions({
 			fullAccess: false,
-			subagents: { explorer: { enabled: true }, memory: { enabled: true } },
+			subagents: { explorer: { enabled: true } },
 		})
 		const fullDefinitions = createAgentDefinitions({
 			fullAccess: true,
-			subagents: { explorer: { enabled: true }, memory: { enabled: true } },
+			subagents: { explorer: { enabled: true } },
 		})
 
 		expect(fullDefinitions).not.toBe(askDefinitions)
@@ -38,22 +37,11 @@ describe('createAgentDefinitions', () => {
 		expect(
 			findDefinition(fullDefinitions, EXPLORER_AGENT_ID).permissionMode,
 		).toBe('readonly')
-		expect(findDefinition(askDefinitions, MEMORY_AGENT_ID)).toMatchObject({
-			permissionMode: 'ask',
-			dispatchable: true,
-			tools: ['bash', 'list_agents', 'send_message', 'followup_task'],
-		})
-		expect(
-			findDefinition(fullDefinitions, MEMORY_AGENT_ID).permissionMode,
-		).toBe('full')
 	})
 
 	it('keeps disabled agents addressable without exposing task', () => {
 		const definitions = createAgentDefinitions({ fullAccess: false })
-		const memory = findDefinition(definitions, MEMORY_AGENT_ID)
 
-		expect(memory.dispatchable).toBe(false)
-		expect(memory.systemPrompt).toContain('<memory-protocol>')
 		expect(findDefinition(definitions, EXPLORER_AGENT_ID).dispatchable).toBe(
 			false,
 		)
@@ -65,18 +53,39 @@ describe('createAgentDefinitions', () => {
 	it('exposes only enabled subagent types and task tools', () => {
 		const definitions = createAgentDefinitions({
 			fullAccess: false,
-			subagents: { explorer: { enabled: false }, memory: { enabled: true } },
+			subagents: { explorer: { enabled: true } },
 		})
 
 		expect(
 			definitions
 				.filter((definition) => definition.dispatchable)
 				.map((definition) => definition.id),
-		).toEqual([MEMORY_AGENT_ID])
+		).toEqual([EXPLORER_AGENT_ID])
 		expect(findDefinition(definitions, MASTER_AGENT_ID).tools).toContain('task')
 		expect(findDefinition(definitions, EXPLORER_AGENT_ID).tools).toContain(
 			'task',
 		)
+	})
+
+	it('gives only the master agent memory, together with its guidance', () => {
+		const enabled = createAgentDefinitions({
+			fullAccess: false,
+			subagents: { explorer: { enabled: true } },
+			memory: { enabled: true },
+		})
+		const master = findDefinition(enabled, MASTER_AGENT_ID)
+		expect(master.tools).toContain('memory')
+		expect(master.systemPrompt).toContain('memory note')
+		expect(findDefinition(enabled, EXPLORER_AGENT_ID).tools).not.toContain(
+			'memory',
+		)
+
+		const disabled = findDefinition(
+			createAgentDefinitions({ fullAccess: false, memory: { enabled: false } }),
+			MASTER_AGENT_ID,
+		)
+		expect(disabled.tools).not.toContain('memory')
+		expect(disabled.systemPrompt).not.toContain('memory note')
 	})
 })
 
