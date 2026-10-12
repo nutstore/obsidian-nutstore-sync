@@ -18,6 +18,7 @@ import type {
 	ReversibleToolOp,
 	WorkspaceContextDelta,
 } from '~/ai/chat/types'
+import { serializeWorkspaceContext } from '~/ai/chat/context/workspace-context-serialization'
 import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
 import { CHECKPOINT_PREAMBLE } from '~/ai/chat/prompts'
 import type { UserContextManager } from '~/ai/chat/context/user-context-manager'
@@ -403,11 +404,7 @@ export async function uiMessagesToModelMessages(
 			if (part.type === 'data-workspace-context') {
 				return {
 					type: 'text',
-					text: `<AdditionalContext>${JSON.stringify(
-						Object.fromEntries(
-							part.data.deltas.map((entry) => [entry.key, entry.content]),
-						),
-					)}</AdditionalContext>`,
+					text: serializeWorkspaceContext(part.data.deltas),
 				}
 			}
 			if (part.type === 'data-context-checkpoint') {
