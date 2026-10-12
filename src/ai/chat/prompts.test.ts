@@ -51,7 +51,10 @@ describe('main system prompt Skills guidance', () => {
 		if (!enabled || !disabled) throw new Error('Expected master definitions')
 
 		const prompt = createSystemPromptForAgent(enabled)
-		expect(prompt).toContain('complete current content of the memory note')
+		expect(prompt).toContain('one {id, text} record')
+		expect(prompt).toContain('Every nonblank physical line is one memory')
+		expect(prompt).toContain('Only unseen additions are disclosed')
+		expect(prompt).toContain('No memory deletion or empty-note notifications')
 		expect(prompt).toContain('Change memory only with that tool')
 		expect(prompt).toContain('on your own initiative')
 		expect(prompt).toContain('without asking first')

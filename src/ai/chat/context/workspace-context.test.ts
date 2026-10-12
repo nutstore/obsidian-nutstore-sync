@@ -5,6 +5,12 @@ import {
 	computeChangedContexts,
 } from '~/ai/chat/context/workspace-context'
 import { MemoryRepository } from '~/ai/memory/repository'
+import {
+	listMemoryEntries,
+	MEMORY_NOTE_CHARACTER_LIMIT,
+	countMemoryCharacters,
+} from '~/ai/memory/memory-note'
+import { uiMessagesToModelMessages } from '~/ai/chat/messages/ui-message'
 import type { SkillRepository } from '~/ai/skills/repository'
 import type { AppUIMessage, WorkspaceContextDelta } from '~/ai/chat/types'
 
@@ -159,92 +165,236 @@ describe('workspace skill context', () => {
 	})
 })
 
-describe('workspace memory context', () => {
-	function createMemory(files: Record<string, string>, enabled = true) {
-		const app = {
-			vault: {
-				adapter: {
-					exists: async (path: string) => path in files,
-					read: async (path: string) => files[path],
+describe('workspace memory additions', () => {
+	const path = '.agents/nutstore-sync/偏好/记忆 🧠.md'
+	const firstText = 'Prefers metric units 偏好公制单位 📏'
+	const secondText = 'Weekly review 每周复盘 🗓️'
+
+	function setup(content = firstText, enabled = true) {
+		const files: Record<string, string> = { [path]: content }
+		const settings = { enabled, path }
+		const memory = new MemoryRepository(
+			{
+				vault: {
+					adapter: {
+						exists: async (path: string) => path in files,
+						read: async (path: string) => files[path],
+					},
 				},
-			},
-		} as never
-		return new MemoryRepository(app, () => ({
-			enabled,
-			path: '.agents/nutstore-sync/偏好/记忆 🧠.md',
-		}))
+			} as never,
+			() => settings,
+		)
+		return {
+			files,
+			settings,
+			memory,
+			capture: () => captureWorkspaceContexts(createApp(), { memory }),
+		}
 	}
 
-	it('discloses the note once and again only after it changes', async () => {
-		const files = {
-			'.agents/nutstore-sync/偏好/记忆 🧠.md':
-				'- Prefers metric units 偏好公制单位 📏\n',
-		}
-		const memory = createMemory(files)
-		await memory.refresh()
-		const first = captureWorkspaceContexts(createApp(), { memory })
-		const disclosure = {
-			path: '.agents/nutstore-sync/偏好/记忆 🧠.md',
-			content: '- Prefers metric units 偏好公制单位 📏',
-		}
-		expect(first.find((entry) => entry.key === 'memory')).toEqual({
-			key: 'memory',
-			content: disclosure,
-			hash: hashObject(disclosure),
-		})
-		const history = [asPreviousMessage(first)]
-		expect(computeChangedContexts(history, first)).toEqual([])
+	function memoryDelta(text: string): WorkspaceContextDelta {
+		const entry = listMemoryEntries(text)[0]
+		return { key: `memory:${entry.id}`, content: entry, hash: entry.id }
+	}
 
-		files['.agents/nutstore-sync/偏好/记忆 🧠.md'] +=
-			'- Weekly review on Fridays 每周五复盘 🗓️\n'
+	it('injects one structured addition per distinct nonblank line without a note snapshot', async () => {
+		const { memory, capture } = setup(
+			`\n${firstText}\n${secondText}\n${firstText}\n`,
+		)
 		await memory.refresh()
-		expect(
-			computeChangedContexts(
-				history,
-				captureWorkspaceContexts(createApp(), { memory }),
-			),
-		).toEqual([expect.objectContaining({ key: 'memory' })])
+		const current = capture()
+		expect(current.filter((entry) => entry.key.startsWith('memory:'))).toEqual([
+			memoryDelta(firstText),
+			memoryDelta(secondText),
+		])
+		expect(current.some((entry) => entry.key === 'memory')).toBe(false)
+		expect(computeChangedContexts([], current)).toEqual(current)
 	})
 
-	it('discloses an emptied note so forgotten memory leaves the context', async () => {
-		const files: Record<string, string> = {
-			'.agents/nutstore-sync/偏好/记忆 🧠.md': '- Old preference 旧偏好 📦\n',
-		}
-		const memory = createMemory(files)
+	it('injects only new lines while deduplicating additions across multiple prior messages', async () => {
+		const { files, memory, capture } = setup()
 		await memory.refresh()
-		const history = [
-			asPreviousMessage(captureWorkspaceContexts(createApp(), { memory })),
-		]
-
-		delete files['.agents/nutstore-sync/偏好/记忆 🧠.md']
+		const first = capture()
+		const history = [asPreviousMessage(first)]
+		expect(computeChangedContexts(history, first)).toEqual([])
+		files[path] += `\n${secondText}`
 		await memory.refresh()
-		expect(
-			computeChangedContexts(
-				history,
-				captureWorkspaceContexts(createApp(), { memory }),
-			),
-		).toEqual([
-			expect.objectContaining({
-				key: 'memory',
-				content: { path: '.agents/nutstore-sync/偏好/记忆 🧠.md', content: '' },
-			}),
+		const second = computeChangedContexts(history, capture())
+		expect(second).toEqual([memoryDelta(secondText)])
+		history.push({ ...asPreviousMessage(second), id: 'second-addition' })
+		expect(computeChangedContexts(history, capture())).toEqual([])
+		files[path] += '\nDrafts in inbox 草稿收件箱 📥'
+		await memory.refresh()
+		expect(computeChangedContexts(history, capture())).toEqual([
+			memoryDelta('Drafts in inbox 草稿收件箱 📥'),
 		])
 	})
 
-	it('omits memory while it is disabled and ignores keys absent from the capture', async () => {
-		const memory = createMemory(
-			{ '.agents/nutstore-sync/偏好/记忆 🧠.md': '- Hidden 隐藏 🙈\n' },
+	it('sends only replacement content when a line is edited and no removal record', async () => {
+		const { files, memory, capture } = setup(`${firstText}\n${secondText}`)
+		await memory.refresh()
+		const history = [asPreviousMessage(capture())]
+		const replacement = 'Monthly review 每月复盘 🗓️'
+		files[path] = `${replacement}\n${firstText}`
+		await memory.refresh()
+		expect(computeChangedContexts(history, capture())).toEqual([
+			memoryDelta(replacement),
+		])
+	})
+
+	it('sends no update for reordering, duplicate lines, removals or an emptied file', async () => {
+		const { files, memory, capture } = setup(`${firstText}\n${secondText}`)
+		await memory.refresh()
+		const history = [asPreviousMessage(capture())]
+		for (const content of [
+			`${secondText}\n\n${firstText}\n${firstText}`,
+			firstText,
+			'',
+			`\n${firstText}`,
+		]) {
+			files[path] = content
+			await memory.refresh()
+			expect(computeChangedContexts(history, capture())).toEqual([])
+		}
+		delete files[path]
+		await memory.refresh()
+		expect(computeChangedContexts(history, capture())).toEqual([])
+	})
+
+	it('omits disabled memory without clearing previous additions', async () => {
+		const { memory, settings, capture } = setup()
+		await memory.refresh()
+		const history = [asPreviousMessage(capture())]
+		settings.enabled = false
+		await memory.refresh()
+		expect(capture().some((entry) => entry.key.startsWith('memory:'))).toBe(
 			false,
 		)
+		expect(computeChangedContexts(history, capture())).toEqual([])
+		settings.enabled = true
 		await memory.refresh()
-		const current = captureWorkspaceContexts(createApp(), { memory })
-		expect(current.some((entry) => entry.key === 'memory')).toBe(false)
-		const history = [
-			asPreviousMessage([
-				{ key: 'memory', content: 'Old 旧 📦', hash: hashObject('Old 旧 📦') },
-				...current,
-			]),
-		]
+		expect(computeChangedContexts(history, capture())).toEqual([])
+	})
+
+	it('rediscloses current lines after reset instead of deduplicating against discarded history', async () => {
+		const { memory, capture } = setup()
+		await memory.refresh()
+		const current = capture()
+		const checkpoint: AppUIMessage = {
+			id: 'reset',
+			role: 'user',
+			parts: [{ type: 'data-context-checkpoint', data: { mode: 'reset' } }],
+		}
+		expect(
+			computeChangedContexts([asPreviousMessage(current), checkpoint], current),
+		).toEqual(current)
+	})
+
+	it('deduplicates against retained additions after summary while redisclosing omitted current lines', async () => {
+		const { memory, capture } = setup(`${firstText}\n${secondText}`)
+		await memory.refresh()
+		const current = capture()
+		const old = {
+			...asPreviousMessage(
+				current.filter((entry) => entry.key !== memoryDelta(secondText).key),
+			),
+			id: 'summarized-addition',
+		}
+		const retained = {
+			...asPreviousMessage([memoryDelta(secondText)]),
+			id: 'retained-addition',
+		}
+		const checkpoint: AppUIMessage = {
+			id: 'summary',
+			role: 'user',
+			parts: [
+				{
+					type: 'data-context-checkpoint',
+					data: {
+						mode: 'summary',
+						summary: 'Review continues 继续复盘 🗓️',
+						summarizedThroughMessageId: old.id,
+						retainedMessageIds: [retained.id],
+					},
+				},
+			],
+		}
+		expect(
+			computeChangedContexts([old, retained, checkpoint], current),
+		).toEqual(
+			current.filter((entry) => entry.key !== memoryDelta(secondText).key),
+		)
+	})
+
+	it('can inject new lines beyond the previous note prefix because budgeting follows deduplication', async () => {
+		const prefix = Array.from(
+			{ length: 80 },
+			(_, index) => `Review topic 复盘主题 🗓️ ${index} ${'📚'.repeat(100)}`,
+		).join('\n')
+		const { files, memory, capture } = setup(prefix)
+		await memory.refresh()
+		const history = [asPreviousMessage(capture())]
+		files[path] += `\n${secondText}`
+		await memory.refresh()
+		expect(computeChangedContexts(history, capture())).toEqual([
+			memoryDelta(secondText),
+		])
+	})
+
+	it('bounds complete additions and delivers deferred lines on subsequent messages', async () => {
+		const note = Array.from(
+			{ length: 80 },
+			(_, index) => `Review topic 复盘主题 🗓️ ${index} ${'📚'.repeat(100)}`,
+		).join('\n')
+		const { memory, capture } = setup(note)
+		await memory.refresh()
+		const current = capture()
+		const history: AppUIMessage[] = []
+		const disclosed = new Set<string>()
+		for (let batch = 0; batch < 10; batch++) {
+			const additions = computeChangedContexts(history, current)
+			const memories = additions.filter((entry) =>
+				entry.key.startsWith('memory:'),
+			)
+			const payload = Object.fromEntries(
+				memories.map((entry) => [entry.key, entry.content]),
+			)
+			expect(
+				countMemoryCharacters(JSON.stringify(payload)),
+			).toBeLessThanOrEqual(MEMORY_NOTE_CHARACTER_LIMIT)
+			for (const entry of memories) {
+				expect(disclosed.has(entry.key)).toBe(false)
+				disclosed.add(entry.key)
+			}
+			history.push({
+				...asPreviousMessage(additions),
+				id: `addition-batch-${batch}`,
+			})
+			if (!memories.length) break
+		}
+		expect(disclosed.size).toBe(listMemoryEntries(note).length)
 		expect(computeChangedContexts(history, current)).toEqual([])
+	})
+
+	it('preserves independent memory records in the model-facing AdditionalContext', async () => {
+		const { memory, capture } = setup(`${firstText}\n${secondText}`)
+		await memory.refresh()
+		const additions = capture().filter((entry) =>
+			entry.key.startsWith('memory:'),
+		)
+		const modelMessages = await uiMessagesToModelMessages([
+			asPreviousMessage(additions),
+		])
+		expect(modelMessages).toEqual([
+			{
+				role: 'user',
+				content: [
+					{
+						type: 'text',
+						text: `<AdditionalContext>${JSON.stringify(Object.fromEntries(additions.map((entry) => [entry.key, entry.content])))}</AdditionalContext>`,
+					},
+				],
+			},
+		])
 	})
 })

@@ -3,10 +3,10 @@ import type { App } from 'obsidian'
 import logger from '~/utils/logger'
 import {
 	DEFAULT_MEMORY_NOTE_PATH,
-	discloseMemoryNote,
 	editMemoryNote,
+	listMemoryEntries,
 	normalizeMemoryNotePath,
-	type MemoryDisclosure,
+	type MemoryEntry,
 	type MemoryEdit,
 	type MemoryEditResult,
 	type MemorySettings,
@@ -60,11 +60,9 @@ export class MemoryRepository {
 		}
 	}
 
-	/** Undefined while memory is off; otherwise always disclosed, even when empty, so forgetting everything reaches the agent. */
-	getDisclosure(): MemoryDisclosure | undefined {
-		return this.enabled
-			? discloseMemoryNote(this.path, this.content)
-			: undefined
+	/** Current lines; context decides which additions are unseen and fit its budget. */
+	getEntries(): MemoryEntry[] {
+		return this.enabled ? listMemoryEntries(this.content) : []
 	}
 
 	/** Serialized, so parallel tool calls never lose each other's entries. */
@@ -72,8 +70,12 @@ export class MemoryRepository {
 		const run = this.edits.then(async () => {
 			const virtualPath = `/${this.path}`
 			const before = (await fs.exists(virtualPath))
-				? new TextDecoder().decode(await fs.readFileBuffer(virtualPath))
+				? new TextDecoder('utf-8', { ignoreBOM: true }).decode(
+						await fs.readFileBuffer(virtualPath),
+					)
 				: ''
+			// Even a rejected edit has read the newest note; do not retain stale context.
+			this.content = before
 			const result = editMemoryNote(before, edit)
 			if (result.content !== before) {
 				await fs.writeFile(virtualPath, result.content)

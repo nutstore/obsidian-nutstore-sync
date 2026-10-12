@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { listMemoryEntries } from '~/ai/memory/memory-note'
 import {
 	fencedCode,
 	formatDuration,
@@ -166,15 +167,30 @@ describe('toolCallDisplayTitle', () => {
 	})
 
 	it('titles memory calls with the entries they remember and forget', () => {
+		const id = listMemoryEntries('Old preference 旧偏好 📦')[0].id
 		const title = toolCallDisplayTitle(
 			makeToolCall(
-				{ remember: ['Prefers metric 偏好公制 📏'], forget: ['Old 旧 📦', 7] },
+				{ remember: ['Prefers metric 偏好公制 📏'], forget: [id, 7] },
 				'memory',
 			),
 		)
 		expect(title).toContain('Prefers metric 偏好公制 📏')
-		expect(title).toContain('Old 旧 📦')
-		expect(title).not.toContain('7')
+		expect(title).toContain(id)
 		expect(toolCallDisplayTitle(makeToolCall({}, 'memory'))).toBe('memory')
+	})
+
+	it('shows resolved deleted text instead of IDs after a memory edit succeeds', () => {
+		const text = 'Old preference 旧偏好 📦'
+		const id = listMemoryEntries(text)[0].id
+		const title = toolCallDisplayTitle({
+			type: 'dynamic-tool',
+			toolCallId: 'memory-delete',
+			toolName: 'memory',
+			input: { forget: [id] },
+			state: 'output-available',
+			output: { forgotten: [text] },
+		})
+		expect(title).toContain(text)
+		expect(title).not.toContain(id)
 	})
 })

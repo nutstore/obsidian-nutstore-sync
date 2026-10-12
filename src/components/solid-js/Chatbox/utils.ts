@@ -94,15 +94,22 @@ export function toolCallPurpose(
 	return undefined
 }
 
-function memoryToolTitle(input: unknown) {
+function memoryToolTitle(input: unknown, output?: unknown) {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) return
 	const strings = (value: unknown) =>
 		Array.isArray(value)
 			? value.filter((item): item is string => typeof item === 'string')
 			: []
 	const { remember, forget } = input as Record<string, unknown>
+	const result =
+		output && typeof output === 'object' && !Array.isArray(output)
+			? (output as Record<string, unknown>)
+			: undefined
 	const title = describeMemoryEdit(
-		{ remember: strings(remember), forget: strings(forget) },
+		{
+			remember: strings(remember),
+			forget: strings(result?.forgotten ?? forget),
+		},
 		(action) =>
 			action === 'remember'
 				? t('chatbox.memory.remember')
@@ -117,7 +124,10 @@ export function toolCallDisplayTitle(
 	return (
 		toolCallPurpose(toolCall) ??
 		(toolCall.toolName === 'memory'
-			? memoryToolTitle(toolCall.input)
+			? memoryToolTitle(
+					toolCall.input,
+					toolCall.state === 'output-available' ? toolCall.output : undefined,
+				)
 			: undefined) ??
 		toolCall.toolName
 	)

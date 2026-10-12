@@ -6,6 +6,7 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'~': new URL('./src', import.meta.url).pathname,
+			obsidian: new URL('./test/obsidian-runtime.ts', import.meta.url).pathname,
 		},
 	},
 	test: {
