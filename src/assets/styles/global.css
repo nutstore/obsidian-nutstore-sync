@@ -1304,6 +1304,15 @@
 	}
 }
 
+/*
+ * Session history sheet sits at z-index 200/201, above Obsidian's --layer-menu.
+ * Scoped to our own menu only: a bare `.menu` override breaks native menu/popover
+ * stacking (Bases layout & filter dropdowns, issue #195).
+ */
+.menu.nutstore-sync-session-menu {
+	z-index: 230;
+}
+
 @keyframes nutstore-sync-progress-indeterminate {
 	from {
 		transform: translateX(-100%);

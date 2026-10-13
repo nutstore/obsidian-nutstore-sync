@@ -21,6 +21,9 @@ export function SessionHistoryItem(props: {
 		const onExport = props.onExport
 		const onDelete = props.onDelete
 		const menu = new Menu()
+		// The history sheet stacks above Obsidian's menu layer; lift only this menu
+		// so native menus elsewhere keep their own layering.
+		menu.dom?.addClass('nutstore-sync-session-menu')
 		menu.addItem((item) =>
 			item
 				.setTitle(t('chatbox.ui.actions.exportAsMarkdown'))

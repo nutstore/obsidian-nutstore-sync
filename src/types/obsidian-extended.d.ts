@@ -61,6 +61,14 @@ declare module 'obsidian' {
 		internalPlugins?: ObsidianInternalPlugins
 	}
 
+	interface Menu {
+		/**
+		 * Root `.menu` element of this menu.
+		 * Internal Obsidian API; absent from the public typings, so treat as optional.
+		 */
+		dom?: HTMLElement
+	}
+
 	interface MenuItem {
 		/**
 		 * Creates a submenu for this menu item.
