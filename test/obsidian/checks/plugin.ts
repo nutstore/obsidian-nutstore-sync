@@ -22,7 +22,11 @@ export async function loadsProductionPlugin(app: App) {
 	getProductionPlugin(app)
 }
 
-export async function listsOnlyVaultSkillsInSettings(app: App) {
+export async function listsOnlyVaultSkillsInSettings(
+	app: App,
+	recordStep: (step: LifecycleStep) => Promise<void>,
+) {
+	const step = createCheckStep(recordStep)
 	const plugin = getProductionPlugin(app)
 	const { settingTab } = plugin
 	const { BUILTIN_SKILLS } = await import('~/ai/skills/builtin')
@@ -38,12 +42,14 @@ export async function listsOnlyVaultSkillsInSettings(app: App) {
 	).setting
 	const adapter = app.vault.adapter
 
-	if (!(await adapter.exists(SKILLS_ROOT))) await adapter.mkdir(SKILLS_ROOT)
-	await adapter.mkdir(skillDir)
-	await adapter.write(
-		`${skillDir}/SKILL.md`,
-		'---\nname: settings-probe-skill\ndescription: Neutral Skill / 中性技能 🌱\n---\n',
-	)
+	await step('Skills: prepare Vault fixture', async () => {
+		if (!(await adapter.exists(SKILLS_ROOT))) await adapter.mkdir(SKILLS_ROOT)
+		await adapter.mkdir(skillDir)
+		await adapter.write(
+			`${skillDir}/SKILL.md`,
+			'---\nname: settings-probe-skill\ndescription: Neutral Skill / 中性技能 🌱\n---\n',
+		)
+	})
 
 	try {
 		plugin.settings.ai.disabledSkills = originalDisabled.filter(
@@ -53,11 +59,13 @@ export async function listsOnlyVaultSkillsInSettings(app: App) {
 			pendingSave = originalSave.call(this)
 			return pendingSave
 		}
-		host.open()
-		host.openTabById('nutstore-sync')
+		await step('Skills: open settings', () => {
+			host.open()
+			host.openTabById('nutstore-sync')
+		})
 		const section = settingTab.skillSettings
 		section.containerEl.show()
-		await section.display()
+		await step('Skills: render initial catalog', () => section.display())
 		const settingsText = section.containerEl.textContent ?? ''
 		assert(
 			settingsText.includes('settings-probe-skill'),
@@ -92,9 +100,14 @@ export async function listsOnlyVaultSkillsInSettings(app: App) {
 				'input[type="checkbox"]',
 			)
 			assert(input, 'Skill toggle has no checkbox input')
-			input.click()
-			assert(pendingSave, 'Toggling a Skill did not save settings')
-			await pendingSave
+			await step(
+				`Skills: save ${enabled ? 'enabled' : 'disabled'}`,
+				async () => {
+					input.click()
+					assert(pendingSave, 'Toggling a Skill did not save settings')
+					await pendingSave
+				},
+			)
 			const stored = (await plugin.loadData()) as {
 				ai: { disabledSkills: string[] }
 			}
@@ -102,7 +115,7 @@ export async function listsOnlyVaultSkillsInSettings(app: App) {
 				stored.ai.disabledSkills.includes('settings-probe-skill') === !enabled,
 				'Skill activation was not persisted',
 			)
-			await section.display()
+			await step('Skills: render saved catalog', () => section.display())
 			const renderedToggle = section.containerEl.querySelector<HTMLElement>(
 				'.checkbox-container',
 			)
@@ -115,8 +128,17 @@ export async function listsOnlyVaultSkillsInSettings(app: App) {
 		host.close()
 		plugin.settingsService.saveSettings = originalSave
 		plugin.settings.ai.disabledSkills = originalDisabled
-		await originalSave.call(plugin.settingsService)
-		await adapter.rmdir(skillDir, true)
+		await step('Skills: restore settings', () =>
+			originalSave.call(plugin.settingsService),
+		)
+		// This fixture is flat. Remove its file explicitly so the host's recursive
+		// rm has no child-file traversal, which can stall in the guest.
+		await step('Skills: remove fixture file', () =>
+			adapter.remove(`${skillDir}/SKILL.md`),
+		)
+		await step('Skills: remove empty fixture directory', () =>
+			adapter.rmdir(skillDir, true),
+		)
 	}
 }
 
@@ -145,13 +167,10 @@ export interface LifecycleStep {
 	elapsedMs: number
 }
 
-export async function detachesChatboxWhenProductionPluginIsDisabled(
-	app: App,
-	recordStep: (step: LifecycleStep) => Promise<void>,
-) {
+function createCheckStep(recordStep: (step: LifecycleStep) => Promise<void>) {
 	// Persist before invoking each operation so even a blocked renderer leaves
 	// the exact pending call in the guest diagnostics.
-	const step = async (name: string, operation: () => void | Promise<void>) => {
+	return async (name: string, operation: () => void | Promise<void>) => {
 		const startedAt = new Date().toISOString()
 		await recordStep({ name, status: 'started', startedAt, elapsedMs: 0 })
 		const start = performance.now()
@@ -173,6 +192,13 @@ export async function detachesChatboxWhenProductionPluginIsDisabled(
 			elapsedMs: performance.now() - start,
 		})
 	}
+}
+
+export async function detachesChatboxWhenProductionPluginIsDisabled(
+	app: App,
+	recordStep: (step: LifecycleStep) => Promise<void>,
+) {
+	const step = createCheckStep(recordStep)
 	const plugins = (
 		app as unknown as {
 			plugins: {

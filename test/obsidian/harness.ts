@@ -136,7 +136,10 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			() => rendersSearchableSettings(this.app),
 		)
 		await run('lists only Vault Skills in the Skills settings', () =>
-			listsOnlyVaultSkillsInSettings(this.app),
+			listsOnlyVaultSkillsInSettings(this.app, async (step) => {
+				lifecycleSteps.push(step)
+				await writeSnapshot()
+			}),
 		)
 
 		await run('tolerates a corrupt chat meta file', () =>

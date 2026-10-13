@@ -36,7 +36,8 @@ export class ReversibleFs implements IFileSystem {
 	private depth = 0
 
 	constructor(
-		private readonly inner: IFileSystem,
+		private readonly inner: IFileSystem &
+			Required<Pick<IFileSystem, 'readdirWithFileTypes'>>,
 		private readonly recorder: ReversibleOpRecorder,
 		private readonly options: ReversibleFsOptions = {},
 	) {}
@@ -175,7 +176,7 @@ export class ReversibleFs implements IFileSystem {
 		return this.inner.readdir(path)
 	}
 	readdirWithFileTypes(path: string) {
-		return this.inner.readdirWithFileTypes!(path)
+		return this.inner.readdirWithFileTypes(path)
 	}
 
 	rm(path: string, options?: RmOptions) {

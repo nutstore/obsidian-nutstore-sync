@@ -1,9 +1,10 @@
-import { MountableFs, type IFileSystem } from 'just-bash/browser'
+import type { IFileSystem } from 'just-bash/browser'
 import { normalizePath, type App } from 'obsidian'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { ObsidianVaultFs, ReversibleOpRecorder } from './bash/fs'
+import { MountableFs } from './bash/mountable-fs'
 import {
 	AGENTS_MOUNT_POINT,
 	AGENTS_VAULT_PATH,
@@ -29,11 +30,9 @@ interface SharedVaultFileSystem {
 }
 
 /**
- * just-bash expands globs from IFileSystem.getAllPaths() before it asks the
- * filesystem to read a directory. Seed that synchronous index from Obsidian's
- * in-memory vault index — the authoritative view shared with the file explorer
- * — plus the plugin's agent domain directory, which the vault index excludes
- * because it is hidden. Other hidden paths stay out of the snapshot.
+ * Seed the synchronous path snapshot from Obsidian's loaded vault files and
+ * the hidden agent domain. Other hidden paths stay out of this snapshot.
+ * Bash globs enumerate directories through readdirWithFileTypes instead.
  */
 async function getInitialVaultPaths(app: App) {
 	const paths = app.vault.getAllLoadedFiles().map((file) => file.path)
