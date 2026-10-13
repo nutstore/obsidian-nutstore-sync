@@ -58,9 +58,11 @@ export default class NutstorePlugin extends Plugin {
 		if (!this.loaded) return
 		await Promise.all([
 			this.sync.lifecycle.update(
-				this.settings.syncModule === ModuleState.Enabled,
+				this.localSettings.modules.sync === ModuleState.Enabled,
 			),
-			this.ai.lifecycle.update(this.settings.aiModule === ModuleState.Enabled),
+			this.ai.lifecycle.update(
+				this.localSettings.modules.ai === ModuleState.Enabled,
+			),
 		])
 		await this.i18nService.update()
 		if (this.sync.lifecycle.active) await this.sync.scheduled.updateInterval()

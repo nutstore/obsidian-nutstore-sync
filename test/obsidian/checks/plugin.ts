@@ -472,9 +472,12 @@ export async function rendersSearchableSettings(app: App) {
 /** Exercise all four combinations and real host registrations without model/network calls. */
 export async function hotTogglesFeatureModules(app: App) {
 	let plugin = getProductionPlugin(app)
-	const original = {
-		syncModule: plugin.settings.syncModule,
-		aiModule: plugin.settings.aiModule,
+	const original = { ...plugin.localSettings.modules }
+	const state = (enabled: boolean) =>
+		enabled ? ModuleState.Enabled : ModuleState.Disabled
+	const setModules = async (sync: boolean, ai: boolean) => {
+		await plugin.settingsService.setModuleState('sync', state(sync))
+		await plugin.settingsService.setModuleState('ai', state(ai))
 	}
 	const commandIds = () =>
 		Object.keys(
@@ -491,11 +494,7 @@ export async function hotTogglesFeatureModules(app: App) {
 			[false, false],
 			[true, true],
 		]) {
-			plugin.settings.syncModule = sync
-				? ModuleState.Enabled
-				: ModuleState.Disabled
-			plugin.settings.aiModule = ai ? ModuleState.Enabled : ModuleState.Disabled
-			await plugin.settingsService.saveSettings()
+			await setModules(sync, ai)
 			assert(
 				plugin.sync.lifecycle.active === sync,
 				'Synchronization lifetime disagrees with its setting',
@@ -527,14 +526,17 @@ export async function hotTogglesFeatureModules(app: App) {
 					'Disabled AI opened or retained a ChatBox',
 				)
 			}
-			const saved = (await plugin.loadData()) as {
-				syncModule: ModuleState
-				aiModule: ModuleState
-			}
+			const local = JSON.parse(
+				await app.vault.adapter.read(`${plugin.manifest.dir}/data.local.json`),
+			) as { modules: Record<'sync' | 'ai', ModuleState> }
 			assert(
-				saved.syncModule === plugin.settings.syncModule &&
-					saved.aiModule === plugin.settings.aiModule,
-				'Module enums were not persisted',
+				local.modules.sync === state(sync) && local.modules.ai === state(ai),
+				'Module enums were not persisted device-locally',
+			)
+			const synced = (await plugin.loadData()) as Record<string, unknown>
+			assert(
+				!('syncModule' in synced) && !('aiModule' in synced),
+				'Module enums leaked into synced data.json',
 			)
 		}
 		const host = (
@@ -546,10 +548,10 @@ export async function hotTogglesFeatureModules(app: App) {
 				}
 			}
 		).setting
-		const originalSave = plugin.settingsService.saveSettings
+		const originalSave = plugin.settingsService.setModuleState
 		let pendingSave: Promise<void> | undefined
-		plugin.settingsService.saveSettings = function () {
-			pendingSave = originalSave.call(this)
+		plugin.settingsService.setModuleState = function (module, value) {
+			pendingSave = originalSave.call(this, module, value)
 			return pendingSave
 		}
 		host.open()
@@ -557,8 +559,8 @@ export async function hotTogglesFeatureModules(app: App) {
 			host.openTabById('nutstore-sync')
 			const labels = plugin.settings.language?.startsWith('zh') ? zh : en
 			for (const [key, label] of [
-				['syncModule', labels.settings.modules.sync],
-				['aiModule', labels.settings.modules.ai],
+				['sync', labels.settings.modules.sync],
+				['ai', labels.settings.modules.ai],
 			] as const) {
 				for (const enabled of [false, true]) {
 					await plugin.settingTab.rerenderIfVisible()
@@ -578,26 +580,29 @@ export async function hotTogglesFeatureModules(app: App) {
 					assert(pendingSave, `Module toggle did not save: ${key}`)
 					await pendingSave
 					assert(
-						plugin.settings[key] ===
-							(enabled ? ModuleState.Enabled : ModuleState.Disabled),
+						plugin.localSettings.modules[key] === state(enabled),
 						`Module toggle did not apply the enum: ${key}`,
 					)
 				}
 			}
 		} finally {
-			plugin.settingsService.saveSettings = originalSave
+			plugin.settingsService.setModuleState = originalSave
 			host.close()
 		}
 		const scope = plugin.ai.lifecycle.scope
 		const oldChat = plugin.ai.chat
-		plugin.settings.aiModule = ModuleState.Disabled
-		const stopping = plugin.settingsService.saveSettings()
+		const stopping = plugin.settingsService.setModuleState(
+			'ai',
+			ModuleState.Disabled,
+		)
 		assert(
 			scope.signal.aborted,
 			'AI was not revoked before settings persistence completed',
 		)
-		plugin.settings.aiModule = ModuleState.Enabled
-		await Promise.all([stopping, plugin.settingsService.saveSettings()])
+		await Promise.all([
+			stopping,
+			plugin.settingsService.setModuleState('ai', ModuleState.Enabled),
+		])
 		assert(
 			plugin.ai.chat !== oldChat,
 			'Re-enabling reused a retired chat runtime',
@@ -609,9 +614,7 @@ export async function hotTogglesFeatureModules(app: App) {
 			refused = true
 		}
 		assert(refused, 'A retired chat runtime accepted work after re-enabling')
-		plugin.settings.syncModule = ModuleState.Disabled
-		plugin.settings.aiModule = ModuleState.Disabled
-		await plugin.settingsService.saveSettings()
+		await setModules(false, false)
 		await reloadsProductionPlugin(app)
 		plugin = getProductionPlugin(app)
 		assert(
@@ -628,8 +631,8 @@ export async function hotTogglesFeatureModules(app: App) {
 			'Cold disabled AI opened a ChatBox',
 		)
 	} finally {
-		Object.assign(plugin.settings, original)
-		await plugin.settingsService.saveSettings()
+		await plugin.settingsService.setModuleState('sync', original.sync)
+		await plugin.settingsService.setModuleState('ai', original.ai)
 		app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
 	}
 }

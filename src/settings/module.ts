@@ -1,10 +1,11 @@
 import { Setting } from 'obsidian'
 import i18n from '~/i18n'
 import { ModuleState } from '~/modules/lifecycle'
+import type { FeatureModule } from '.'
 import BaseSettings from './settings.base'
 
 export default class ModuleSettings extends BaseSettings {
-	module: 'sync' | 'ai' = 'sync'
+	module: FeatureModule = 'sync'
 	readonly name = () =>
 		i18n.t(
 			this.module === 'sync' ? 'settings.modules.sync' : 'settings.modules.ai',
@@ -17,20 +18,22 @@ export default class ModuleSettings extends BaseSettings {
 
 	async display() {
 		this.containerEl.empty()
-		const key = this.module === 'sync' ? 'syncModule' : 'aiModule'
 		new Setting(this.containerEl)
 			.setName(this.name())
 			.setDesc(i18n.t('settings.modules.description'))
 			.addToggle((toggle) =>
 				toggle
-					.setValue(this.plugin.settings[key] === ModuleState.Enabled)
+					.setValue(
+						this.plugin.localSettings.modules[this.module] ===
+							ModuleState.Enabled,
+					)
 					.onChange(async (enabled) => {
 						toggle.setDisabled(true)
 						try {
-							this.plugin.settings[key] = enabled
-								? ModuleState.Enabled
-								: ModuleState.Disabled
-							await this.plugin.settingsService.saveSettings()
+							await this.plugin.settingsService.setModuleState(
+								this.module,
+								enabled ? ModuleState.Enabled : ModuleState.Disabled,
+							)
 							await this.settings.rerenderIfVisible()
 						} finally {
 							toggle.setDisabled(false)

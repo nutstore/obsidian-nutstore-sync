@@ -145,8 +145,6 @@ export function getSyncPolicyDescI18nKey(
 }
 
 export interface NutstoreSettings {
-	syncModule: ModuleState
-	aiModule: ModuleState
 	account: string
 	credential: string
 	nutstoreEnterpriseBaseUrl: string
@@ -200,8 +198,6 @@ function exclude(expr: string): GlobFilterRule {
 }
 
 export const DEFAULT_SETTINGS: NutstoreSettings = {
-	syncModule: ModuleState.Enabled,
-	aiModule: ModuleState.Enabled,
 	account: '',
 	credential: '',
 	nutstoreEnterpriseBaseUrl: '',
@@ -264,8 +260,17 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 	configDirSyncMode: 'none',
 }
 
+/** Feature modules whose on/off state is a per-device choice. */
+export type FeatureModule = 'sync' | 'ai'
+
+/**
+ * Device-local settings live in `data.local.json`, which config-dir sync never
+ * transfers. Anything that must not propagate between devices belongs here.
+ */
 export interface NutstoreLocalSettings {
 	syncPolicy: SyncPolicy
+	/** Disabling a module on one device must not disable it on others. */
+	modules: Record<FeatureModule, ModuleState>
 	ai: {
 		presetModels?: AIProviderDefinitions
 		presetModelsUpdatedAt?: string
@@ -274,6 +279,7 @@ export interface NutstoreLocalSettings {
 
 export const DEFAULT_LOCAL_SETTINGS: NutstoreLocalSettings = {
 	syncPolicy: SyncPolicy.TwoWay,
+	modules: { sync: ModuleState.Enabled, ai: ModuleState.Enabled },
 	ai: {},
 }
 
@@ -555,9 +561,8 @@ export class NutstoreSettingTab extends PluginSettingTab {
 
 	private visibleSections(tab: SettingsTabKey) {
 		const disabled =
-			(tab === 'sync' &&
-				this.plugin.settings.syncModule === ModuleState.Disabled) ||
-			(tab === 'ai' && this.plugin.settings.aiModule === ModuleState.Disabled)
+			(tab === 'sync' || tab === 'ai') &&
+			this.plugin.localSettings.modules[tab] === ModuleState.Disabled
 		return disabled ? this.tabSections[tab].slice(0, 1) : this.tabSections[tab]
 	}
 

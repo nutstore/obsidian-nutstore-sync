@@ -1,4 +1,4 @@
-import { normalizeModuleState } from '~/modules/lifecycle'
+import { type ModuleState, normalizeModuleState } from '~/modules/lifecycle'
 import { debounce } from 'es-toolkit/compat'
 import { normalizePath, Notice } from 'obsidian'
 import {
@@ -17,6 +17,7 @@ import i18n from '~/i18n'
 import {
 	DEFAULT_LOCAL_SETTINGS,
 	DEFAULT_SETTINGS,
+	type FeatureModule,
 	type NutstoreLocalSettings,
 	type NutstoreSettings,
 } from '~/settings'
@@ -27,8 +28,15 @@ import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import { BaseService } from './service.interface'
 
+/** Earlier builds stored module states in the synced `data.json`. */
+interface LegacyModuleSettings {
+	syncModule?: unknown
+	aiModule?: unknown
+}
+
 export default class SettingsService extends BaseService {
 	private reloadSettingsPromise: Promise<void> | null = null
+	private legacyModules: Partial<Record<FeatureModule, unknown>> = {}
 	private readonly debouncedReloadSettingsFromDisk = debounce(() => {
 		void this.reloadSettingsFromDisk()
 	}, 500)
@@ -52,13 +60,18 @@ export default class SettingsService extends BaseService {
 			loadedSettings && typeof loadedSettings === 'object'
 				? (loadedSettings as Partial<NutstoreSettings>)
 				: {}
-		this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS, storedSettings)
-		this.plugin.settings.syncModule = normalizeModuleState(
-			storedSettings.syncModule,
-		)
-		this.plugin.settings.aiModule = normalizeModuleState(
-			storedSettings.aiModule,
-		)
+		const {
+			syncModule: legacySyncModule,
+			aiModule: legacyAiModule,
+			...syncedSettings
+		} = storedSettings as Partial<NutstoreSettings> & LegacyModuleSettings
+		// Module states moved to device-local settings; keep the old synced
+		// values only as a one-time seed for devices without a local choice.
+		this.legacyModules = {
+			sync: legacySyncModule,
+			ai: legacyAiModule,
+		}
+		this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS, syncedSettings)
 		if (
 			storedSettings?.conflictStrategy !== undefined &&
 			!Object.values(ConflictStrategy).includes(storedSettings.conflictStrategy)
@@ -157,21 +170,41 @@ export default class SettingsService extends BaseService {
 
 	async loadLocalSettings() {
 		const path = normalizePath(`${this.plugin.manifest.dir}/data.local.json`)
-		if (!(await this.plugin.app.vault.adapter.exists(path))) {
-			this.plugin.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
-			return
-		}
+		let stored: Partial<NutstoreLocalSettings> = {}
 		try {
-			const raw = await this.plugin.app.vault.adapter.read(path)
-			this.plugin.localSettings = Object.assign(
-				{},
-				DEFAULT_LOCAL_SETTINGS,
-				JSON.parse(raw),
-			) as NutstoreLocalSettings
-			this.plugin.localSettings.ai ??= {}
+			if (await this.plugin.app.vault.adapter.exists(path)) {
+				const parsed = JSON.parse(
+					await this.plugin.app.vault.adapter.read(path),
+				) as unknown
+				if (parsed && typeof parsed === 'object') stored = parsed
+			}
 		} catch {
-			this.plugin.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
+			stored = {}
 		}
+		const storedModules: Partial<Record<FeatureModule, unknown>> =
+			stored.modules ?? {}
+		const migrateModules =
+			storedModules.sync === undefined || storedModules.ai === undefined
+		this.plugin.localSettings = {
+			...DEFAULT_LOCAL_SETTINGS,
+			...stored,
+			ai: stored.ai ?? {},
+			modules: {
+				sync: normalizeModuleState(
+					storedModules.sync ?? this.legacyModules.sync,
+				),
+				ai: normalizeModuleState(storedModules.ai ?? this.legacyModules.ai),
+			},
+		}
+		if (migrateModules) await this.saveLocalSettings()
+	}
+
+	/** Module states are device-local: persist locally and reconcile lifetimes. */
+	async setModuleState(module: FeatureModule, state: ModuleState) {
+		this.plugin.localSettings.modules[module] = state
+		// Begin revocation before the first persistence await.
+		const applied = this.plugin.applySettings()
+		await Promise.all([this.saveLocalSettings(), applied])
 	}
 
 	async saveLocalSettings() {
