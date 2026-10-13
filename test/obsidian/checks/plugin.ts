@@ -533,7 +533,10 @@ export async function hotTogglesFeatureModules(app: App) {
 				local.modules.sync === state(sync) && local.modules.ai === state(ai),
 				'Module enums were not persisted device-locally',
 			)
-			const synced = (await plugin.loadData()) as Record<string, unknown>
+			const synced = ((await plugin.loadData()) ?? {}) as Record<
+				string,
+				unknown
+			>
 			assert(
 				!('syncModule' in synced) && !('aiModule' in synced),
 				'Module enums leaked into synced data.json',
