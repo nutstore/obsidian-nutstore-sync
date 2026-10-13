@@ -10,6 +10,16 @@ export function getDBKey(vaultName: string, remoteBaseDir: string) {
 	})
 }
 
+/**
+ * Version of the persisted `TraverseWebDAVCache` shape. It is part of the key,
+ * so builds that do not understand a newer shape never see it: a reader that
+ * ignores `pendingVerification` would treat a suspended traversal as complete
+ * and infer remote deletions. Bump on any incompatible cache change.
+ *
+ * - 2: `pendingVerification` makes an empty `queue` insufficient for completeness.
+ */
+export const TRAVERSAL_CACHE_SCHEMA = 2
+
 export async function getTraversalWebDAVDBKey(
 	remoteAccountId: string,
 	remoteEndpoint: string,
@@ -19,5 +29,6 @@ export async function getTraversalWebDAVDBKey(
 		remoteEndpoint,
 		accountHash: await sha256Hex(new TextEncoder().encode(remoteAccountId)),
 		remoteBaseDir: normalizeVaultPath(remoteBaseDir),
+		schema: TRAVERSAL_CACHE_SCHEMA,
 	})
 }
