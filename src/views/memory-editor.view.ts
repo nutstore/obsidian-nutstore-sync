@@ -19,7 +19,7 @@ export class MemoryEditorView extends MarkdownView {
 
 	constructor(
 		leaf: WorkspaceLeaf,
-		private memory: MemoryService,
+		private memory: MemoryService | undefined,
 	) {
 		super(leaf)
 		this.allowNoFile = true
@@ -35,6 +35,10 @@ export class MemoryEditorView extends MarkdownView {
 	}
 
 	override async setState(_state: unknown, result: ViewStateResult) {
+		if (!this.memory?.active) {
+			this.leaf.detach()
+			return
+		}
 		if (this.ready) return
 		await super.setState({ mode: 'source', source: true }, result)
 		this.memoryPath = this.memory.repository.path
@@ -43,6 +47,7 @@ export class MemoryEditorView extends MarkdownView {
 			this.setViewData(this.savedContent, true)
 			this.ready = true
 		} catch (error) {
+			if (!this.memory?.active) return
 			logger.error('Failed to open memory editor', error)
 			new Notice(i18n.t('memory.openFailed', { path: this.memoryPath }))
 		}
@@ -57,7 +62,7 @@ export class MemoryEditorView extends MarkdownView {
 	}
 
 	async persist() {
-		if (this.saving || !this.ready) return false
+		if (!this.memory?.active || this.saving || !this.ready) return false
 		if (this.getViewData() === this.savedContent) return true
 		this.saving = true
 		const next = this.getViewData()

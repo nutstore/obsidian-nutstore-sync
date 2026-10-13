@@ -7,6 +7,7 @@ import {
 import {
 	detachesChatboxWhenProductionPluginIsDisabled,
 	listsOnlyVaultSkillsInSettings,
+	hotTogglesFeatureModules,
 	loadsProductionPlugin,
 	reloadsProductionPlugin,
 	rendersSearchableSettings,
@@ -87,6 +88,9 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		)
 		await run('reloads the production plugin through the real lifecycle', () =>
 			reloadsProductionPlugin(this.app),
+		)
+		await run('hot toggles synchronization and AI modules independently', () =>
+			hotTogglesFeatureModules(this.app),
 		)
 		await run('expands existing Vault paths in Bash wildcards', () =>
 			expandsExistingVaultPathsInBash(this.app),

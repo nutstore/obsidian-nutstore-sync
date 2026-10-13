@@ -126,7 +126,7 @@ export default class AISettings extends BaseSettings {
 			.setName(i18n.t('settings.ai.mcp.name'))
 			.setDesc(
 				i18n.t('settings.ai.mcp.summary', {
-					count: Object.keys(this.plugin.mcpService.getServers()).length,
+					count: Object.keys(this.plugin.ai.mcp.getServers()).length,
 				}),
 			)
 			.addButton((button) =>
@@ -152,8 +152,7 @@ export default class AISettings extends BaseSettings {
 
 	private listUserManagedProviders() {
 		return listProviders(this.plugin.settings.ai.providers).filter(
-			(provider) =>
-				!this.plugin.nutstoreLlmGatewayService.isManagedProvider(provider),
+			(provider) => !this.plugin.ai.gateway.isManagedProvider(provider),
 		)
 	}
 

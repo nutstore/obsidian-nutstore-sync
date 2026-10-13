@@ -47,7 +47,7 @@ import {
 	createViewImageAttachmentMessage,
 	InMemoryViewImageAttachmentRegistry,
 } from '~/ai/tools/view-image-attachments'
-import { createAbortError } from '~/ai/transport/abort'
+import { createAbortError } from '~/utils/abort'
 import i18n from '~/i18n'
 
 export type AgentTurnResult =
@@ -116,6 +116,7 @@ export class AgentRunner {
 		const stableContext = this.toolExecutor.createStableToolsContext(
 			session,
 			definition,
+			options.abortSignal,
 		)
 		const systemPrompt = await buildAgentSystemPrompt(
 			this.app,

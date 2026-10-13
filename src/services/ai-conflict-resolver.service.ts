@@ -1,3 +1,4 @@
+import type { EventRef } from 'obsidian'
 import { MarkdownView, Notice, TFile } from 'obsidian'
 import { sanitizeDefaultSelections } from '~/ai/catalog/config'
 import { createVaultPathContextItem } from '~/ai/chat/context/user-context'
@@ -11,6 +12,7 @@ export default class AIConflictResolverService extends BaseService {
 	private readonly actions = new Map<MarkdownView, HTMLElement>()
 	private refreshVersion = 0
 	private unloaded = false
+	private refs: Array<() => void> = []
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
@@ -18,17 +20,17 @@ export default class AIConflictResolverService extends BaseService {
 
 	override onload() {
 		this.unloaded = false
-		this.plugin.registerEvent(
+		this.registerWorkspaceEvent(
 			this.plugin.app.workspace.on('active-leaf-change', () => {
 				void this.refresh()
 			}),
 		)
-		this.plugin.registerEvent(
+		this.registerWorkspaceEvent(
 			this.plugin.app.workspace.on('file-open', () => {
 				void this.refresh()
 			}),
 		)
-		this.plugin.registerEvent(
+		this.registerVaultEvent(
 			this.plugin.app.vault.on('modify', (file) => {
 				const view = this.plugin.app.workspace.getActiveViewOfType(MarkdownView)
 				if (file instanceof TFile && view?.file?.path === file.path) {
@@ -39,9 +41,17 @@ export default class AIConflictResolverService extends BaseService {
 		void this.refresh()
 	}
 
+	private registerWorkspaceEvent(ref: EventRef) {
+		this.refs.push(() => this.plugin.app.workspace.offref(ref))
+	}
+	private registerVaultEvent(ref: EventRef) {
+		this.refs.push(() => this.plugin.app.vault.offref(ref))
+	}
+
 	async refresh() {
 		const version = ++this.refreshVersion
-		if (this.unloaded) return
+		if (this.unloaded || !this.plugin.ai.lifecycle.active) return
+		const scope = this.plugin.ai.lifecycle.scope
 		const view = this.plugin.app.workspace.getActiveViewOfType(MarkdownView)
 		if (!view) return
 
@@ -55,6 +65,7 @@ export default class AIConflictResolverService extends BaseService {
 		try {
 			const content = await this.plugin.app.vault.cachedRead(file)
 			if (
+				scope.signal.aborted ||
 				this.unloaded ||
 				version !== this.refreshVersion ||
 				view.file?.path !== file.path
@@ -74,6 +85,7 @@ export default class AIConflictResolverService extends BaseService {
 			action.setAttribute('title', title)
 			action.show()
 		} catch (error) {
+			if (scope.signal.aborted) return
 			action.hide()
 			logger.error(`Failed to inspect merge conflicts: ${file.path}`, error)
 		}
@@ -96,6 +108,7 @@ export default class AIConflictResolverService extends BaseService {
 	}
 
 	override onunload() {
+		this.refs.splice(0).forEach((dispose) => dispose())
 		this.unloaded = true
 		this.refreshVersion++
 		for (const action of this.actions.values()) {
@@ -114,6 +127,8 @@ export default class AIConflictResolverService extends BaseService {
 	}
 
 	private async prepareResolution(view: MarkdownView) {
+		if (!this.plugin.ai.lifecycle.active) return
+		const scope = this.plugin.ai.lifecycle.scope
 		const action = this.getOrCreateAction(view)
 		const file = view.file
 		if (!file || action.getAttribute('aria-disabled') === 'true') return
@@ -127,18 +142,20 @@ export default class AIConflictResolverService extends BaseService {
 			}
 
 			const content = await this.plugin.app.vault.cachedRead(file)
+			if (scope.signal.aborted) return
 			if (countMergeConflictBlocks(content) === 0) {
 				action.hide()
 				new Notice(i18n.t('chatbox.conflictResolution.alreadyResolved'))
 				return
 			}
 
-			await this.plugin.chatService.createDraftSession(
+			await this.plugin.ai.chat.createDraftSession(
 				i18n.t('chatbox.conflictResolution.prompt'),
 				[createVaultPathContextItem(file.path, 'file')],
 			)
-			await this.plugin.commandService.openChatbox()
+			await this.plugin.ai.openChatbox()
 		} catch (error) {
+			if (scope.signal.aborted) return
 			logger.error(
 				`Failed to prepare AI conflict resolution: ${file.path}`,
 				error,

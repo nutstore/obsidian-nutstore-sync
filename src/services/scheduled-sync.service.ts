@@ -1,3 +1,4 @@
+import type { ModuleScope } from '~/modules/lifecycle'
 import { clamp } from 'es-toolkit/compat'
 import { SyncStartMode } from '~/sync'
 import type NutstorePlugin from '..'
@@ -8,6 +9,8 @@ export default class ScheduledSyncService extends BaseService {
 	private autoSyncTimer: number | null = null
 	private startupSyncTimer: number | null = null
 	private startupSyncCompleted = false
+	private scope?: ModuleScope
+	private scheduleKey = ''
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -21,6 +24,8 @@ export default class ScheduledSyncService extends BaseService {
 	}
 
 	async start() {
+		this.scope = this.plugin.sync.lifecycle.scope
+		this.scheduleKey = this.getScheduleKey()
 		this.stopTimer()
 		this.clearStartupTimer()
 		this.startupSyncCompleted = false
@@ -28,6 +33,8 @@ export default class ScheduledSyncService extends BaseService {
 	}
 
 	private startTimer(intervalSeconds: number) {
+		if (!this.scope || this.scope.signal.aborted) return
+		const scope = this.scope
 		this.stopTimer()
 
 		const intervalMs = intervalSeconds * 1000
@@ -35,6 +42,7 @@ export default class ScheduledSyncService extends BaseService {
 
 		if (clampedIntervalMs > 0) {
 			this.autoSyncTimer = window.setInterval(() => {
+				if (scope.signal.aborted) return
 				void this.syncExecutor.executeSync({
 					mode: SyncStartMode.AUTO_SYNC,
 				})
@@ -50,10 +58,13 @@ export default class ScheduledSyncService extends BaseService {
 	}
 
 	private async scheduleStartupOrInterval() {
+		if (!this.scope || this.scope.signal.aborted) return
+		const scope = this.scope
 		const settings = this.plugin.settings
 
 		if (!this.startupSyncCompleted && settings.startupSyncDelaySeconds > 0) {
 			this.startupSyncTimer = window.setTimeout(() => {
+				if (scope.signal.aborted) return
 				this.startupSyncTimer = null
 				this.startupSyncCompleted = true
 				void (async () => {
@@ -62,7 +73,8 @@ export default class ScheduledSyncService extends BaseService {
 							mode: SyncStartMode.AUTO_SYNC,
 						})
 					} finally {
-						this.startTimer(this.plugin.settings.autoSyncIntervalSeconds)
+						if (!scope.signal.aborted)
+							this.startTimer(this.plugin.settings.autoSyncIntervalSeconds)
 					}
 				})()
 			}, settings.startupSyncDelaySeconds * 1000)
@@ -80,7 +92,15 @@ export default class ScheduledSyncService extends BaseService {
 		}
 	}
 
+	private getScheduleKey() {
+		return `${this.plugin.settings.startupSyncDelaySeconds}:${this.plugin.settings.autoSyncIntervalSeconds}`
+	}
+
 	async updateInterval() {
+		if (!this.scope || this.scope.signal.aborted) return
+		const key = this.getScheduleKey()
+		if (key === this.scheduleKey) return
+		this.scheduleKey = key
 		this.stopTimer()
 		if (!this.startupSyncCompleted) {
 			this.clearStartupTimer()
@@ -94,5 +114,6 @@ export default class ScheduledSyncService extends BaseService {
 	override onunload() {
 		this.stopTimer()
 		this.clearStartupTimer()
+		this.scope = undefined
 	}
 }

@@ -64,7 +64,7 @@ export const bashTool = tool({
 		updateSettings: updateSettingsDep,
 	}),
 	outputSchema: z.string(),
-	execute: async (params, { context, toolCallId }) => {
+	execute: async (params, { context, toolCallId, abortSignal }) => {
 		const {
 			app,
 			fileSystemManager,
@@ -83,6 +83,7 @@ export const bashTool = tool({
 
 		const result = await execVaultBash(app, params.script, {
 			cwd,
+			signal: abortSignal,
 			stdin: params.stdin,
 			rawScript: params.rawScript,
 			permissionGuard: withPermissionPurpose(permissionGuard, params.purpose),

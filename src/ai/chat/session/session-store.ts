@@ -1,3 +1,4 @@
+import { isAbortError } from '~/utils/abort'
 import { Notice } from 'obsidian'
 import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 
@@ -344,7 +345,8 @@ export class SessionStore {
 				}
 			})
 			.catch((error) => {
-				logger.error('Failed to persist chat session', error)
+				if (!isAbortError(error))
+					logger.error('Failed to persist chat session', error)
 			})
 		await write
 	}

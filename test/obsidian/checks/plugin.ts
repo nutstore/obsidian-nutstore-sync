@@ -1,31 +1,12 @@
+import { ModuleState } from '~/modules/lifecycle'
 import { requireApiVersion, type App } from 'obsidian'
-import type { NutstoreSettingTab } from '~/settings'
 import type NutstorePlugin from '~/index'
 import en from '~/i18n/locales/en.json'
 import zh from '~/i18n/locales/zh.json'
 import { CHATBOX_VIEW_TYPE } from '~/views/chatbox.view'
 import { assert } from './assert'
 
-interface ProductionPlugin extends Pick<
-	NutstorePlugin,
-	'settings' | 'settingsService' | 'loadData'
-> {
-	settingTab: NutstoreSettingTab
-	isSyncing: boolean
-	commandService: {
-		openChatbox(): Promise<void>
-	}
-	progressService: {
-		syncProgress: { total: number; completed: unknown[]; current: unknown }
-		preparationProgress: unknown
-		syncEnd: boolean
-		syncFailed: boolean
-		syncFailedCount: number
-		showProgressModal(): void
-		closeProgressModal(): void
-		updateModal: (() => void) & { flush?: () => void }
-	}
-}
+type ProductionPlugin = NutstorePlugin
 
 function getProductionPlugin(app: App): ProductionPlugin {
 	const plugins = (
@@ -201,7 +182,7 @@ export async function detachesChatboxWhenProductionPluginIsDisabled(
 		}
 	).plugins
 	const plugin = getProductionPlugin(app)
-	await step('openChatbox: initial', () => plugin.commandService.openChatbox())
+	await step('openChatbox: initial', () => plugin.ai.openChatbox())
 	await step('assert: initial ChatBox count', () => {
 		assert(
 			app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE).length === 1,
@@ -231,9 +212,7 @@ export async function detachesChatboxWhenProductionPluginIsDisabled(
 
 	const reloadedPlugin = getProductionPlugin(app)
 	try {
-		await step('openChatbox: reloaded', () =>
-			reloadedPlugin.commandService.openChatbox(),
-		)
+		await step('openChatbox: reloaded', () => reloadedPlugin.ai.openChatbox())
 		await step('assert: no duplicate ChatBox', () => {
 			assert(
 				app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE).length === 1,
@@ -249,7 +228,7 @@ export async function detachesChatboxWhenProductionPluginIsDisabled(
 
 export async function rendersSyncProgress(app: App) {
 	const plugin = getProductionPlugin(app)
-	const progress = plugin.progressService
+	const progress = plugin.sync.progress
 	plugin.isSyncing = true
 	progress.syncProgress = { total: 0, completed: [], current: null }
 	progress.preparationProgress = null
@@ -461,5 +440,170 @@ export async function rendersSearchableSettings(app: App) {
 		}
 	} else {
 		throw new Error('Settings search requires Obsidian 1.13.0')
+	}
+}
+
+/** Exercise all four combinations and real host registrations without model/network calls. */
+export async function hotTogglesFeatureModules(app: App) {
+	let plugin = getProductionPlugin(app)
+	const original = {
+		syncModule: plugin.settings.syncModule,
+		aiModule: plugin.settings.aiModule,
+	}
+	const commandIds = () =>
+		Object.keys(
+			(app as unknown as { commands: { commands: Record<string, unknown> } })
+				.commands.commands,
+		)
+	const owns = (id: string) => commandIds().includes(`nutstore-sync:${id}`)
+	try {
+		for (const [sync, ai] of [
+			[false, false],
+			[true, false],
+			[false, true],
+			[true, true],
+			[false, false],
+			[true, true],
+		]) {
+			plugin.settings.syncModule = sync
+				? ModuleState.Enabled
+				: ModuleState.Disabled
+			plugin.settings.aiModule = ai ? ModuleState.Enabled : ModuleState.Disabled
+			await plugin.settingsService.saveSettings()
+			assert(
+				plugin.sync.lifecycle.active === sync,
+				'Synchronization lifetime disagrees with its setting',
+			)
+			assert(
+				plugin.ai.lifecycle.active === ai,
+				'AI lifetime disagrees with its setting',
+			)
+			assert(
+				owns('start-sync') === sync,
+				'Synchronization command survived disabling or failed to return',
+			)
+			assert(
+				owns('open-chatbox') === ai,
+				'Chat command survived disabling or failed to return',
+			)
+			assert(
+				owns('open-memory-note') === ai,
+				'Memory command disagrees with AI lifetime',
+			)
+			if (ai) {
+				await plugin.ai.openChatbox()
+				await plugin.ai.chat.ensureSession()
+				plugin.ai.chat.updateInputDraft('Neutral draft / 中性草稿 🌱')
+			} else {
+				await plugin.ai.openChatbox()
+				assert(
+					app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE).length === 0,
+					'Disabled AI opened or retained a ChatBox',
+				)
+			}
+			const saved = (await plugin.loadData()) as {
+				syncModule: ModuleState
+				aiModule: ModuleState
+			}
+			assert(
+				saved.syncModule === plugin.settings.syncModule &&
+					saved.aiModule === plugin.settings.aiModule,
+				'Module enums were not persisted',
+			)
+		}
+		const host = (
+			app as unknown as {
+				setting: {
+					open(): void
+					close(): void
+					openTabById(id: string): void
+				}
+			}
+		).setting
+		const originalSave = plugin.settingsService.saveSettings
+		let pendingSave: Promise<void> | undefined
+		plugin.settingsService.saveSettings = function () {
+			pendingSave = originalSave.call(this)
+			return pendingSave
+		}
+		host.open()
+		try {
+			host.openTabById('nutstore-sync')
+			const labels = plugin.settings.language?.startsWith('zh') ? zh : en
+			for (const [key, label] of [
+				['syncModule', labels.settings.modules.sync],
+				['aiModule', labels.settings.modules.ai],
+			] as const) {
+				for (const enabled of [false, true]) {
+					await plugin.settingTab.rerenderIfVisible()
+					const row = Array.from(
+						plugin.settingTab.containerEl.querySelectorAll('.setting-item'),
+					).find(
+						(element) =>
+							element.querySelector('.setting-item-name')?.textContent ===
+							label,
+					)
+					const input = row?.querySelector<HTMLInputElement>(
+						'input[type="checkbox"]',
+					)
+					assert(input, `Module toggle was not rendered: ${key}`)
+					pendingSave = undefined
+					input.click()
+					assert(pendingSave, `Module toggle did not save: ${key}`)
+					await pendingSave
+					assert(
+						plugin.settings[key] ===
+							(enabled ? ModuleState.Enabled : ModuleState.Disabled),
+						`Module toggle did not apply the enum: ${key}`,
+					)
+				}
+			}
+		} finally {
+			plugin.settingsService.saveSettings = originalSave
+			host.close()
+		}
+		const scope = plugin.ai.lifecycle.scope
+		const oldChat = plugin.ai.chat
+		plugin.settings.aiModule = ModuleState.Disabled
+		const stopping = plugin.settingsService.saveSettings()
+		assert(
+			scope.signal.aborted,
+			'AI was not revoked before settings persistence completed',
+		)
+		plugin.settings.aiModule = ModuleState.Enabled
+		await Promise.all([stopping, plugin.settingsService.saveSettings()])
+		assert(
+			plugin.ai.chat !== oldChat,
+			'Re-enabling reused a retired chat runtime',
+		)
+		let refused = false
+		try {
+			await oldChat.sendMessage('Neutral request / 中性请求 🌱')
+		} catch {
+			refused = true
+		}
+		assert(refused, 'A retired chat runtime accepted work after re-enabling')
+		plugin.settings.syncModule = ModuleState.Disabled
+		plugin.settings.aiModule = ModuleState.Disabled
+		await plugin.settingsService.saveSettings()
+		await reloadsProductionPlugin(app)
+		plugin = getProductionPlugin(app)
+		assert(
+			!plugin.sync.lifecycle.active && !plugin.ai.lifecycle.active,
+			'Cold loading activated a disabled module',
+		)
+		assert(
+			!owns('start-sync') && !owns('open-chatbox'),
+			'Cold loading registered commands for disabled modules',
+		)
+		await plugin.ai.openChatbox()
+		assert(
+			app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE).length === 0,
+			'Cold disabled AI opened a ChatBox',
+		)
+	} finally {
+		Object.assign(plugin.settings, original)
+		await plugin.settingsService.saveSettings()
+		app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
 	}
 }

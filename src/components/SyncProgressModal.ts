@@ -86,19 +86,19 @@ export default class SyncProgressModal extends Modal {
 			return
 		}
 
-		const progress = this.plugin.progressService.syncProgress
-		const preparation = this.plugin.progressService.preparationProgress
-		const failedCount = this.plugin.progressService.syncFailedCount
+		const progress = this.plugin.sync.progress.syncProgress
+		const preparation = this.plugin.sync.progress.preparationProgress
+		const failedCount = this.plugin.sync.progress.syncFailedCount
 		const preparationText = preparation
 			? getSyncPreparationText(preparation)
 			: null
-		const state: SyncProgressModalState = this.plugin.progressService.syncEnd
+		const state: SyncProgressModalState = this.plugin.sync.progress.syncEnd
 			? failedCount > 0
 				? 'warning'
 				: 'complete'
 			: this.syncCancelled
 				? 'cancelled'
-				: this.plugin.progressService.syncFailed
+				: this.plugin.sync.progress.syncFailed
 					? 'error'
 					: preparation
 						? 'preparing'

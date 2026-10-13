@@ -45,7 +45,7 @@ import type { TaskOrigin } from '~/ai/chat/runtime/master-turn-scheduler'
 import i18n from '~/i18n'
 import createId, { createUniqueWordId } from '~/utils/create-id'
 import type { DispatchTaskParams, DispatchTaskResult } from '~/ai/tools/task'
-import { createAbortError } from '~/ai/transport/abort'
+import { createAbortError } from '~/utils/abort'
 
 export class TaskManager implements AgentCommunication {
 	private executing = new Map<string, Promise<void>>()

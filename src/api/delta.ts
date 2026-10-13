@@ -29,10 +29,18 @@ interface GetDeltaInput {
 	cursor?: string
 	settings: NutstoreSettings
 	token: string
+	throwIfCancelled?: () => void
 }
 
 export const getDelta = apiLimiter.wrap(
-	async ({ folderName, cursor, settings, token }: GetDeltaInput) => {
+	async ({
+		folderName,
+		cursor,
+		settings,
+		token,
+		throwIfCancelled,
+	}: GetDeltaInput) => {
+		throwIfCancelled?.()
 		const body = `<?xml version="1.0" encoding="utf-8"?>
               <s:delta xmlns:s="http://ns.jianguoyun.com">
                   <s:folderName>${folderName}</s:folderName>
@@ -48,6 +56,7 @@ export const getDelta = apiLimiter.wrap(
 			body,
 		})
 
+		throwIfCancelled?.()
 		const parseXml = new XMLParser({
 			attributeNamePrefix: '',
 			removeNSPrefix: true,

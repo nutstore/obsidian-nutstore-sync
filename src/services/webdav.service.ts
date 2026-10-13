@@ -10,6 +10,7 @@ export class WebDAVService extends BaseService {
 	}
 
 	async createWebDAVClient(): Promise<WebDAVClient> {
+		const scope = this.plugin.sync.lifecycle.scope
 		const davEndpoint = getNutstoreDavEndpoint(this.plugin.settings)
 		let client: WebDAVClient
 		if (this.plugin.settings.loginMode === 'manual') {
@@ -24,7 +25,8 @@ export class WebDAVService extends BaseService {
 				password: oauth.access_token,
 			})
 		}
-		return createRateLimitedWebDAVClient(client)
+		scope.check()
+		return createRateLimitedWebDAVClient(client, scope.check)
 	}
 
 	async checkWebDAVConnection(): Promise<{ error?: Error; success: boolean }> {

@@ -1,3 +1,4 @@
+import { throwIfAborted } from '~/utils/abort'
 import { Bash } from 'just-bash/browser'
 import type { App } from 'obsidian'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
@@ -11,6 +12,7 @@ import {
 import type { SettingsSnapshotFn, SettingsUpdater } from '../tool-context'
 
 export interface VaultBashExecOptions {
+	signal?: AbortSignal
 	cwd?: string
 	stdin?: string
 	rawScript?: boolean
@@ -52,6 +54,7 @@ export async function execVaultBash(
 	script: string,
 	options: VaultBashExecOptions = {},
 ) {
+	throwIfAborted(options.signal)
 	const recorder = new ReversibleOpRecorder()
 	const bash = await createVaultBash(
 		app,
@@ -68,7 +71,9 @@ export async function execVaultBash(
 		cwd: options.cwd ?? VAULT_MOUNT_POINT,
 		stdin: options.stdin,
 		rawScript: options.rawScript,
+		signal: options.signal,
 	})
+	throwIfAborted(options.signal)
 	return {
 		...result,
 		reversibleOps: await recorder.getNetOperations(),

@@ -1,3 +1,5 @@
+import ModuleSettings from './module'
+import { ModuleState } from '~/modules/lifecycle'
 import {
 	App,
 	Platform,
@@ -143,6 +145,8 @@ export function getSyncPolicyDescI18nKey(
 }
 
 export interface NutstoreSettings {
+	syncModule: ModuleState
+	aiModule: ModuleState
 	account: string
 	credential: string
 	nutstoreEnterpriseBaseUrl: string
@@ -196,6 +200,8 @@ function exclude(expr: string): GlobFilterRule {
 }
 
 export const DEFAULT_SETTINGS: NutstoreSettings = {
+	syncModule: ModuleState.Enabled,
+	aiModule: ModuleState.Enabled,
 	account: '',
 	credential: '',
 	nutstoreEnterpriseBaseUrl: '',
@@ -398,8 +404,23 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			this,
 			troubleshootingContainerEl,
 		)
+		const syncModuleSettings = new ModuleSettings(
+			app,
+			plugin,
+			this,
+			this.containerEl.createDiv(),
+		)
+		syncModuleSettings.module = 'sync'
+		const aiModuleSettings = new ModuleSettings(
+			app,
+			plugin,
+			this,
+			this.containerEl.createDiv(),
+		)
+		aiModuleSettings.module = 'ai'
 		this.tabSections = {
 			sync: [
+				syncModuleSettings,
 				this.syncBackupReminderSettings,
 				this.accountSettings,
 				this.synchronizationSettings,
@@ -409,6 +430,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 				this.filterSettings,
 			],
 			ai: [
+				aiModuleSettings,
 				this.aiSettings,
 				this.memorySettings,
 				this.subagentSettings,
@@ -428,7 +450,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		this.renderTabBar()
 		const definitions: SettingDefinitionItem[] = []
 		for (const tab of SETTINGS_TABS) {
-			for (const section of this.tabSections[tab.key]) {
+			for (const section of this.visibleSections(tab.key)) {
 				const { name, containerEl, searchable, showGroupHeading } = section
 				const target: {
 					tab: SettingsTabKey
@@ -501,7 +523,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		this.activeTab = target.tab
 		this.renderTabBar()
 		this.updatePanelVisibility()
-		for (const section of this.tabSections[target.tab])
+		for (const section of this.visibleSections(target.tab))
 			section.containerEl.show()
 		return target.element
 	}
@@ -527,16 +549,25 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		void this.renderActiveTabContent()
 	}
 
+	private visibleSections(tab: SettingsTabKey) {
+		const disabled =
+			(tab === 'sync' &&
+				this.plugin.settings.syncModule === ModuleState.Disabled) ||
+			(tab === 'ai' && this.plugin.settings.aiModule === ModuleState.Disabled)
+		return disabled ? this.tabSections[tab].slice(0, 1) : this.tabSections[tab]
+	}
+
 	private async renderActiveTabContent() {
 		this.updatePanelVisibility()
 		for (const tab of SETTINGS_TABS) {
 			const isActive = tab.key === this.activeTab
 			for (const section of this.tabSections[tab.key]) {
-				if (isActive) section.containerEl.show()
+				if (isActive && this.visibleSections(tab.key).includes(section))
+					section.containerEl.show()
 				else section.containerEl.hide()
 			}
 		}
-		for (const section of this.tabSections[this.activeTab]) {
+		for (const section of this.visibleSections(this.activeTab)) {
 			await section.display()
 		}
 	}
@@ -623,6 +654,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	}
 
 	unload() {
+		void this.accountSettings.hide()
 		for (const subscription of this.subscriptions) {
 			subscription.unsubscribe()
 		}

@@ -44,6 +44,7 @@ export default class ProviderEditorModal extends Modal {
 		private readonly mountTarget?: ChatModalMountTarget,
 	) {
 		super(plugin.app)
+		plugin.ai.lifecycle.scope.ownModal(this)
 		this.draft = cloneDeep(provider)
 	}
 
@@ -137,10 +138,13 @@ export default class ProviderEditorModal extends Modal {
 							this.draft.allowBrowserCors = false
 							return
 						}
-						const confirmed = await new ProviderCorsConfirmModal(
-							this.app,
-							this.mountTarget,
-						).openAndWait()
+						const scope = this.plugin.ai.lifecycle.scope
+						const confirmed = await scope
+							.ownModal(
+								new ProviderCorsConfirmModal(this.app, this.mountTarget),
+							)
+							.openAndWait()
+						if (scope.signal.aborted) return
 						if (!confirmed) {
 							this.render()
 							return

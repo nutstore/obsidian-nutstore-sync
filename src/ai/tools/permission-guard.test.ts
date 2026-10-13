@@ -6,9 +6,10 @@ import {
 	withPermissionPurpose,
 } from './permission-guard'
 
-const { modalOpenMock, modalCtorMock } = vi.hoisted(() => ({
+const { modalOpenMock, modalCtorMock, modalCloseMock } = vi.hoisted(() => ({
 	modalOpenMock: vi.fn(),
 	modalCtorMock: vi.fn(),
+	modalCloseMock: vi.fn(),
 }))
 
 vi.mock('~/components/AIPermissionModal', () => ({
@@ -16,6 +17,7 @@ vi.mock('~/components/AIPermissionModal', () => ({
 		modalCtorMock({ app, request })
 		return {
 			open: modalOpenMock,
+			close: modalCloseMock,
 		}
 	}),
 }))
@@ -52,6 +54,7 @@ function createGuard(
 beforeEach(() => {
 	modalOpenMock.mockReset()
 	modalCtorMock.mockReset()
+	modalCloseMock.mockReset()
 })
 
 describe('createPermissionGuard', () => {
@@ -273,4 +276,35 @@ describe('createFullAccessPermissionGuard', () => {
 
 		expect(modalOpenMock).not.toHaveBeenCalled()
 	})
+})
+
+describe('revoked tool approval', () => {
+	it.each(['notes/neutral.md', '笔记/中性🌱.md'])(
+		'cannot resume a write to %s after cancellation',
+		async (path) => {
+			const controller = new AbortController()
+			let approve!: (value: string) => void
+			modalOpenMock.mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						approve = resolve
+					}),
+			)
+			modalCloseMock.mockImplementation(() => approve('approve'))
+			const guard = createPermissionGuard({} as never, undefined, {
+				signal: controller.signal,
+			})
+			const write = vi.fn()
+			const pending = guard({ type: 'fs', fs: { kind: 'write', path } }).then(
+				write,
+			)
+			const rejected = expect(pending).rejects.toMatchObject({
+				name: 'AbortError',
+			})
+			controller.abort()
+			await rejected
+			expect(modalCloseMock).toHaveBeenCalledTimes(1)
+			expect(write).not.toHaveBeenCalled()
+		},
+	)
 })

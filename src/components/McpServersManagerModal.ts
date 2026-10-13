@@ -14,30 +14,42 @@ import McpServerEditorModal, {
 } from './McpServerEditorModal'
 
 export default class McpServersManagerModal extends Modal {
+	private readonly moduleScope
+	private readonly mcp
 	constructor(
 		private plugin: NutstorePlugin,
 		private onChanged: () => Promise<void> | void,
 	) {
 		super(plugin.app)
+		this.moduleScope = plugin.ai.lifecycle.scope
+		this.mcp = plugin.ai.mcp
+		this.moduleScope.ownModal(this)
 	}
 
 	onOpen() {
-		void this.plugin.mcpService.reload().then(() => this.render())
+		void this.moduleScope.background(
+			async () => {
+				await this.mcp.reload()
+				this.render()
+			},
+			(error) => logger.error(error),
+		)
 		this.render()
 	}
 
 	private get servers(): McpServerConfigs {
-		return this.plugin.mcpService.getServers()
+		return this.mcp.getServers()
 	}
 
 	private render() {
+		if (this.moduleScope.signal.aborted) return
 		const { contentEl } = this
 		contentEl.empty()
 		contentEl.createEl('h2', {
 			text: i18n.t('settings.ai.mcp.manager.title'),
 		})
 
-		const parseError = this.plugin.mcpService.getParseError()
+		const parseError = this.mcp.getParseError()
 		if (parseError) {
 			contentEl.createDiv({
 				cls: ':uno: setting-item-description mod-warning',
@@ -87,9 +99,7 @@ export default class McpServersManagerModal extends Modal {
 		}
 
 		const runtimes = new Map(
-			this.plugin.mcpService
-				.getServerRuntimes()
-				.map((runtime) => [runtime.name, runtime]),
+			this.mcp.getServerRuntimes().map((runtime) => [runtime.name, runtime]),
 		)
 		for (const [name, config] of entries) {
 			this.renderServer(contentEl, name, config, runtimes.get(name))
@@ -140,13 +150,14 @@ export default class McpServersManagerModal extends Modal {
 					.onClick(async () => {
 						button.setDisabled(true)
 						try {
-							const tools = await this.plugin.mcpService.testConnection(config)
+							const tools = await this.mcp.testConnection(config)
 							new Notice(
 								i18n.t('settings.ai.mcp.manager.testSuccess', {
 									count: tools.length,
 								}),
 							)
 						} catch (error) {
+							if (this.moduleScope.signal.aborted) return
 							logger.error(error)
 							new Notice(
 								i18n.t('settings.ai.mcp.manager.testFailed', {
@@ -220,11 +231,13 @@ export default class McpServersManagerModal extends Modal {
 
 	private async saveServers(servers: McpServerConfigs) {
 		try {
-			await this.plugin.mcpService.saveServers(servers)
+			await this.mcp.saveServers(servers)
+			this.moduleScope.check()
 			await this.onChanged()
 			this.render()
 			return true
 		} catch (error) {
+			if (this.moduleScope.signal.aborted) return
 			logger.error(error)
 			new Notice(
 				error instanceof Error

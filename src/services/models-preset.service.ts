@@ -46,10 +46,12 @@ export default class ModelsPresetService extends BaseService {
 	}
 
 	async refreshFromRemote(): Promise<ModelsPresetRefreshResult> {
+		const scope = this.plugin.ai.lifecycle.scope
 		try {
 			const currentCounts = countProvidersAndModels(getPresetProviders())
 			const response = await obsidianFetch(MODELS_API_URL, {
 				method: 'GET',
+				signal: scope.signal,
 			})
 			if (!response.ok) {
 				return {
@@ -60,6 +62,7 @@ export default class ModelsPresetService extends BaseService {
 				}
 			}
 			const payload = (await response.json()) as unknown
+			scope.check()
 			const providers = sanitizePresetProviders(payload)
 			if (!providers) {
 				return {
@@ -82,6 +85,7 @@ export default class ModelsPresetService extends BaseService {
 				modelsDelta: nextCounts.modelsCount - currentCounts.modelsCount,
 			}
 		} catch (error) {
+			scope.check()
 			logger.error(error)
 			return {
 				success: false,

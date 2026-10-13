@@ -1,4 +1,5 @@
 import { Setting } from 'obsidian'
+import logger from '~/utils/logger'
 import type { SkillDiagnostic, SkillMetadata } from '~/ai/skills/types'
 import i18n from '~/i18n'
 import BaseSettings from '../settings.base'
@@ -17,16 +18,26 @@ export default class SkillsSettingsSection extends BaseSettings {
 
 	async display() {
 		this.containerEl.empty()
-		const { skills, diagnostics } =
-			await this.plugin.chatService.listConfigurableSkills()
-		const disabled = new Set(this.plugin.settings.ai.disabledSkills)
+		if (!this.plugin.ai.lifecycle.active) return
+		const scope = this.plugin.ai.lifecycle.scope
+		await scope.background(
+			async () => {
+				const { skills, diagnostics } =
+					await this.plugin.ai.chat.listConfigurableSkills()
+				if (scope.signal.aborted) return
+				const disabled = new Set(this.plugin.settings.ai.disabledSkills)
 
-		if (skills.length === 0) {
-			new Setting(this.containerEl).setDesc(i18n.t('settings.ai.skills.empty'))
-		} else {
-			for (const skill of skills) this.renderSkill(skill, disabled)
-		}
-		this.renderDiagnostics(diagnostics)
+				if (skills.length === 0) {
+					new Setting(this.containerEl).setDesc(
+						i18n.t('settings.ai.skills.empty'),
+					)
+				} else {
+					for (const skill of skills) this.renderSkill(skill, disabled)
+				}
+				this.renderDiagnostics(diagnostics)
+			},
+			(error) => logger.error(error),
+		)
 	}
 
 	private renderSkill(skill: SkillMetadata, disabled: ReadonlySet<string>) {

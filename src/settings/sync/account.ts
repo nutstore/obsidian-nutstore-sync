@@ -31,7 +31,9 @@ export default class AccountSettings extends BaseSettings {
 	private updateOAuthUrlTimer: number | null = null
 
 	async display() {
+		await this.hide()
 		this.containerEl.empty()
+		if (!this.plugin.sync.lifecycle.active) return
 
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.loginMode.name'))
@@ -112,6 +114,7 @@ export default class AccountSettings extends BaseSettings {
 	}
 
 	private async displaySSOLoginSettings() {
+		const scope = this.plugin.sync.lifecycle.scope
 		let isLoggedIn = this.plugin.settings.oauthResponseText.length > 0
 		let oauth: OAuthResponse | undefined
 		if (isLoggedIn) {
@@ -155,10 +158,11 @@ export default class AccountSettings extends BaseSettings {
 					anchor.href = await createOAuthUrl({
 						app: 'obsidian',
 					})
+					if (scope.signal.aborted || !ownerDocument.contains(anchor)) return
 					this.updateOAuthUrlTimer = window.setInterval(() => {
 						void (async () => {
 							const stillInDoc = ownerDocument.contains(anchor)
-							if (stillInDoc) {
+							if (stillInDoc && !scope.signal.aborted) {
 								anchor.href = await createOAuthUrl({
 									app: 'obsidian',
 								})
@@ -201,7 +205,7 @@ export default class AccountSettings extends BaseSettings {
 						buttonEl.textContent = i18n.t('settings.checkConnection.name')
 						try {
 							const { success, error } =
-								await this.plugin.webDAVService.checkWebDAVConnection()
+								await this.plugin.sync.webdav.checkWebDAVConnection()
 							removeClassTokens(
 								buttonEl,
 								':uno: loading',

@@ -3,6 +3,11 @@
 		"filenameUnsupportedChars": "文件 {{path}} 包含不支持的字符：{{chars}}"
 	},
 	"settings": {
+		"modules": {
+			"sync": "启用同步",
+			"ai": "启用 AI",
+			"description": "立即生效。关闭后停止该模块，保留已有配置和数据。"
+		},
 		"language": {
 			"name": "语言",
 			"desc": "选择界面语言",

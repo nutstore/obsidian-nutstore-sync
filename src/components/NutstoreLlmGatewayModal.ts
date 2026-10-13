@@ -88,6 +88,8 @@ function modelLabel(model: ModelSummary) {
 }
 
 export default class NutstoreLlmGatewayModal extends Modal {
+	private readonly moduleScope
+	private readonly gateway
 	private activeTab: NutstoreLlmGatewayTab = 'usage'
 	private usage: NutstoreLlmGatewayUsage | null = null
 	private usageError: string | null = null
@@ -106,6 +108,9 @@ export default class NutstoreLlmGatewayModal extends Modal {
 		private onModelsUpdated: () => Promise<void> | void,
 	) {
 		super(plugin.app)
+		this.moduleScope = plugin.ai.lifecycle.scope
+		this.gateway = plugin.ai.gateway
+		this.moduleScope.ownModal(this)
 	}
 
 	onOpen() {
@@ -178,11 +183,12 @@ export default class NutstoreLlmGatewayModal extends Modal {
 		this.usageRefreshStatus = 'loading'
 		this.render()
 		try {
-			this.usage = await this.plugin.nutstoreLlmGatewayService.getUsage()
+			this.usage = await this.gateway.getUsage()
 			this.usageLoaded = true
 			this.usageUpdatedAt = Date.now()
 			this.usageRefreshStatus = 'success'
 		} catch (error) {
+			if (this.moduleScope.signal.aborted) return
 			this.usageLoaded = true
 			this.usageError =
 				error instanceof Error
@@ -207,10 +213,9 @@ export default class NutstoreLlmGatewayModal extends Modal {
 		this.modelDiff = null
 		this.render()
 		try {
-			const refreshed =
-				await this.plugin.nutstoreLlmGatewayService.refreshModels({
-					removeOnAuthError: true,
-				})
+			const refreshed = await this.gateway.refreshModels({
+				removeOnAuthError: true,
+			})
 			if (refreshed) {
 				const diff = compareModels(previousModels, this.getCurrentModels())
 				this.modelDiff = diff.added.length || diff.removed.length ? diff : null
@@ -226,6 +231,7 @@ export default class NutstoreLlmGatewayModal extends Modal {
 			}
 			this.modelRefreshStatus = 'success'
 		} catch (error) {
+			if (this.moduleScope.signal.aborted) return
 			logger.error(error)
 			this.modelRefreshStatus = 'error'
 			this.modelRefreshError =
@@ -240,6 +246,7 @@ export default class NutstoreLlmGatewayModal extends Modal {
 	}
 
 	private render() {
+		if (this.moduleScope.signal.aborted) return
 		if (!this.active) {
 			return
 		}

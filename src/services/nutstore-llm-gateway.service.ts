@@ -1,3 +1,5 @@
+import type { ModuleScope } from '~/modules/lifecycle'
+import { guardIO } from '~/modules/guard-io'
 import { LlmGatewayClient } from '@nutstore/sso-js'
 import { Notice } from 'obsidian'
 import { Subscription, timer } from 'rxjs'
@@ -163,14 +165,28 @@ function toModelConfig(model: NutstoreLlmGatewayModel): AIModelInput {
 }
 
 export default class NutstoreLlmGatewayService extends BaseService {
-	private readonly client = new LlmGatewayClient({
-		fetcher: obsidianFetch,
-	})
+	private readonly client: LlmGatewayClient
 	private refreshSubscription: Subscription | null = null
 	private authorizationPollingSubscription: Subscription | null = null
 
-	constructor(private plugin: NutstorePlugin) {
+	constructor(
+		private plugin: NutstorePlugin,
+		private readonly scope: ModuleScope,
+	) {
 		super()
+		this.client = guardIO(
+			new LlmGatewayClient({
+				fetcher: (input, init) => this.fetch(input, init),
+			}),
+			scope.check,
+		)
+	}
+
+	private fetch: typeof fetch = (input, init) => {
+		this.scope.check()
+		return this.scope
+			.wait(obsidianFetch(input, { ...init, signal: this.scope.signal }))
+			.then((response) => guardIO(response, this.scope.check))
 	}
 
 	isProviderId(providerId?: string) {
@@ -200,6 +216,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	async startAuthorization() {
+		this.scope.check()
 		if (this.settings.pendingAuthorization) {
 			this.resumeAuthorizationPolling()
 			return this.settings.pendingAuthorization
@@ -236,6 +253,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	async openPendingAuthorizationPage() {
+		this.scope.check()
 		const pending = this.settings.pendingAuthorization
 		if (!pending) {
 			throw new Error(
@@ -252,13 +270,14 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	async refreshModels(options: { removeOnAuthError?: boolean } = {}) {
+		this.scope.check()
 		const token = await this.ensureAccessToken(options)
 		if (!token) {
 			return false
 		}
 
 		const endpoints = this.client.getLlmGatewayEndpoints()
-		const response = await obsidianFetch(endpoints.models, {
+		const response = await this.fetch(endpoints.models, {
 			method: 'GET',
 			headers: { Authorization: `Bearer ${token}` },
 		})
@@ -303,12 +322,14 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	async getUsage(): Promise<NutstoreLlmGatewayUsage> {
+		this.scope.check()
 		const hadAuthorization = this.isAuthorized()
 		const previousAccessToken = this.settings.accessToken
 		let token: string | undefined
 		try {
 			token = await this.ensureAccessToken({ removeOnAuthError: true })
 		} catch (error) {
+			this.scope.check()
 			if (hadAuthorization && !this.isAuthorized()) {
 				await this.plugin.settingsService.saveSettings()
 			}
@@ -329,7 +350,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			await this.plugin.settingsService.saveSettings()
 		}
 
-		const response = await obsidianFetch(
+		const response = await this.fetch(
 			this.client.getLlmGatewayEndpoints().rateLimits,
 			{
 				method: 'GET',
@@ -353,6 +374,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	async ensureProviderReady(provider?: AIProviderConfig) {
+		this.scope.check()
 		if (!this.isProviderId(provider?.id)) {
 			return
 		}
@@ -373,6 +395,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	async initializeProviderFromStoredAuth() {
+		this.scope.check()
 		if (this.settings.pendingAuthorization) {
 			if (this.settings.pendingAuthorization.expiresAt <= Date.now()) {
 				this.settings.pendingAuthorization = undefined
@@ -394,6 +417,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 				await this.plugin.settingsService.saveSettings()
 			}
 		} catch (error) {
+			this.scope.check()
 			this.noticeError(error)
 			await this.plugin.settingsService.saveSettings()
 			if (this.isAuthorized()) {
@@ -405,6 +429,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	async disconnect() {
+		this.scope.check()
 		await this.cancelPendingAuthorization()
 		this.clearProviderAndAuth()
 		await this.plugin.settingsService.saveSettings()
@@ -417,6 +442,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private async ensureAccessToken(options: { removeOnAuthError?: boolean }) {
+		this.scope.check()
 		if (isTokenUsable(this.settings.accessTokenExpiresAt)) {
 			return this.settings.accessToken
 		}
@@ -437,6 +463,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			this.applyToken(token)
 			return token.access_token
 		} catch (error) {
+			this.scope.check()
 			if (options.removeOnAuthError) {
 				this.clearProviderAndAuth()
 			}
@@ -445,6 +472,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private applyToken(token: OAuthTokenResponse) {
+		this.scope.check()
 		this.settings.accessToken = token.access_token
 		this.settings.refreshToken = token.refresh_token
 		this.settings.accessTokenExpiresAt = expiresAtFromNow(token.expires_in)
@@ -472,6 +500,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private clearProviderAndAuth() {
+		this.scope.check()
 		this.settings.accessToken = undefined
 		this.settings.refreshToken = undefined
 		this.settings.accessTokenExpiresAt = undefined
@@ -484,6 +513,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private disableProviderToken() {
+		this.scope.check()
 		const provider =
 			this.plugin.settings.ai.providers[NUTSTORE_LLM_GATEWAY_PROVIDER_ID]
 		if (provider) {
@@ -492,6 +522,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private startTokenRefreshTimer() {
+		if (this.scope.signal.aborted) return
 		if (this.refreshSubscription) {
 			return
 		}
@@ -499,7 +530,10 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			TOKEN_REFRESH_INTERVAL_MS,
 			TOKEN_REFRESH_INTERVAL_MS,
 		).subscribe(() => {
-			void this.refreshAccessTokenIfNeeded()
+			void this.scope.background(
+				() => this.refreshAccessTokenIfNeeded(),
+				(error) => this.noticeError(error),
+			)
 		})
 	}
 
@@ -512,6 +546,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private async refreshAccessTokenIfNeeded() {
+		if (this.scope.signal.aborted) return
 		if (
 			!this.isAuthorized() ||
 			isTokenUsable(this.settings.accessTokenExpiresAt)
@@ -527,12 +562,14 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			this.updateProviderApiKey(token)
 			await this.plugin.settingsService.saveSettings()
 		} catch (error) {
+			this.scope.check()
 			this.noticeError(error)
 			await this.plugin.settingsService.saveSettings()
 		}
 	}
 
 	private resumeAuthorizationPolling() {
+		if (this.scope.signal.aborted) return
 		if (this.authorizationPollingSubscription) {
 			return
 		}
@@ -551,10 +588,14 @@ export default class NutstoreLlmGatewayService extends BaseService {
 		pending: NutstoreLlmGatewayPendingAuthorization,
 		pollIntervalMs: number,
 	) {
+		if (this.scope.signal.aborted) return
 		this.authorizationPollingSubscription?.unsubscribe()
 		this.authorizationPollingSubscription = timer(pollIntervalMs).subscribe(
 			() => {
-				void this.pollDeviceTokenOnce(pending, pollIntervalMs)
+				void this.scope.background(
+					() => this.pollDeviceTokenOnce(pending, pollIntervalMs),
+					(error) => this.noticeError(error),
+				)
 			},
 		)
 	}
@@ -614,6 +655,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			await this.finishAuthorization(result.data)
 			this.emitAuthState()
 		} catch (error) {
+			this.scope.check()
 			this.stopAuthorizationPolling()
 			this.settings.pendingAuthorization = undefined
 			await this.plugin.settingsService.saveSettings()
@@ -623,6 +665,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private async finishAuthorization(token: OAuthTokenResponse) {
+		this.scope.check()
 		this.applyToken(token)
 		this.settings.pendingAuthorization = undefined
 		try {
@@ -645,11 +688,13 @@ export default class NutstoreLlmGatewayService extends BaseService {
 				deviceCode: pending.deviceCode,
 			})
 		} catch (error) {
+			this.scope.check()
 			logger.error(error)
 		}
 	}
 
 	private updateProviderApiKey(apiKey: string) {
+		this.scope.check()
 		const provider =
 			this.plugin.settings.ai.providers[NUTSTORE_LLM_GATEWAY_PROVIDER_ID]
 		if (provider) {
@@ -658,6 +703,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 	}
 
 	private noticeError(error: unknown) {
+		if (this.scope.signal.aborted) return
 		logger.error(error)
 		new Notice(
 			error instanceof Error ? error.message : i18n.t('settings.login.failure'),

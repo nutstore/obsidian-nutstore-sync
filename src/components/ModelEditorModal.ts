@@ -40,6 +40,7 @@ export default class ModelEditorModal extends Modal {
 		private options: ModelEditorOptions = {},
 	) {
 		super(plugin.app)
+		plugin.ai.lifecycle.scope.ownModal(this)
 		this.draft = cloneDeep(model)
 		this.ensureModalities()
 		if (

@@ -158,6 +158,5 @@ export default class AutomationSettings extends BaseSettings {
 	private async saveAutoSyncInterval(minutes: number) {
 		this.plugin.settings.autoSyncIntervalSeconds = minutes * 60
 		await this.plugin.settingsService.saveSettings()
-		await this.plugin.scheduledSyncService.updateInterval()
 	}
 }

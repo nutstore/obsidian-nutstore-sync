@@ -43,7 +43,7 @@ import type {
 	ChatSubmission,
 } from '~/ai/chat/types'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
-import { createAbortError } from '~/ai/transport/abort'
+import { createAbortError } from '~/utils/abort'
 import i18n from '~/i18n'
 
 interface MessageOpsPort {

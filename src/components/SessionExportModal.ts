@@ -1,3 +1,4 @@
+import { closeModalOnAbort } from '~/modules/modal-lifetime'
 import { App, Modal, Setting } from 'obsidian'
 import {
 	applyObsidianModalMountTarget,
@@ -24,9 +25,16 @@ export default class SessionExportModal extends Modal {
 		super(app)
 	}
 
-	static open(app: App, mountTarget?: ChatModalMountTarget) {
+	static open(
+		app: App,
+		mountTarget?: ChatModalMountTarget,
+		signal?: AbortSignal,
+	) {
 		return new Promise<SessionExportOptions | undefined>((resolve) => {
-			new SessionExportModal(app, resolve, mountTarget).open()
+			closeModalOnAbort(
+				new SessionExportModal(app, resolve, mountTarget),
+				signal,
+			).open()
 		})
 	}
 

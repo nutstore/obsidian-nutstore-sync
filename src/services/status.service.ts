@@ -90,5 +90,7 @@ export class StatusService extends BaseService {
 
 	override onunload(): void {
 		this.stopTimeUpdates()
+		this.syncStatusBar?.remove()
+		this.syncStatusBar = null
 	}
 }

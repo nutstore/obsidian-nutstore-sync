@@ -1,3 +1,4 @@
+import { normalizeModuleState } from '~/modules/lifecycle'
 import { debounce } from 'es-toolkit/compat'
 import { normalizePath, Notice } from 'obsidian'
 import {
@@ -39,8 +40,6 @@ export default class SettingsService extends BaseService {
 	override async onload() {
 		await this.loadSettings()
 		await this.loadLocalSettings()
-		this.plugin.modelsPresetService.initializeFromLocalSettings()
-		await this.plugin.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
 	}
 
 	override onunload() {
@@ -54,6 +53,12 @@ export default class SettingsService extends BaseService {
 				? (loadedSettings as Partial<NutstoreSettings>)
 				: {}
 		this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS, storedSettings)
+		this.plugin.settings.syncModule = normalizeModuleState(
+			storedSettings.syncModule,
+		)
+		this.plugin.settings.aiModule = normalizeModuleState(
+			storedSettings.aiModule,
+		)
 		if (
 			storedSettings?.conflictStrategy !== undefined &&
 			!Object.values(ConflictStrategy).includes(storedSettings.conflictStrategy)
@@ -139,24 +144,14 @@ export default class SettingsService extends BaseService {
 	}
 
 	async saveSettings() {
-		await this.plugin.saveData(this.plugin.settings)
-		await this.plugin.chatService.handleSettingsChanged()
-		await this.plugin.aiConflictResolverService.refresh()
+		// Begin revocation before the first persistence await.
+		const applied = this.plugin.applySettings()
+		await Promise.all([this.plugin.saveData(this.plugin.settings), applied])
 	}
 
-	/**
-	 * Applies an AI-originated, already-validated settings patch and runs the
-	 * same side-effect chain used after reloading settings from disk (language
-	 * refresh, chat coordination, conflict refresh, schedule update, settings
-	 * tab rerender).
-	 */
 	async applySettingsPatch(patch: NormalizedSettingsPatch) {
 		applyNormalizedSettingsPatch(this.plugin.settings, patch)
-		await this.plugin.saveData(this.plugin.settings)
-		await this.plugin.i18nService.update()
-		await this.plugin.chatService.handleSettingsChanged()
-		await this.plugin.aiConflictResolverService.refresh()
-		await this.plugin.scheduledSyncService.updateInterval()
+		await this.saveSettings()
 		await this.plugin.settingTab?.rerenderIfVisible()
 	}
 
@@ -199,12 +194,17 @@ export default class SettingsService extends BaseService {
 		const reloadPromise = (async () => {
 			await this.loadSettings()
 			await this.loadLocalSettings()
-			this.plugin.modelsPresetService.initializeFromLocalSettings()
-			await this.plugin.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
-			await this.plugin.i18nService.update()
-			await this.plugin.chatService.handleSettingsChanged()
-			await this.plugin.aiConflictResolverService.refresh()
-			await this.plugin.scheduledSyncService.updateInterval()
+			const previousGateway = this.plugin.ai.gateway
+			await this.plugin.applySettings()
+			if (
+				this.plugin.ai.lifecycle.active &&
+				this.plugin.ai.gateway === previousGateway
+			) {
+				await this.plugin.ai.lifecycle.scope.background(
+					() => previousGateway.initializeProviderFromStoredAuth(),
+					(error) => logger.error(error),
+				)
+			}
 			await this.plugin.settingTab?.rerenderIfVisible()
 		})()
 

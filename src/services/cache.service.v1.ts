@@ -50,7 +50,7 @@ export default class CacheServiceV1 extends BaseService {
 				return false
 			}
 
-			const webdav = await this.plugin.webDAVService.createWebDAVClient()
+			const webdav = await this.plugin.sync.webdav.createWebDAVClient()
 			const filePath = this.remoteCacheFilePath
 			const fileExists = await webdav.exists(filePath).catch(() => false)
 			if (!fileExists) {
@@ -120,7 +120,7 @@ export default class CacheServiceV1 extends BaseService {
 			const nodesHash = hashObject(filteredCache.nodes)
 			const metaKey = await this.getKVKey()
 
-			const webdav = await this.plugin.webDAVService.createWebDAVClient()
+			const webdav = await this.plugin.sync.webdav.createWebDAVClient()
 			if (isCancelled()) {
 				return false
 			}

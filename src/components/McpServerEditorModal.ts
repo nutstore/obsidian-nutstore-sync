@@ -27,6 +27,7 @@ export default class McpServerEditorModal extends Modal {
 		private isNew: boolean,
 	) {
 		super(plugin.app)
+		plugin.ai.lifecycle.scope.ownModal(this)
 		this.draft = cloneDeep(draft)
 		this.headerRows = Object.entries(this.draft.config.headers ?? {}).map(
 			([key, value]) => ({ key, value }),

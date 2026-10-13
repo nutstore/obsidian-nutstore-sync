@@ -17,7 +17,13 @@ import { stdRemotePath } from './std-remote-path'
 import { isTraversalCacheCompatible } from './traversal-cache-compat'
 import { MaybePromise } from './types'
 
-const getContents = apiLimiter.wrap(getDirectoryContents)
+const getContents = (
+	settings: NutstoreSettings,
+	token: string,
+	path: string,
+	check?: () => void,
+) =>
+	apiLimiter.schedule(() => getDirectoryContents(settings, token, path, check))
 
 // Global mutex map: one lock per kvKey
 const traversalLocks = new Map<string, Mutex>()
@@ -178,6 +184,7 @@ export class ResumableWebDAVTraversal {
 						const { response } = await this.executeWithRetry(() =>
 							getLatestDeltaCursor({
 								token: this.token,
+								throwIfCancelled: this.throwIfCancelled,
 								settings: this.settings,
 								folderName: getRootFolderName(this.remoteBaseDir),
 							}),
@@ -222,7 +229,13 @@ export class ResumableWebDAVTraversal {
 						resultItems.push(...cachedItems)
 					} else {
 						const contents = await this.executeWithRetry(
-							() => getContents(this.settings, this.token, currentPath),
+							() =>
+								getContents(
+									this.settings,
+									this.token,
+									currentPath,
+									this.throwIfCancelled,
+								),
 							currentPath,
 						)
 
@@ -269,6 +282,7 @@ export class ResumableWebDAVTraversal {
 			const { response: endResponse } = await this.executeWithRetry(() =>
 				getLatestDeltaCursor({
 					token: this.token,
+					throwIfCancelled: this.throwIfCancelled,
 					settings: this.settings,
 					folderName: getRootFolderName(this.remoteBaseDir),
 				}),
@@ -367,7 +381,13 @@ export class ResumableWebDAVTraversal {
 				try {
 					contents = (
 						await this.executeWithRetry(
-							() => getContents(this.settings, this.token, parent),
+							() =>
+								getContents(
+									this.settings,
+									this.token,
+									parent,
+									this.throwIfCancelled,
+								),
 							parent,
 						)
 					).map(fileStatToStatModel)
@@ -436,6 +456,7 @@ export class ResumableWebDAVTraversal {
 			const { response } = await this.executeWithRetry(() =>
 				getDelta({
 					token: this.token,
+					throwIfCancelled: this.throwIfCancelled,
 					settings: this.settings,
 					folderName: getRootFolderName(this.remoteBaseDir),
 					cursor: currentCursor,
@@ -492,6 +513,7 @@ export class ResumableWebDAVTraversal {
 				const { response: cursorResponse } = await this.executeWithRetry(() =>
 					getLatestDeltaCursor({
 						token: this.token,
+						throwIfCancelled: this.throwIfCancelled,
 						settings: this.settings,
 						folderName: getRootFolderName(this.remoteBaseDir),
 					}),
@@ -719,6 +741,7 @@ export class ResumableWebDAVTraversal {
 	 * Save current state
 	 */
 	private async saveState(): Promise<void> {
+		this.checkCancelled()
 		await traverseWebDAVKV.set(this.kvKey, {
 			rootCursor: this.rootCursor,
 			queue: this.queue,

@@ -2,7 +2,13 @@ import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
 import RemoveLocalTask from '../sync/tasks/remove-local.task'
 
+interface DeleteSelection {
+	tasksToDelete: RemoveLocalTask[]
+	tasksToReupload: RemoveLocalTask[]
+}
+
 export default class DeleteConfirmModal extends Modal {
+	private resolve?: (selection: DeleteSelection) => void
 	private confirmed: boolean = false
 	private selectedTasks: boolean[] = []
 
@@ -83,32 +89,23 @@ export default class DeleteConfirmModal extends Modal {
 			})
 	}
 
-	openAndWait(): Promise<{
-		tasksToDelete: RemoveLocalTask[]
-		tasksToReupload: RemoveLocalTask[]
-	}> {
-		super.open()
+	openAndWait(): Promise<DeleteSelection> {
 		return new Promise((resolve) => {
-			this.onClose = () => {
-				if (!this.confirmed) {
-					// User cancelled, no changes
-					resolve({
-						tasksToDelete: [],
-						tasksToReupload: [],
-					})
-					return
-				}
-				const tasksToDelete = this.tasks.filter(
-					(_, index) => this.selectedTasks[index],
-				)
-				const tasksToReupload = this.tasks.filter(
-					(_, index) => !this.selectedTasks[index],
-				)
-				resolve({
-					tasksToDelete,
-					tasksToReupload,
-				})
-			}
+			this.resolve = resolve
+			super.open()
 		})
+	}
+
+	onClose() {
+		this.resolve?.({
+			tasksToDelete: this.confirmed
+				? this.tasks.filter((_, index) => this.selectedTasks[index])
+				: [],
+			tasksToReupload: this.confirmed
+				? this.tasks.filter((_, index) => !this.selectedTasks[index])
+				: [],
+		})
+		this.resolve = undefined
+		this.contentEl.empty()
 	}
 }

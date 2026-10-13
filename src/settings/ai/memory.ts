@@ -55,7 +55,7 @@ export default class MemorySettingsSection extends BaseSettings {
 					.setButtonText(i18n.t('settings.ai.memory.open'))
 					.onClick(async () => {
 						this.app.setting?.close()
-						await this.plugin.memoryService.openNote()
+						await this.plugin.ai.memory.openNote()
 					}),
 			)
 	}

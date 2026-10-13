@@ -3,6 +3,11 @@
 		"filenameUnsupportedChars": "File {{path}} contains unsupported characters: {{chars}}"
 	},
 	"settings": {
+		"modules": {
+			"sync": "Enable synchronization",
+			"ai": "Enable AI",
+			"description": "Takes effect immediately. Turning off stops this module and preserves its settings and data."
+		},
 		"language": {
 			"name": "Language",
 			"desc": "Select interface language",

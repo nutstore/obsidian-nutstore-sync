@@ -16,7 +16,9 @@ vi.mock('~/api/webdav', () => ({ getDirectoryContents: vi.fn() }))
 vi.mock('~/storage', () => ({
 	traverseWebDAVKV: { get: vi.fn(), set: vi.fn(), unset: vi.fn() },
 }))
-vi.mock('./api-limiter', () => ({ apiLimiter: { wrap: <T>(fn: T) => fn } }))
+vi.mock('./api-limiter', () => ({
+	apiLimiter: { wrap: <T>(fn: T) => fn, schedule: <T>(fn: () => T) => fn() },
+}))
 vi.mock('./logger', () => ({
 	default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }))

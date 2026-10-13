@@ -1,3 +1,6 @@
+import type { ModuleScope } from '~/modules/lifecycle'
+import { guardAppIO } from '~/modules/guard-io'
+import { throwIfAborted } from '~/utils/abort'
 import type { App } from 'obsidian'
 import type { AgentCommunication } from '~/ai/tools/agent-communication'
 import type { ChatSession } from '~/ai/chat/domain'
@@ -67,6 +70,7 @@ export class ToolExecutor {
 			updateSettings: SettingsUpdater
 		},
 		private memory: MemoryRepository,
+		private scope?: ModuleScope,
 	) {
 		this.fileSystemManager = new VaultFileSystemManager(app)
 	}
@@ -124,6 +128,7 @@ export class ToolExecutor {
 		session?: ChatSession,
 		model?: AIModelConfig,
 	) {
+		this.scope?.check()
 		const allowSpawn = depth < MAX_TASK_DEPTH
 		const tools = createAITools({
 			allowSpawn,
@@ -148,7 +153,14 @@ export class ToolExecutor {
 	createStableToolsContext(
 		session: ChatSession,
 		definition: AgentDefinition,
+		signal?: AbortSignal,
 	): StableToolsContext {
+		const check = () => {
+			this.scope?.check()
+			throwIfAborted(signal)
+		}
+		check()
+		const app = guardAppIO(this.app, check)
 		const permissionGuard =
 			definition.permissionMode === 'readonly'
 				? createReadonlyPermissionGuard()
@@ -172,12 +184,17 @@ export class ToolExecutor {
 									this.state.sessionIndex.find((item) => item.id === session.id)
 										?.title || deriveTitle(session),
 								modalMountTarget: this.getChatModalMountTarget(),
+								signal: signal ?? this.scope?.signal,
 							},
 						)
 		return {
-			app: this.app,
-			fileSystemManager: this.fileSystemManager,
-			permissionGuard,
+			app,
+			fileSystemManager: new VaultFileSystemManager(app),
+			permissionGuard: async (request) => {
+				check()
+				await permissionGuard(request)
+				check()
+			},
 			communication: this.communication,
 			dispatchTask: (params, origin) =>
 				this.dispatchTaskHandler(params, origin),
