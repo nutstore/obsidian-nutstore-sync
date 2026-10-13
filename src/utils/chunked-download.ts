@@ -174,8 +174,8 @@ async function removeTempDownload(vault: Vault, tempPath: string) {
 	}
 }
 
-function toArrayBuffer(buf: Buffer): ArrayBuffer {
-	if (buf.buffer instanceof SharedArrayBuffer) {
+function toArrayBuffer(buf: Uint8Array): ArrayBuffer {
+	if (!(buf.buffer instanceof ArrayBuffer)) {
 		const copy = new ArrayBuffer(buf.byteLength)
 		new Uint8Array(copy).set(buf)
 		return copy

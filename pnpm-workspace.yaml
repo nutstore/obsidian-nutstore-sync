@@ -1,7 +1,13 @@
 pmOnFail: ignore
+audit:
+  ignore:
+    # sprintf-js <=1.1.3 has no patched release; remove after just-bash replaces it.
+    # https://github.com/advisories/GHSA-hp3w-g68c-fv3c
+    - GHSA-hp3w-g68c-fv3c
 catalog:
   zod: ^4.5.4
 overrides:
+  undici@>=7.0.0 <7.29.1: ^7.29.1
   zod: 'catalog:'
 allowBuilds:
   '@mongodb-js/zstd': true
