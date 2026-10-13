@@ -495,7 +495,10 @@ export class NutstoreSettingTab extends PluginSettingTab {
 				definitions.push({
 					type: 'group',
 					heading: showGroupHeading ? name() : undefined,
-					cls: 'ns-settings-section',
+					cls:
+						section === this.tabSections[tab.key][0]
+							? 'ns-settings-section ns-settings-first-section'
+							: 'ns-settings-section',
 					items: [definition],
 				})
 			}
@@ -506,6 +509,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	private mountTabBar(anchorEl: HTMLElement) {
 		if (requireApiVersion('1.13.0')) {
 			if (!this.tabBarEl.isConnected) {
+				// The host reconciles group siblings; keep navigation inside a group.
 				anchorEl.before(this.tabBarEl)
 				this.renderTabBar()
 			}

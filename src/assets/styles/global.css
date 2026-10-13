@@ -731,6 +731,12 @@
 	color: var(--text-error);
 }
 
+/* Tabs supply the first section's gap. Native group spacing also matches
+   hidden preceding groups and would otherwise shift AI and troubleshooting. */
+.setting-group.ns-settings-section.ns-settings-first-section {
+	margin-top: 0;
+}
+
 .ns-settings-tabs {
 	--ns-settings-tab-height: max(var(--input-height), 36px);
 	--ns-settings-tab-curve: var(--size-4-2);
