@@ -15,7 +15,7 @@ export function RunStateCard(props: {
 
 	return (
 		<Show when={label()}>
-			<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
+			<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-card-py)]">
 				<div class=":uno: flex items-center justify-between gap-3 text-sm text-[var(--text-normal)]">
 					<div class=":uno: flex min-w-0 items-center gap-3">
 						<svg

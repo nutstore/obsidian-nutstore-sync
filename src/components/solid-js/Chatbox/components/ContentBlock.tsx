@@ -23,10 +23,10 @@ export function ContentBlock(props: {
 			class={
 				appearance === 'plain'
 					? ':uno: chatbox-process-content min-w-0 py-1'
-					: ':uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-3 py-2.5'
+					: ':uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-card-py)]'
 			}
 		>
-			<div class=":uno: flex flex-col gap-3">
+			<div class=":uno: flex flex-col gap-[var(--ns-chatbox-gap)]">
 				<For each={props.block.parts}>
 					{(part) => (
 						<Switch>

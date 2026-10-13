@@ -815,9 +815,10 @@ function Chatbox(props: ChatboxProps) {
 	return (
 		<div
 			ref={chatboxRootEl}
-			class={`:uno: relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)] ${
+			class={`:uno: chatbox-root relative flex h-full overflow-hidden bg-[var(--background-primary)] text-[var(--text-normal)] ${
 				isFileDragActive() ? 'chatbox-file-drag-active' : ''
 			}`}
+			classList={{ 'is-compact': isCompactLayout() }}
 		>
 			<input
 				ref={fileInputEl}
@@ -893,7 +894,7 @@ function Chatbox(props: ChatboxProps) {
 					{/* Messages */}
 					<div
 						ref={messagesEl}
-						class=":uno: min-h-0 flex-1 overflow-y-auto px-3 pb-3 scrollbar-default"
+						class=":uno: min-h-0 flex-1 overflow-y-auto px-[var(--ns-chatbox-pad-x)] pb-[var(--ns-chatbox-gap)] scrollbar-default"
 					>
 						<Show
 							when={
@@ -909,7 +910,7 @@ function Chatbox(props: ChatboxProps) {
 								</div>
 							}
 						>
-							<div class=":uno: flex flex-col gap-3">
+							<div class=":uno: flex flex-col gap-[var(--ns-chatbox-gap)]">
 								<TurnTimeline
 									timeline={props.timeline}
 									sessionId={props.activeSessionId}

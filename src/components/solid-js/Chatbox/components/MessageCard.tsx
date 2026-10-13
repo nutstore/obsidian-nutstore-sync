@@ -198,7 +198,7 @@ export function MessageCard(props: {
 					!props.process && props.item.showHeader && !isSystemNotification()
 				}
 			>
-				<div class=":uno: mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
+				<div class=":uno: mb-[var(--ns-chatbox-block-gap)] flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
 					<div class=":uno: flex items-center gap-1 font-medium text-[var(--text-normal)]">
 						<span
 							class={`:uno: ${roleIconClass()} size-4 shrink-0`}
@@ -209,7 +209,7 @@ export function MessageCard(props: {
 					<span>{formatTime(props.item.createdAt)}</span>
 				</div>
 			</Show>
-			<div class=":uno: flex flex-col gap-2">
+			<div class=":uno: flex flex-col gap-[var(--ns-chatbox-block-gap)]">
 				<For each={props.displayBlocks ?? props.item.displayBlocks}>
 					{(block) => (
 						<MessageDisplayBlock
@@ -233,7 +233,7 @@ export function MessageCard(props: {
 					)
 				}
 			>
-				<div class=":uno: mt-2">
+				<div class=":uno: mt-[var(--ns-chatbox-block-gap)]">
 					<ContextArea
 						items={props.item.message.parts.flatMap((part) =>
 							part.type === 'data-user-context' ? part.data.items : [],
@@ -249,7 +249,7 @@ export function MessageCard(props: {
 						props.item.message.role === 'user')
 				}
 			>
-				<div class=":uno: mt-3 flex items-center justify-between gap-2 px-1">
+				<div class=":uno: mt-[var(--ns-chatbox-block-gap)] flex items-center justify-between gap-2 px-1">
 					<div class=":uno: flex items-center gap-0.5">
 						<CopyButton getText={getText} />
 						<Show when={props.onDeleteMessage}>

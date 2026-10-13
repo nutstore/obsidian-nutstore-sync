@@ -84,7 +84,7 @@ export function TurnTimeline(props: {
 										}
 									>
 										<CollapsibleAppearance.Provider value="plain">
-											<div class=":uno: chatbox-process-flow flex min-w-0 flex-col gap-3">
+											<div class=":uno: chatbox-process-flow flex min-w-0 flex-col gap-[var(--ns-chatbox-gap)]">
 												<For each={[...messages().keys()]}>
 													{(messageKey) => {
 														const message = createMemo(() =>

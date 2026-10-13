@@ -1203,6 +1203,21 @@
 	color: color-mix(in srgb, var(--color-cyan) 78%, var(--text-normal));
 }
 
+/* Message density tokens; compact trades whitespace for visible content. */
+.chatbox-root {
+	--ns-chatbox-gap: 0.75rem;
+	--ns-chatbox-block-gap: 0.5rem;
+	--ns-chatbox-pad-x: 0.75rem;
+	--ns-chatbox-card-py: 0.625rem;
+}
+
+.chatbox-root.is-compact {
+	--ns-chatbox-gap: 0.5rem;
+	--ns-chatbox-block-gap: 0.25rem;
+	--ns-chatbox-pad-x: 0.5rem;
+	--ns-chatbox-card-py: 0.375rem;
+}
+
 .chatbox-input {
 	height: 7rem;
 	padding: 0.75rem;
@@ -1287,21 +1302,24 @@
 	resize: none;
 }
 
-@media (max-width: 768px) {
-	.chatbox-resizer {
-		padding-bottom: 8px;
-		padding-top: 8px;
-	}
+/*
+ * `.is-compact` is set by Chatbox from its own container width (same source as
+ * the input-pane height math), so a narrow side pane and a phone share one
+ * layout instead of diverging on viewport width.
+ */
+.chatbox-root.is-compact .chatbox-resizer {
+	padding-bottom: 8px;
+	padding-top: 8px;
+}
 
-	.chatbox-input {
-		height: 5.5rem;
-		padding: 0.625rem;
-		line-height: 1.4;
-	}
+.chatbox-root.is-compact .chatbox-input {
+	height: 5.5rem;
+	padding: 0.625rem;
+	line-height: 1.4;
+}
 
-	.chatbox-context-header {
-		max-height: clamp(2.5rem, 18vh, 6rem);
-	}
+.chatbox-root.is-compact .chatbox-context-header {
+	max-height: clamp(2.5rem, 18vh, 6rem);
 }
 
 /*

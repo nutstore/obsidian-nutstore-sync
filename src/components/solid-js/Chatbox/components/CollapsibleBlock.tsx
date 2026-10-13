@@ -23,7 +23,7 @@ export function CollapsibleBlock(props: {
 			open={props.open}
 			onToggle={(event) => props.onOpenChange?.(event.currentTarget.open)}
 		>
-			<summary class=":uno: flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs text-[var(--text-muted)] marker:hidden">
+			<summary class=":uno: flex cursor-pointer list-none items-center justify-between gap-3 px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-card-py)] text-xs text-[var(--text-muted)] marker:hidden">
 				<Show when={appearance() === 'plain'}>
 					<span
 						class=":uno: chatbox-collapsible-leading-chevron i-lucide-chevron-right size-4 shrink-0 transition-transform"
@@ -89,7 +89,7 @@ export function TitledCollapsibleBlock(props: {
 				class={
 					appearance() === 'plain'
 						? ':uno: chatbox-document-content min-w-0 py-2'
-						: ':uno: border-t border-[var(--background-modifier-border)] px-3 py-3'
+						: ':uno: border-t border-[var(--background-modifier-border)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-gap)]'
 				}
 			>
 				{props.children}
