@@ -426,7 +426,6 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		aiModuleSettings.module = 'ai'
 		this.tabSections = {
 			sync: [
-				syncModuleSettings,
 				this.syncBackupReminderSettings,
 				this.accountSettings,
 				this.synchronizationSettings,
@@ -434,13 +433,14 @@ export class NutstoreSettingTab extends PluginSettingTab {
 				this.transferSettings,
 				this.interfaceSettings,
 				this.filterSettings,
+				syncModuleSettings,
 			],
 			ai: [
-				aiModuleSettings,
 				this.aiSettings,
 				this.memorySettings,
 				this.subagentSettings,
 				this.skillSettings,
+				aiModuleSettings,
 			],
 			troubleshooting: [
 				this.pluginRuntimeInfoSettings,
@@ -456,7 +456,8 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		this.renderTabBar()
 		const definitions: SettingDefinitionItem[] = []
 		for (const tab of SETTINGS_TABS) {
-			for (const section of this.visibleSections(tab.key)) {
+			const visibleSections = this.visibleSections(tab.key)
+			for (const section of visibleSections) {
 				const { name, containerEl, searchable, showGroupHeading } = section
 				const target: {
 					tab: SettingsTabKey
@@ -502,7 +503,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 					type: 'group',
 					heading: showGroupHeading ? name() : undefined,
 					cls:
-						section === this.tabSections[tab.key][0]
+						section === visibleSections[0]
 							? 'ns-settings-section ns-settings-first-section'
 							: 'ns-settings-section',
 					items: [definition],
@@ -563,7 +564,8 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		const disabled =
 			(tab === 'sync' || tab === 'ai') &&
 			this.plugin.localSettings.modules[tab] === ModuleState.Disabled
-		return disabled ? this.tabSections[tab].slice(0, 1) : this.tabSections[tab]
+		// The module switch is the last section and stays reachable when disabled.
+		return disabled ? this.tabSections[tab].slice(-1) : this.tabSections[tab]
 	}
 
 	private async renderActiveTabContent() {
