@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { deflateSync, gzipSync, zlibSync } from 'fflate'
 
 afterEach(() => {
 	vi.unstubAllGlobals()
@@ -40,5 +41,48 @@ describe('polyfill', () => {
 
 		expect(callback).toHaveBeenCalledOnce()
 		expect(callback).toHaveBeenCalledWith('Hello 你好 🌿')
+	})
+
+	it.each([
+		['deflate-raw', deflateSync],
+		['deflate', zlibSync],
+		['gzip', gzipSync],
+	] as const)(
+		'fills DecompressionStream(%s) on WebViews without it',
+		async (format, compress) => {
+			const runtime = {
+				process: { cwd: () => '/' },
+				queueMicrotask,
+				setTimeout,
+				TransformStream,
+				DecompressionStream: undefined as
+					typeof DecompressionStream | undefined,
+			}
+			vi.stubGlobal('window', runtime)
+			vi.resetModules()
+			await import('./polyfill')
+
+			const text = 'Neutral archive / 中性归档 🌱 '.repeat(64)
+			const compressed = compress(new TextEncoder().encode(text))
+			const input = new Blob([compressed.slice(0, 7), compressed.slice(7)])
+			const output = input
+				.stream()
+				.pipeThrough(new runtime.DecompressionStream!(format))
+			expect(await new Response(output).text()).toBe(text)
+		},
+	)
+
+	it('keeps the native DecompressionStream when it supports every format', async () => {
+		const runtime = {
+			process: { cwd: () => '/' },
+			queueMicrotask,
+			setTimeout,
+			TransformStream,
+			DecompressionStream,
+		}
+		vi.stubGlobal('window', runtime)
+		vi.resetModules()
+		await import('./polyfill')
+		expect(runtime.DecompressionStream).toBe(DecompressionStream)
 	})
 })
