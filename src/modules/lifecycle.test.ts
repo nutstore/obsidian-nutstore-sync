@@ -153,4 +153,30 @@ describe('module lifetime', () => {
 		expect(dispose).toHaveBeenCalledOnce()
 		expect(stop).toHaveBeenCalledOnce()
 	})
+
+	it('re-enables after a failed shutdown without replaying the old failure', async () => {
+		const start = vi.fn()
+		const stop = vi.fn<() => void>().mockImplementationOnce(() => {
+			throw new Error('Neutral shutdown failure / 中性停止失败 🌱')
+		})
+		const lifecycle = new ModuleLifecycle(start, stop)
+		await lifecycle.update(true)
+		await expect(lifecycle.update(false)).rejects.toThrow(
+			'Module shutdown failed',
+		)
+		await lifecycle.update(true)
+		expect(start).toHaveBeenCalledTimes(2)
+		expect(lifecycle.active).toBe(true)
+		await expect(lifecycle.update(false)).resolves.toBeUndefined()
+	})
+
+	it('retries activation after startup threw once', async () => {
+		let attempts = 0
+		const lifecycle = new ModuleLifecycle(() => {
+			if (attempts++ === 0) throw new Error('Neutral startup failure / 中性 🌱')
+		}, vi.fn())
+		await expect(lifecycle.update(true)).rejects.toThrow('startup failure')
+		await lifecycle.update(true)
+		expect(lifecycle.active).toBe(true)
+	})
 })

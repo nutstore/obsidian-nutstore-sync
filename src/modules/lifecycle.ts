@@ -93,6 +93,7 @@ export class ModuleScope {
 export class ModuleLifecycle {
 	private current?: ModuleScope
 	private desired = false
+	/** Tail of the serial transition chain; always settles as fulfilled. */
 	private transition: Promise<void> = Promise.resolve()
 
 	constructor(
@@ -137,15 +138,10 @@ export class ModuleLifecycle {
 					if (errors.length)
 						throw new AggregateError(errors, 'Module shutdown failed')
 				})
-			this.transition = Promise.allSettled([this.transition, cleanup]).then(
-				(results) => {
-					const failure = results.find((result) => result.status === 'rejected')
-					if (failure?.status === 'rejected') throw failure.reason
-				},
-			)
+			return this.enqueue(cleanup)
 		}
 		if (enabled && !this.current) {
-			this.transition = this.transition.then(async () => {
+			return this.enqueue(async () => {
 				if (!this.desired || this.current) return
 				const scope = new ModuleScope()
 				this.current = scope
@@ -167,5 +163,19 @@ export class ModuleLifecycle {
 			})
 		}
 		return this.transition
+	}
+
+	/**
+	 * Appends a step to the serial transition chain. The step's own outcome is
+	 * returned to its caller; the chain itself never stays rejected, so one
+	 * failed retirement or activation cannot block later transitions.
+	 */
+	private enqueue(step: Promise<void> | (() => Promise<void>)): Promise<void> {
+		const result =
+			typeof step === 'function'
+				? this.transition.then(step)
+				: this.transition.then(() => step)
+		this.transition = result.catch(() => {})
+		return result
 	}
 }
