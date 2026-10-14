@@ -581,6 +581,11 @@
 		"requestsTooFrequent": "请求过于频繁，插件将在 {{time}} 后自动继续同步任务",
 		"preparing": "📋 准备同步",
 		"preparation": {
+			"progressLabel": "扫描进度",
+			"scannedDirectories": "已扫描目录",
+			"queuedDirectories": "待扫描目录",
+			"discoveredItems": "已发现项目",
+			"knownDirectoriesHint": "按当前已发现目录计算，扫描中会继续发现新目录",
 			"checkingRemote": "正在检查远端目录…",
 			"loadingState": "正在读取同步状态…",
 			"scanningRemote": "正在扫描远端目录…",

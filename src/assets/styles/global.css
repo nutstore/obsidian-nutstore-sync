@@ -35,26 +35,65 @@
 }
 
 .modal.nutstore-sync-progress-modal {
+	--nutstore-progress-accent: var(--interactive-accent);
+	display: flex;
+	flex-direction: column;
 	width: min(560px, calc(100vw - 2rem));
-	max-height: calc(100% - 2rem);
+	max-height: calc(100vh - 2rem);
+	padding: 0;
+	overflow: hidden;
+	border-radius: 1.25rem;
+}
+
+@supports (max-height: 100dvh) {
+	.modal.nutstore-sync-progress-modal {
+		max-height: calc(100dvh - 2rem);
+	}
+}
+
+.modal.nutstore-sync-progress-modal[data-state='complete'] {
+	--nutstore-progress-accent: var(--text-success);
+}
+
+.modal.nutstore-sync-progress-modal[data-state='warning'] {
+	--nutstore-progress-accent: var(--text-warning);
+}
+
+.modal.nutstore-sync-progress-modal[data-state='error'],
+.modal.nutstore-sync-progress-modal[data-state='cancelled'] {
+	--nutstore-progress-accent: var(--text-error);
 }
 
 .modal-content.nutstore-sync-progress-modal__content {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
 	padding: 0;
+	margin: 0;
+	min-height: 0;
+	overflow: hidden;
 }
 
 .nutstore-sync-progress {
 	display: flex;
 	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
 	gap: 1rem;
-	min-height: min(40vh, 28rem);
-	max-height: 75vh;
+	padding-bottom: 1rem;
+	overflow-y: auto;
 }
 
 .modal.nutstore-sync-progress-modal .modal-header {
 	display: flex;
+	flex: 0 0 auto;
 	align-items: center;
-	padding: 1.25rem 1.5rem;
+	padding: 1.5rem 2.75rem 1.25rem 1.5rem;
+	background: linear-gradient(
+		120deg,
+		color-mix(in srgb, var(--nutstore-progress-accent) 8%, transparent),
+		transparent 75%
+	);
 }
 
 .modal.nutstore-sync-progress-modal
@@ -75,8 +114,14 @@
 	width: 2.5rem;
 	height: 2.5rem;
 	border-radius: 0.75rem;
-	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
-	color: var(--interactive-accent);
+	background: color-mix(
+		in srgb,
+		var(--nutstore-progress-accent) 14%,
+		transparent
+	);
+	color: var(--nutstore-progress-accent);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in srgb, var(--nutstore-progress-accent) 18%, transparent);
 }
 
 .nutstore-sync-progress__status-icon--preparing,
@@ -125,15 +170,16 @@
 	min-width: 0;
 	overflow: hidden;
 	margin: 0;
+	color: var(--text-normal);
 	font-size: var(--font-ui-large);
 	line-height: 1.3;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: anywhere;
 }
 
 .nutstore-sync-progress__status {
 	display: flex;
 	flex-direction: column;
+	flex: 0 0 auto;
 	gap: 0.25rem;
 	margin: 0 1.5rem;
 }
@@ -144,6 +190,11 @@
 	font-size: var(--font-ui-small);
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	font-family: var(--font-monospace);
+}
+
+.nutstore-sync-progress__current-file:empty {
+	display: none;
 }
 
 .nutstore-sync-progress__summary {
@@ -155,17 +206,38 @@
 .nutstore-sync-progress__card {
 	display: flex;
 	flex-direction: column;
-	gap: 0.625rem;
+	flex: 0 0 auto;
+	gap: 1rem;
 	margin: 0 1.5rem;
-	padding: 0.875rem 1rem 1rem;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m);
-	background: color-mix(in srgb, var(--background-secondary) 38%, transparent);
+	padding: 1rem;
+	border: 1px solid
+		color-mix(
+			in srgb,
+			var(--nutstore-progress-accent) 22%,
+			var(--background-modifier-border)
+		);
+	border-radius: 1rem;
+	background: linear-gradient(
+		135deg,
+		color-mix(
+			in srgb,
+			var(--nutstore-progress-accent) 5%,
+			var(--background-primary)
+		),
+		var(--background-secondary)
+	);
+}
+
+.nutstore-sync-progress__meta {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
 }
 
 .nutstore-sync-progress__label {
 	font-weight: 600;
-	color: var(--text-muted);
+	color: var(--text-normal);
 	font-size: var(--font-ui-small);
 }
 
@@ -177,10 +249,14 @@
 
 .nutstore-sync-progress__bar-container {
 	position: relative;
-	height: 1.25rem;
+	height: 0.625rem;
 	overflow: hidden;
-	border-radius: var(--radius-s);
-	background: var(--background-secondary);
+	border-radius: 999px;
+	background: color-mix(
+		in srgb,
+		var(--nutstore-progress-accent) 10%,
+		var(--background-modifier-border)
+	);
 }
 
 .nutstore-sync-progress__bar {
@@ -188,20 +264,91 @@
 	inset-block: 0;
 	left: 0;
 	width: 0;
+	overflow: hidden;
 	border-radius: inherit;
-	background: var(--interactive-accent);
-	transition: width 250ms ease;
+	background: linear-gradient(
+		90deg,
+		color-mix(
+			in srgb,
+			var(--nutstore-progress-accent) 65%,
+			var(--background-primary)
+		),
+		var(--nutstore-progress-accent)
+	);
+	box-shadow: 0 0 12px
+		color-mix(in srgb, var(--nutstore-progress-accent) 40%, transparent);
+	transition: width 350ms ease;
+}
+
+.nutstore-sync-progress-modal[data-state='preparing']
+	.nutstore-sync-progress__primary
+	.nutstore-sync-progress__bar::after,
+.nutstore-sync-progress-modal[data-state='syncing']
+	.nutstore-sync-progress__primary
+	.nutstore-sync-progress__bar::after {
+	content: '';
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 40%;
+	border-radius: inherit;
+	background: linear-gradient(
+		90deg,
+		transparent,
+		color-mix(in srgb, var(--nutstore-progress-accent) 55%, white),
+		transparent
+	);
+	opacity: 0.45;
+	animation: nutstore-sync-progress-indeterminate 2s linear infinite;
 }
 
 .nutstore-sync-progress__bar-label {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--text-on-accent);
-	font-size: var(--font-ui-smaller);
+	flex: 0 0 auto;
+	color: var(--nutstore-progress-accent);
+	font-size: var(--font-ui-small);
 	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.nutstore-sync-progress__hint {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.5;
+}
+
+.nutstore-sync-progress__stats {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.5rem;
+	padding-top: 0.5rem;
+}
+
+.nutstore-sync-progress__stat {
+	min-width: 0;
+	padding: 0.75rem 0.625rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 0.75rem;
+	background: color-mix(in srgb, var(--background-primary) 65%, transparent);
+}
+
+.nutstore-sync-progress__stat-count {
+	color: var(--text-normal);
+	font-size: 1.5rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+.nutstore-sync-progress__stat:first-child .nutstore-sync-progress__stat-count {
+	color: var(--nutstore-progress-accent);
+}
+
+.nutstore-sync-progress__stat-label {
+	margin-top: 0.25rem;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+	overflow-wrap: anywhere;
 }
 
 .nutstore-sync-progress__cache {
@@ -227,7 +374,7 @@
 
 .nutstore-sync-progress__files-list {
 	flex: 1 1 auto;
-	min-height: 5rem;
+	min-height: 0;
 	max-height: 32vh;
 	overflow-y: auto;
 	padding: 0.25rem;
@@ -240,13 +387,74 @@
 	display: flex;
 	justify-content: flex-end;
 	gap: 0.5rem;
-	margin-top: auto;
+	flex: 0 0 auto;
 	padding: 1rem 1.5rem 1.25rem;
 	border-top: 1px solid var(--background-modifier-border);
 }
 
 .nutstore-sync-progress__footer button {
 	min-width: 5.5rem;
+	border-radius: 0.625rem;
+}
+
+.nutstore-sync-progress-modal[data-preparation-phase='retrying']
+	.nutstore-sync-progress-indeterminate,
+.nutstore-sync-progress-modal[data-preparation-phase='retrying']
+	.nutstore-sync-progress__bar::after,
+.nutstore-sync-progress-modal[data-preparation-phase='retrying']
+	.nutstore-sync-spinning {
+	animation-play-state: paused;
+}
+
+@media (max-width: 480px) {
+	.modal.nutstore-sync-progress-modal .modal-header {
+		padding-inline: 1rem 2.5rem;
+	}
+
+	.nutstore-sync-progress__status,
+	.nutstore-sync-progress__card,
+	.nutstore-sync-progress__files {
+		margin-inline: 1rem;
+	}
+
+	.nutstore-sync-progress__footer {
+		padding-inline: 1rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.nutstore-sync-progress-modal .nutstore-sync-spinning,
+	.nutstore-sync-progress-modal .nutstore-sync-progress-indeterminate,
+	.nutstore-sync-progress-modal .nutstore-sync-progress__bar::after {
+		animation: none;
+	}
+
+	.nutstore-sync-progress-modal .nutstore-sync-progress__bar {
+		transition: none;
+	}
+}
+
+@media (max-width: 360px) {
+	.nutstore-sync-progress__stats {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.nutstore-sync-progress__stat {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.5rem 0.625rem;
+	}
+
+	.nutstore-sync-progress__stat-label {
+		order: -1;
+		margin-top: 0;
+	}
+
+	.nutstore-sync-progress__stat-count {
+		font-size: 1.25rem;
+	}
 }
 
 .modal.nutstore-llm-gateway-modal {
