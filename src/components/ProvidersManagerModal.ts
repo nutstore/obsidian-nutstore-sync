@@ -274,12 +274,17 @@ export default class ProvidersManagerModal extends Modal {
 									if (!this.validateProviderKey(savedProvider, provider.id)) {
 										return false
 									}
-									const { [provider.id]: _old, ...rest } =
-										this.plugin.settings.ai.providers
-									this.plugin.settings.ai.providers = {
-										...rest,
-										[savedProvider.id]: savedProvider,
+									const nextProviders: Record<string, AIProviderConfig> = {}
+									for (const [key, val] of Object.entries(
+										this.plugin.settings.ai.providers,
+									)) {
+										if (key === provider.id) {
+											nextProviders[savedProvider.id] = savedProvider
+										} else {
+											nextProviders[key] = val
+										}
 									}
+									this.plugin.settings.ai.providers = nextProviders
 									await this.onChanged()
 									this.render()
 									return true

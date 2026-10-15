@@ -222,12 +222,30 @@
 				"name": "模型",
 				"desc": "在当前模型提供商下可用的模型",
 				"add": "新增模型",
-				"empty": "当前模型提供商下还没有模型。"
+				"fetch": "获取模型",
+				"fetching": "获取中...",
+				"empty": "当前模型提供商下还没有模型。",
+				"selectModelsTitle": "选择要添加的模型",
+				"selectModelsDesc": "以下是模型提供商的可用模型，勾选要添加的模型。",
+				"searchPlaceholder": "搜索模型",
+				"selectAll": "全选",
+				"deselectAll": "取消全选",
+				"addSelected": "添加所选",
+				"noModelsFound": "未获取到可用模型",
+				"noModelsSelected": "请至少勾选一个模型",
+				"modelsAdded": "已成功添加 {{count}} 个模型",
+				"noMatchingModels": "未找到匹配的模型",
+				"fetchFailed": "获取模型失败：{{reason}}",
+				"invalidJsonResponse": "模型列表响应不是合法的 JSON 数据"
 			},
 			"model": {
 				"id": "模型 ID",
 				"idDesc": "请求 API 时使用的模型标识（如 gpt-4o）",
-				"inputModalities": "输入模态"
+				"inputModalities": "输入模态",
+				"contextLimit": "上下文窗口大小",
+				"contextLimitDesc": "模型上下文限制，支持纯数字或 128k、1M 等缩写",
+				"outputLimit": "最大输出 Token",
+				"outputLimitDesc": "单次生成的最大 Token 限制，支持纯数字或 4k、65k 等缩写"
 			},
 			"modals": {
 				"confirmDeleteLabel": "确认",
@@ -336,6 +354,8 @@
 				"invalidProvidersConfig": "AI 模型提供商配置无效，请在设置中修正。详情：{{reason}}",
 				"emptyModelId": "模型 ID 不能为空",
 				"duplicateModelId": "已存在相同 ID 的模型",
+				"invalidContextLimit": "上下文窗口大小格式不正确（支持 128k、1M 或纯数字）",
+				"invalidOutputLimit": "最大输出 Token 格式不正确（支持 4k、65k 或纯数字）",
 				"emptyProviderId": "模型提供商名称不能为空",
 				"duplicateProviderId": "已存在相同名称的模型提供商",
 				"reservedProviderId": "该模型提供商名称由坚果云 AI 保留，请使用其他名称",

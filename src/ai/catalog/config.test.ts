@@ -9,6 +9,7 @@ import {
 	createProviderConfig,
 	createProviderFromPreset,
 	findPresetModelById,
+	listModels,
 	sanitizeProviders,
 } from './config'
 
@@ -196,5 +197,23 @@ describe('ai config', () => {
 		expect(() => sanitizeProviders([{ name: 'Provider' }])).toThrow(
 			/Invalid AI provider/,
 		)
+	})
+
+	it('sorts models lexicographically in listModels', () => {
+		const provider = createProviderConfig()
+		provider.models = {
+			'gpt-4o': createModelConfig({ id: 'gpt-4o' }),
+			'claude-3-haiku': createModelConfig({ id: 'claude-3-haiku' }),
+			'gpt-3.5-turbo': createModelConfig({ id: 'gpt-3.5-turbo' }),
+			'claude-3-5-sonnet': createModelConfig({ id: 'claude-3-5-sonnet' }),
+		}
+
+		const models = listModels(provider)
+		expect(models.map((m) => m.id)).toEqual([
+			'claude-3-5-sonnet',
+			'claude-3-haiku',
+			'gpt-3.5-turbo',
+			'gpt-4o',
+		])
 	})
 })

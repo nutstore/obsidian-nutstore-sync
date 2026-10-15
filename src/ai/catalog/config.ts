@@ -159,7 +159,9 @@ export function listProviders(
 export function listModels(
 	provider: AIProviderConfig | undefined,
 ): AIModelConfig[] {
-	return Object.values(provider?.models || {})
+	return Object.values(provider?.models || {}).sort((a, b) =>
+		a.id.localeCompare(b.id, undefined, { numeric: true }),
+	)
 }
 
 export function getFirstModel(provider: AIProviderConfig | undefined) {

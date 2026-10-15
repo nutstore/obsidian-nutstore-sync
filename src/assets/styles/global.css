@@ -1258,6 +1258,23 @@
 	min-height: 0;
 }
 
+.modal.provider-select-models-modal {
+	width: min(560px, calc(100vw - 2rem));
+	max-width: 560px;
+}
+
+.modal.provider-select-models-modal.ns-chatbox-contained-modal {
+	width: min(560px, calc(100% - 2rem));
+	max-width: calc(100% - 2rem);
+}
+
+.modal-content.provider-select-models-modal__content {
+	display: flex;
+	flex-direction: column;
+	max-height: 80vh;
+	min-height: 0;
+}
+
 .provider-editor-modal__footer {
 	flex: 0 0 auto;
 	padding-top: 0.75rem;

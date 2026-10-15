@@ -264,12 +264,30 @@
 				"name": "Models",
 				"desc": "Models available under this provider",
 				"add": "Add model",
-				"empty": "No model configured yet."
+				"fetch": "Fetch models",
+				"fetching": "Fetching...",
+				"empty": "No model configured yet.",
+				"selectModelsTitle": "Select models to add",
+				"selectModelsDesc": "Below are the available models from the provider. Check the models you want to add.",
+				"searchPlaceholder": "Search models",
+				"selectAll": "Select all",
+				"deselectAll": "Deselect all",
+				"addSelected": "Add selected",
+				"noModelsFound": "No available models found",
+				"noModelsSelected": "Please select at least one model",
+				"modelsAdded": "Successfully added {{count}} model(s)",
+				"noMatchingModels": "No matching models found",
+				"fetchFailed": "Failed to fetch models: {{reason}}",
+				"invalidJsonResponse": "Invalid JSON response from server"
 			},
 			"model": {
 				"id": "Model ID",
 				"idDesc": "Model identifier sent to the API (e.g. gpt-4o)",
-				"inputModalities": "Input modalities"
+				"inputModalities": "Input modalities",
+				"contextLimit": "Context Window Limit",
+				"contextLimitDesc": "Context window token limit, supports numbers or shorthand like 128k, 1M",
+				"outputLimit": "Max Output Tokens",
+				"outputLimitDesc": "Maximum output tokens limit, supports numbers or shorthand like 4k, 65k"
 			},
 			"modals": {
 				"confirmDeleteLabel": "Confirm",
@@ -378,6 +396,8 @@
 				"invalidProvidersConfig": "AI provider configuration is invalid. Please fix it in settings. Details: {{reason}}",
 				"emptyModelId": "Model ID cannot be empty",
 				"duplicateModelId": "A model with this ID already exists",
+				"invalidContextLimit": "Context window limit is invalid (supports numbers or 128k, 1M)",
+				"invalidOutputLimit": "Max output tokens limit is invalid (supports numbers or 4k, 65k)",
 				"emptyProviderId": "Provider name cannot be empty",
 				"duplicateProviderId": "A provider with this name already exists",
 				"reservedProviderId": "This provider name is reserved by Nutstore AI. Use another name.",

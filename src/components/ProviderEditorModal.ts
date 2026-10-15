@@ -1,11 +1,13 @@
 import { cloneDeep } from 'es-toolkit/compat'
-import { Modal, Notice, Setting, setIcon } from 'obsidian'
+import { ButtonComponent, Modal, Notice, Setting, setIcon } from 'obsidian'
 import {
 	createModelConfig,
 	listModels,
 	slugifyProviderId,
 } from '~/ai/catalog/config'
+import { fetchProviderModels } from '~/ai/catalog/fetch-models'
 import { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import { getProviderDefaultBaseURL } from '~/ai/providers/defaults'
 import {
 	applyObsidianModalMountTarget,
 	type ChatModalMountTarget,
@@ -16,6 +18,7 @@ import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
 import ProviderCorsConfirmModal from './ProviderCorsConfirmModal'
+import ProviderSelectModelsModal from './ProviderSelectModelsModal'
 
 const API_FORMAT_OPTIONS = [
 	{
@@ -35,6 +38,7 @@ const API_FORMAT_OPTIONS = [
 export default class ProviderEditorModal extends Modal {
 	private draft: AIProviderConfig
 	private cleanupModalMount?: () => void
+	private isFetchingModels = false
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -159,6 +163,27 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(modelContainer)
 			.setName(i18n.t('settings.ai.models.name'))
 			.setDesc(i18n.t('settings.ai.models.desc'))
+			.addButton((button) => {
+				button
+					.setButtonText(
+						this.isFetchingModels
+							? i18n.t('settings.ai.models.fetching')
+							: i18n.t('settings.ai.models.fetch'),
+					)
+					.setDisabled(this.isFetchingModels)
+				if (this.isFetchingModels) {
+					addClassTokens(
+						button.buttonEl,
+						':uno: connection-button',
+						':uno: loading',
+						':uno: opacity-50',
+						':uno: pointer-events-none',
+					)
+				}
+				button.onClick(async () => {
+					await this.fetchModels(button)
+				})
+			})
 			.addButton((button) =>
 				button.setButtonText(i18n.t('settings.ai.models.add')).onClick(() => {
 					new ModelEditorModal(
@@ -224,8 +249,15 @@ export default class ProviderEditorModal extends Modal {
 										new Notice(i18n.t('settings.ai.errors.duplicateModelId'))
 										return false
 									}
-									const { [model.id]: _old, ...rest } = this.draft.models
-									this.draft.models = { ...rest, [savedModel.id]: savedModel }
+									const nextModels: Record<string, AIModelConfig> = {}
+									for (const [key, val] of Object.entries(this.draft.models)) {
+										if (key === model.id) {
+											nextModels[savedModel.id] = savedModel
+										} else {
+											nextModels[key] = val
+										}
+									}
+									this.draft.models = nextModels
 									this.render()
 									return true
 								},
@@ -297,6 +329,83 @@ export default class ProviderEditorModal extends Modal {
 		this.draft.models = models
 		new Notice(i18n.t('settings.ai.modals.model.deleted'))
 		this.render()
+	}
+
+	private async fetchModels(button: ButtonComponent) {
+		if (this.isFetchingModels) return
+		const baseURL =
+			this.draft.api?.trim() || getProviderDefaultBaseURL(this.draft.npm)
+		if (!baseURL) {
+			new Notice(i18n.t('chatbox.errors.providerBaseUrlRequired'))
+			return
+		}
+
+		this.isFetchingModels = true
+		button.setDisabled(true)
+		button.setButtonText(i18n.t('settings.ai.models.fetching'))
+		addClassTokens(
+			button.buttonEl,
+			':uno: connection-button',
+			':uno: loading',
+			':uno: opacity-50',
+			':uno: pointer-events-none',
+		)
+
+		const scope = this.plugin.ai.lifecycle.scope
+
+		try {
+			const models = await fetchProviderModels(this.draft, {
+				signal: scope.signal,
+			})
+			if (scope.signal.aborted) return
+
+			if (models.length === 0) {
+				new Notice(i18n.t('settings.ai.models.noModelsFound'))
+				return
+			}
+
+			new ProviderSelectModelsModal(
+				this.plugin,
+				models,
+				(selected) => {
+					for (const item of selected) {
+						this.draft.models = {
+							...this.draft.models,
+							[item.id]: item.modelConfig,
+						}
+					}
+					this.render()
+					new Notice(
+						i18n.t('settings.ai.models.modelsAdded', {
+							count: selected.length,
+						}),
+					)
+				},
+				this.mountTarget,
+			).open()
+		} catch (error) {
+			if (scope.signal.aborted) return
+			logger.error('Failed to fetch provider models', error)
+			new Notice(
+				i18n.t('settings.ai.models.fetchFailed', {
+					reason: error instanceof Error ? error.message : String(error),
+				}),
+				10000,
+			)
+		} finally {
+			if (!scope.signal.aborted) {
+				this.isFetchingModels = false
+				button.setDisabled(false)
+				button.setButtonText(i18n.t('settings.ai.models.fetch'))
+				removeClassTokens(
+					button.buttonEl,
+					':uno: connection-button',
+					':uno: loading',
+					':uno: opacity-50',
+					':uno: pointer-events-none',
+				)
+			}
+		}
 	}
 
 	open() {
