@@ -30,23 +30,6 @@ export function bufferLikeToArrayBuffer(buffer: BufferLike): ArrayBuffer {
 	return toArrayBuffer(buffer)
 }
 
-function concatenateChunks(chunks: ArrayBuffer[], totalSize: number) {
-	const result = new ArrayBuffer(totalSize)
-	const resultView = new Uint8Array(result)
-	let offset = 0
-
-	for (const chunk of chunks) {
-		resultView.set(new Uint8Array(chunk), offset)
-		offset += chunk.byteLength
-	}
-
-	if (offset !== totalSize) {
-		throw new Error('Remote Size Not Match!')
-	}
-
-	return result
-}
-
 async function downloadRemoteFileWhole({
 	vault,
 	webdav,
@@ -82,21 +65,13 @@ async function downloadRemoteFileInChunks({
 		return
 	}
 
-	const appendBinary = (
-		vault.adapter as unknown as {
-			appendBinary?: (path: string, data: ArrayBuffer) => Promise<void>
-		}
-	).appendBinary?.bind(vault.adapter)
-	const chunks: ArrayBuffer[] = []
-
 	const chunkSize = parseMobileAppDownloadFileChunkSize(
 		mobileAppDownloadFileChunkSize,
 	)
-	const tempPath = normalizePath(
-		`${normalizedLocalPath}.nutstore-sync-${Date.now()}-${Math.random()
-			.toString(36)
-			.slice(2)}.download`,
-	)
+	// Fill one buffer so peak assembly memory is the file plus the current chunk.
+	// Commit only after every range is validated; no temporary filesystem paths.
+	const content = new ArrayBuffer(remoteSize)
+	const contentView = new Uint8Array(content)
 	let offset = 0
 	let chunkIndex = 0
 
@@ -104,74 +79,37 @@ async function downloadRemoteFileInChunks({
 		`[ChunkedDownload] start ${remotePath} (${remoteSize} bytes, chunkSize=${chunkSize})`,
 	)
 
-	try {
-		while (offset < remoteSize) {
-			const end = Math.min(offset + chunkSize, remoteSize) - 1
-			const response = await webdav.customRequest(remotePath, {
-				method: 'GET',
-				headers: {
-					Range: `bytes=${offset}-${end}`,
-				},
-			})
-			if (response.status !== 206) {
-				throw new Error(`Range download failed with status ${response.status}`)
-			}
-			const chunk = await response.arrayBuffer()
-			const expectedLength = end - offset + 1
-			if (chunk.byteLength !== expectedLength) {
-				throw new Error('Remote chunk size not match!')
-			}
-			if (appendBinary && offset === 0) {
-				await vault.adapter.writeBinary(tempPath, chunk)
-			} else if (appendBinary) {
-				await appendBinary(tempPath, chunk)
-			} else {
-				chunks.push(chunk)
-			}
-			offset += chunk.byteLength
-			chunkIndex++
-			if (chunkIndex % 5 === 0) {
-				logger.debug(
-					`[ChunkedDownload] progress ${offset}/${remoteSize} bytes (chunk #${chunkIndex})`,
-				)
-			}
+	while (offset < remoteSize) {
+		const end = Math.min(offset + chunkSize, remoteSize) - 1
+		const response = await webdav.customRequest(remotePath, {
+			method: 'GET',
+			headers: {
+				Range: `bytes=${offset}-${end}`,
+			},
+		})
+		if (response.status !== 206) {
+			throw new Error(`Range download failed with status ${response.status}`)
 		}
-
-		if (offset !== remoteSize) {
-			throw new Error('Remote Size Not Match!')
+		const chunk = await response.arrayBuffer()
+		const expectedLength = end - offset + 1
+		if (chunk.byteLength !== expectedLength) {
+			throw new Error('Remote chunk size not match!')
 		}
-		if (appendBinary) {
-			if (await vault.adapter.exists(normalizedLocalPath)) {
-				await vault.adapter.remove(normalizedLocalPath)
-			}
-			await vault.adapter.rename(tempPath, normalizedLocalPath)
-		} else {
-			logger.warn(
-				'[ChunkedDownload] adapter.appendBinary is unavailable; assembling chunks in memory',
-			)
-			await writeLocalBinary(
-				vault,
-				normalizedLocalPath,
-				concatenateChunks(chunks, remoteSize),
+		contentView.set(new Uint8Array(chunk), offset)
+		offset += chunk.byteLength
+		chunkIndex++
+		if (chunkIndex % 5 === 0) {
+			logger.debug(
+				`[ChunkedDownload] progress ${offset}/${remoteSize} bytes (chunk #${chunkIndex})`,
 			)
 		}
-		logger.info(`[ChunkedDownload] done ${remotePath} (${chunkIndex} chunks)`)
-	} catch (error) {
-		if (appendBinary) {
-			await removeTempDownload(vault, tempPath)
-		}
-		throw error
 	}
-}
 
-async function removeTempDownload(vault: Vault, tempPath: string) {
-	try {
-		if (await vault.adapter.exists(tempPath)) {
-			await vault.adapter.remove(tempPath)
-		}
-	} catch {
-		// Best-effort cleanup only; preserve the original download error.
+	if (offset !== remoteSize) {
+		throw new Error('Remote Size Not Match!')
 	}
+	await writeLocalBinary(vault, normalizedLocalPath, content)
+	logger.info(`[ChunkedDownload] done ${remotePath} (${chunkIndex} chunks)`)
 }
 
 function toArrayBuffer(buf: Uint8Array): ArrayBuffer {
