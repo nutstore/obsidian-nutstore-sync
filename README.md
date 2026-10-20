@@ -34,7 +34,7 @@ Nutstore Sync 是面向坚果云用户的 Obsidian 同步插件，支持桌面�
 
 ### 🚀 快速开始
 
-1. 从 Obsidian 社区插件中安装并启用 **Nutstore Sync**。
+1. 从 [Obsidian 社区插件中安装](https://community.obsidian.md/plugins/nutstore-sync)并启用 **Nutstore Sync**。
 2. 打开插件设置，使用坚果云授权登录；也可以选择手动模式，填写 WebDAV 应用密码。
 3. 选择坚果云中的远程目录和同步策略，然后检查 WebDAV 连接。
 4. 点击功能区的同步图标，或从命令面板运行 **Start sync**。
@@ -138,7 +138,7 @@ Nutstore Sync is an Obsidian plugin for syncing a vault with Nutstore on desktop
 
 ### 🚀 Quick Start
 
-1. Install and enable **Nutstore Sync** from Obsidian Community Plugins.
+1. Install and enable **Nutstore Sync** from [Obsidian Community Plugins](https://community.obsidian.md/plugins/nutstore-sync).
 2. Open the plugin settings and sign in through Nutstore authorization, or enter a WebDAV app password in manual mode.
 3. Choose a remote Nutstore directory and a sync policy, then check the WebDAV connection.
 4. Click the sync ribbon icon, or run **Start sync** from the command palette.
