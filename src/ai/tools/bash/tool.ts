@@ -1,6 +1,6 @@
-import { posix as pathPosix } from 'path-browserify'
-import { idAgent } from 'id-agent'
 import { tool } from 'ai'
+import { idAgent } from 'id-agent'
+import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod/mini'
 import {
 	AGENTS_MOUNT_POINT,
@@ -36,7 +36,7 @@ export const bashTool = tool({
 	description: [
 		`Execute a browser-based bash subset against a virtual filesystem where the Obsidian vault is rooted at ${VAULT_MOUNT_POINT}, agent data is available at ${AGENTS_MOUNT_POINT}, built-in Skills are read-only under ${BUILTIN_SKILLS_MOUNT_POINT}, and plugin settings are editable at ${SETTINGS_MOUNT_POINT}/settings.json.`,
 		'This is not the host shell: node, python, xxd, and some command flags are unavailable.',
-		'Prefer supported commands such as ls, cat, rg, jq, sed, awk, od, gzip, gunzip, zcat, zip, unzip, mkdir, mv, cp, and rm. zip and unzip support standard store/deflate archives, but not encrypted, Zip64, or uncommon compression formats.',
+		'Prefer supported commands such as ls, cat, rg, jq, sed, awk, od, gzip, gunzip, zcat, zip, unzip, mkdir, mv, cp, and rm. App files are ordinary files edited with these commands; the only App command is `app open [appId]`, which opens the App view immediately. zip and unzip support standard store/deflate archives, but not encrypted, Zip64, or uncommon compression formats.',
 		`Wildcards enumerate live directories in the virtual filesystem. Hidden dot-prefixed entries require a dot-prefixed pattern or shopt -s dotglob. When a glob or rg finds nothing, list the parent directory or read the explicit path directly before concluding a file is missing.`,
 		`Treat the filesystem root as the user's personal knowledge base — only write there for content the user intends to keep; use ${BASH_TMP_MOUNT_POINT} for intermediate or scratch work.`,
 		`The plugin settings file ${SETTINGS_MOUNT_POINT}/settings.json is virtual and reflects live settings (whitelist only, never credentials). To change settings, write the complete file as valid JSON — prefer jq or a full-file rewrite; the plugin validates and applies it on save.`,

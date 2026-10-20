@@ -30,6 +30,7 @@ const MASTER_SYSTEM_PROMPT = [
 	'User messages may be prepended with <AdditionalContext> blocks containing TOON workspace updates: indentation defines objects; name[N]{fields} declares N rows with comma-separated columns; quoted strings preserve escapes.',
 	'Missing fields are unchanged; null clears a value; [] clears a list. Except for memoryAdditions, each supplied field replaces its previous state. Silently apply updates without mentioning or quoting the XML structure.',
 	'When a task matches an available skill, or the user explicitly requests one, use bash to read its complete SKILL.md before following it. Copy the absolute path exactly from workspace context; never derive or alter it. User Vault Skills under /.agents/skills and built-in Skills under /.agents/nutstore-sync/builtin-skills are not interchangeable.',
+	'App workspaces are optional chat targets mounted under /.agents/nutstore-sync/apps. For App creation or editing, read the app-builder skill for the App directory and file specification. File changes are validated in the sandbox and saved. A reply containing code does not create an App. Selected App identity is supplied by the host; do not infer a target from old messages.',
 	'Hidden dot-folders are internal; do not expose their paths or contents unless the user explicitly asks about them. Never guess or fabricate credentials.',
 ].join('\n')
 

@@ -70,6 +70,7 @@ function isSupportedPickedFile(file: File): boolean {
 }
 
 function Chatbox(props: ChatboxProps) {
+	let workspaceHostEl: HTMLDivElement | undefined
 	type RecallArmedMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
 	const [isComposing, setIsComposing] = createSignal(false)
@@ -277,8 +278,17 @@ function Chatbox(props: ChatboxProps) {
 			(model) => model.id === props.selectedModelId,
 		)
 		return (
-			[provider?.name, selectedModel?.name].filter(Boolean).join('/') ||
+			[provider?.name, selectedModel?.name].filter(Boolean).join(' · ') ||
 			t('chatbox.ui.states.noModel')
+		)
+	}
+	const compactModelPickerLabel = () => {
+		const provider = selectedProvider()
+		const selectedModel = provider?.models.find(
+			(model) => model.id === props.selectedModelId,
+		)
+		return (
+			selectedModel?.name || provider?.name || t('chatbox.ui.states.noModel')
 		)
 	}
 	function readStoredInputPaneHeight() {
@@ -493,6 +503,8 @@ function Chatbox(props: ChatboxProps) {
 	}
 
 	onMount(() => {
+		props.onWorkspaceHostChange?.(workspaceHostEl)
+		onCleanup(() => props.onWorkspaceHostChange?.(undefined))
 		props.onModalHostChange?.(chatboxRootEl)
 		onCleanup(() => props.onModalHostChange?.(undefined))
 	})
@@ -841,9 +853,9 @@ function Chatbox(props: ChatboxProps) {
 			</Show>
 			<div class=":uno: flex min-w-0 flex-1 flex-col overflow-hidden">
 				{/* Header */}
-				<div class=":uno: relative flex shrink-0 items-center gap-2 border-b border-[var(--background-modifier-border)] px-2 py-2">
+				<div class="ns-chatbox-header">
 					<button
-						class=":uno: inline-flex size-8 shrink-0 items-center justify-center text-[var(--text-muted)] transition-colors !bg-transparent hover:text-[var(--interactive-accent)] focus-visible:text-[var(--interactive-accent)]"
+						class="ns-chatbox-nav-btn"
 						type="button"
 						aria-label={t('chatbox.ui.history.title')}
 						title={t('chatbox.ui.history.title')}
@@ -852,39 +864,32 @@ function Chatbox(props: ChatboxProps) {
 							setModelPickerOpen(false)
 						}}
 					>
-						<span class=":uno: i-lucide-menu size-5 shrink-0" />
+						<span class=":uno: i-lucide-history size-4 shrink-0" />
 					</button>
-					<div class=":uno: min-w-0 flex-1 truncate text-sm font-semibold">
+					<div
+						class="ns-chatbox-session-title"
+						title={props.title || t('chatbox.newChat')}
+					>
 						{props.title || t('chatbox.newChat')}
 					</div>
-					<Show
-						when={isSmallChatbox()}
-						fallback={
-							<button
-								class=":uno: max-w-56 min-w-34 text-sm"
-								type="button"
-								onClick={() => {
-									setModelPickerOpen(true)
-									setHistoryOpen(false)
-								}}
-							>
-								<div class=":uno: truncate">{modelPickerLabel()}</div>
-							</button>
-						}
+					<button
+						class="ns-model-pill"
+						type="button"
+						aria-label={`${t('chatbox.ui.labels.provider')} / ${t('chatbox.ui.labels.model')}: ${modelPickerLabel()}`}
+						title={modelPickerLabel()}
+						onClick={() => {
+							setModelPickerOpen(true)
+							setHistoryOpen(false)
+						}}
 					>
-						<button
-							class=":uno: inline-flex size-6 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
-							type="button"
-							aria-label={`${t('chatbox.ui.labels.provider')} / ${t('chatbox.ui.labels.model')}`}
-							title={`${t('chatbox.ui.labels.provider')} / ${t('chatbox.ui.labels.model')}`}
-							onClick={() => {
-								setModelPickerOpen(true)
-								setHistoryOpen(false)
-							}}
-						>
-							<span class=":uno: i-lucide-sliders-horizontal size-3 shrink-0" />
-						</button>
-					</Show>
+						<span class=":uno: i-lucide-sparkles size-3.5 shrink-0 ns-model-pill-icon" />
+						<span class="ns-model-pill-text">
+							{isSmallChatbox()
+								? compactModelPickerLabel()
+								: modelPickerLabel()}
+						</span>
+						<span class=":uno: i-lucide-chevron-down size-3 shrink-0 ns-model-pill-chevron" />
+					</button>
 				</div>
 
 				<div
@@ -894,7 +899,7 @@ function Chatbox(props: ChatboxProps) {
 					{/* Messages */}
 					<div
 						ref={messagesEl}
-						class=":uno: min-h-0 flex-1 overflow-y-auto px-[var(--ns-chatbox-pad-x)] pb-[var(--ns-chatbox-gap)] scrollbar-default"
+						class=":uno: ns-chatbox-messages min-h-0 flex-1 overflow-y-auto px-[var(--ns-chatbox-pad-x)] pt-[var(--ns-chatbox-gap)] pb-[var(--ns-chatbox-gap)] scrollbar-default"
 					>
 						<Show
 							when={
@@ -903,10 +908,22 @@ function Chatbox(props: ChatboxProps) {
 								isBusy()
 							}
 							fallback={
-								<div class=":uno: flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
-									{props.loading
-										? t('chatbox.ui.states.loading')
-										: t('chatbox.ui.states.empty')}
+								<div class="ns-chatbox-empty">
+									<div class="ns-chatbox-empty-card">
+										<div class="ns-chatbox-empty-badge" aria-hidden="true">
+											<span class=":uno: i-lucide-sparkles size-6 shrink-0" />
+										</div>
+										<div class="ns-chatbox-empty-title">
+											{props.loading
+												? t('chatbox.ui.states.loading')
+												: props.title || t('chatbox.newChat')}
+										</div>
+										<Show when={!props.loading}>
+											<div class="ns-chatbox-empty-subtitle">
+												{t('chatbox.ui.states.empty')}
+											</div>
+										</Show>
+									</div>
 								</div>
 							}
 						>
@@ -953,115 +970,135 @@ function Chatbox(props: ChatboxProps) {
 					{/* Input */}
 					<div
 						ref={inputPaneEl}
-						class={`:uno: chatbox-input-pane shrink-0 px-2 pb-1 ${'chatbox-input-pane--resizable'}`}
+						class={`:uno: chatbox-input-pane shrink-0 px-[var(--ns-chatbox-pad-x)] pb-2 ${'chatbox-input-pane--resizable'}`}
 					>
-						<div class="chatbox-context-header">
-							<Show when={props.activeContextItems.length > 0}>
-								<ContextArea items={props.activeContextItems} />
-							</Show>
-							<Show when={props.draft.userContext.length > 0}>
-								<ContextArea
-									items={props.draft.userContext}
-									onRemove={props.onRemoveUserContext}
-								/>
-							</Show>
-						</div>
-						<textarea
-							ref={inputTextareaEl}
-							class=":uno: chatbox-input flex-1 w-full rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] text-sm outline-none"
-							style={(() => {
-								const height = getTextareaHeightStyle()
-								return height ? { height } : undefined
-							})()}
-							placeholder={t('chatbox.ui.placeholders.input')}
-							value={input()}
-							onInput={(event) => {
-								const nextInput = event.currentTarget.value
-								setInput(nextInput)
-								props.onUpdateInputDraft(nextInput)
-							}}
-							onPaste={(event) => {
-								const imageFiles = Array.from(event.clipboardData?.items ?? [])
-									.filter(
-										(item) =>
-											item.kind === 'file' && item.type.startsWith('image/'),
-									)
-									.map((item) => item.getAsFile())
-									.filter((file): file is File => !!file)
-								if (!imageFiles.length) return
-								event.preventDefault()
-								void addPickedFiles(imageFiles)
-							}}
-							onCompositionStart={() => setIsComposing(true)}
-							onCompositionEnd={() => setIsComposing(false)}
-							onKeyDown={(event) => {
-								if (shouldSubmitChatInput(event, isComposing())) {
-									event.preventDefault()
-									void submit()
+						<div class="ns-composer-card">
+							<Show
+								when={
+									props.activeContextItems.length > 0 ||
+									props.draft.userContext.length > 0
 								}
-							}}
-						/>
+							>
+								<div class="chatbox-context-header">
+									<div class="ns-composer-context-items">
+										<Show when={props.activeContextItems.length > 0}>
+											<ContextArea items={props.activeContextItems} />
+										</Show>
+										<Show when={props.draft.userContext.length > 0}>
+											<ContextArea
+												items={props.draft.userContext}
+												onRemove={props.onRemoveUserContext}
+											/>
+										</Show>
+									</div>
+								</div>
+							</Show>
+							<textarea
+								ref={inputTextareaEl}
+								class=":uno: chatbox-input ns-composer-textarea flex-1 w-full text-sm outline-none"
+								style={(() => {
+									const height = getTextareaHeightStyle()
+									return height ? { height } : undefined
+								})()}
+								placeholder={t('chatbox.ui.placeholders.input')}
+								value={input()}
+								onInput={(event) => {
+									const nextInput = event.currentTarget.value
+									setInput(nextInput)
+									props.onUpdateInputDraft(nextInput)
+								}}
+								onPaste={(event) => {
+									const imageFiles = Array.from(
+										event.clipboardData?.items ?? [],
+									)
+										.filter(
+											(item) =>
+												item.kind === 'file' && item.type.startsWith('image/'),
+										)
+										.map((item) => item.getAsFile())
+										.filter((file): file is File => !!file)
+									if (!imageFiles.length) return
+									event.preventDefault()
+									void addPickedFiles(imageFiles)
+								}}
+								onCompositionStart={() => setIsComposing(true)}
+								onCompositionEnd={() => setIsComposing(false)}
+								onKeyDown={(event) => {
+									if (shouldSubmitChatInput(event, isComposing())) {
+										event.preventDefault()
+										void submit()
+									}
+								}}
+							/>
 
-						<div class=":uno: mt-3 flex items-center justify-between gap-3">
-							<div class=":uno: flex flex-wrap items-center gap-2">
+							<div class="ns-composer-toolbar">
+								<Show when={props.onWorkspaceHostChange}>
+									<div class="ns-workspace-slot" ref={workspaceHostEl} />
+								</Show>
+								<div class="ns-composer-tools">
+									<button
+										class="ns-composer-tool-btn"
+										type="button"
+										title={t('chatbox.ui.actions.selectFile')}
+										aria-label={t('chatbox.ui.actions.selectFile')}
+										onClick={openFilePicker}
+									>
+										<span class=":uno: i-lucide-paperclip size-4 shrink-0" />
+									</button>
+									<button
+										class="ns-composer-tool-btn"
+										type="button"
+										title={t('chatbox.ui.actions.compressContext')}
+										aria-label={t('chatbox.ui.actions.compressContext')}
+										disabled={!props.canCompress}
+										onClick={openCompressContextConfirm}
+									>
+										<span class=":uno: i-lucide-minimize-2 size-4 shrink-0" />
+									</button>
+									<McpServersDialog
+										servers={props.mcpServers}
+										mountEl={dialogMountTarget().mountEl}
+										contained={dialogMountTarget().contained}
+										onToggle={props.onToggleSessionMcpServer}
+									/>
+									<button
+										class="ns-composer-tool-btn"
+										type="button"
+										title={t('chatbox.newChat')}
+										aria-label={t('chatbox.newChat')}
+										onClick={() => props.onNewSession()}
+									>
+										<span class=":uno: i-lucide-square-pen size-4 shrink-0" />
+									</button>
+								</div>
 								<button
-									class=":uno: inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+									class=":uno: mod-cta ns-composer-send"
 									type="button"
-									title={t('chatbox.ui.actions.selectFile')}
-									aria-label={t('chatbox.ui.actions.selectFile')}
-									onClick={openFilePicker}
+									disabled={
+										(!input().trim() &&
+											!props.draft.userContext.length &&
+											!props.activeContextItems.length) ||
+										!props.canSend
+									}
+									onClick={() => void submit()}
+									title={contextUsageTitle()}
+									aria-label={t('chatbox.ui.actions.send')}
 								>
-									<span class=":uno: i-lucide-paperclip size-4 shrink-0" />
-								</button>
-								<button
-									class=":uno: inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
-									type="button"
-									title={t('chatbox.ui.actions.compressContext')}
-									aria-label={t('chatbox.ui.actions.compressContext')}
-									disabled={!props.canCompress}
-									onClick={openCompressContextConfirm}
-								>
-									<span class=":uno: i-lucide-minimize-2 size-4 shrink-0" />
-								</button>
-								<McpServersDialog
-									servers={props.mcpServers}
-									mountEl={dialogMountTarget().mountEl}
-									contained={dialogMountTarget().contained}
-									onToggle={props.onToggleSessionMcpServer}
-								/>
-								<button
-									class=":uno: inline-flex size-9 shrink-0 items-center justify-center rounded-full"
-									type="button"
-									title={t('chatbox.newChat')}
-									aria-label={t('chatbox.newChat')}
-									onClick={() => props.onNewSession()}
-								>
-									<span class=":uno: i-lucide-square-pen size-4 shrink-0" />
+									<Show when={props.contextWindow}>
+										<ContextRing
+											used={contextUsedTokens()}
+											total={props.contextWindow!}
+											size={15}
+											stroke={2.5}
+											title={contextUsageTitle()}
+										/>
+									</Show>
+									<span class="ns-composer-send-label">
+										{t('chatbox.ui.actions.send')}
+									</span>
+									<span class=":uno: i-lucide-arrow-up size-3.5 shrink-0" />
 								</button>
 							</div>
-							<button
-								class=":uno: mod-cta inline-flex items-center gap-1.5"
-								type="button"
-								disabled={
-									(!input().trim() &&
-										!props.draft.userContext.length &&
-										!props.activeContextItems.length) ||
-									!props.canSend
-								}
-								onClick={() => void submit()}
-								title={contextUsageTitle()}
-							>
-								<Show when={props.contextWindow}>
-									<ContextRing
-										used={contextUsedTokens()}
-										total={props.contextWindow!}
-										size={16}
-										stroke={3}
-										title={contextUsageTitle()}
-									/>
-								</Show>
-								{t('chatbox.ui.actions.send')}
-							</button>
 						</div>
 					</div>
 				</div>

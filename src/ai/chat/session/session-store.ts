@@ -187,6 +187,7 @@ export class SessionStore {
 					title: payload.title || cached?.title || i18n.t('chatbox.newChat'),
 					createdAt: cached?.createdAt ?? numberOrZero(session.createdAt),
 					updatedAt: cached?.updatedAt ?? numberOrZero(session.updatedAt),
+					appId: session.appId,
 				})
 			} catch {
 				/* skip corrupt session files */
@@ -358,6 +359,7 @@ export class SessionStore {
 				title: item.title,
 				createdAt: item.createdAt,
 				updatedAt: item.updatedAt,
+				appId: item.appId,
 			}
 		}
 		const meta: ChatMetaFile = {
@@ -527,6 +529,7 @@ export class SessionStore {
 						)
 					: undefined,
 				subagents: { master },
+				appId: session.appId,
 			},
 			changed,
 		}
@@ -548,6 +551,7 @@ export class SessionStore {
 			title: title ?? existingTitle,
 			createdAt: session.createdAt,
 			updatedAt: session.updatedAt,
+			appId: session.appId,
 		}
 		const existingIndex = this.state.sessionIndex.findIndex(
 			(entry) => entry.id === session.id,

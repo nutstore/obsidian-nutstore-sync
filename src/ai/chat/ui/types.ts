@@ -21,6 +21,7 @@ export interface ChatProviderOption {
 }
 
 interface ChatSessionHistoryItem {
+	appId?: string
 	id: string
 	title: string
 	createdAt: number
@@ -111,6 +112,8 @@ export interface ChatboxProps extends ChatboxViewModel {
 	) => void
 	onDropContextItem: (path: string) => Promise<void> | void
 	onCaptureActiveContext?: () => void
+	/** Mounts the host-owned chat target selector beside composer context. */
+	onWorkspaceHostChange?: (host?: HTMLElement) => void
 	onModalHostChange?: (rootEl?: HTMLElement) => void
 	onDeleteMessage?: (messageId: string) => void
 	onRegenerateMessage?: (messageId: string) => void

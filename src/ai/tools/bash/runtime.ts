@@ -4,11 +4,7 @@ import type { App } from 'obsidian'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { ReversibleOpRecorder } from './fs'
 import { archiveCommands } from './zip'
-import {
-	createVaultFileSystem,
-	VAULT_MOUNT_POINT,
-	type VaultFileSystemManager,
-} from '../vault-filesystem'
+import { VAULT_MOUNT_POINT, VaultFileSystemManager } from '../vault-filesystem'
 import type { SettingsSnapshotFn, SettingsUpdater } from '../tool-context'
 
 export interface VaultBashExecOptions {
@@ -23,6 +19,17 @@ export interface VaultBashExecOptions {
 	fileSystemManager?: VaultFileSystemManager
 }
 
+function createBash({
+	fs,
+	customCommands,
+}: Awaited<ReturnType<VaultFileSystemManager['createBashEnvironment']>>) {
+	return new Bash({
+		fs,
+		cwd: VAULT_MOUNT_POINT,
+		customCommands: [...archiveCommands, ...customCommands],
+	})
+}
+
 export async function createVaultBash(
 	app: App,
 	permissionGuard?: PermissionGuard,
@@ -34,19 +41,15 @@ export async function createVaultBash(
 	},
 	fileSystemManager?: VaultFileSystemManager,
 ) {
-	const fs = await createVaultFileSystem(app, {
+	const manager = fileSystemManager ?? new VaultFileSystemManager(app)
+	const environment = await manager.createBashEnvironment({
 		permissionGuard,
 		recorder,
 		onRead,
 		getSettingsSnapshot: settingsIo?.getSettingsSnapshot,
 		updateSettings: settingsIo?.updateSettings,
-		fileSystemManager,
 	})
-	return new Bash({
-		fs,
-		cwd: VAULT_MOUNT_POINT,
-		customCommands: archiveCommands,
-	})
+	return createBash(environment)
 }
 
 export async function execVaultBash(
@@ -56,17 +59,15 @@ export async function execVaultBash(
 ) {
 	throwIfAborted(options.signal)
 	const recorder = new ReversibleOpRecorder()
-	const bash = await createVaultBash(
-		app,
-		options.permissionGuard,
+	const manager = options.fileSystemManager ?? new VaultFileSystemManager(app)
+	const environment = await manager.createBashEnvironment({
+		permissionGuard: options.permissionGuard,
 		recorder,
-		options.onRead,
-		{
-			getSettingsSnapshot: options.getSettingsSnapshot,
-			updateSettings: options.updateSettings,
-		},
-		options.fileSystemManager,
-	)
+		onRead: options.onRead,
+		getSettingsSnapshot: options.getSettingsSnapshot,
+		updateSettings: options.updateSettings,
+	})
+	const bash = createBash(environment)
 	const result = await bash.exec(script, {
 		cwd: options.cwd ?? VAULT_MOUNT_POINT,
 		stdin: options.stdin,

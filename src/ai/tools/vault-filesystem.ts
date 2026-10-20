@@ -1,8 +1,15 @@
 import type { IFileSystem } from 'just-bash/browser'
 import { normalizePath, type App } from 'obsidian'
+import {
+	appIdFromPath,
+	isAppDirectoryPath,
+	isReservedAppPath,
+} from '~/ai/apps/domain'
+import type { AppOpenFn, AppWorkspaceBinding } from '~/ai/apps/workspaces'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
+import { createAppCommands } from './bash/app'
 import { ObsidianVaultFs, ReversibleOpRecorder } from './bash/fs'
 import { MountableFs } from './bash/mountable-fs'
 import {
@@ -23,6 +30,9 @@ export interface CreateVaultFileSystemOptions {
 	getSettingsSnapshot?: SettingsSnapshotFn
 	updateSettings?: SettingsUpdater
 	fileSystemManager?: VaultFileSystemManager
+	appWorkspaceBinding?: AppWorkspaceBinding
+	openApp?: AppOpenFn
+	readonlyApps?: boolean
 }
 
 interface SharedVaultFileSystem {
@@ -50,14 +60,44 @@ async function listAgentDomainPaths(app: App) {
 				app.vault.adapter,
 				directory,
 			)
-			for (const path of [...listed.files, ...listed.folders])
+			for (const path of [...listed.files, ...listed.folders]) {
 				paths.push(normalizePath(path))
-			for (const path of listed.folders) directories.push(normalizePath(path))
+			}
+			for (const path of listed.folders) {
+				directories.push(normalizePath(path))
+			}
 		} catch {
 			// A missing agent domain directory simply contributes nothing.
 		}
 	}
 	return paths
+}
+
+/**
+ * App files are real vault files served by the base filesystem. Only
+ * host-owned files are protected from mutation, and App source edits never
+ * prompt: they are sandboxed source rather than user knowledge. Reading or
+ * writing an App still updates the chat selection when a pending App does not
+ * exist yet, so binding failures stay non-fatal.
+ */
+function createAppPathPolicy(options: CreateVaultFileSystemOptions) {
+	const touchApp = (vaultPath: string) => {
+		const appId = appIdFromPath(vaultPath)
+		if (!appId || !options.appWorkspaceBinding) return
+		void options.appWorkspaceBinding.access(appId).catch(() => {})
+	}
+	return {
+		touchApp,
+		readOnlyPath: (vaultPath: string) =>
+			isReservedAppPath(vaultPath) ||
+			isAppDirectoryPath(vaultPath) ||
+			(options.readonlyApps === true && appIdFromPath(vaultPath) !== undefined),
+		// A new App directory may be created from files; its lifecycle after that
+		// (remove/rename) belongs to the host UI.
+		creatablePath: isAppDirectoryPath,
+		autoApprovePermission: (vaultPath: string) =>
+			appIdFromPath(vaultPath) !== undefined,
+	}
 }
 
 /**
@@ -68,11 +108,50 @@ async function listAgentDomainPaths(app: App) {
 export class VaultFileSystemManager {
 	private sharedPromise?: Promise<SharedVaultFileSystem>
 
-	constructor(private readonly app: App) {}
+	constructor(
+		private readonly app: App,
+		private readonly defaults: Pick<
+			CreateVaultFileSystemOptions,
+			'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
+		> = {},
+		sharedPromise?: Promise<SharedVaultFileSystem>,
+	) {
+		this.sharedPromise = sharedPromise
+	}
+
+	withDefaults(
+		overrides: Pick<
+			CreateVaultFileSystemOptions,
+			'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
+		>,
+	) {
+		return new VaultFileSystemManager(
+			this.app,
+			{ ...this.defaults, ...overrides },
+			this.getShared(),
+		)
+	}
 
 	async create(options: CreateVaultFileSystemOptions = {}) {
 		const shared = await this.getShared()
-		return createScopedVaultFileSystem(this.app, shared, options)
+		return createScopedVaultFileSystem(this.app, shared, {
+			...this.defaults,
+			...options,
+		})
+	}
+
+	/** Commands and filesystem share one invocation's defaults without wrapper identity. */
+	async createBashEnvironment(options: CreateVaultFileSystemOptions = {}) {
+		const scoped = { ...this.defaults, ...options }
+		const fs = await this.create(scoped)
+		const { openApp, appWorkspaceBinding } = scoped
+		return {
+			fs,
+			customCommands: createAppCommands({
+				openApp,
+				selectedAppId: () => appWorkspaceBinding?.selectedAppId(),
+			}),
+		}
 	}
 
 	private getShared() {
@@ -93,7 +172,9 @@ async function createScopedVaultFileSystem(
 	shared: SharedVaultFileSystem,
 	options: CreateVaultFileSystemOptions,
 ) {
+	const appPathPolicy = createAppPathPolicy(options)
 	const onRead = (path: string) => {
+		appPathPolicy.touchApp(path)
 		if (!options.recorder?.isCapturing) options.onRead?.(path)
 	}
 	const configDirMountPoint = getConfigDirMountPoint(
@@ -104,6 +185,12 @@ async function createScopedVaultFileSystem(
 		await getInitialVaultPaths(app),
 		options.permissionGuard,
 		onRead,
+		{
+			readOnlyPath: appPathPolicy.readOnlyPath,
+			creatablePath: appPathPolicy.creatablePath,
+			autoApprovePermission: appPathPolicy.autoApprovePermission,
+			onWrite: appPathPolicy.touchApp,
+		},
 	)
 	const settingsFs =
 		options.getSettingsSnapshot && options.updateSettings
@@ -131,7 +218,7 @@ async function createScopedVaultFileSystem(
 				: []),
 		],
 	})
-	return options.recorder
+	const result = options.recorder
 		? new ReversibleFs(mountable, options.recorder, {
 				absoluteMountPoints: [
 					AGENTS_MOUNT_POINT,
@@ -140,6 +227,7 @@ async function createScopedVaultFileSystem(
 				],
 			})
 		: mountable
+	return result
 }
 
 export async function createVaultFileSystem(

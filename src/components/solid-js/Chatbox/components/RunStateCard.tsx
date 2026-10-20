@@ -15,9 +15,9 @@ export function RunStateCard(props: {
 
 	return (
 		<Show when={label()}>
-			<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-card-py)]">
+			<div class="ns-run-state-card">
 				<div class=":uno: flex items-center justify-between gap-3 text-sm text-[var(--text-normal)]">
-					<div class=":uno: flex min-w-0 items-center gap-3">
+					<div class=":uno: flex min-w-0 items-center gap-2.5">
 						<svg
 							class=":uno: h-4 w-4 shrink-0 animate-spin text-[var(--interactive-accent)]"
 							viewBox="0 0 24 24"
@@ -38,7 +38,7 @@ export function RunStateCard(props: {
 					</div>
 					<Show when={canStop() && props.onStop}>
 						<button
-							class=":uno: shrink-0"
+							class="ns-run-stop-btn"
 							type="button"
 							onClick={() => props.onStop?.()}
 						>

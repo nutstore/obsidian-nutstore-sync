@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import type NutstorePlugin from '~/index'
+import type { NutstoreLocalSettings } from '~/settings'
 import { ModuleState } from '~/modules/lifecycle'
 import SettingsService from './settings.service'
 
@@ -50,9 +51,7 @@ function fixture(data: unknown, local?: unknown) {
 }
 
 const readLocal = (files: Map<string, string>) =>
-	JSON.parse(files.get(LOCAL_PATH)!) as {
-		modules: Record<'sync' | 'ai', ModuleState>
-	}
+	JSON.parse(files.get(LOCAL_PATH)!) as NutstoreLocalSettings
 
 describe('device-local module states', () => {
 	it('seeds local states once from legacy synced data and drops them from synced data', async () => {

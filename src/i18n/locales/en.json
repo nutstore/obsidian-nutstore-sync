@@ -944,5 +944,22 @@
 		"changed": "Memory has changed. Copy your edits and reopen memory before saving.",
 		"saveAndClose": "Save and close",
 		"cancel": "Cancel"
+	},
+	"apps": {
+		"openApp": "Open App",
+		"modify": "Continue editing",
+		"pin": "Pin to ribbon",
+		"unpin": "Unpin from ribbon",
+		"deleteApp": "Delete App",
+		"deleteAppPrompt": "Delete this App and its data? Chat history will be kept.",
+		"workspace": "App workspace",
+		"noWorkspace": "General chat",
+		"newApp": "New App…",
+		"workspaceDescription": "Build an App in a workspace. Preview and keep refining it as you chat.",
+		"appId": "App ID (e.g. org.example.counter)",
+		"appTitle": "App title",
+		"create": "Create",
+		"missingApp": "App workspace is unavailable",
+		"describeApp": "Describe what you want to build in chat. Your App will appear here."
 	}
 }

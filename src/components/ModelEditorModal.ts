@@ -1,6 +1,5 @@
 import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Notice, Setting, type TextComponent } from 'obsidian'
-import { findPresetModelById } from '~/ai/catalog/config'
 import { resolvePresetModel } from '~/ai/catalog/fetch-models'
 import { AIModelConfig } from '~/ai/core/types'
 import {
@@ -232,9 +231,10 @@ export default class ModelEditorModal extends Modal {
 		const trimmedId = this.draft.id.trim()
 		if (!trimmedId || this.lastMatchedModelId === trimmedId) return
 		this.lastMatchedModelId = trimmedId
-		const presetModel =
-			resolvePresetModel(trimmedId, this.options.presetProviderApi) ||
-			findPresetModelById(trimmedId, this.options.presetProviderApi)
+		const presetModel = resolvePresetModel(
+			trimmedId,
+			this.options.presetProviderApi,
+		)
 		if (!presetModel) return
 		this.draft = {
 			...cloneDeep(presetModel),

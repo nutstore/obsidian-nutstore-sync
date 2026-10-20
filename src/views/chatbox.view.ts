@@ -1,3 +1,4 @@
+import { ChatWorkspacePanel } from '~/components/ChatWorkspacePanel'
 import type ChatService from '~/services/chat.service'
 import {
 	Component,
@@ -12,6 +13,7 @@ import {
 } from 'obsidian'
 import type { EditorView } from '@codemirror/view'
 import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
+import { appIdFromPath } from '~/ai/apps/domain'
 import { resolveResourceDataUrl } from '~/ai/tools/resource-data-url'
 import {
 	createImageContextItem,
@@ -63,6 +65,7 @@ function normalizeDroppedVaultPath(path: string): string | null {
 
 export default class ChatboxView extends ItemView {
 	private rootEl!: HTMLDivElement
+	private workspacePanel?: ChatWorkspacePanel
 	private controller?: ChatboxController
 	private unsub?: () => void
 	private unsubWindowMigrated?: () => void
@@ -392,6 +395,11 @@ export default class ChatboxView extends ItemView {
 	}
 
 	private async openFileChange(vaultPath: string, line?: number) {
+		const appId = appIdFromPath(vaultPath)
+		if (appId) {
+			await this.plugin.ai.openApp(appId)
+			return
+		}
 		const target = this.app.vault.getAbstractFileByPath(
 			normalizePath(vaultPath),
 		)
@@ -430,6 +438,12 @@ export default class ChatboxView extends ItemView {
 			...viewProps,
 			activeContextItems,
 			renderMarkdown: this.renderMarkdown,
+			onWorkspaceHostChange: (host) => {
+				this.workspacePanel?.destroy()
+				this.workspacePanel = host
+					? new ChatWorkspacePanel(host, this.plugin)
+					: undefined
+			},
 			onModalHostChange: (rootEl) => this.chat.setChatModalHost(rootEl),
 			onOpenFileChange: (vaultPath, line) =>
 				this.openFileChange(vaultPath, line),
@@ -517,6 +531,8 @@ export default class ChatboxView extends ItemView {
 
 	async onClose() {
 		this.clearSelectionHighlight()
+		this.workspacePanel?.destroy()
+		this.workspacePanel = undefined
 		this.unsubWindowMigrated?.()
 		this.unsubWindowMigrated = undefined
 		this.unsub?.()

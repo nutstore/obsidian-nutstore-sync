@@ -76,6 +76,7 @@
 		"@swc/cli": "^0.8.1",
 		"@swc/core": "^1.16.2",
 		"@types/diff-match-patch": "^1.0.36",
+		"@types/jsdom": "^30.0.0",
 		"@types/node": "^16.18.126",
 		"@types/path-browserify": "^1.0.3",
 		"@vitest/coverage-v8": "^3.2.7",

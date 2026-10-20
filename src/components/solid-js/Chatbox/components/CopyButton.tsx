@@ -23,7 +23,7 @@ export function CopyButton(props: { getText: () => string }) {
 
 	return (
 		<button
-			class=":uno: cursor-pointer p-1 size-5 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
+			class="ns-message-action-btn"
 			type="button"
 			title={
 				copied() ? t('chatbox.ui.states.copied') : t('chatbox.ui.actions.copy')

@@ -10,7 +10,12 @@ import type {
 import { posix as pathPosix } from 'path-browserify'
 import type { NutstoreSettings } from '~/settings'
 import type { PermissionGuard } from './permission-guard'
-import { encodeContent, toArrayBuffer } from './bash/fs'
+import {
+	encodeContent,
+	normalizeVirtualPath,
+	toArrayBuffer,
+	toRelativePath,
+} from './bash/fs'
 import { SETTINGS_MOUNT_POINT } from './bash/mount-points'
 import {
 	describeSettingsPatch,
@@ -33,21 +38,8 @@ export interface SettingsInput {
 	onRead?: (virtualPath: string) => void
 }
 
-function normalizeVirtualPath(inputPath: string) {
-	const normalized = pathPosix.normalize(pathPosix.resolve('/', inputPath))
-	return normalized === '' ? '/' : normalized
-}
-
 function joinVirtualPath(parent: string, name: string) {
 	return parent === '/' ? `/${name}` : `${parent}/${name}`
-}
-
-function toRelativePath(path: string) {
-	const normalized = normalizeVirtualPath(path)
-	if (normalized === '/') {
-		return ''
-	}
-	return normalized.slice(1)
 }
 
 function settingsError(code: string, message: string): never {

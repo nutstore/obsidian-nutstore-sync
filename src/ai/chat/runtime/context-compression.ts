@@ -320,6 +320,7 @@ export async function resolveSummaryContext(
 				session.systemPrompt,
 				undefined,
 				agent.id,
+				session.appId,
 			),
 			toolExecutor.createTools(0, definition, session, model),
 		])

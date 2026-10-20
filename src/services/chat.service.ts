@@ -173,6 +173,15 @@ export default class ChatService extends BaseService {
 			},
 			memory,
 			scope,
+			{
+				service: plugin.ai.workspaces,
+				persist: async (session) => {
+					await this.store.persistSession(session)
+					this.store.upsertSessionIndexItem(session)
+					await this.store.persistMetaAndIndex()
+					this.notify()
+				},
+			},
 		)
 		this.userContextManager = new UserContextManager(
 			this.state,
@@ -217,6 +226,16 @@ export default class ChatService extends BaseService {
 		this.toolExecutor.setDispatchTaskHandler((params, origin) =>
 			this.taskManager.dispatchTask(params, origin),
 		)
+		this.toolExecutor.setAppOpenHandler(async (appId) => {
+			scope.check()
+			const saved = await plugin.ai.openApp(appId)
+			scope.check()
+			if (!saved)
+				throw new Error(
+					'App opening is unavailable while the AI module is inactive',
+				)
+			return { appId, title: saved.manifest.title }
+		})
 		const reportTransientError = (message: string) => new Notice(message)
 		this.messageOps = new MessageOps(
 			app,
@@ -316,7 +335,7 @@ export default class ChatService extends BaseService {
 			await this.store.persistSession(initialSession)
 		}
 
-		if (this.state.sessionIndex.length === 0) {
+		if (!this.state.sessionIndex.length) {
 			const session = await this.createEmptySession()
 			this.scope.check()
 			this.state.activeSessionId = session.id
@@ -582,6 +601,47 @@ export default class ChatService extends BaseService {
 	async ensureSession() {
 		await this.initialize()
 		this.scope.check()
+	}
+
+	get workspaceState() {
+		const session = this.getLoadedActiveSession()
+		return {
+			sessionId: session?.id,
+			appId: session?.appId,
+			busy:
+				!session ||
+				isSessionExecutionPending(this.runtimeStates.get(session.id)),
+		}
+	}
+	get activeAppId() {
+		return this.workspaceState.appId
+	}
+
+	async selectWorkspace(appId?: string) {
+		await this.ensureSession()
+		const session = this.getLoadedActiveSession()
+		if (!session) throw new Error('No active chat')
+		if (isSessionExecutionPending(this.runtimeStates.get(session.id)))
+			throw new Error(
+				'Wait for the current run to finish before switching workspace',
+			)
+		if (appId) await this.plugin.ai.apps.read(appId)
+		if (isSessionExecutionPending(this.runtimeStates.get(session.id)))
+			throw new Error(
+				'Wait for the current run to finish before switching workspace',
+			)
+		this.scope.check()
+		const previous = session.appId
+		session.appId = appId
+		try {
+			await this.store.persistSession(session)
+		} catch (error) {
+			session.appId = previous
+			throw error
+		}
+		this.store.upsertSessionIndexItem(session)
+		await this.store.persistMetaAndIndex()
+		this.notify()
 	}
 
 	async createSession() {

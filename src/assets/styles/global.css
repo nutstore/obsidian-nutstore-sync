@@ -1434,36 +1434,545 @@
 	--ns-chatbox-block-gap: 0.5rem;
 	--ns-chatbox-pad-x: 0.75rem;
 	--ns-chatbox-card-py: 0.625rem;
+	container-type: inline-size;
 }
 
 .chatbox-root.is-compact {
-	--ns-chatbox-gap: 0.5rem;
-	--ns-chatbox-block-gap: 0.25rem;
-	--ns-chatbox-pad-x: 0.5rem;
-	--ns-chatbox-card-py: 0.375rem;
+	--ns-chatbox-gap: 0.625rem;
+	--ns-chatbox-block-gap: 0.375rem;
+	--ns-chatbox-pad-x: 0.625rem;
+	--ns-chatbox-card-py: 0.5rem;
+}
+
+/* Top navigation header inside Chatbox */
+.ns-chatbox-header {
+	position: relative;
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	padding: 6px var(--ns-chatbox-pad-x);
+	border-bottom: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 75%, transparent);
+	background: color-mix(
+		in srgb,
+		var(--background-primary) 88%,
+		var(--background-secondary)
+	);
+}
+
+.chatbox-root button.ns-chatbox-nav-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background-color 140ms ease,
+		color 140ms ease,
+		border-color 140ms ease;
+}
+
+.chatbox-root button.ns-chatbox-nav-btn:hover,
+.chatbox-root button.ns-chatbox-nav-btn:focus-visible {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ns-chatbox-session-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-normal);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+.chatbox-root button.ns-model-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: min(200px, 52%);
+	height: 28px;
+	padding: 0 9px;
+	border: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 85%, transparent);
+	border-radius: 999px;
+	background: color-mix(
+		in srgb,
+		var(--background-secondary) 75%,
+		var(--background-primary)
+	);
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		border-color 140ms ease,
+		background-color 140ms ease,
+		color 140ms ease;
+}
+
+.chatbox-root button.ns-model-pill:hover,
+.chatbox-root button.ns-model-pill:focus-visible {
+	border-color: color-mix(
+		in srgb,
+		var(--interactive-accent) 45%,
+		var(--background-modifier-border)
+	);
+	background: color-mix(
+		in srgb,
+		var(--interactive-accent) 8%,
+		var(--background-secondary)
+	);
+	color: var(--text-normal);
+}
+
+.ns-model-pill-icon {
+	color: var(--interactive-accent);
+}
+
+.ns-model-pill-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ns-model-pill-chevron {
+	opacity: 0.65;
+}
+
+/* Empty welcome state */
+.ns-chatbox-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	min-height: 180px;
+	padding: 1.5rem 1rem;
+}
+
+.ns-chatbox-empty-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	max-width: 260px;
+	text-align: center;
+}
+
+.ns-chatbox-empty-badge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	margin-bottom: 4px;
+	border: 1px solid
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 24%,
+			var(--background-modifier-border)
+		);
+	border-radius: 14px;
+	background: linear-gradient(
+		145deg,
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 14%,
+			var(--background-primary)
+		),
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 4%,
+			var(--background-secondary)
+		)
+	);
+	color: var(--interactive-accent);
+	box-shadow: 0 6px 18px -8px
+		color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+}
+
+.ns-chatbox-empty-title {
+	color: var(--text-normal);
+	font-size: 0.875rem;
+	font-weight: 600;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+.ns-chatbox-empty-subtitle {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+/* Message cards & editorial hierarchy */
+.ns-message-card {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.ns-message-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 6px;
+	padding: 0 2px;
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+
+.ns-message-role-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.ns-message-card--assistant .ns-message-role-icon {
+	color: var(--interactive-accent);
+}
+
+.ns-message-card--user .ns-message-role-icon {
+	color: var(--text-muted);
+}
+
+.ns-message-role-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ns-message-time {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-size: 0.6875rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.ns-content-block {
+	border-radius: 12px;
+	transition: border-color 140ms ease;
+}
+
+.ns-message-card--user > div > .ns-content-block {
+	border-color: color-mix(
+		in srgb,
+		var(--interactive-accent) 22%,
+		var(--background-modifier-border)
+	);
+	background: linear-gradient(
+		145deg,
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 9%,
+			var(--background-secondary)
+		),
+		color-mix(in srgb, var(--interactive-accent) 4%, var(--background-primary))
+	);
+}
+
+.ns-message-card--assistant > div > .ns-content-block {
+	border-color: color-mix(
+		in srgb,
+		var(--background-modifier-border) 80%,
+		transparent
+	);
+	background: color-mix(
+		in srgb,
+		var(--background-primary-alt) 75%,
+		var(--background-primary)
+	);
+}
+
+.ns-message-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 4px;
+	padding: 0 2px;
+}
+
+.ns-message-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	opacity: 0.72;
+	transition: opacity 140ms ease;
+}
+
+.ns-message-card:hover .ns-message-actions,
+.ns-message-card:focus-within .ns-message-actions {
+	opacity: 1;
+}
+
+.chatbox-root button.ns-message-action-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background-color 120ms ease,
+		color 120ms ease;
+}
+
+.chatbox-root button.ns-message-action-btn:hover,
+.chatbox-root button.ns-message-action-btn:focus-visible {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.chatbox-root button.ns-message-action-btn--danger:hover,
+.chatbox-root button.ns-message-action-btn--danger:focus-visible {
+	background: color-mix(in srgb, var(--text-error) 12%, transparent);
+	color: var(--text-error);
+}
+
+.ns-message-usage {
+	color: var(--text-faint);
+	font-size: 0.6875rem;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Run state card */
+.ns-run-state-card {
+	padding: var(--ns-chatbox-card-py) var(--ns-chatbox-pad-x);
+	border: 1px solid
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 28%,
+			var(--background-modifier-border)
+		);
+	border-radius: 12px;
+	background: color-mix(
+		in srgb,
+		var(--interactive-accent) 6%,
+		var(--background-primary-alt)
+	);
+}
+
+.chatbox-root button.ns-run-stop-btn {
+	flex-shrink: 0;
+	height: 26px;
+	padding: 0 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: var(--background-primary);
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.chatbox-root button.ns-run-stop-btn:hover {
+	border-color: color-mix(
+		in srgb,
+		var(--text-error) 45%,
+		var(--background-modifier-border)
+	);
+	color: var(--text-error);
+}
+
+/* Unified Composer Card */
+.ns-composer-card {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 14px;
+	background: color-mix(
+		in srgb,
+		var(--background-primary-alt) 65%,
+		var(--background-primary)
+	);
+	box-shadow: 0 2px 10px -4px rgba(0, 0, 0, 0.08);
+	transition:
+		border-color 150ms ease,
+		box-shadow 150ms ease,
+		background-color 150ms ease;
+}
+
+.ns-composer-card:focus-within {
+	border-color: color-mix(
+		in srgb,
+		var(--interactive-accent) 60%,
+		var(--background-modifier-border)
+	);
+	background: var(--background-primary);
+	box-shadow:
+		0 0 0 2px color-mix(in srgb, var(--interactive-accent) 16%, transparent),
+		0 4px 14px -6px rgba(0, 0, 0, 0.12);
+}
+
+.ns-context-pill-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.ns-context-pill-list + .ns-context-pill-list {
+	margin-top: 6px;
+}
+
+.ns-context-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	max-width: 12rem;
+	padding: 2px 8px;
+	border: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 85%, transparent);
+	border-radius: 999px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	line-height: 1.4;
 }
 
 .chatbox-input {
-	height: 7rem;
-	padding: 0.75rem;
+	height: 6.25rem;
+	padding: 0.65rem 0.75rem;
 	line-height: 1.5;
+}
+
+.chatbox-root textarea.ns-composer-textarea {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-normal);
+}
+
+.chatbox-root textarea.ns-composer-textarea:focus,
+.chatbox-root textarea.ns-composer-textarea:focus-visible {
+	border: 0;
+	box-shadow: none;
+	outline: none;
+}
+
+.ns-composer-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 8px 8px;
+	border-top: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+}
+
+.ns-composer-tools {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	overflow-x: auto;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 4px;
+}
+
+.chatbox-root button.ns-composer-tool-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background-color 130ms ease,
+		color 130ms ease;
+}
+
+.chatbox-root button.ns-composer-tool-btn:hover:not(:disabled),
+.chatbox-root button.ns-composer-tool-btn:focus-visible:not(:disabled) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.chatbox-root button.ns-composer-tool-btn:disabled {
+	opacity: 0.38;
+	cursor: default;
+}
+
+.chatbox-root button.ns-composer-send {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	flex-shrink: 0;
+	height: 30px;
+	padding: 0 12px;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		opacity 140ms ease,
+		transform 100ms ease;
+}
+
+.chatbox-root button.ns-composer-send:disabled {
+	opacity: 0.45;
+	cursor: default;
 }
 
 .chatbox-input-pane {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-	border-top: 1px solid var(--background-modifier-border);
 }
 
 .chatbox-context-header {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
 	flex: 0 1 auto;
 	max-height: clamp(3rem, 22vh, 8rem);
 	min-height: 0;
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	padding-right: 2px;
+	padding: 8px 10px 6px;
+	border-bottom: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 55%, transparent);
 }
 
 .chatbox-file-drag-active::after {
@@ -1538,7 +2047,7 @@
 }
 
 .chatbox-root.is-compact .chatbox-input {
-	height: 5.5rem;
+	height: 4rem;
 	padding: 0.625rem;
 	line-height: 1.4;
 }
@@ -1846,4 +2355,375 @@
 /* The memory path is configured in settings; its editor only changes content. */
 .ns-memory-editor-modal .inline-title {
 	display: none;
+}
+/* App views and chat previews share one browser-only runtime. */
+.ns-app-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	background: var(--background-primary);
+}
+.ns-app-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 8px 14px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: color-mix(
+		in srgb,
+		var(--background-secondary) 55%,
+		var(--background-primary)
+	);
+	flex-shrink: 0;
+	flex-wrap: wrap;
+}
+.ns-app-brand {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: 1;
+	min-width: 0;
+}
+.ns-app-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 30px;
+	width: 30px;
+	height: 30px;
+	border: 1px solid
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 26%,
+			var(--background-modifier-border)
+		);
+	border-radius: 9px;
+	background: color-mix(
+		in srgb,
+		var(--interactive-accent) 12%,
+		var(--background-primary)
+	);
+	color: var(--interactive-accent);
+}
+.ns-app-badge svg {
+	width: 16px;
+	height: 16px;
+}
+.ns-app-heading {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+	font-size: var(--font-ui-medium);
+	font-weight: 600;
+	color: var(--text-normal);
+}
+.ns-app-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+.ns-app-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 34px;
+	min-height: 34px;
+	padding: 6px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background-color 140ms ease,
+		color 140ms ease,
+		border-color 140ms ease;
+}
+.ns-app-button:hover,
+.ns-app-button:focus-visible {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.ns-app-button.is-active {
+	border-color: color-mix(
+		in srgb,
+		var(--interactive-accent) 30%,
+		var(--background-modifier-border)
+	);
+	background: color-mix(
+		in srgb,
+		var(--interactive-accent) 12%,
+		var(--background-primary)
+	);
+	color: var(--interactive-accent);
+}
+.ns-app-button svg {
+	width: 16px;
+	height: 16px;
+}
+.ns-app-output {
+	flex: 1;
+	min-height: 0;
+}
+.ns-app-runtime {
+	width: 100%;
+	height: 100%;
+	display: block;
+	border: 0;
+	background: var(--background-primary);
+}
+.ns-app-status {
+	color: var(--text-muted);
+	overflow-wrap: anywhere;
+	padding: 6px 12px;
+	font-size: var(--font-ui-small);
+}
+.ns-app-status:empty {
+	display: none;
+}
+.ns-app-error {
+	background: color-mix(in srgb, var(--text-error) 8%, transparent);
+	border-bottom: 1px solid
+		color-mix(in srgb, var(--text-error) 25%, var(--background-modifier-border));
+	color: var(--text-error);
+}
+.ns-app-candidate {
+	position: fixed;
+	left: -10000px;
+	top: 0;
+	width: 320px;
+	height: 600px;
+	visibility: hidden;
+	pointer-events: none;
+}
+/* Target selection shares the existing toolbar; only actual context adds a row. */
+.ns-workspace-slot {
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 30%;
+}
+.ns-chat-workspace {
+	min-width: 0;
+}
+.chatbox-root button.ns-workspace-picker {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	width: 100%;
+	min-width: 0;
+	height: 26px;
+	padding: 2px 7px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 7px;
+	background: var(--background-secondary);
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	cursor: pointer;
+}
+.chatbox-root .has-workspace button.ns-workspace-picker {
+	border-color: color-mix(
+		in srgb,
+		var(--interactive-accent) 35%,
+		var(--background-modifier-border)
+	);
+	color: var(--text-normal);
+}
+.chatbox-root button.ns-workspace-picker:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+}
+.chatbox-root button.ns-workspace-picker:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+.chatbox-root button.ns-workspace-picker:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.ns-workspace-title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ns-workspace-icon,
+.ns-workspace-chevron {
+	display: flex;
+	flex: 0 0 auto;
+	color: var(--text-muted);
+}
+.has-workspace .ns-workspace-icon {
+	color: var(--interactive-accent);
+}
+.ns-workspace-icon svg,
+.ns-workspace-chevron svg {
+	width: 14px;
+	height: 14px;
+}
+.ns-chat-workspace > .ns-app-status:not(:empty) {
+	padding: 4px 0;
+	overflow-wrap: anywhere;
+	font-size: var(--font-ui-smaller);
+}
+.ns-composer-context-items {
+	display: flex;
+	flex: 1;
+	gap: 6px;
+	min-width: 0;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+}
+.ns-composer-context-items .ns-context-pill-list {
+	flex: 0 0 auto;
+	flex-wrap: nowrap;
+	align-items: center;
+}
+.ns-composer-context-items .ns-context-pill-list + .ns-context-pill-list {
+	margin-top: 0;
+}
+.ns-composer-context-items .ns-context-pill {
+	flex-shrink: 0;
+}
+
+/* Compact chat keeps target, tools and send on one line, even with a touch keyboard. */
+.chatbox-root.is-compact
+	.ns-chat-workspace:not(.has-workspace)
+	.ns-workspace-title,
+.chatbox-root.is-compact
+	.ns-chat-workspace:not(.has-workspace)
+	.ns-workspace-chevron,
+.chatbox-root.is-compact .ns-composer-send-label {
+	display: none;
+}
+.chatbox-root.is-compact .ns-workspace-slot {
+	flex-shrink: 0;
+	max-width: 28%;
+}
+.chatbox-root.is-compact
+	.ns-chat-workspace:not(.has-workspace)
+	.ns-workspace-picker {
+	justify-content: center;
+	width: 32px;
+}
+.chatbox-root.is-compact button.ns-composer-send {
+	flex-shrink: 0;
+	gap: 4px;
+	padding-inline: 8px;
+}
+
+/* Touch & mobile ergonomics: expand tap targets gracefully on coarse pointers */
+@media (pointer: coarse) {
+	.chatbox-root button.ns-chatbox-nav-btn,
+	.chatbox-root button.ns-composer-tool-btn,
+	.ns-app-button {
+		width: 38px;
+		min-width: 38px;
+		height: 38px;
+	}
+	.chatbox-root button.ns-model-pill,
+	.chatbox-root button.ns-workspace-picker,
+	.chatbox-root button.ns-composer-send {
+		height: 34px;
+	}
+	.ns-message-actions {
+		opacity: 1;
+	}
+	.chatbox-root button.ns-message-action-btn {
+		width: 32px;
+		height: 32px;
+	}
+}
+
+.ns-workspace-placeholder {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	box-sizing: border-box;
+	height: 100%;
+	min-height: 220px;
+	max-width: 400px;
+	margin-inline: auto;
+	padding: 32px 24px;
+	text-align: center;
+	overflow-wrap: anywhere;
+}
+.ns-workspace-placeholder-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 56px;
+	height: 56px;
+	border: 1px solid
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 26%,
+			var(--background-modifier-border)
+		);
+	border-radius: 18px;
+	background: linear-gradient(
+		145deg,
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 14%,
+			var(--background-primary)
+		),
+		color-mix(
+			in srgb,
+			var(--interactive-accent) 4%,
+			var(--background-secondary)
+		)
+	);
+	color: var(--interactive-accent);
+	box-shadow: 0 8px 24px -10px
+		color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+}
+.ns-workspace-placeholder-icon svg {
+	width: 26px;
+	height: 26px;
+}
+.ns-workspace-placeholder h2 {
+	margin: 4px 0 0;
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+	font-weight: 600;
+}
+.ns-workspace-placeholder p {
+	margin: 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.7;
+}
+.ns-workspace-create-description {
+	margin: 0 0 20px;
+	color: var(--text-muted);
+	line-height: 1.6;
+}
+.ns-workspace-create-label {
+	display: grid;
+	gap: 8px;
+	font-size: var(--font-ui-small);
+}
+.ns-workspace-create-label input {
+	width: 100%;
+	min-height: 44px;
+}
+.ns-workspace-create-footer {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 24px;
+}
+.ns-workspace-create-footer button {
+	min-width: 88px;
+	min-height: 44px;
+}
+.ns-app-placeholder {
+	padding: 24px;
+	color: var(--text-muted);
+	overflow-wrap: anywhere;
 }

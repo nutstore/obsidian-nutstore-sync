@@ -1,5 +1,5 @@
 import type { TextPart } from 'ai'
-import { For, Match, Switch, useContext } from 'solid-js'
+import { Index, Match, Switch, useContext } from 'solid-js'
 import { imageFilePartSrc } from '~/ai/chat/messages/message-utils'
 import type { ChatDisplayContentBlock } from '~/ai/chat/types'
 import type { ChatboxProps } from '~/ai/chat/ui/types'
@@ -18,19 +18,21 @@ export function ContentBlock(props: {
 	streaming?: boolean
 }) {
 	const appearance = useContext(CollapsibleAppearance)
+	const textPart = (part: ChatDisplayContentBlock['parts'][number]) =>
+		isTextPart(part) ? part : undefined
 	return (
 		<div
 			class={
 				appearance === 'plain'
 					? ':uno: chatbox-process-content min-w-0 py-1'
-					: ':uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-card-py)]'
+					: ':uno: ns-content-block rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-card-py)]'
 			}
 		>
 			<div class=":uno: flex flex-col gap-[var(--ns-chatbox-gap)]">
-				<For each={props.block.parts}>
+				<Index each={props.block.parts}>
 					{(part) => (
 						<Switch>
-							<Match when={isTextPart(part) ? part : undefined}>
+							<Match when={textPart(part())}>
 								{(textPart) => (
 									<MarkdownContent
 										markdown={textPart().text ?? ''}
@@ -39,7 +41,7 @@ export function ContentBlock(props: {
 									/>
 								)}
 							</Match>
-							<Match when={imageFilePartSrc(part)}>
+							<Match when={imageFilePartSrc(part())}>
 								{(src) => (
 									<img
 										class=":uno: max-h-80 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
@@ -50,7 +52,7 @@ export function ContentBlock(props: {
 							</Match>
 						</Switch>
 					)}
-				</For>
+				</Index>
 			</div>
 		</div>
 	)

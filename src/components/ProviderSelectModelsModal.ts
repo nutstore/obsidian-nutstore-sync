@@ -4,6 +4,7 @@ import {
 	type ChatModalMountTarget,
 } from '~/ai/chat/ui/modal-mount'
 import type { DiscoveredModel } from '~/ai/catalog/fetch-models'
+import { compareModelIds } from '~/ai/catalog/config'
 import i18n from '~/i18n'
 import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import { isFuzzySubsequenceMatch } from '~/utils/fuzzy-match'
@@ -26,9 +27,7 @@ export default class ProviderSelectModelsModal extends Modal {
 	) {
 		super(plugin.app)
 		plugin.ai.lifecycle.scope.ownModal(this)
-		this.models = [...models].sort((a, b) =>
-			a.id.localeCompare(b.id, undefined, { numeric: true }),
-		)
+		this.models = [...models].sort((a, b) => compareModelIds(a.id, b.id))
 		this.filteredModels = [...this.models]
 	}
 

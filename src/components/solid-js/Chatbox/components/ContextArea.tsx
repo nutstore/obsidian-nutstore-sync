@@ -118,11 +118,11 @@ export function ContextArea(props: {
 }) {
 	return (
 		<Show when={props.items.length > 0}>
-			<div class=":uno: mb-2 flex flex-wrap gap-1.5">
+			<div class="ns-context-pill-list">
 				<For each={props.items}>
 					{(item, index) => (
 						<div
-							class=":uno: flex items-center gap-1 rounded-full border border-[var(--background-modifier-border)] bg-[var(--background-secondary)] px-2 py-0.5 text-xs text-[var(--text-muted)] max-w-48"
+							class="ns-context-pill"
 							title={
 								item.type === 'selection'
 									? item.selectedText

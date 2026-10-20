@@ -1,6 +1,6 @@
-import { fromUint8Array } from 'js-base64'
 import type { App } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
+import { bytesToDataUrl } from '~/utils/data-url'
 
 import {
 	BUILTIN_SKILLS_MOUNT_POINT,
@@ -25,5 +25,5 @@ export async function resolveResourceDataUrl(
 	}
 	const adapterPath = normalizedPath.slice(1)
 	const data = await app.vault.adapter.readBinary(adapterPath)
-	return `data:${mediaType};base64,${fromUint8Array(new Uint8Array(data), false)}`
+	return bytesToDataUrl(mediaType, data)
 }

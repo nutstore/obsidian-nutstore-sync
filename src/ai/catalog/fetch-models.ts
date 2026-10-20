@@ -1,8 +1,9 @@
 import { createModelConfig, findPresetModelById } from '~/ai/catalog/config'
-import type {
-	AIModelConfig,
-	AIModelModality,
-	AIProviderConfig,
+import {
+	aiModelModalitySchema,
+	type AIModelConfig,
+	type AIModelModality,
+	type AIProviderConfig,
 } from '~/ai/core/types'
 import { getProviderDefaultBaseURL } from '~/ai/providers/defaults'
 import { createProviderFetch } from '~/ai/transport/provider-fetch'
@@ -15,20 +16,10 @@ export interface DiscoveredModel {
 	modelConfig: AIModelConfig
 }
 
-const VALID_MODALITIES: Set<AIModelModality> = new Set([
-	'text',
-	'image',
-	'audio',
-	'video',
-	'pdf',
-	'file',
-])
-
 function normalizeModality(mod: string): AIModelModality | undefined {
 	const lower = mod.trim().toLowerCase()
-	if (VALID_MODALITIES.has(lower as AIModelModality)) {
-		return lower as AIModelModality
-	}
+	const parsed = aiModelModalitySchema.safeParse(lower)
+	if (parsed.success) return parsed.data
 	if (lower === 'vision' || lower === 'img') return 'image'
 	if (lower === 'document' || lower === 'doc') return 'pdf'
 	if (lower === 'voice' || lower === 'sound') return 'audio'
@@ -40,56 +31,35 @@ function extractModalities(
 ): { input: AIModelModality[]; output: AIModelModality[] } | undefined {
 	const inputSet = new Set<AIModelModality>(['text'])
 	let foundAny = false
+	const addModalities = (values: unknown[]) => {
+		foundAny = true
+		for (const value of values) {
+			if (typeof value !== 'string') continue
+			const modality = normalizeModality(value)
+			if (modality) inputSet.add(modality)
+		}
+	}
 
 	if (rec.modalities && typeof rec.modalities === 'object') {
 		const mods = rec.modalities as Record<string, unknown>
 		if (Array.isArray(mods.input)) {
-			foundAny = true
-			for (const m of mods.input) {
-				if (typeof m === 'string') {
-					const norm = normalizeModality(m)
-					if (norm) inputSet.add(norm)
-				}
-			}
+			addModalities(mods.input)
 		}
 	} else if (Array.isArray(rec.modalities)) {
-		foundAny = true
-		for (const m of rec.modalities) {
-			if (typeof m === 'string') {
-				const norm = normalizeModality(m)
-				if (norm) inputSet.add(norm)
-			}
-		}
+		addModalities(rec.modalities)
 	}
 
 	if (Array.isArray(rec.input_modalities)) {
-		foundAny = true
-		for (const m of rec.input_modalities) {
-			if (typeof m === 'string') {
-				const norm = normalizeModality(m)
-				if (norm) inputSet.add(norm)
-			}
-		}
+		addModalities(rec.input_modalities)
 	}
 
 	if (rec.architecture && typeof rec.architecture === 'object') {
 		const arch = rec.architecture as Record<string, unknown>
 		if (typeof arch.modality === 'string') {
-			foundAny = true
-			const parts = arch.modality.toLowerCase().split('->')[0].split('+')
-			for (const p of parts) {
-				const norm = normalizeModality(p)
-				if (norm) inputSet.add(norm)
-			}
+			addModalities(arch.modality.toLowerCase().split('->')[0].split('+'))
 		}
 		if (Array.isArray(arch.input_modalities)) {
-			foundAny = true
-			for (const m of arch.input_modalities) {
-				if (typeof m === 'string') {
-					const norm = normalizeModality(m)
-					if (norm) inputSet.add(norm)
-				}
-			}
+			addModalities(arch.input_modalities)
 		}
 	}
 
@@ -352,6 +322,47 @@ export function resolveModelsRequest(provider: AIProviderConfig): {
 	return { url, headers }
 }
 
+function discoveredModelConfig(
+	id: string,
+	providerApi?: string,
+	metadata?: { name: string; record: Record<string, unknown> },
+): AIModelConfig {
+	const preset = resolvePresetModel(id, providerApi)
+	const inferred = inferModelDefaults(id)
+	const rec = metadata?.record
+	const modalities = (rec && extractModalities(rec)) ||
+		preset?.modalities ||
+		inferred.modalities || { input: ['text'], output: ['text'] }
+	const limit = (rec && extractLimits(rec)) ||
+		preset?.limit ||
+		inferred.limit || { context: 0, output: 0 }
+	const reasoning =
+		(rec ? extractReasoning(rec) : undefined) ??
+		preset?.reasoning ??
+		inferred.reasoning ??
+		false
+	return createModelConfig(
+		{
+			...(preset || {}),
+			id,
+			name: metadata ? metadata.name : preset?.name || id,
+			modalities,
+			limit,
+			reasoning,
+			attachment: modalities.input.some((modality) => modality !== 'text'),
+			...(rec
+				? {
+						tool_call:
+							typeof rec.tool_call === 'boolean'
+								? rec.tool_call
+								: (preset?.tool_call ?? true),
+					}
+				: {}),
+		},
+		id,
+	)
+}
+
 export function parseModelsResponse(
 	payload: unknown,
 	providerApi?: string,
@@ -383,26 +394,7 @@ export function parseModelsResponse(
 			if (!id || seen.has(id)) continue
 			seen.add(id)
 
-			const preset = resolvePresetModel(id, providerApi)
-			const inferred = inferModelDefaults(id)
-			const modalities = preset?.modalities ||
-				inferred.modalities || { input: ['text'], output: ['text'] }
-			const limit = preset?.limit || inferred.limit || { context: 0, output: 0 }
-			const reasoning = preset?.reasoning ?? inferred.reasoning ?? false
-			const attachment = modalities.input.some((m) => m !== 'text')
-
-			const modelConfig = createModelConfig(
-				{
-					...(preset || {}),
-					id,
-					name: preset?.name || id,
-					modalities,
-					limit,
-					reasoning,
-					attachment,
-				},
-				id,
-			)
+			const modelConfig = discoveredModelConfig(id, providerApi)
 
 			results.push({ id, name: id, modelConfig })
 			continue
@@ -440,41 +432,10 @@ export function parseModelsResponse(
 			const description =
 				typeof rec.description === 'string' ? rec.description.trim() : undefined
 
-			const apiModalities = extractModalities(rec)
-			const apiLimits = extractLimits(rec)
-			const apiReasoning = extractReasoning(rec)
-			const preset = resolvePresetModel(id, providerApi)
-			const inferred = inferModelDefaults(id)
-
-			const modalities = apiModalities ||
-				preset?.modalities ||
-				inferred.modalities || { input: ['text'], output: ['text'] }
-
-			const limit = apiLimits ||
-				preset?.limit ||
-				inferred.limit || { context: 0, output: 0 }
-
-			const reasoning =
-				apiReasoning ?? preset?.reasoning ?? inferred.reasoning ?? false
-
-			const attachment = modalities.input.some((m) => m !== 'text')
-
-			const modelConfig = createModelConfig(
-				{
-					...(preset || {}),
-					id,
-					name,
-					modalities,
-					limit,
-					reasoning,
-					attachment,
-					tool_call:
-						typeof rec.tool_call === 'boolean'
-							? rec.tool_call
-							: (preset?.tool_call ?? true),
-				},
-				id,
-			)
+			const modelConfig = discoveredModelConfig(id, providerApi, {
+				name,
+				record: rec,
+			})
 
 			results.push({ id, name, description, modelConfig })
 		}

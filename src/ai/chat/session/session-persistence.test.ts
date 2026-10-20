@@ -13,6 +13,29 @@ import {
 } from '~/ai/chat/session/session-persistence'
 
 describe('chat session persistence', () => {
+	it('persists only a workspace reference while App data stays independent', async () => {
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'neutral-chat',
+			appId: 'neutral-app',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master: createEmptyMasterAgent(1) },
+		}
+		session.subagents.master.timeline.push({
+			id: 'neutral-request',
+			role: 'user',
+			parts: [{ type: 'text', text: '调整布局 Update layout 中文 🌿' }],
+		})
+		const decoded = decodeChatSessionFromStorage(
+			await encodeChatSessionForStorage(session),
+		) as ChatSession
+		expect(decoded.appId).toBe('neutral-app')
+		expect(decoded.subagents.master.timeline[0].parts).toEqual(
+			session.subagents.master.timeline[0].parts,
+		)
+		expect(Object.keys(decoded).sort()).toEqual(Object.keys(session).sort())
+	})
 	it('round-trips a subagent model snapshot and accepts legacy agents without one', async () => {
 		const master = createEmptyMasterAgent(1)
 		master.subagents['neutral-agent'] = {

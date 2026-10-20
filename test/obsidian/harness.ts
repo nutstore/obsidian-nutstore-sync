@@ -1,4 +1,5 @@
 import { Plugin } from 'obsidian'
+import { createsIndependentApps } from './checks/apps'
 import {
 	exportsImagesThroughBrowserTransport,
 	persistsChatSessions,
@@ -113,6 +114,10 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		)
 		await run('persists chat sessions through the real DataAdapter', () =>
 			persistsChatSessions(this.app),
+		)
+		await run(
+			'creates independent Apps with persistent data, SVG icons and ribbon pins',
+			() => createsIndependentApps(this.app),
 		)
 		await run(
 			'skips a stale Vault Skill entry without hiding stable Skills',

@@ -19,6 +19,7 @@ import type {
 } from '~/ai/tools/file-operation'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import {
+	emitLocalPathChanged,
 	existsLocalPath,
 	isAdapterPath,
 	readLocalBinary,
@@ -33,6 +34,31 @@ const FILE_MODE = 0o644
 const DIR_MODE = 0o755
 type ReadFileOptions = { encoding?: BufferEncoding | null }
 type WriteFileOptions = { encoding?: BufferEncoding }
+
+/**
+ * Domain-neutral write policy for one vault filesystem view. Callbacks receive
+ * vault-relative paths, exactly like the read observer.
+ */
+export interface ObsidianVaultFsOptions {
+	/**
+	 * Host-owned paths. Every mutating operation throws for these paths instead
+	 * of changing them.
+	 */
+	readOnlyPath?: (vaultPath: string) => boolean
+	/**
+	 * Paths whose mutations never prompt for confirmation. Dual-path
+	 * operations only skip the prompt when both ends match; a half-approved
+	 * move or copy still needs a user decision.
+	 */
+	autoApprovePermission?: (vaultPath: string) => boolean
+	/**
+	 * Read-only directories that may still be created (for example a new App
+	 * directory). Their creation is allowed; removal and renaming stay blocked.
+	 */
+	creatablePath?: (vaultPath: string) => boolean
+	/** Observes every successful mutation by vault-relative path. */
+	onWrite?: (vaultPath: string) => void
+}
 
 function getEncoding(
 	options?: ReadFileOptions | WriteFileOptions | BufferEncoding | null,
@@ -114,9 +140,14 @@ function getPathDepth(path: string) {
 	return path.split('/').filter(Boolean).length
 }
 
-function normalizeVirtualPath(inputPath: string) {
+export function normalizeVirtualPath(inputPath: string) {
 	const normalized = pathPosix.normalize(pathPosix.resolve('/', inputPath))
 	return normalized === '' ? '/' : normalized
+}
+
+export function toRelativePath(path: string) {
+	const normalized = normalizeVirtualPath(path)
+	return normalized === '/' ? '' : normalized.slice(1)
 }
 
 function joinVirtualPath(parent: string, name: string) {
@@ -292,6 +323,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		initialPaths: string[] | VaultPathIndex = [],
 		private readonly permissionGuard?: PermissionGuard,
 		private readonly onRead?: (vaultPath: string) => void,
+		private readonly options: ObsidianVaultFsOptions = {},
 	) {
 		this.pathIndex = Array.isArray(initialPaths)
 			? new MutableVaultPathIndex(initialPaths)
@@ -317,6 +349,13 @@ export class ObsidianVaultFs implements IFileSystem {
 			| { kind: AIDualPathFileOperation; src: string; dest: string },
 	): Promise<void> {
 		if (this._batchDepth > 0 || !this.permissionGuard) return
+		if (
+			'src' in request
+				? this.isAutoApprovedPermission(request.src) &&
+					this.isAutoApprovedPermission(request.dest)
+				: this.isAutoApprovedPermission(request.path)
+		)
+			return
 		const normalizedRequest =
 			'src' in request
 				? {
@@ -347,6 +386,34 @@ export class ObsidianVaultFs implements IFileSystem {
 	private toVaultPath(inputPath: string) {
 		const normalized = ensureNotEscapingRoot(inputPath)
 		return normalized === '/' ? '' : normalizePath(normalized.slice(1))
+	}
+
+	private isAutoApprovedPermission(inputPath: string) {
+		return (
+			this.options.autoApprovePermission?.(this.toVaultPath(inputPath)) === true
+		)
+	}
+
+	/** Refuse to mutate host-owned paths before any prompt or side effect. */
+	private assertWritable(...paths: string[]) {
+		for (const path of paths) {
+			const vaultPath = this.toVaultPath(path)
+			if (this.options.readOnlyPath?.(vaultPath)) {
+				throw new Error(
+					`EROFS: ${vaultPath} is managed by the App host and is read-only`,
+				)
+			}
+		}
+	}
+
+	/** Host-owned directories are creatable but never removable or renameable. */
+	private isCreatable(inputPath: string) {
+		return this.options.creatablePath?.(this.toVaultPath(inputPath)) === true
+	}
+
+	/** Notify the write observer after a mutation has reached the vault. */
+	private notifyWrite(path: string) {
+		this.options.onWrite?.(this.toVaultPath(path))
 	}
 
 	private isInternalDirectory(inputPath: string) {
@@ -448,18 +515,21 @@ export class ObsidianVaultFs implements IFileSystem {
 		content: FileContent,
 		options?: WriteFileOptions | BufferEncoding,
 	): Promise<void> {
-		await this.checkPermission({ kind: 'write', path })
+		const normalized = ensureNotEscapingRoot(path)
+		this.assertWritable(normalized)
+		await this.checkPermission({ kind: 'write', path: normalized })
 		await this.withBatch(async () => {
-			await this.mkdir(pathPosix.dirname(ensureNotEscapingRoot(path)), {
+			await this.mkdir(pathPosix.dirname(normalized), {
 				recursive: true,
 			})
 			const encoded = encodeContent(content, options)
 			await writeLocalBinary(
 				this.vault,
-				this.toVaultPath(path),
+				this.toVaultPath(normalized),
 				toArrayBuffer(encoded),
 			)
-			this.recordPath(path)
+			this.recordPath(normalized)
+			this.notifyWrite(normalized)
 		})
 	}
 
@@ -468,16 +538,18 @@ export class ObsidianVaultFs implements IFileSystem {
 		content: FileContent,
 		options?: WriteFileOptions | BufferEncoding,
 	): Promise<void> {
-		await this.checkPermission({ kind: 'write', path })
+		const normalized = ensureNotEscapingRoot(path)
+		this.assertWritable(normalized)
+		await this.checkPermission({ kind: 'write', path: normalized })
 		await this.withBatch(async () => {
 			const encoded = encodeContent(content, options)
-			const existing = (await this.exists(path))
-				? await this.readInternal(path)
+			const existing = (await this.exists(normalized))
+				? await this.readInternal(normalized)
 				: (new Uint8Array(0) as Uint8Array)
 			const merged = new Uint8Array(existing.length + encoded.length)
 			merged.set(existing)
 			merged.set(encoded, existing.length)
-			await this.writeFile(path, merged)
+			await this.writeFile(normalized, merged)
 		})
 	}
 
@@ -538,7 +610,8 @@ export class ObsidianVaultFs implements IFileSystem {
 		if (normalized === '/') {
 			return
 		}
-		await this.checkPermission({ kind: 'mkdir', path })
+		if (!this.isCreatable(normalized)) this.assertWritable(normalized)
+		await this.checkPermission({ kind: 'mkdir', path: normalized })
 		if (!options?.recursive) {
 			const parent = pathPosix.dirname(normalized)
 			if (!(await this.exists(parent))) {
@@ -549,6 +622,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		}
 		await mkdirsVault(this.vault, this.toVaultPath(normalized))
 		this.recordPath(normalized)
+		this.notifyWrite(normalized)
 	}
 
 	async readdir(path: string): Promise<string[]> {
@@ -589,7 +663,8 @@ export class ObsidianVaultFs implements IFileSystem {
 		if (normalized === '/') {
 			throw new Error(`EPERM: operation not permitted, remove '${path}'`)
 		}
-		await this.checkPermission({ kind: 'delete', path })
+		this.assertWritable(normalized)
+		await this.checkPermission({ kind: 'delete', path: normalized })
 
 		if (!(await this.exists(normalized))) {
 			if (options?.force) {
@@ -601,47 +676,80 @@ export class ObsidianVaultFs implements IFileSystem {
 		const vaultPath = this.toVaultPath(normalized)
 		await removeLocalPath(this.app, vaultPath, options?.recursive ?? false)
 		this.forgetPath(normalized)
+		this.notifyWrite(normalized)
 	}
 
 	async cp(src: string, dest: string, options?: CpOptions): Promise<void> {
-		await this.checkPermission({ kind: 'copy', src, dest })
-		await this.withBatch(() => copyRecursive(this, src, dest, options))
+		const normalizedSrc = ensureNotEscapingRoot(src)
+		const normalizedDest = ensureNotEscapingRoot(dest)
+		// A copy only reads the source, so just the destination tree must be writable.
+		this.assertWritable(normalizedDest)
+		await this.checkPermission({
+			kind: 'copy',
+			src: normalizedSrc,
+			dest: normalizedDest,
+		})
+		await this.withBatch(() =>
+			copyRecursive(this, normalizedSrc, normalizedDest, options),
+		)
+		this.notifyWrite(normalizedDest)
 	}
 
 	async mv(src: string, dest: string): Promise<void> {
-		await this.checkPermission({ kind: 'move', src, dest })
+		const normalizedSrc = ensureNotEscapingRoot(src)
+		const normalizedDest = ensureNotEscapingRoot(dest)
+		this.assertWritable(normalizedSrc, normalizedDest)
+		await this.checkPermission({
+			kind: 'move',
+			src: normalizedSrc,
+			dest: normalizedDest,
+		})
 		await this.withBatch(async () => {
-			if (!(await this.exists(src))) {
-				throw new Error(`ENOENT: no such file or directory, move '${src}'`)
+			if (!(await this.exists(normalizedSrc))) {
+				throw new Error(
+					`ENOENT: no such file or directory, move '${normalizedSrc}'`,
+				)
 			}
-			await this.mkdir(pathPosix.dirname(ensureNotEscapingRoot(dest)), {
+			await this.mkdir(pathPosix.dirname(normalizedDest), {
 				recursive: true,
 			})
 			const sourceIsAdapterPath = isAdapterPath(
 				this.vault,
-				this.toVaultPath(src),
+				this.toVaultPath(normalizedSrc),
 			)
 			const destinationIsAdapterPath = isAdapterPath(
 				this.vault,
-				this.toVaultPath(dest),
+				this.toVaultPath(normalizedDest),
 			)
 			if (sourceIsAdapterPath !== destinationIsAdapterPath) {
-				await copyRecursive(this, src, dest, { recursive: true })
-				await this.rm(src, { recursive: true })
+				await copyRecursive(this, normalizedSrc, normalizedDest, {
+					recursive: true,
+				})
+				await this.rm(normalizedSrc, { recursive: true })
 			} else if (sourceIsAdapterPath) {
 				await this.vault.adapter.rename(
-					this.toVaultPath(src),
-					this.toVaultPath(dest),
+					this.toVaultPath(normalizedSrc),
+					this.toVaultPath(normalizedDest),
 				)
+				emitLocalPathChanged(this.toVaultPath(normalizedSrc))
+				emitLocalPathChanged(this.toVaultPath(normalizedDest))
 			} else {
-				const target = this.vault.getAbstractFileByPath(this.toVaultPath(src))
+				const target = this.vault.getAbstractFileByPath(
+					this.toVaultPath(normalizedSrc),
+				)
 				if (!target) {
-					throw new Error(`ENOENT: no such file or directory, move '${src}'`)
+					throw new Error(
+						`ENOENT: no such file or directory, move '${normalizedSrc}'`,
+					)
 				}
-				await this.vault.rename(target, this.toVaultPath(dest))
+				await this.vault.rename(target, this.toVaultPath(normalizedDest))
+				emitLocalPathChanged(this.toVaultPath(normalizedSrc))
+				emitLocalPathChanged(this.toVaultPath(normalizedDest))
 			}
-			this.forgetPath(src)
-			this.recordPath(dest)
+			this.forgetPath(normalizedSrc)
+			this.recordPath(normalizedDest)
+			this.notifyWrite(normalizedSrc)
+			this.notifyWrite(normalizedDest)
 		})
 	}
 
@@ -654,6 +762,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async chmod(path: string, _mode: number): Promise<void> {
+		this.assertWritable(path)
 		await this.assertExists(path)
 	}
 
@@ -683,6 +792,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async utimes(path: string, _atime: Date, _mtime: Date): Promise<void> {
+		this.assertWritable(path)
 		await this.withBatch(async () => {
 			const stat = await this.stat(path)
 			if (stat.isDirectory) {

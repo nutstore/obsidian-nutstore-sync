@@ -75,6 +75,9 @@ export default defineConfig([
 			'main.js',
 			'styles.css',
 			'coverage/**',
+			'.cache/**',
+			// Device-local plugin settings are generated runtime data, not source files.
+			'data.local.json',
 		],
 	},
 

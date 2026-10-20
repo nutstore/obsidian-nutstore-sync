@@ -60,6 +60,7 @@ function finish(toolCalls: boolean): StreamPart {
 function harness(
 	tools: ToolSet,
 	viewImageAttachments = new InMemoryViewImageAttachmentRegistry(),
+	presentation?: { firstText: string; finalText: string },
 ) {
 	const agent = createEmptyMasterAgent(1)
 	agent.timeline.push({
@@ -77,6 +78,17 @@ function harness(
 	const model = new MockLanguageModelV4({
 		doStream: [
 			stream([
+				...(presentation
+					? [
+							{ type: 'text-start' as const, id: 'progress' },
+							{
+								type: 'text-delta' as const,
+								id: 'progress',
+								delta: presentation.firstText,
+							},
+							{ type: 'text-end' as const, id: 'progress' },
+						]
+					: []),
 				...Object.keys(tools).map((toolName): StreamPart => ({
 					type: 'tool-call',
 					toolCallId: toolName,
@@ -87,7 +99,11 @@ function harness(
 			]),
 			stream([
 				{ type: 'text-start', id: 'reply' },
-				{ type: 'text-delta', id: 'reply', delta: 'Result 结果 🌿' },
+				{
+					type: 'text-delta',
+					id: 'reply',
+					delta: presentation?.finalText ?? 'Result 结果 🌿',
+				},
 				{ type: 'text-end', id: 'reply' },
 				finish(false),
 			]),
@@ -136,6 +152,32 @@ function harness(
 }
 
 describe('AgentRunner input handoff', () => {
+	it('preserves progress and tool outcomes in the ordinary chat transcript', async () => {
+		const tools = {
+			lookup: tool({
+				inputSchema: z.object({ text: z.string() }),
+				execute: async ({ text }) => text,
+			}),
+		}
+		const progress = '准备制作 Preparing App 🌿'
+		const final = '制作完成 App ready 📘'
+		const { run, model, agent } = harness(tools, undefined, {
+			firstText: progress,
+			finalText: final,
+		})
+		expect((await run(() => false)).status).toBe('completed')
+		expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain(progress)
+		expect(JSON.stringify(agent.timeline)).toContain(progress)
+		expect(JSON.stringify(agent.timeline)).toContain(final)
+		expect(
+			agent.timeline
+				.flatMap((message) => message.parts)
+				.some(
+					(part) =>
+						part.type === 'dynamic-tool' && part.state === 'output-available',
+				),
+		).toBe(true)
+	})
 	it.each([false, true])(
 		'waits for every tool outcome before yielding (error: %s)',
 		async (fails) => {

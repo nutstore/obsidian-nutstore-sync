@@ -13,7 +13,11 @@ import {
 	type ChatModalMountTarget,
 } from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
-import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
+import {
+	addClassTokens,
+	removeClassTokens,
+	toggleClassTokens,
+} from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
@@ -164,22 +168,7 @@ export default class ProviderEditorModal extends Modal {
 			.setName(i18n.t('settings.ai.models.name'))
 			.setDesc(i18n.t('settings.ai.models.desc'))
 			.addButton((button) => {
-				button
-					.setButtonText(
-						this.isFetchingModels
-							? i18n.t('settings.ai.models.fetching')
-							: i18n.t('settings.ai.models.fetch'),
-					)
-					.setDisabled(this.isFetchingModels)
-				if (this.isFetchingModels) {
-					addClassTokens(
-						button.buttonEl,
-						':uno: connection-button',
-						':uno: loading',
-						':uno: opacity-50',
-						':uno: pointer-events-none',
-					)
-				}
+				this.updateFetchButton(button)
 				button.onClick(async () => {
 					await this.fetchModels(button)
 				})
@@ -331,6 +320,23 @@ export default class ProviderEditorModal extends Modal {
 		this.render()
 	}
 
+	private updateFetchButton(button: ButtonComponent) {
+		button
+			.setDisabled(this.isFetchingModels)
+			.setButtonText(
+				i18n.t(
+					this.isFetchingModels
+						? 'settings.ai.models.fetching'
+						: 'settings.ai.models.fetch',
+				),
+			)
+		toggleClassTokens(
+			button.buttonEl,
+			':uno: connection-button loading opacity-50 pointer-events-none',
+			this.isFetchingModels,
+		)
+	}
+
 	private async fetchModels(button: ButtonComponent) {
 		if (this.isFetchingModels) return
 		const baseURL =
@@ -341,15 +347,7 @@ export default class ProviderEditorModal extends Modal {
 		}
 
 		this.isFetchingModels = true
-		button.setDisabled(true)
-		button.setButtonText(i18n.t('settings.ai.models.fetching'))
-		addClassTokens(
-			button.buttonEl,
-			':uno: connection-button',
-			':uno: loading',
-			':uno: opacity-50',
-			':uno: pointer-events-none',
-		)
+		this.updateFetchButton(button)
 
 		const scope = this.plugin.ai.lifecycle.scope
 
@@ -368,12 +366,11 @@ export default class ProviderEditorModal extends Modal {
 				this.plugin,
 				models,
 				(selected) => {
+					const models = { ...this.draft.models }
 					for (const item of selected) {
-						this.draft.models = {
-							...this.draft.models,
-							[item.id]: item.modelConfig,
-						}
+						models[item.id] = item.modelConfig
 					}
+					this.draft.models = models
 					this.render()
 					new Notice(
 						i18n.t('settings.ai.models.modelsAdded', {
@@ -395,15 +392,7 @@ export default class ProviderEditorModal extends Modal {
 		} finally {
 			if (!scope.signal.aborted) {
 				this.isFetchingModels = false
-				button.setDisabled(false)
-				button.setButtonText(i18n.t('settings.ai.models.fetch'))
-				removeClassTokens(
-					button.buttonEl,
-					':uno: connection-button',
-					':uno: loading',
-					':uno: opacity-50',
-					':uno: pointer-events-none',
-				)
+				this.updateFetchButton(button)
 			}
 		}
 	}

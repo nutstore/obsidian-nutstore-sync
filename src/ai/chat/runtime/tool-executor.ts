@@ -1,3 +1,4 @@
+import type { AppOpenFn, AppWorkspaces } from '~/ai/apps/workspaces'
 import type { ModuleScope } from '~/modules/lifecycle'
 import { guardAppIO } from '~/modules/guard-io'
 import { throwIfAborted } from '~/utils/abort'
@@ -58,6 +59,9 @@ export class ToolExecutor {
 	private dispatchTaskHandler: DispatchTaskFn = () => {
 		throw new Error('task handler not set')
 	}
+	private appOpenHandler: AppOpenFn = async () => {
+		throw new Error('App open handler not set')
+	}
 
 	constructor(
 		private app: App,
@@ -71,6 +75,10 @@ export class ToolExecutor {
 		},
 		private memory: MemoryRepository,
 		private scope?: ModuleScope,
+		private workspaces?: {
+			service: AppWorkspaces
+			persist: (session: ChatSession) => Promise<void>
+		},
 	) {
 		this.fileSystemManager = new VaultFileSystemManager(app)
 	}
@@ -87,6 +95,10 @@ export class ToolExecutor {
 
 	setDispatchTaskHandler(handler: DispatchTaskFn) {
 		this.dispatchTaskHandler = handler
+	}
+
+	setAppOpenHandler(handler: AppOpenFn) {
+		this.appOpenHandler = handler
 	}
 
 	getChatModalMountTarget() {
@@ -160,6 +172,7 @@ export class ToolExecutor {
 			throwIfAborted(signal)
 		}
 		check()
+		const effectiveSignal = signal ?? this.scope?.signal
 		const app = guardAppIO(this.app, check)
 		const permissionGuard =
 			definition.permissionMode === 'readonly'
@@ -184,12 +197,31 @@ export class ToolExecutor {
 									this.state.sessionIndex.find((item) => item.id === session.id)
 										?.title || deriveTitle(session),
 								modalMountTarget: this.getChatModalMountTarget(),
-								signal: signal ?? this.scope?.signal,
+								signal: effectiveSignal,
 							},
 						)
+		const appWorkspaceBinding =
+			definition.id === MASTER_AGENT_ID && this.workspaces
+				? this.workspaces.service.createBinding(
+						session,
+						() => this.workspaces!.persist(session),
+						effectiveSignal,
+					)
+				: undefined
 		return {
 			app,
-			fileSystemManager: new VaultFileSystemManager(app),
+			fileSystemManager: this.fileSystemManager.withDefaults({
+				appWorkspaceBinding,
+				openApp: async (appId) => {
+					check()
+					const opened = await this.appOpenHandler(appId)
+					check()
+					return opened
+				},
+				readonlyApps:
+					definition.permissionMode === 'readonly' ||
+					definition.id !== MASTER_AGENT_ID,
+			}),
 			permissionGuard: async (request) => {
 				check()
 				await permissionGuard(request)

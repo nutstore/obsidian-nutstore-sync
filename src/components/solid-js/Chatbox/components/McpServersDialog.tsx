@@ -17,7 +17,7 @@ export function McpServersDialog(props: McpServersDialogProps) {
 		<Show when={props.servers.length > 0}>
 			<>
 				<button
-					class=":uno: inline-flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+					class="ns-composer-tool-btn"
 					type="button"
 					title={t('chatbox.ui.mcp.button')}
 					aria-label={t('chatbox.ui.mcp.button')}

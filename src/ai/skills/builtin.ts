@@ -8,6 +8,7 @@ import settingsReferenceContent from './builtin/nutstore-sync-guide/references/s
 import nutstoreSyncGuideContent from './builtin/nutstore-sync-guide/SKILL.md?raw'
 import syncReferenceContent from './builtin/nutstore-sync-guide/references/sync.md?raw'
 import skillCreatorContent from './builtin/skill-creator/SKILL.md?raw'
+import appBuilderContent from './builtin/app-builder/SKILL.md?raw'
 import type { BuiltinSkill } from './types'
 
 export const BUILTIN_SKILLS_ROOT = BUILTIN_SKILLS_MOUNT_POINT
@@ -18,6 +19,13 @@ export function isBuiltinSkillPath(path: string) {
 }
 
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
+	{
+		name: 'app-builder',
+		description:
+			'Create and modify interactive Apps in the selected Chatbox App workspace, including games, visual tools, and persistent utilities.',
+		path: `${BUILTIN_SKILLS_ROOT}/app-builder/SKILL.md`,
+		content: appBuilderContent,
+	},
 	{
 		name: 'nutstore-sync-guide',
 		description:

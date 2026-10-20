@@ -1,5 +1,28 @@
 import { type App, normalizePath, TFile, Vault } from 'obsidian'
 
+type LocalPathListener = (path: string) => void
+
+const localPathListeners = new Set<LocalPathListener>()
+
+/**
+ * Subscribe to normalized vault-relative paths written, moved, or removed
+ * through the local vault I/O boundary (including hidden `.agents/...` files
+ * that Obsidian's indexed Vault events do not emit).
+ */
+export function onLocalPathChanged(listener: LocalPathListener) {
+	localPathListeners.add(listener)
+	return () => {
+		localPathListeners.delete(listener)
+	}
+}
+
+export function emitLocalPathChanged(path: string) {
+	const normalizedPath = normalizePath(path).replace(/^\/+/, '')
+	for (const listener of localPathListeners) {
+		listener(normalizedPath)
+	}
+}
+
 function isAdapterPathNormalized(vault: Vault, normalizedPath: string) {
 	const pathForCheck = normalizedPath.replace(/^\/+/, '').replace(/\/+$/, '')
 	const configDir = normalizePath(vault.configDir)
@@ -51,36 +74,34 @@ export async function writeLocalBinary(
 	const normalizedPath = normalizePath(path)
 	if (isAdapterPathNormalized(vault, normalizedPath)) {
 		await vault.adapter.writeBinary(normalizedPath, data)
-		return
+	} else {
+		const file = vault.getAbstractFileByPath(normalizedPath)
+		if (file instanceof TFile) {
+			await vault.modifyBinary(file, data)
+		} else if (await vault.adapter.exists(normalizedPath)) {
+			await vault.adapter.writeBinary(normalizedPath, data)
+		} else {
+			await vault.createBinary(normalizedPath, data)
+		}
 	}
-	const file = vault.getAbstractFileByPath(normalizedPath)
-	if (file instanceof TFile) {
-		await vault.modifyBinary(file, data)
-		return
-	}
-	if (await vault.adapter.exists(normalizedPath)) {
-		await vault.adapter.writeBinary(normalizedPath, data)
-		return
-	}
-	await vault.createBinary(normalizedPath, data)
+	emitLocalPathChanged(normalizedPath)
 }
 
 export async function writeLocalText(vault: Vault, path: string, data: string) {
 	const normalizedPath = normalizePath(path)
 	if (isAdapterPathNormalized(vault, normalizedPath)) {
 		await vault.adapter.write(normalizedPath, data)
-		return
+	} else {
+		const file = vault.getAbstractFileByPath(normalizedPath)
+		if (file instanceof TFile) {
+			await vault.modify(file, data)
+		} else if (await vault.adapter.exists(normalizedPath)) {
+			await vault.adapter.write(normalizedPath, data)
+		} else {
+			await vault.create(normalizedPath, data)
+		}
 	}
-	const file = vault.getAbstractFileByPath(normalizedPath)
-	if (file instanceof TFile) {
-		await vault.modify(file, data)
-		return
-	}
-	if (await vault.adapter.exists(normalizedPath)) {
-		await vault.adapter.write(normalizedPath, data)
-		return
-	}
-	await vault.create(normalizedPath, data)
+	emitLocalPathChanged(normalizedPath)
 }
 
 export async function readLocalText(vault: Vault, path: string) {
@@ -132,9 +153,11 @@ export async function removeLocalPath(
 		}
 		if (stat.type === 'folder') {
 			await vault.adapter.rmdir(normalizedPath, recursive)
+			emitLocalPathChanged(normalizedPath)
 			return
 		}
 		await vault.adapter.remove(normalizedPath)
+		emitLocalPathChanged(normalizedPath)
 		return
 	}
 	const file = vault.getAbstractFileByPath(normalizedPath)
@@ -142,4 +165,5 @@ export async function removeLocalPath(
 		return
 	}
 	await fileManager.trashFile(file)
+	emitLocalPathChanged(normalizedPath)
 }

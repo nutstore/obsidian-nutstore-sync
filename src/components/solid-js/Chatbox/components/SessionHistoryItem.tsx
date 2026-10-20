@@ -69,6 +69,9 @@ export function SessionHistoryItem(props: {
 					</div>
 					<div class=":uno: mt-2 flex items-center gap-1 text-xs text-[var(--text-muted)]">
 						{formatTime(props.session.createdAt)}
+						<Show when={props.session.appId}>
+							<span title={t('apps.workspace')}> · App</span>
+						</Show>
 						<Show when={props.isRunning}>
 							<span class=":uno: font-medium text-[var(--color-yellow)]">
 								· {t('chatbox.ui.history.sessionRunning')}

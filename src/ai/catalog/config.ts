@@ -156,11 +156,15 @@ export function listProviders(
 	return Object.values(providers)
 }
 
+const modelIdCollator = new Intl.Collator(undefined, { numeric: true })
+export const compareModelIds = (a: string, b: string) =>
+	modelIdCollator.compare(a, b)
+
 export function listModels(
 	provider: AIProviderConfig | undefined,
 ): AIModelConfig[] {
 	return Object.values(provider?.models || {}).sort((a, b) =>
-		a.id.localeCompare(b.id, undefined, { numeric: true }),
+		compareModelIds(a.id, b.id),
 	)
 }
 

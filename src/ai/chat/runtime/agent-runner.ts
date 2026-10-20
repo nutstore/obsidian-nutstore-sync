@@ -4,7 +4,6 @@ import {
 	type AssistantModelMessage,
 	type ContentPart,
 	type ModelMessage,
-	type StopCondition,
 	type ToolCallPart,
 	type ToolSet,
 } from 'ai'
@@ -124,6 +123,7 @@ export class AgentRunner {
 			session.systemPrompt,
 			undefined,
 			agent.id,
+			session.appId,
 		)
 		consumePendingInputs(agent)
 		const messages = options.buildMessages
@@ -216,17 +216,23 @@ export class AgentRunner {
 		}
 		let shouldSuspend = false
 		let finalMessage: AssistantModelMessage | undefined
-		const repeatedToolCalls: StopCondition<typeof tools> = ({ steps }) => {
-			const calls = steps.at(-1)?.toolCalls ?? []
+		const repeatedToolCalls = ({
+			steps,
+		}: {
+			steps: Array<{ toolCalls: Array<ToolCallPart | undefined> }>
+		}) => {
+			const calls =
+				steps
+					.at(-1)
+					?.toolCalls.filter((call): call is ToolCallPart => !!call) ?? []
 			if (!calls.length) return false
-			repeatState = updateToolCallRepeatState(
-				repeatState,
-				calls as ToolCallPart[],
-			)
+			repeatState = updateToolCallRepeatState(repeatState, calls)
 			return repeatState.isRepeatedTooManyTimes
 		}
-		const suspendAtStepBoundary: StopCondition<typeof tools> = async ({
+		const suspendAtStepBoundary = async ({
 			steps,
+		}: {
+			steps: Array<{ toolCalls: unknown[] }>
 		}) => {
 			if (!steps.at(-1)?.toolCalls.length) return false
 			// Provider tools may defer their results to another step. Never insert
@@ -247,8 +253,6 @@ export class AgentRunner {
 		const toolLoop = new ToolLoopAgent({
 			model,
 			instructions: systemPrompt,
-			tools,
-			toolsContext,
 			stopWhen: [isLoopFinished(), repeatedToolCalls, suspendAtStepBoundary],
 			maxOutputTokens: resolveModelOutputLimit(options.model),
 			prepareStep: async ({ messages }) => {
@@ -265,6 +269,8 @@ export class AgentRunner {
 					messages: [...messages, attachmentMessage],
 				}
 			},
+			tools,
+			toolsContext,
 		})
 		const result = await toolLoop.stream({
 			messages: prepareMessagesForModel(
@@ -329,6 +335,20 @@ export class AgentRunner {
 			if (chunk.type === 'text-delta' && chunk.text) {
 				await projector.project({ type: 'text-delta', delta: chunk.text })
 			}
+			if (chunk.type === 'reasoning-delta')
+				await projector.project({ type: 'reasoning-delta', delta: chunk.text })
+			if (chunk.type === 'tool-input-start')
+				await projector.project({
+					type: 'tool-input-start',
+					id: chunk.id,
+					toolName: chunk.toolName,
+				})
+			if (chunk.type === 'tool-input-delta')
+				await projector.project({
+					type: 'tool-input-delta',
+					id: chunk.id,
+					delta: chunk.delta,
+				})
 			if (chunk.type === 'error') throw chunk.error
 			if (chunk.type === 'abort') {
 				throw options.abortSignal?.reason ?? new Error('Agent run aborted')

@@ -487,6 +487,6 @@ export const applyPatchTool = tool({
 	},
 	toModelOutput: ({ output }) => ({
 		type: 'text',
-		value: `Done!\n${output.files.map((path) => `- ${path}`).join('\n')}`,
+		value: ['Done!', ...output.files.map((path) => `- ${path}`)].join('\n'),
 	}),
 })

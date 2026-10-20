@@ -1,5 +1,6 @@
 import {
 	AGENTS_MOUNT_POINT,
+	APPS_MOUNT_POINT,
 	BASH_TMP_MOUNT_POINT,
 	BUILTIN_SKILLS_MOUNT_POINT,
 	SETTINGS_FILE_PATH,
@@ -15,6 +16,7 @@ export function createVirtualFilesystemGuidance() {
 		'<virtual-filesystem>',
 		`${VAULT_MOUNT_POINT} is the Obsidian vault base filesystem; relative paths resolve here.`,
 		`${AGENTS_MOUNT_POINT} is a hidden dot-folder containing user Skills and plugin data. Inspect it only when the task or a loaded Skill requires it.`,
+		`${APPS_MOUNT_POINT}/<appId>/ holds real App files: manifest.json, index.html and any relative css/js/assets. data.json, logs.jsonl and state.json there are host-owned and read-only. App source edits hot-reload the App; use "app open [appId]" to show it.`,
 		`${BUILTIN_SKILLS_MOUNT_POINT} contains bundled Skills and is read-only; use the exact paths supplied by workspace context.`,
 		`${BASH_TMP_MOUNT_POINT} is for temporary, scratch, debug, and intermediate files.`,
 		`${SETTINGS_FILE_PATH} is a virtual live settings file for configuration-capable tools; it contains whitelist fields only, never credentials.`,

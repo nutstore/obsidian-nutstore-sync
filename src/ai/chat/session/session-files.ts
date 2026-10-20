@@ -34,6 +34,7 @@ export interface ChatMetaSessionInfo {
 	title: string
 	createdAt: number
 	updatedAt: number
+	appId?: string
 }
 
 export interface ChatMetaFile {
@@ -136,6 +137,8 @@ export class SessionsFileBackend {
 	}
 
 	async deleteSessionFile(id: string) {
+		if (!id || id === '.' || id === '..' || /[/\\]/.test(id))
+			throw new Error('Invalid session identity')
 		await removeLocalPath(this.app, getChatSessionPath(id))
 	}
 
