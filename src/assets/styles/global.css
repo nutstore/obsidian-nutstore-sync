@@ -2699,29 +2699,6 @@
 	font-size: var(--font-ui-small);
 	line-height: 1.7;
 }
-.ns-workspace-create-description {
-	margin: 0 0 20px;
-	color: var(--text-muted);
-	line-height: 1.6;
-}
-.ns-workspace-create-label {
-	display: grid;
-	gap: 8px;
-	font-size: var(--font-ui-small);
-}
-.ns-workspace-create-label input {
-	width: 100%;
-	min-height: 44px;
-}
-.ns-workspace-create-footer {
-	display: flex;
-	justify-content: flex-end;
-	margin-top: 24px;
-}
-.ns-workspace-create-footer button {
-	min-width: 88px;
-	min-height: 44px;
-}
 .ns-app-placeholder {
 	padding: 24px;
 	color: var(--text-muted);

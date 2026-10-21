@@ -1,10 +1,13 @@
-import { Menu, Modal, Notice, setIcon } from 'obsidian'
+import { Menu, Modal, Notice, Platform, setIcon } from 'obsidian'
 import type NutstorePlugin from '~/index'
-import { appIdSchema, type SavedApp } from '~/ai/apps/domain'
+import type { SavedApp } from '~/ai/apps/domain'
 import { appError } from '~/ai/apps/error'
 import i18n from '~/i18n'
 
-/** The composer exposes the chat target; Apps render in the main workspace view. */
+/**
+ * The composer exposes the chat target. Apps are authored through conversation
+ * and render in the main workspace view; their IDs stay an internal detail.
+ */
 export class ChatWorkspacePanel {
 	private readonly host: HTMLElement
 	private readonly picker: HTMLButtonElement
@@ -15,6 +18,7 @@ export class ChatWorkspacePanel {
 	private items: Array<{ id: string; app?: SavedApp }> = []
 	private saved?: SavedApp
 	private activeId?: string
+	private observedSessionId?: string
 	private renderedIcon?: { appId?: string; svg?: string }
 	private epoch = 0
 	private closed = false
@@ -75,15 +79,9 @@ export class ChatWorkspacePanel {
 					.onClick(() => this.selectWorkspace(app.id)),
 			)
 		}
-		menu.addSeparator()
-		menu.addItem((item) =>
-			item
-				.setTitle(i18n.t('apps.newApp'))
-				.setIcon('plus')
-				.onClick(() => this.create()),
-		)
 		const id = this.activeId
 		if (id) {
+			menu.addSeparator()
 			menu.addItem((item) =>
 				item
 					.setTitle(i18n.t('apps.openApp'))
@@ -133,7 +131,17 @@ export class ChatWorkspacePanel {
 	}
 	private update() {
 		if (this.closed) return
-		const { appId: id, busy } = this.plugin.ai.chat.workspaceState
+		const { sessionId, appId: id, busy } = this.plugin.ai.chat.workspaceState
+		const enteredSession = sessionId !== this.observedSessionId
+		this.observedSessionId = sessionId
+		if (enteredSession && sessionId && id && Platform.isDesktopApp) {
+			// Restore the session's App once per entry. Workspace changes made
+			// inside that session remain explicit user actions.
+			void this.plugin.ai.openApp(id).catch((error) => {
+				if (!this.closed && this.observedSessionId === sessionId)
+					this.status.textContent = appError(error)
+			})
+		}
 		if (id !== this.activeId) {
 			this.activeId = id
 			this.saved = undefined
@@ -177,83 +185,6 @@ export class ChatWorkspacePanel {
 		}
 	}
 
-	private create() {
-		const modal = this.plugin.ai.lifecycle.scope.ownModal(
-			new Modal(this.plugin.app),
-		)
-		modal.setTitle(i18n.t('apps.newApp'))
-		modal.modalEl.addClass('ns-workspace-create-modal')
-		modal.contentEl.createEl('p', {
-			cls: 'ns-workspace-create-description',
-			text: i18n.t('apps.workspaceDescription'),
-		})
-		const label = modal.contentEl.createEl('label', {
-			cls: 'ns-workspace-create-label',
-			text: i18n.t('apps.appTitle'),
-		})
-		const input = label.createEl('input', {
-			attr: {
-				'aria-label': i18n.t('apps.appTitle'),
-				placeholder: i18n.t('apps.appTitle'),
-				maxlength: '100',
-			},
-		})
-		const idLabel = modal.contentEl.createEl('label', {
-			cls: 'ns-workspace-create-label',
-			text: i18n.t('apps.appId'),
-		})
-		const idInput = idLabel.createEl('input', {
-			attr: {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case -- App identities are lowercase package names.
-				placeholder: 'org.example.counter',
-				maxlength: '100',
-				'aria-label': i18n.t('apps.appId'),
-			},
-		})
-		const footer = modal.contentEl.createDiv({
-			cls: 'ns-workspace-create-footer',
-		})
-		const button = footer.createEl('button', {
-			text: i18n.t('apps.create'),
-			cls: 'mod-cta',
-		})
-		button.disabled = true
-		const update = () => {
-			button.disabled =
-				!input.value.trim() ||
-				!appIdSchema.safeParse(idInput.value.trim()).success
-		}
-		input.addEventListener('input', update)
-		idInput.addEventListener('input', update)
-		const create = async () => {
-			if (!input.value.trim() || button.disabled) return
-			button.disabled = true
-			input.disabled = true
-			try {
-				const saved = await this.plugin.ai.workspaces.create(
-					idInput.value.trim(),
-					input.value.trim(),
-				)
-				await this.plugin.ai.chat.selectWorkspace(saved.id)
-				modal.close()
-			} catch (error) {
-				new Notice(appError(error))
-				button.disabled = false
-				input.disabled = false
-			}
-		}
-		button.addEventListener('click', () => {
-			void create()
-		})
-		input.addEventListener('keydown', (event) => {
-			if (event.key === 'Enter') {
-				event.preventDefault()
-				void create()
-			}
-		})
-		modal.open()
-		input.focus()
-	}
 	private confirmDelete() {
 		const id = this.activeId
 		if (!id) return

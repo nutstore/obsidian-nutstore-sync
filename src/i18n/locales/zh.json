@@ -954,11 +954,6 @@
 		"deleteAppPrompt": "删除此 App 及其数据？会话记录会保留。",
 		"workspace": "App 工作区",
 		"noWorkspace": "普通对话",
-		"newApp": "新建 App…",
-		"workspaceDescription": "在工作区中制作 App，随时预览、继续修改。",
-		"appId": "App ID（例如 org.example.counter）",
-		"appTitle": "App 名称",
-		"create": "创建",
 		"missingApp": "App 工作区已不存在或无法读取",
 		"describeApp": "在聊天中描述你想制作的内容，App 会在这里呈现。"
 	}
