@@ -1,6 +1,11 @@
 import { posix as pathPosix } from 'path-browserify'
 import { bytesToDataUrl } from '~/utils/data-url'
-import type { AppContent } from './domain'
+/** The assembled, sandbox-ready source of one App. */
+export interface AppContent {
+	html: string
+	css: string
+	javascript: string
+}
 
 /**
  * Source references that cannot be resolved are a hard error: the sandbox has

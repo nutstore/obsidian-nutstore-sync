@@ -13,7 +13,7 @@ import {
 } from 'obsidian'
 import type { EditorView } from '@codemirror/view'
 import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
-import { appIdFromPath } from '~/ai/apps/domain'
+import { appIdFromPath } from '~/ai/apps/paths'
 import { resolveResourceDataUrl } from '~/ai/tools/resource-data-url'
 import {
 	createImageContextItem,

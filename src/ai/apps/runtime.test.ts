@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
+import { InMemoryFs } from 'just-bash/browser'
+import { createAppFSDispatcher } from './capabilities/fs'
 import { AppRuntime, runtimeDocument } from './runtime'
 import { validateAppIcon, appIconContent } from './icon'
-import type { AppContent, AppKV } from './domain'
+import type { AppContent } from './source'
+import type { AppKV } from './capabilities/kv'
 
 const content: AppContent = {
 	html: '<button id="add">增加 Add 🌿</button>',
@@ -153,6 +156,53 @@ describe('App runtime and trusted SVG boundary', () => {
 		expect(runtime.frame.getAttribute('sandbox')).toBe('allow-scripts')
 	})
 
+	it('bridges authenticated filesystem binary requests and stops dispatch after teardown', async () => {
+		const fs = new InMemoryFs()
+		const dispatch = vi.fn(
+			createAppFSDispatcher(
+				async () => fs,
+				() => {},
+			),
+		)
+		const runtime = new AppRuntime(document.body, content, {
+			...createHost(),
+			fs: dispatch,
+		})
+		const frame = runtime.frame.contentWindow!
+		const post = vi.spyOn(frame, 'postMessage').mockImplementation(() => {})
+		const channel = runtime.frame.srcdoc.match(/"channel":"([^"]+)"/)![1]
+		const bytes = new Uint8Array([0, 128, 255])
+		const request = (
+			id: number,
+			method: string,
+			args: unknown[],
+			source = frame,
+		) =>
+			window.dispatchEvent(
+				new MessageEvent('message', {
+					source,
+					data: { channel, id, method, args },
+				}),
+			)
+		request(1, 'fs.writeFile', ['/Asset 素材 🌿.bin', bytes], window)
+		expect(dispatch).not.toHaveBeenCalled()
+		request(2, 'fs.writeFile', ['/Asset 素材 🌿.bin', bytes])
+		await vi.waitFor(() =>
+			expect(post).toHaveBeenCalledWith(
+				{ channel, id: 2, value: undefined },
+				'*',
+			),
+		)
+		request(3, 'fs.readFileBuffer', ['/Asset 素材 🌿.bin'])
+		await vi.waitFor(() =>
+			expect(post).toHaveBeenCalledWith({ channel, id: 3, value: bytes }, '*'),
+		)
+		runtime.destroy()
+		request(4, 'fs.rm', ['/Asset 素材 🌿.bin'])
+		expect(dispatch).toHaveBeenCalledTimes(2)
+		expect(await fs.readFileBuffer('/Asset 素材 🌿.bin')).toEqual(bytes)
+	})
+
 	it('forwards only the latest theme without replacing the live frame', async () => {
 		const runtime = new AppRuntime(document.body, content, createHost())
 		const channel = runtime.frame.srcdoc.match(/"channel":"([^"]+)"/)![1]
@@ -286,7 +336,7 @@ describe('App runtime and trusted SVG boundary', () => {
 		await timeout(20)
 		expect(messages.some((message) => message.event === 'ready')).toBe(true)
 		expect(Object.keys((dom.window as unknown as { app: object }).app)).toEqual(
-			['kv'],
+			['fs', 'kv'],
 		)
 		expect((dom.window as unknown as { bad?: number }).bad).toBeUndefined()
 		expect(

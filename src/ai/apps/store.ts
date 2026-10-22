@@ -1,3 +1,4 @@
+import { z } from 'zod/mini'
 import type { App } from 'obsidian'
 import { dirname } from 'path-browserify'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
@@ -13,21 +14,37 @@ import {
 	APP_MANIFEST_FILE,
 	APP_ROOT_DIR,
 	APP_STATE_FILE,
-	appDataFileSchema,
 	appDirectoryPath,
 	appIdFromPath,
+} from './paths'
+import {
 	appManifestSchema,
-	appStateSchema,
-	changeKV,
 	emptyAppManifest,
-	newAppState,
+	type AppManifest,
+} from './manifest'
+import {
+	appDataFileSchema,
+	changeKV,
 	validateKV,
 	type AppKV,
-	type AppManifest,
-	type AppState,
 	type KVChange,
-	type SavedApp,
-} from './domain'
+} from './capabilities/kv'
+
+export const appStateSchema = z.object({
+	schemaVersion: z.literal(1),
+	pinned: z.boolean(),
+	createdAt: z.number(),
+	updatedAt: z.number(),
+})
+export type AppState = z.infer<typeof appStateSchema>
+export interface SavedApp {
+	id: string
+	manifest: AppManifest
+	state: AppState
+}
+export function newAppState(now = Date.now()): AppState {
+	return { schemaVersion: 1, pinned: false, createdAt: now, updatedAt: now }
+}
 
 async function readJson(vault: App['vault'], path: string): Promise<unknown> {
 	return JSON.parse(await readLocalText(vault, path))

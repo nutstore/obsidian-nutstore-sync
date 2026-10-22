@@ -1,3 +1,6 @@
+export const APP_DEFAULT_ICON =
+	'<svg viewBox="0 0 100 100"><rect x="12" y="12" width="76" height="76" rx="12" fill="none" stroke="currentColor" stroke-width="8"/></svg>'
+
 /** Icons enter Obsidian's trusted DOM, so accept only inert monochrome SVG geometry. */
 export function validateAppIcon(svg: string, doc: Document): string {
 	if (svg.length > 20_000 || /<!|<\?/.test(svg))

@@ -2,7 +2,7 @@ import type { App } from 'obsidian'
 import { dirname } from 'path-browserify'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { readLocalText } from '~/utils/local-vault-io'
-import { APP_LOG_FILE, appDirectoryPath, appIdSchema } from './domain'
+import { APP_LOG_FILE, appDirectoryPath, appIdSchema } from './paths'
 
 export const APP_LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 export const APP_LOG_MAX_BYTES = 1_048_576

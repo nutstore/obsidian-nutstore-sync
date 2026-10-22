@@ -1,5 +1,5 @@
 import { posix as pathPosix } from 'path-browserify'
-import { APP_ROOT_DIR } from '~/ai/apps/domain'
+import { APP_ROOT_DIR } from '~/ai/apps/paths'
 
 export const VAULT_MOUNT_POINT = '/'
 export const AGENTS_MOUNT_POINT = '/.agents'

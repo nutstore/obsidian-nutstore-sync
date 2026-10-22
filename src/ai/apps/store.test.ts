@@ -5,11 +5,11 @@ import {
 	APP_MANIFEST_FILE,
 	APP_ROOT_DIR,
 	APP_STATE_FILE,
-	MAX_VALUE_BYTES,
 	appDirectoryPath,
-	emptyAppManifest,
-	newAppState,
-} from './domain'
+} from './paths'
+import { emptyAppManifest } from './manifest'
+import { newAppState } from './store'
+import { MAX_VALUE_BYTES } from './capabilities/kv'
 import { AppStore } from './store'
 import { writeLocalTextAtomic } from '~/utils/local-vault-io'
 

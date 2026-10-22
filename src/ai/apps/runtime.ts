@@ -1,35 +1,28 @@
+import { appFSMethods, createAppFS, type AppFS } from './capabilities/fs'
+import {
+	createAppKV,
+	dispatchAppKV,
+	type AppKVAPI,
+	type AppKVHost,
+} from './capabilities/kv'
 import { z } from 'zod/mini'
 import createId from '~/utils/create-id'
-import {
-	changeKV,
-	jsonValue,
-	validateKey,
-	type AppContent,
-	type AppKV,
-	type JsonValue,
-	type KVChange,
-} from './domain'
+import type { AppContent } from './source'
 import { emptyAppTheme, readAppTheme, type AppTheme } from './theme'
 import type { AppLogEvent } from './logs'
 
 export interface AppRuntimeAPI {
-	kv: {
-		get(key: string): Promise<JsonValue | null>
-		list(): Promise<string[]>
-		set(key: string, value: JsonValue): Promise<void>
-		delete(key: string): Promise<void>
-		transact(changes: KVChange[]): Promise<void>
-	}
+	fs: AppFS
+	kv: AppKVAPI
 }
 const requestSchema = z.object({
 	channel: z.string(),
 	id: z.number().check(z.int(), z.minimum(1)),
-	method: z.enum(['kv.get', 'kv.list', 'kv.transact']),
-	args: z.array(z.unknown()).check(z.maxLength(2)),
+	method: z.string(),
+	args: z.array(z.unknown()).check(z.maxLength(3)),
 })
-export interface RuntimeHost {
-	readKV(): Promise<AppKV>
-	transact(changes: KVChange[]): Promise<void>
+export interface RuntimeHost extends AppKVHost {
+	fs?: (method: string, args: unknown[]) => Promise<unknown>
 	log(event: AppLogEvent): void
 	error(message: string): void
 }
@@ -83,14 +76,19 @@ export function formatAppRuntimeFailure(failure: AppRuntimeFailure) {
 
 /** This function is serialized into srcdoc. Keep it self-contained and browser-only. */
 /* eslint-disable obsidianmd/prefer-create-el -- Serialized sandbox code runs in a standard browser document without Obsidian DOM extensions. */
-function bootstrap(payload: {
-	channel: string
-	nonce: string
-	html: string
-	css: string
-	javascript: string
-	theme: AppTheme
-}) {
+function bootstrap(
+	payload: {
+		channel: string
+		nonce: string
+		html: string
+		css: string
+		javascript: string
+		theme: AppTheme
+		fsMethods: string[]
+	},
+	createFS: typeof createAppFS,
+	createKV: typeof createAppKV,
+) {
 	const channel = payload.channel
 	let nextId = 0
 	const pending = new Map<
@@ -267,16 +265,10 @@ function bootstrap(payload: {
 		})
 	})
 	const api: AppRuntimeAPI = {
-		kv: {
-			get: (key) => rpc('kv.get', key) as Promise<JsonValue | null>,
-			list: () => rpc('kv.list') as Promise<string[]>,
-			set: (key, value) =>
-				rpc('kv.transact', [{ key, value }]) as Promise<void>,
-			delete: (key) =>
-				rpc('kv.transact', [{ key, delete: true }]) as Promise<void>,
-			transact: (changes) => rpc('kv.transact', changes) as Promise<void>,
-		},
+		fs: createFS(rpc, payload.fsMethods),
+		kv: createKV(rpc),
 	}
+
 	Object.defineProperty(window, 'app', {
 		value: Object.freeze(api),
 		writable: false,
@@ -356,9 +348,10 @@ export function runtimeDocument(
 		nonce: channel,
 		...content,
 		theme,
+		fsMethods: appFSMethods,
 	}).replace(/</g, '\\u003c')
 	const policy = `default-src 'none'; script-src 'nonce-${channel}'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`
-	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html{color-scheme:light dark}body{margin:0;padding:16px;color:var(--text-normal,CanvasText);background:var(--background-primary,Canvas);font-family:var(--font-interface,var(--font-text,system-ui,sans-serif));font-size:var(--font-ui-medium,14px);line-height:1.5}*{box-sizing:border-box}button,input,textarea,select{font:inherit;color:var(--text-normal,CanvasText)}button{background:var(--interactive-normal,var(--background-secondary,ButtonFace));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--button-radius,var(--radius-s,6px));padding:6px 12px}button:hover{background:var(--interactive-hover,var(--background-modifier-hover,ButtonFace))}input,textarea,select{background:var(--background-modifier-form-field,var(--background-primary,Field));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--input-radius,var(--radius-s,6px));padding:6px 8px}a{color:var(--link-color,var(--text-accent,LinkText))}a:hover{color:var(--link-color-hover,var(--text-accent-hover,LinkText))}::selection{background:var(--text-selection,Highlight)}img,canvas,svg{max-width:100%}</style></head><body><script nonce="${channel}">(${bootstrap.toString()})(${payload});</script></body></html>`
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html{color-scheme:light dark}body{margin:0;padding:16px;color:var(--text-normal,CanvasText);background:var(--background-primary,Canvas);font-family:var(--font-interface,var(--font-text,system-ui,sans-serif));font-size:var(--font-ui-medium,14px);line-height:1.5}*{box-sizing:border-box}button,input,textarea,select{font:inherit;color:var(--text-normal,CanvasText)}button{background:var(--interactive-normal,var(--background-secondary,ButtonFace));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--button-radius,var(--radius-s,6px));padding:6px 12px}button:hover{background:var(--interactive-hover,var(--background-modifier-hover,ButtonFace))}input,textarea,select{background:var(--background-modifier-form-field,var(--background-primary,Field));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--input-radius,var(--radius-s,6px));padding:6px 8px}a{color:var(--link-color,var(--text-accent,LinkText))}a:hover{color:var(--link-color-hover,var(--text-accent-hover,LinkText))}::selection{background:var(--text-selection,Highlight)}img,canvas,svg{max-width:100%}</style></head><body><script nonce="${channel}">(${bootstrap.toString()})(${payload}, ${createAppFS.toString()}, ${createAppKV.toString()});</script></body></html>`
 }
 
 /** Each mount owns a revocable capability. A sandbox's opaque origin is authenticated by source + instance channel. */
@@ -489,33 +482,21 @@ export class AppRuntime {
 		}
 		const execute = async () => {
 			if (++this.requestCount > 60) throw new Error('App request rate exceeded')
-			switch (request.method) {
-				case 'kv.get': {
-					if (request.args.length !== 1) throw new Error('Invalid App request')
-					const key = request.args[0]
-					validateKey(key)
-					return (await this.host.readKV())[key] ?? null
-				}
-				case 'kv.list':
-					return Object.keys(await this.host.readKV())
-				case 'kv.transact': {
-					const input = request.args[0]
-					if (request.args.length !== 1 || !Array.isArray(input))
-						throw new Error('Invalid App transaction')
-					const changes = input.map((item: unknown) => {
-						if (!item || typeof item !== 'object')
-							throw new Error('Invalid App transaction')
-						const change = item as Record<string, unknown>
-						validateKey(change.key)
-						if (change.delete === true) return { key: change.key, delete: true }
-						return { key: change.key, value: jsonValue(change.value) }
-					})
-					changeKV({}, changes)
-					if (this.destroyed) throw new Error('App closed')
-					await this.host.transact(changes)
-					return null
-				}
+			if (request.method.startsWith('fs.')) {
+				if (!this.host.fs) throw new Error('Filesystem unavailable')
+				return this.host.fs(request.method.slice(3), request.args)
 			}
+			if (request.method.startsWith('kv.')) {
+				return dispatchAppKV(
+					this.host,
+					request.method.slice(3),
+					request.args,
+					() => {
+						if (this.destroyed) throw new Error('App closed')
+					},
+				)
+			}
+			throw new Error('Unknown App operation')
 		}
 		void execute().then(
 			(value) => {

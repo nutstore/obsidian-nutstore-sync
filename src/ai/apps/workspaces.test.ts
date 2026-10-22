@@ -10,9 +10,9 @@ import {
 	APP_MANIFEST_FILE,
 	APP_STATE_FILE,
 	appDirectoryPath,
-	type AppContent,
-	type KVChange,
-} from './domain'
+} from './paths'
+import { type AppContent } from './source'
+import { type KVChange } from './capabilities/kv'
 import { AppWorkspaces } from './workspaces'
 import type { RuntimeHost } from './runtime'
 

@@ -1,6 +1,6 @@
 import { Menu, Modal, Notice, Platform, setIcon } from 'obsidian'
 import type NutstorePlugin from '~/index'
-import type { SavedApp } from '~/ai/apps/domain'
+import type { SavedApp } from '~/ai/apps/store'
 import { appError } from '~/ai/apps/error'
 import i18n from '~/i18n'
 

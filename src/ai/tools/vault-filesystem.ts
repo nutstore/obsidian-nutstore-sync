@@ -4,7 +4,7 @@ import {
 	appIdFromPath,
 	isAppDirectoryPath,
 	isReservedAppPath,
-} from '~/ai/apps/domain'
+} from '~/ai/apps/paths'
 import type { AppOpenFn, AppWorkspaceBinding } from '~/ai/apps/workspaces'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'

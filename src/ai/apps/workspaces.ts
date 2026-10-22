@@ -1,3 +1,5 @@
+import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
+import { createAppFSDispatcher } from './capabilities/fs'
 import type { App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 import type { ModuleScope } from '~/modules/lifecycle'
@@ -15,18 +17,18 @@ import {
 	APP_LOG_FILE,
 	APP_ROOT_DIR,
 	appDirectoryPath,
-	changeKV,
-	type AppContent,
-	type AppKV,
-	type KVChange,
-	type LoadedApp,
-} from './domain'
+} from './paths'
+import { changeKV, type AppKV, type KVChange } from './capabilities/kv'
 import { appError } from './error'
 import { validateAppIcon } from './icon'
 import { AppLogStore } from './logs'
 import { AppRuntime, type RuntimeHost } from './runtime'
-import { assembleAppContent } from './source'
-import { AppStore } from './store'
+import { assembleAppContent, type AppContent } from './source'
+import { AppStore, type SavedApp } from './store'
+
+export interface LoadedApp extends SavedApp {
+	content: AppContent
+}
 
 export interface AppOpenResult {
 	appId: string
@@ -111,6 +113,14 @@ export class AppWorkspaces {
 		let runtime: AppRuntime | undefined
 		try {
 			runtime = new AppRuntime(container, loaded.content, {
+				fs: createAppFSDispatcher(
+					() =>
+						new VaultFileSystemManager(
+							guardAppIO(this.app, check, this.scope.track),
+						).create({ readonlyApps: true }),
+					check,
+					true,
+				),
 				readKV: async () => disposable,
 				transact: async (changes) => {
 					disposable = changeKV(disposable, changes)
@@ -140,10 +150,37 @@ export class AppWorkspaces {
 	}
 
 	/** Host bridge for one mounted runtime; runtime lifetime replaces revision identity. */
-	createRuntimeHost(appId: string): RuntimeHost {
+	createRuntimeHost(
+		appId: string,
+		checkRuntime: () => void = () => {},
+	): RuntimeHost {
 		const scope = this.scope
 		const apps = this.store
+		const check = () => {
+			scope.check()
+			checkRuntime()
+		}
 		return {
+			fs: createAppFSDispatcher(
+				() =>
+					new VaultFileSystemManager(
+						guardAppIO(this.app, check, scope.track),
+					).create({
+						readonlyApps: true,
+						permissionGuard: async (request) => {
+							check()
+							const { createPermissionGuard } =
+								await import('~/ai/tools/permission-guard')
+							check()
+							await createPermissionGuard(this.app, undefined, {
+								sessionTitle: appId,
+								signal: scope.signal,
+							})(request)
+							check()
+						},
+					}),
+				check,
+			),
 			readKV: async () => {
 				scope.check()
 				return apps.readKV(appId)

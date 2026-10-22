@@ -96,8 +96,8 @@ Unsupported references fail visibly instead of silently loading nothing:
 - Multi-page navigation does not happen: `<a href="page.html">` does not change
   the view.
 
-Apps are self-contained: they cannot reference files outside their own
-directory, other vault files, or network resources.
+App source references stay inside their own directory. Read other files at runtime
+through `app.fs`; network resources remain unavailable.
 
 ## Hot reload
 
@@ -122,8 +122,7 @@ manually when possible, and describe verification accurately.
 ## Sandbox and persistence
 
 The App runs in an opaque-origin iframe (`sandbox="allow-scripts"`) with CSP
-`default-src 'none'` and no network access. `window.app.kv` is the only
-persistence API, and every call is async:
+`default-src 'none'` and no network access. `window.app.kv` provides small JSON state. Every call is async:
 
 - `await app.kv.get(key)` returns a JSON value or `null`; `await app.kv.list()`
   returns stored keys.
@@ -140,6 +139,43 @@ do not read or write it directly — use `app.kv`.
 
 Use `addEventListener` for events; inline `on*` handler attributes are removed.
 Browser storage and parent-window access are unavailable.
+
+## Virtual filesystem
+
+`app.fs` accesses the same virtual filesystem as Agent file tools. Relative
+paths resolve from `/`, not the App source directory. `/` is the vault base;
+`/.agents/nutstore-sync/builtin-skills` is a read-only mount. The App view
+currently has no virtual settings mount.
+
+All methods return promises, including `resolvePath`:
+
+- `exists(path)`, `stat(path)`, `readdir(path)` (entry names).
+- `readFile(path, encoding?)` for text; default UTF-8.
+- `readFileBuffer(path)` returns `Uint8Array` without text conversion.
+- `writeFile(path, textOrUint8Array, encoding?)`, `appendFile(...)`.
+- `mkdir(path, { recursive? }?)`, `rm(path, { recursive?, force? }?)`.
+- `mv(src, dest)`, `cp(src, dest, { recursive? }?)`.
+- `resolvePath(base, path)` resolves a virtual path.
+
+Encodings are `utf8`, `utf-8`, `base64`, `hex`, `binary` and `latin1`, supplied
+as a string or `{ encoding }`. Write payloads are limited to 4 MiB for bytes
+or 4,194,304 UTF-16 code units for strings. Filesystem errors reject the promise.
+Writes to App directories, source and host-owned files are blocked; use `app.kv`
+for App state. Ordinary file mutations use the host's existing permission dialog.
+Permissions apply to the App independently of the authoring chat.
+
+Startup validation permits filesystem reads only. Perform filesystem mutations in response to
+user actions after startup; handle errors in the UI. Reads and writes share
+Agent mount routing and encoding semantics. App closure or replacement revokes
+access, including queued requests.
+
+```js
+const entries = await app.fs.readdir('/Notes')
+const text = await app.fs.readFile('/Notes/Example.md')
+document.querySelector('button').addEventListener('click', async () => {
+	await app.fs.writeFile('/Notes/Example.md', text + '\nNew entry')
+})
+```
 
 ## Theme and appearance
 

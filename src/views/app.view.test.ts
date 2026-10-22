@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceLeaf } from 'obsidian'
 import type NutstorePlugin from '~/index'
-import type { AppContent, LoadedApp } from '~/ai/apps/domain'
+import type { AppContent } from '~/ai/apps/source'
+import type { LoadedApp } from '~/ai/apps/workspaces'
 import type { RuntimeHost } from '~/ai/apps/runtime'
 import AppView from './app.view'
 import i18n from '~/i18n'
@@ -229,7 +230,10 @@ describe('App view sandbox lifetime', () => {
 		expect(runtimes).toHaveLength(1)
 		expect(runtimes[0].content).toEqual(f.loaded.content)
 		expect(runtimes[0].title).toBe('清单 Checklist 中文 🌿')
-		expect(f.workspaces.createRuntimeHost).toHaveBeenCalledWith('neutral-app')
+		expect(f.workspaces.createRuntimeHost).toHaveBeenCalledWith(
+			'neutral-app',
+			expect.any(Function),
+		)
 		expect(f.view.contentEl.textContent).toContain('清单 Checklist 中文 🌿')
 		expect(
 			f.view.contentEl.querySelector(

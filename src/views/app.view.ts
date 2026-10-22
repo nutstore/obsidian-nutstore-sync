@@ -8,7 +8,7 @@ import {
 } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import { AppRuntime } from '~/ai/apps/runtime'
-import type { LoadedApp } from '~/ai/apps/domain'
+import type { LoadedApp } from '~/ai/apps/workspaces'
 import { appError } from '~/ai/apps/error'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
@@ -203,12 +203,15 @@ export default class AppView extends ItemView {
 			this.title = validated.manifest.title
 			this.heading.textContent = this.title
 			this.clearRuntime()
-			const host = this.plugin.ai.workspaces.createRuntimeHost(appId)
+			const host = this.plugin.ai.workspaces.createRuntimeHost(appId, () => {
+				if (!current()) throw new Error('This App version is no longer active')
+			})
 			const current = () => !this.closed && this.runtime === runtime
 			const runtime: AppRuntime = new AppRuntime(
 				this.output,
 				validated.content,
 				{
+					fs: host.fs,
 					readKV: async () => {
 						if (!current())
 							throw new Error('This App version is no longer active')

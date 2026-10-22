@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ModuleScope } from '~/modules/lifecycle'
 import type NutstorePlugin from '~/index'
-import type { SavedApp } from '~/ai/apps/domain'
+import type { SavedApp } from '~/ai/apps/store'
 import type { AppStore } from '~/ai/apps/store'
 import AppRibbonManager from './AppRibbonManager'
 

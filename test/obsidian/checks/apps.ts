@@ -7,7 +7,7 @@ import {
 	APP_MANIFEST_FILE,
 	APP_STATE_FILE,
 	appDirectoryPath,
-} from '~/ai/apps/domain'
+} from '~/ai/apps/paths'
 import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import { execVaultBash } from '~/ai/tools/bash/runtime'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
