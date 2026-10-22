@@ -7,6 +7,8 @@ audit:
 catalog:
   zod: ^4.5.4
 overrides:
+  # GHSA-5r4p-p66f-jhc7 is patched in hono >=4.13.11.
+  hono: ^4.13.11
   undici@>=7.0.0 <7.29.1: ^7.29.1
   zod: 'catalog:'
 allowBuilds:
