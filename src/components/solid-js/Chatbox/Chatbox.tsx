@@ -7,6 +7,8 @@ import {
 	on,
 	onCleanup,
 	onMount,
+	type JSX,
+	untrack,
 } from 'solid-js'
 import {
 	createFileContextItem,
@@ -67,6 +69,35 @@ function isSupportedTextFile(file: File): boolean {
 
 function isSupportedPickedFile(file: File): boolean {
 	return file.type.startsWith('image/') || isSupportedTextFile(file)
+}
+
+/**
+ * Keeps message growth observable after Markdown and media finish rendering.
+ * Data changes alone cannot detect those later layout changes.
+ */
+function MessageScrollContent(props: {
+	class: string
+	onResize: () => void
+	children: JSX.Element
+}) {
+	let el!: HTMLDivElement
+
+	onMount(() => {
+		const ResizeObserverConstructor =
+			el.ownerDocument.defaultView?.ResizeObserver
+		if (!ResizeObserverConstructor) return
+		const observer = new ResizeObserverConstructor(() =>
+			untrack(() => props.onResize()),
+		)
+		observer.observe(el)
+		onCleanup(() => observer.disconnect())
+	})
+
+	return (
+		<div ref={el} class={props.class}>
+			{props.children}
+		</div>
+	)
 }
 
 function Chatbox(props: ChatboxProps) {
@@ -390,17 +421,19 @@ function Chatbox(props: ChatboxProps) {
 		}
 	}
 
-	function scrollMessagesToBottom(behavior: ScrollBehavior = 'smooth') {
+	function scrollMessagesToBottom(force = false) {
+		if (force) setStickToBottom(true)
 		getViewWindow().requestAnimationFrame(() => {
-			if (!messagesEl) {
+			if (!messagesEl || (!force && !untrack(() => stickToBottom()))) {
 				return
 			}
-			messagesEl.scrollTo({
-				top: messagesEl.scrollHeight,
-				behavior,
-			})
+			messagesEl.scrollTop = messagesEl.scrollHeight
 			setStickToBottom(true)
 		})
+	}
+
+	function onMessageContentResize() {
+		if (stickToBottom()) scrollMessagesToBottom()
 	}
 
 	async function addPickedFile(file: File) {
@@ -518,13 +551,10 @@ function Chatbox(props: ChatboxProps) {
 				props.runState,
 			],
 			([activeSessionId]) => {
-				const behavior =
-					previousActiveSessionId !== activeSessionId ? 'auto' : 'smooth'
-				const shouldScroll =
-					previousActiveSessionId !== activeSessionId || stickToBottom()
+				const sessionChanged = previousActiveSessionId !== activeSessionId
 				previousActiveSessionId = activeSessionId?.toString()
-				if (shouldScroll) {
-					scrollMessagesToBottom(behavior)
+				if (sessionChanged || stickToBottom()) {
+					scrollMessagesToBottom(sessionChanged)
 				}
 			},
 		),
@@ -538,7 +568,7 @@ function Chatbox(props: ChatboxProps) {
 				if (activeSessionId !== previousActiveSessionId || !stickToBottom()) {
 					return
 				}
-				scrollMessagesToBottom('auto')
+				scrollMessagesToBottom()
 			},
 		),
 	)
@@ -674,7 +704,7 @@ function Chatbox(props: ChatboxProps) {
 		const previousInput = input()
 		setInput('')
 		props.onUpdateInputDraft('')
-		scrollMessagesToBottom('auto')
+		scrollMessagesToBottom(true)
 		try {
 			const accepted = await props.onSendMessage(text, props.activeContextItems)
 			if (!accepted) {
@@ -927,7 +957,10 @@ function Chatbox(props: ChatboxProps) {
 								</div>
 							}
 						>
-							<div class=":uno: flex flex-col gap-[var(--ns-chatbox-gap)]">
+							<MessageScrollContent
+								class=":uno: ns-chatbox-message-content flex flex-col gap-[var(--ns-chatbox-gap)]"
+								onResize={onMessageContentResize}
+							>
 								<TurnTimeline
 									timeline={props.timeline}
 									sessionId={props.activeSessionId}
@@ -956,7 +989,7 @@ function Chatbox(props: ChatboxProps) {
 									onStop={props.onStopActiveRun}
 								/>
 								<PendingList pending={props.pending} />
-							</div>
+							</MessageScrollContent>
 						</Show>
 					</div>
 
