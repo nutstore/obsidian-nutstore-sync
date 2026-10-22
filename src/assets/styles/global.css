@@ -2500,6 +2500,62 @@
 	visibility: hidden;
 	pointer-events: none;
 }
+.modal.ns-app-create-modal {
+	width: min(560px, calc(100vw - 2rem));
+}
+.ns-app-create-form {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+	padding-top: var(--size-4-2);
+}
+.ns-app-create-field.setting-item {
+	flex-direction: column;
+	align-items: stretch;
+	gap: var(--size-4-1);
+	padding: var(--size-4-2) 0;
+	margin-bottom: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.ns-app-create-field .setting-item-info {
+	margin-inline-end: 0;
+}
+.ns-app-create-field .setting-item-description {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: var(--line-height-tight);
+}
+.ns-app-create-field .setting-item-control {
+	width: 100%;
+	justify-content: stretch;
+}
+.ns-app-create-field input,
+.ns-app-create-field textarea {
+	width: 100%;
+}
+.ns-app-create-field textarea {
+	min-height: 8.5rem;
+	max-height: 16rem;
+	line-height: var(--line-height-normal);
+	resize: vertical;
+}
+.ns-app-create-actions.setting-item {
+	margin-top: var(--size-4-4);
+	margin-bottom: 0;
+	padding: var(--size-4-4) 0 0;
+	border: 0;
+	border-top: 1px solid var(--background-modifier-border);
+	border-radius: 0;
+	background: transparent;
+}
+.ns-app-create-actions .setting-item-info {
+	display: none;
+}
+.ns-app-create-actions .setting-item-control {
+	margin-inline-start: auto;
+}
 /* Target selection shares the existing toolbar; only actual context adds a row. */
 .ns-workspace-slot {
 	flex: 0 1 auto;

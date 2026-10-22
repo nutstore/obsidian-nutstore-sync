@@ -950,11 +950,22 @@
 		"modify": "继续修改",
 		"pin": "固定到 ribbon",
 		"unpin": "取消 ribbon 固定",
+		"createApp": "创建 App",
+		"createAppName": "App 名称",
+		"createAppNameDesc": "可选。将作为 App 的名称。",
+		"createAppNamePlaceholder": "例如：任务清单",
+		"createAppDescription": "App 描述",
+		"createAppDescriptionDesc": "必填。描述 App 的用途和功能。",
+		"createAppDescriptionPlaceholder": "描述界面、功能和操作方式。",
+		"create": "创建",
+		"cancel": "取消",
 		"deleteApp": "删除 App",
 		"deleteAppPrompt": "删除此 App 及其数据？会话记录会保留。",
 		"workspace": "App 工作区",
 		"noWorkspace": "普通对话",
 		"missingApp": "App 工作区已不存在或无法读取",
-		"describeApp": "在聊天中描述你想制作的内容，App 会在这里呈现。"
+		"describeApp": "在聊天中描述你想制作的内容，App 会在这里呈现。",
+		"createPrompt": "写一个App，这是他的描述：",
+		"createPromptName": "App 名称：{{name}}"
 	}
 }

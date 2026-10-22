@@ -950,11 +950,22 @@
 		"modify": "Continue editing",
 		"pin": "Pin to ribbon",
 		"unpin": "Unpin from ribbon",
+		"createApp": "Create App",
+		"createAppName": "App name",
+		"createAppNameDesc": "Optional. Used as the App title.",
+		"createAppNamePlaceholder": "For example: Task checklist",
+		"createAppDescription": "App description",
+		"createAppDescriptionDesc": "Required. Describe the features and behavior you want.",
+		"createAppDescriptionPlaceholder": "Describe the layout, features, and interactions.",
+		"create": "Create",
+		"cancel": "Cancel",
 		"deleteApp": "Delete App",
 		"deleteAppPrompt": "Delete this App and its data? Chat history will be kept.",
 		"workspace": "App workspace",
 		"noWorkspace": "General chat",
 		"missingApp": "App workspace is unavailable",
-		"describeApp": "Describe what you want to build in chat. Your App will appear here."
+		"describeApp": "Describe what you want to build in chat. Your App will appear here.",
+		"createPrompt": "Write an App. Here is its description:",
+		"createPromptName": "App name: {{name}}"
 	}
 }

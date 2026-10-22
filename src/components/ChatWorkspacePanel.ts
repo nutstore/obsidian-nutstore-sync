@@ -2,7 +2,9 @@ import { Menu, Modal, Notice, Platform, setIcon } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import type { SavedApp } from '~/ai/apps/store'
 import { appError } from '~/ai/apps/error'
+import { formatAppCreationPrompt } from '~/ai/apps/create-app-prompt'
 import i18n from '~/i18n'
+import AppCreationModal from './AppCreationModal'
 
 /**
  * The composer exposes the chat target. Apps are authored through conversation
@@ -67,6 +69,12 @@ export class ChatWorkspacePanel {
 				.setChecked(!this.activeId)
 				.onClick(() => this.selectWorkspace()),
 		)
+		menu.addItem((item) =>
+			item
+				.setTitle(i18n.t('apps.createApp'))
+				.setIcon('plus')
+				.onClick(() => this.openCreateApp()),
+		)
 		for (const app of this.items) {
 			menu.addItem((item) =>
 				item
@@ -104,6 +112,17 @@ export class ChatWorkspacePanel {
 		}
 		const rect = this.picker.getBoundingClientRect()
 		menu.showAtPosition({ x: rect.left, y: rect.bottom })
+	}
+	private openCreateApp() {
+		const modal = this.plugin.ai.lifecycle.scope.ownModal(
+			new AppCreationModal(this.plugin.app, async ({ name, description }) => {
+				await this.plugin.ai.chat.createDraftSession(
+					formatAppCreationPrompt({ name, description }),
+				)
+				await this.plugin.ai.chat.selectWorkspace(undefined)
+			}),
+		)
+		modal.open()
 	}
 	private syncWorkspaceIcon() {
 		const appId = this.activeId
