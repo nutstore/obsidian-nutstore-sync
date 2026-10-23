@@ -16,10 +16,17 @@ import { type KVChange } from './capabilities/kv'
 import { AppWorkspaces } from './workspaces'
 import type { RuntimeHost } from './runtime'
 
+vi.mock('obsidian', () => ({
+	normalizePath: (path: string) => path.replace(/^\/+|\/+$/g, ''),
+	TFile: class {},
+	TFolder: class {},
+}))
+
 const disk = vi.hoisted(() => new Map<string, string>())
 const binary = vi.hoisted(() => new Map<string, ArrayBuffer>())
 const pathListeners = vi.hoisted(() => new Set<(path: string) => void>())
 const logger = vi.hoisted(() => ({ error: vi.fn() }))
+const permissionGuard = vi.hoisted(() => vi.fn(async () => {}))
 const runtimeControl = vi.hoisted(() => ({
 	fail: false,
 	gate: undefined as Promise<void> | undefined,
@@ -36,9 +43,18 @@ const runtimeControl = vi.hoisted(() => ({
 
 vi.mock('~/utils/logger', () => ({ default: logger }))
 vi.mock('~/utils/mkdirs-vault', () => ({ mkdirsVault: async () => {} }))
+vi.mock('~/ai/tools/permission-guard', () => ({
+	createPermissionGuard: () => permissionGuard,
+}))
+vi.mock('~/ai/skills/builtin', () => ({
+	createBuiltinSkillsFs: async () => ({}),
+}))
 vi.mock('~/utils/local-vault-io', () => ({
 	existsLocalPath: async (_vault: unknown, path: string) =>
-		disk.has(path) || binary.has(path),
+		disk.has(path) ||
+		binary.has(path) ||
+		[...disk.keys()].some((key) => key.startsWith(`${path}/`)) ||
+		[...binary.keys()].some((key) => key.startsWith(`${path}/`)),
 	readLocalText: async (_vault: unknown, path: string) => {
 		if (!disk.has(path)) throw new Error(`Missing file: ${path}`)
 		return disk.get(path)!
@@ -173,7 +189,11 @@ function fixture() {
 		value: { createDiv: () => document.createElement('div') },
 	})
 	const app = {
-		vault: { configDir: '.obsidian', adapter },
+		vault: {
+			configDir: '.obsidian',
+			adapter,
+			getAllLoadedFiles: () => [],
+		},
 		fileManager: {},
 		workspace: { containerEl: document.body },
 	} as unknown as App
@@ -204,6 +224,7 @@ beforeEach(() => {
 	binary.clear()
 	pathListeners.clear()
 	logger.error.mockClear()
+	permissionGuard.mockClear()
 	runtimeControl.fail = false
 	runtimeControl.gate = undefined
 	runtimeControl.starts = 0
@@ -456,6 +477,42 @@ describe('App workspaces over real App files', () => {
 
 		host.error('中性错误 Neutral failure 🌿')
 		expect(logger.error).toHaveBeenCalledWith('中性错误 Neutral failure 🌿')
+	})
+
+	it('lets an App uninstall another App through the host without weakening its own source protection', async () => {
+		const { service } = fixture()
+		const current = await service.create(
+			'org.example.files',
+			'中性文件管理器 Neutral file manager 🌿',
+		)
+		const target = await service.create(
+			'org.example.archive',
+			'中性归档 Neutral archive 🌿',
+		)
+		disk.set(
+			sourcePath(target.id, APP_ENTRY_FILE),
+			'<p>中性内容 Neutral content 🌿</p>',
+		)
+		const host = service.createRuntimeHost(current.id)
+
+		await expect(
+			host.fs!('rm', [`${appDirectoryPath(target.id)}/${APP_ENTRY_FILE}`]),
+		).rejects.toThrow(/EROFS/)
+		await expect(
+			host.fs!('rm', [`${appDirectoryPath(target.id)}/${APP_DATA_FILE}`]),
+		).rejects.toThrow(/EROFS/)
+		await host.fs!('rm', [appDirectoryPath(target.id), { recursive: true }])
+
+		expect(permissionGuard).toHaveBeenCalledWith(
+			expect.objectContaining({
+				fs: { kind: 'delete', path: `/${appDirectoryPath(target.id)}` },
+			}),
+		)
+		expect(disk.has(sourcePath(target.id, APP_MANIFEST_FILE))).toBe(false)
+		expect(disk.has(sourcePath(current.id, APP_MANIFEST_FILE))).toBe(true)
+		await expect(
+			host.fs!('rm', [appDirectoryPath(current.id), { recursive: true }]),
+		).rejects.toThrow(/cannot uninstall itself/)
 	})
 
 	it('binds App access only when the selection actually changes and rolls back failures', async () => {

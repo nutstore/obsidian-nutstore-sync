@@ -1,9 +1,10 @@
 import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import { createAppFSDispatcher } from './capabilities/fs'
-import type { App } from 'obsidian'
+import { normalizePath, type App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 import type { ModuleScope } from '~/modules/lifecycle'
 import { guardAppIO } from '~/modules/guard-io'
+import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { isAbortError, throwIfAborted } from '~/utils/abort'
 import { raceWithAbort } from '~/utils/abortable'
 import {
@@ -17,6 +18,8 @@ import {
 	APP_LOG_FILE,
 	APP_ROOT_DIR,
 	appDirectoryPath,
+	appIdFromPath,
+	isAppDirectoryPath,
 } from './paths'
 import { changeKV, type AppKV, type KVChange } from './capabilities/kv'
 import { appError } from './error'
@@ -160,27 +163,62 @@ export class AppWorkspaces {
 			scope.check()
 			checkRuntime()
 		}
+		const permissionGuard: PermissionGuard = async (request) => {
+			check()
+			const { createPermissionGuard } =
+				await import('~/ai/tools/permission-guard')
+			check()
+			await createPermissionGuard(this.app, undefined, {
+				sessionTitle: appId,
+				signal: scope.signal,
+			})(request)
+			check()
+		}
+		const fs = createAppFSDispatcher(
+			() =>
+				new VaultFileSystemManager(
+					guardAppIO(this.app, check, scope.track),
+				).create({
+					readonlyApps: true,
+					permissionGuard,
+				}),
+			check,
+			false,
+			async (method, args) => {
+				if (method !== 'rm') return
+				const [path, options] = args as [
+					string,
+					{ recursive?: boolean; force?: boolean }?,
+				]
+				const vaultPath = normalizePath(path).replace(/^\/+/, '')
+				const targetId = appIdFromPath(vaultPath)
+				if (!targetId || !isAppDirectoryPath(vaultPath)) return
+				if (targetId === appId) {
+					throw new Error('EPERM: an App cannot uninstall itself')
+				}
+				check()
+				if (!(await apps.exists(targetId))) {
+					if (options?.force) return { handled: true, value: undefined }
+					throw new Error(`ENOENT: no such file or directory, remove '${path}'`)
+				}
+				if (!options?.recursive) {
+					throw new Error(
+						`EISDIR: illegal operation on a directory, remove '${path}'`,
+					)
+				}
+				await permissionGuard({
+					type: 'fs',
+					fs: {
+						kind: 'delete',
+						path: `/${appDirectoryPath(targetId)}`,
+					},
+				})
+				await this.remove(targetId)
+				return { handled: true, value: undefined }
+			},
+		)
 		return {
-			fs: createAppFSDispatcher(
-				() =>
-					new VaultFileSystemManager(
-						guardAppIO(this.app, check, scope.track),
-					).create({
-						readonlyApps: true,
-						permissionGuard: async (request) => {
-							check()
-							const { createPermissionGuard } =
-								await import('~/ai/tools/permission-guard')
-							check()
-							await createPermissionGuard(this.app, undefined, {
-								sessionTitle: appId,
-								signal: scope.signal,
-							})(request)
-							check()
-						},
-					}),
-				check,
-			),
+			fs,
 			readKV: async () => {
 				scope.check()
 				return apps.readKV(appId)

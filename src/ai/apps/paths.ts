@@ -33,7 +33,7 @@ export function appIdFromPath(vaultPath: string): string | undefined {
 export function isHostFileName(fileName: string): boolean {
 	return (APP_HOST_FILES as readonly string[]).includes(fileName)
 }
-/** The Apps root or one App directory itself; its lifecycle belongs to the host UI. */
+/** The Apps root or one App directory itself; its lifecycle belongs to the host. */
 export function isAppDirectoryPath(vaultPath: string): boolean {
 	const id = appIdFromPath(vaultPath)
 	if (id === undefined) return false

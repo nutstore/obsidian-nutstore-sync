@@ -160,9 +160,12 @@ All methods return promises, including `resolvePath`:
 Encodings are `utf8`, `utf-8`, `base64`, `hex`, `binary` and `latin1`, supplied
 as a string or `{ encoding }`. Write payloads are limited to 4 MiB for bytes
 or 4,194,304 UTF-16 code units for strings. Filesystem errors reject the promise.
-Writes to App directories, source and host-owned files are blocked; use `app.kv`
-for App state. Ordinary file mutations use the host's existing permission dialog.
-Permissions apply to the App independently of the authoring chat.
+App source and host-owned files are read-only to a running App; use `app.kv`
+for App state. An App may uninstall a different App by removing that App's root
+directory with `{ recursive: true }`. This always asks the user and the host
+removes the whole App lifecycle. An App cannot uninstall itself. Ordinary file
+mutations use the host's existing permission dialog. Permissions apply to the
+App independently of the authoring chat.
 
 Startup validation permits filesystem reads only. Perform filesystem mutations in response to
 user actions after startup; handle errors in the UI. Reads and writes share
