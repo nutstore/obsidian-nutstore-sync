@@ -1444,11 +1444,6 @@
 	--ns-chatbox-card-py: 0.5rem;
 }
 
-.ns-chatbox-messages {
-	/* Follow-bottom owns scroll position; browser anchoring would race it. */
-	overflow-anchor: none;
-}
-
 /* Top navigation header inside Chatbox */
 .ns-chatbox-header {
 	position: relative;

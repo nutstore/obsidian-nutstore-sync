@@ -926,10 +926,12 @@ function Chatbox(props: ChatboxProps) {
 					ref={splitLayoutEl}
 					class=":uno: flex min-h-0 flex-1 flex-col overflow-hidden"
 				>
-					{/* Messages */}
+					{/* Native anchoring preserves reading position above the bottom;
+					    follow-bottom owns scrolling while pinned to the end. */}
 					<div
 						ref={messagesEl}
 						class=":uno: ns-chatbox-messages min-h-0 flex-1 overflow-y-auto px-[var(--ns-chatbox-pad-x)] pt-[var(--ns-chatbox-gap)] pb-[var(--ns-chatbox-gap)] scrollbar-default"
+						style={{ 'overflow-anchor': stickToBottom() ? 'none' : 'auto' }}
 					>
 						<Show
 							when={
