@@ -8,6 +8,7 @@ import en from '~/i18n/locales/en.json'
 import zh from '~/i18n/locales/zh.json'
 import { CHATBOX_VIEW_TYPE } from '~/views/chatbox.view'
 import { assert } from './assert'
+import { assertViewAboveMobileNavigation } from './mobile-navigation'
 
 type ProductionPlugin = NutstorePlugin
 
@@ -82,76 +83,9 @@ export async function keepsChatboxAboveMobileNavigation(app: App) {
 			plugin.localSettings.ai.chatboxLocation = location
 			await plugin.ai.openChatbox()
 			const view = app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]!.view
-			const content =
-				view.containerEl.querySelector<HTMLElement>('.view-content')!
-			const wrapper = view.containerEl.parentElement!
-			const originalClass = wrapper.className
-			const originalStyle = wrapper.getAttribute('style')
 			try {
-				for (const overrides of [
-					{},
-					{ safe: 34, offset: 34, reserve: 82 },
-					{ width: 650, height: 330 },
-					{ height: 350, safe: 34, offset: 34, keyboard: 300, reserve: 0 },
-					{ hidden: true, reserve: 0 },
-					{ floating: false, reserve: 0 },
-					{ phone: false, width: 768, reserve: 0 },
-				]) {
-					const state = {
-						width: 390,
-						height: 650,
-						safe: 0,
-						offset: 12,
-						keyboard: 0,
-						phone: true,
-						floating: true,
-						hidden: false,
-						reserve: 60,
-						...overrides,
-					}
-					wrapper.toggleClass('is-phone', state.phone)
-					wrapper.toggleClass('is-floating-nav', state.floating)
-					wrapper.toggleClass('is-hidden-nav', state.hidden)
-					wrapper.setCssProps({
-						'--safe-area-inset-bottom': `${state.safe}px`,
-						'--navbar-height': '48px',
-						'--navbar-bottom-offset': `${state.offset}px`,
-						'--keyboard-height': `${state.keyboard}px`,
-					})
-					content.setCssStyles({
-						width: `${state.width}px`,
-						height: `${state.height}px`,
-						flex: 'none',
-					})
-					await new Promise<void>((resolve) =>
-						window.requestAnimationFrame(() =>
-							window.requestAnimationFrame(() => resolve()),
-						),
-					)
-					const padding = Number.parseFloat(
-						getComputedStyle(content).paddingBottom,
-					)
-					assert(
-						state.reserve
-							? padding >= state.reserve
-							: padding <= Math.max(state.safe, 32),
-						`Chatbox reserved the wrong mobile navigation space: ${padding}px, ${JSON.stringify(state)}`,
-					)
-					const send = content.querySelector<HTMLElement>('.ns-composer-send')!
-					assert(
-						send && send.offsetHeight > 0,
-						'Chatbox send action is not visible',
-					)
-					assert(
-						send.getBoundingClientRect().bottom <=
-							content.getBoundingClientRect().bottom - state.reserve + 1,
-						'Mobile navigation overlaps the Chatbox send action',
-					)
-				}
+				await assertViewAboveMobileNavigation(view, '.ns-composer-send')
 			} finally {
-				wrapper.className = originalClass
-				if (originalStyle === null) wrapper.removeAttribute('style')
-				else wrapper.setAttribute('style', originalStyle)
 				app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
 			}
 		}

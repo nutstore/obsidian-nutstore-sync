@@ -12,6 +12,7 @@ import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import { execVaultBash } from '~/ai/tools/bash/runtime'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { assert } from './assert'
+import { assertViewAboveMobileNavigation } from './mobile-navigation'
 import type { AppAIHost } from '~/ai/apps/ai/contract'
 
 const APP_ID = 'org.example.counter'
@@ -323,6 +324,7 @@ export async function createsIndependentApps(app: App) {
 		const leaf = app.workspace
 			.getLeavesOfType(APP_VIEW_TYPE)
 			.find((item) => item.view.getState().appId === APP_ID)!
+		await assertViewAboveMobileNavigation(leaf.view, '.ns-app-runtime')
 		const frame = leaf.view.containerEl.querySelector('iframe')!
 		assert(
 			frame.getAttribute('sandbox') === 'allow-scripts',

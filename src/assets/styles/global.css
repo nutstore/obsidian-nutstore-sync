@@ -7,11 +7,14 @@
 }
 
 /* Floating phone navigation overlays custom views. Reserve its full footprint
- * inside the view so the full-height chat keeps its composer above it. Obsidian
+ * inside the view so Chatbox controls and App frames stay above it. Obsidian
  * supplies the theme/safe-area offsets and keyboard height; tablets and docked
  * navigation already allocate their own space. */
 .is-phone:is(.is-floating-nav, .auto-full-screen):not(.is-hidden-nav)
-	.workspace-leaf-content[data-type='nutstore-sync-chatbox']
+	.workspace-leaf-content:is(
+		[data-type='nutstore-sync-chatbox'],
+		[data-type='nutstore-app']
+	)
 	.view-content {
 	box-sizing: border-box;
 	padding-bottom: max(
