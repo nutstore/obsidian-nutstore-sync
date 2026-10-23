@@ -12,10 +12,7 @@ import { buildAgentSystemPrompt, COMPRESSION_PROMPT } from '~/ai/chat/prompts'
 import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
-import {
-	resolveModelOutputLimit,
-	resolveSummaryOutputTokenBudget,
-} from '~/ai/core/inference'
+import { resolveModelOutputLimit } from '~/ai/core/inference'
 import {
 	prepareMessagesForModel,
 	resolveLanguageModel,
@@ -365,7 +362,7 @@ export async function generateContextCompression(
 			},
 		],
 		abortSignal: options.abortSignal,
-		maxOutputTokens: resolveSummaryOutputTokenBudget(options.model),
+		maxOutputTokens: resolveModelOutputLimit(options.model),
 	})
 	if (options.isCancelled?.()) return undefined
 	const summary = response.text.trim()
