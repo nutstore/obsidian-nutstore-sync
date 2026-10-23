@@ -144,7 +144,20 @@
 			"troubleshooting": "Troubleshoot"
 		},
 		"ai": {
+			"preferences": "Preferences",
+			"sessionAppOpenMode": {
+				"name": "Session App opening mode",
+				"desc": "Choose whether entering a chat session automatically opens its linked App on desktop. Applies to this device; manual opening is always available.",
+				"automatic": "Open automatically",
+				"manual": "Open manually"
+			},
 			"saved": "AI settings saved",
+			"chatboxLocation": {
+				"name": "Chatbox opening location",
+				"desc": "Where Chatbox opens on this device. Applies the next time you open Chatbox. Editor view provides more space on mobile.",
+				"sidebar": "Sidebar",
+				"editor": "Editor view"
+			},
 			"none": "Not set",
 			"unnamedProvider": "Unnamed provider",
 			"unnamedModel": "Unnamed model",

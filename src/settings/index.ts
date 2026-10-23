@@ -25,6 +25,7 @@ import { GlobFilterRule } from '~/utils/glob-match'
 import { toggleClassTokens } from '~/utils/class-tokens'
 import AccountSettings from './sync/account'
 import AISettings from './ai/settings'
+import AIPreferencesSettings from './ai/preferences'
 import MemorySettingsSection from './ai/memory'
 import SkillsSettingsSection from './ai/skills'
 import SubagentSettingsSection from './ai/subagents'
@@ -42,6 +43,16 @@ import TroubleshootingSettings from './troubleshooting/settings'
 export enum SyncMode {
 	STRICT = 'strict',
 	LOOSE = 'loose',
+}
+
+export enum ChatboxLocation {
+	Sidebar = 'sidebar',
+	Editor = 'editor',
+}
+
+export enum SessionAppOpenMode {
+	Automatic = 'automatic',
+	Manual = 'manual',
 }
 
 export enum SyncPolicy {
@@ -272,6 +283,10 @@ export interface NutstoreLocalSettings {
 	/** Disabling a module on one device must not disable it on others. */
 	modules: Record<FeatureModule, ModuleState>
 	ai: {
+		/** Opening position is device-local so mobile and desktop can differ. */
+		chatboxLocation: ChatboxLocation
+		/** Controls automatic App restoration when entering a chat session. */
+		sessionAppOpenMode: SessionAppOpenMode
 		presetModels?: AIProviderDefinitions
 		presetModelsUpdatedAt?: string
 	}
@@ -280,7 +295,10 @@ export interface NutstoreLocalSettings {
 export const DEFAULT_LOCAL_SETTINGS: NutstoreLocalSettings = {
 	syncPolicy: SyncPolicy.TwoWay,
 	modules: { sync: ModuleState.Enabled, ai: ModuleState.Enabled },
-	ai: {},
+	ai: {
+		chatboxLocation: ChatboxLocation.Sidebar,
+		sessionAppOpenMode: SessionAppOpenMode.Automatic,
+	},
 }
 
 export class NutstoreSettingTab extends PluginSettingTab {
@@ -294,6 +312,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	troubleshootingSettings: TroubleshootingSettings
 	pluginRuntimeInfoSettings: PluginRuntimeInfoSettings
 	aiSettings: AISettings
+	aiPreferencesSettings: AIPreferencesSettings
 	memorySettings: MemorySettingsSection
 	subagentSettings: SubagentSettingsSection
 	skillSettings: SkillsSettingsSection
@@ -375,6 +394,12 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		)
 		const aiContainerEl = this.containerEl.createDiv()
 		this.aiSettings = new AISettings(this.app, this.plugin, this, aiContainerEl)
+		this.aiPreferencesSettings = new AIPreferencesSettings(
+			this.app,
+			this.plugin,
+			this,
+			this.containerEl.createDiv(),
+		)
 		const memoryContainerEl = this.containerEl.createDiv()
 		this.memorySettings = new MemorySettingsSection(
 			this.app,
@@ -440,6 +465,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 				this.memorySettings,
 				this.subagentSettings,
 				this.skillSettings,
+				this.aiPreferencesSettings,
 				aiModuleSettings,
 			],
 			troubleshooting: [

@@ -10,6 +10,9 @@ import {
 	listsOnlyVaultSkillsInSettings,
 	hotTogglesFeatureModules,
 	loadsProductionPlugin,
+	opensChatboxInChosenLocation,
+	keepsChatboxAboveMobileNavigation,
+	respectsSessionAppOpenMode,
 	reloadsProductionPlugin,
 	rendersSearchableSettings,
 	rendersSyncProgress,
@@ -86,6 +89,18 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 
 		await run('loads the production plugin', () =>
 			loadsProductionPlugin(this.app),
+		)
+		await run(
+			'keeps the Chatbox composer above phone navigation across keyboard and layout changes',
+			() => keepsChatboxAboveMobileNavigation(this.app),
+		)
+		await run(
+			'respects automatic and manual session App opening independently of Chatbox location',
+			() => respectsSessionAppOpenMode(this.app),
+		)
+		await run(
+			'opens Chatbox in the chosen area while preserving its session and Unicode draft',
+			() => opensChatboxInChosenLocation(this.app),
 		)
 		await run('reloads the production plugin through the real lifecycle', () =>
 			reloadsProductionPlugin(this.app),

@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type NutstorePlugin from '~/index'
 import type { NutstoreLocalSettings } from '~/settings'
+import { ChatboxLocation, SessionAppOpenMode } from '~/settings'
 import { ModuleState } from '~/modules/lifecycle'
 import SettingsService from './settings.service'
 
@@ -52,6 +53,66 @@ function fixture(data: unknown, local?: unknown) {
 
 const readLocal = (files: Map<string, string>) =>
 	JSON.parse(files.get(LOCAL_PATH)!) as NutstoreLocalSettings
+
+describe('device-local Chatbox location', () => {
+	it.each([undefined, 'sidebar', 'Neutral / 中性 🌱', null])(
+		'defaults missing or invalid location %j to the sidebar',
+		async (chatboxLocation) => {
+			const { plugin, service } = fixture({}, { ai: { chatboxLocation } })
+			await service.onload()
+			expect(plugin.localSettings.ai.chatboxLocation).toBe(
+				ChatboxLocation.Sidebar,
+			)
+		},
+	)
+
+	it('persists the editor choice locally and preserves other AI preferences', async () => {
+		const { plugin, service, files, saveData } = fixture(
+			{},
+			{
+				ai: { presetModelsUpdatedAt: '2026-01-01' },
+			},
+		)
+		await service.onload()
+		plugin.localSettings.ai.chatboxLocation = ChatboxLocation.Editor
+		await service.saveLocalSettings()
+		await service.loadLocalSettings()
+		expect(readLocal(files).ai.chatboxLocation).toBe(ChatboxLocation.Editor)
+		expect(plugin.localSettings.ai.presetModelsUpdatedAt).toBe('2026-01-01')
+		expect(saveData).not.toHaveBeenCalled()
+	})
+})
+
+describe('device-local session App opening mode', () => {
+	it.each([undefined, 'automatic', 'Neutral / 中性 🌱', null])(
+		'defaults missing or invalid mode %j to automatic',
+		async (sessionAppOpenMode) => {
+			const { plugin, service } = fixture({}, { ai: { sessionAppOpenMode } })
+			await service.onload()
+			expect(plugin.localSettings.ai.sessionAppOpenMode).toBe(
+				SessionAppOpenMode.Automatic,
+			)
+		},
+	)
+
+	it('persists manual opening independently of the Chatbox location', async () => {
+		const { plugin, service, files, saveData } = fixture(
+			{},
+			{
+				ai: { chatboxLocation: ChatboxLocation.Editor },
+			},
+		)
+		await service.onload()
+		plugin.localSettings.ai.sessionAppOpenMode = SessionAppOpenMode.Manual
+		await service.saveLocalSettings()
+		await service.loadLocalSettings()
+		expect(readLocal(files).ai.sessionAppOpenMode).toBe(
+			SessionAppOpenMode.Manual,
+		)
+		expect(plugin.localSettings.ai.chatboxLocation).toBe(ChatboxLocation.Editor)
+		expect(saveData).not.toHaveBeenCalled()
+	})
+})
 
 describe('device-local module states', () => {
 	it('seeds local states once from legacy synced data and drops them from synced data', async () => {

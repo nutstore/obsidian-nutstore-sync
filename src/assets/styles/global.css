@@ -6,6 +6,24 @@
 	padding-top: 0;
 }
 
+/* Floating phone navigation overlays custom views. Reserve its full footprint
+ * inside the view so the full-height chat keeps its composer above it. Obsidian
+ * supplies the theme/safe-area offsets and keyboard height; tablets and docked
+ * navigation already allocate their own space. */
+.is-phone:is(.is-floating-nav, .auto-full-screen):not(.is-hidden-nav)
+	.workspace-leaf-content[data-type='nutstore-sync-chatbox']
+	.view-content {
+	box-sizing: border-box;
+	padding-bottom: max(
+		0px,
+		var(--view-bottom-spacing, 0px),
+		calc(
+			var(--navbar-height, 0px) + var(--navbar-bottom-offset, 0px) -
+				var(--keyboard-height, 0px)
+		)
+	);
+}
+
 @keyframes nutstore-sync-spin {
 	from {
 		transform: rotate(0deg);

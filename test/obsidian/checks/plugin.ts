@@ -1,4 +1,7 @@
 import { ModuleState } from '~/modules/lifecycle'
+import { ChatboxLocation, SessionAppOpenMode } from '~/settings'
+import { ChatWorkspacePanel } from '~/components/ChatWorkspacePanel'
+import { APP_VIEW_TYPE } from '~/views/app.view'
 import { requireApiVersion, type App } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import en from '~/i18n/locales/en.json'
@@ -20,6 +23,203 @@ function getProductionPlugin(app: App): ProductionPlugin {
 
 export async function loadsProductionPlugin(app: App) {
 	getProductionPlugin(app)
+}
+
+export async function opensChatboxInChosenLocation(app: App) {
+	const plugin = getProductionPlugin(app)
+	const original = plugin.localSettings.ai.chatboxLocation
+	await plugin.ai.chat.ensureSession()
+	const draft = 'Neutral draft / 中性草稿 🌱'
+	const sessionId = plugin.ai.chat.getViewProps().activeSessionId
+	plugin.ai.chat.updateInputDraft(draft)
+	try {
+		for (const location of [
+			ChatboxLocation.Sidebar,
+			ChatboxLocation.Editor,
+			ChatboxLocation.Sidebar,
+		]) {
+			plugin.localSettings.ai.chatboxLocation = location
+			await plugin.ai.openChatbox()
+			const leaves = app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)
+			assert(leaves.length === 1, 'Changing location duplicated the Chatbox')
+			const leaf = leaves[0]!
+			assert(
+				leaf.getRoot() ===
+					(location === ChatboxLocation.Editor
+						? app.workspace.rootSplit
+						: app.workspace.rightSplit),
+				'Chatbox opened in the wrong workspace area',
+			)
+			await plugin.ai.openChatbox()
+			assert(
+				app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0] === leaf,
+				'Reopening replaced the existing Chatbox',
+			)
+			const props = plugin.ai.chat.getViewProps()
+			assert(
+				props.activeSessionId === sessionId,
+				'Moving Chatbox changed its session',
+			)
+			assert(
+				props.draft.text === draft,
+				'Moving Chatbox lost its Unicode draft',
+			)
+		}
+	} finally {
+		plugin.localSettings.ai.chatboxLocation = original
+		app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
+	}
+}
+
+/** Exercise the actual composer against Obsidian's phone navigation CSS. */
+export async function keepsChatboxAboveMobileNavigation(app: App) {
+	const plugin = getProductionPlugin(app)
+	const originalLocation = plugin.localSettings.ai.chatboxLocation
+	await plugin.ai.chat.ensureSession()
+	plugin.ai.chat.updateInputDraft('Neutral message / 中性消息 🌱')
+	try {
+		for (const location of [ChatboxLocation.Editor, ChatboxLocation.Sidebar]) {
+			plugin.localSettings.ai.chatboxLocation = location
+			await plugin.ai.openChatbox()
+			const view = app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]!.view
+			const content =
+				view.containerEl.querySelector<HTMLElement>('.view-content')!
+			const wrapper = view.containerEl.parentElement!
+			const originalClass = wrapper.className
+			const originalStyle = wrapper.getAttribute('style')
+			try {
+				for (const overrides of [
+					{},
+					{ safe: 34, offset: 34, reserve: 82 },
+					{ width: 650, height: 330 },
+					{ height: 350, safe: 34, offset: 34, keyboard: 300, reserve: 0 },
+					{ hidden: true, reserve: 0 },
+					{ floating: false, reserve: 0 },
+					{ phone: false, width: 768, reserve: 0 },
+				]) {
+					const state = {
+						width: 390,
+						height: 650,
+						safe: 0,
+						offset: 12,
+						keyboard: 0,
+						phone: true,
+						floating: true,
+						hidden: false,
+						reserve: 60,
+						...overrides,
+					}
+					wrapper.toggleClass('is-phone', state.phone)
+					wrapper.toggleClass('is-floating-nav', state.floating)
+					wrapper.toggleClass('is-hidden-nav', state.hidden)
+					wrapper.setCssProps({
+						'--safe-area-inset-bottom': `${state.safe}px`,
+						'--navbar-height': '48px',
+						'--navbar-bottom-offset': `${state.offset}px`,
+						'--keyboard-height': `${state.keyboard}px`,
+					})
+					content.setCssStyles({
+						width: `${state.width}px`,
+						height: `${state.height}px`,
+						flex: 'none',
+					})
+					await new Promise<void>((resolve) =>
+						window.requestAnimationFrame(() =>
+							window.requestAnimationFrame(() => resolve()),
+						),
+					)
+					const padding = Number.parseFloat(
+						getComputedStyle(content).paddingBottom,
+					)
+					assert(
+						state.reserve
+							? padding >= state.reserve
+							: padding <= Math.max(state.safe, 32),
+						`Chatbox reserved the wrong mobile navigation space: ${padding}px, ${JSON.stringify(state)}`,
+					)
+					const send = content.querySelector<HTMLElement>('.ns-composer-send')!
+					assert(
+						send && send.offsetHeight > 0,
+						'Chatbox send action is not visible',
+					)
+					assert(
+						send.getBoundingClientRect().bottom <=
+							content.getBoundingClientRect().bottom - state.reserve + 1,
+						'Mobile navigation overlaps the Chatbox send action',
+					)
+				}
+			} finally {
+				wrapper.className = originalClass
+				if (originalStyle === null) wrapper.removeAttribute('style')
+				else wrapper.setAttribute('style', originalStyle)
+				app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
+			}
+		}
+	} finally {
+		plugin.localSettings.ai.chatboxLocation = originalLocation
+	}
+}
+
+export async function respectsSessionAppOpenMode(app: App) {
+	const plugin = getProductionPlugin(app)
+	const originalMode = plugin.localSettings.ai.sessionAppOpenMode
+	const originalLocation = plugin.localSettings.ai.chatboxLocation
+	const id = 'org.example.session_opening'
+	app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
+	await plugin.ai.workspaces.create(id, '中性工具 Neutral tool 🌱')
+	await plugin.ai.chat.ensureSession()
+	await plugin.ai.chat.selectWorkspace(id)
+	const sessionId = plugin.ai.chat.workspaceState.sessionId!
+	const originalOpen = plugin.ai.openApp
+	let pending: Promise<unknown>[] = []
+	plugin.ai.openApp = (appId) => {
+		const opened = originalOpen.call(plugin.ai, appId)
+		pending.push(opened)
+		return opened
+	}
+	const host = app.workspace.containerEl.createDiv()
+	try {
+		for (const location of [ChatboxLocation.Sidebar, ChatboxLocation.Editor]) {
+			plugin.localSettings.ai.chatboxLocation = location
+			for (const mode of [
+				SessionAppOpenMode.Manual,
+				SessionAppOpenMode.Automatic,
+			]) {
+				plugin.localSettings.ai.sessionAppOpenMode = mode
+				pending = []
+				const panel = new ChatWorkspacePanel(host, plugin)
+				try {
+					await Promise.all(pending)
+					assert(
+						pending.length === (mode === SessionAppOpenMode.Automatic ? 1 : 0),
+						'Session App opening ignored the independent device preference',
+					)
+					assert(
+						plugin.ai.chat.activeAppId === id,
+						'Manual opening cleared the session App binding',
+					)
+					await plugin.ai.openApp(id)
+					assert(
+						app.workspace.getLeavesOfType(APP_VIEW_TYPE).length === 1,
+						'Explicit App opening failed or duplicated its view',
+					)
+					const count = pending.length
+					await plugin.ai.chat.switchSession(sessionId)
+					assert(pending.length === count, 'A session update reopened its App')
+				} finally {
+					panel.destroy()
+					app.workspace.detachLeavesOfType(APP_VIEW_TYPE)
+				}
+			}
+		}
+	} finally {
+		host.remove()
+		plugin.ai.openApp = originalOpen
+		plugin.localSettings.ai.sessionAppOpenMode = originalMode
+		plugin.localSettings.ai.chatboxLocation = originalLocation
+		await plugin.ai.chat.selectWorkspace(undefined)
+		await plugin.ai.workspaces.remove(id)
+	}
 }
 
 export async function listsOnlyVaultSkillsInSettings(
@@ -352,6 +552,7 @@ export async function rendersSearchableSettings(app: App) {
 						labels.settings.ai.memory.heading,
 						labels.settings.ai.subagents.heading,
 						labels.settings.ai.skills.heading,
+						labels.settings.ai.preferences,
 					],
 					[labels.settings.troubleshooting.title],
 				]

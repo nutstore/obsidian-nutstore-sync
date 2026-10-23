@@ -102,6 +102,19 @@
 			"troubleshooting": "排障"
 		},
 		"ai": {
+			"preferences": "偏好设置",
+			"sessionAppOpenMode": {
+				"name": "会话 App 打开方式",
+				"desc": "选择桌面端进入会话时是否自动打开关联的 App。仅对当前设备生效，始终可以手动打开。",
+				"automatic": "自动打开",
+				"manual": "手动打开"
+			},
+			"chatboxLocation": {
+				"name": "Chatbox 打开位置",
+				"desc": "设置当前设备上 Chatbox 的打开位置，下次打开时生效。手机上可选择编辑器视图以获得更大空间。",
+				"sidebar": "侧边栏",
+				"editor": "编辑器视图"
+			},
 			"saved": "AI 设置已保存",
 			"none": "未设置",
 			"unnamedProvider": "未命名模型提供商",

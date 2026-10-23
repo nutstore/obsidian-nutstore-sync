@@ -15,6 +15,8 @@ import {
 } from '~/ai/tools/settings-whitelist'
 import i18n from '~/i18n'
 import {
+	ChatboxLocation,
+	SessionAppOpenMode,
 	DEFAULT_LOCAL_SETTINGS,
 	DEFAULT_SETTINGS,
 	type FeatureModule,
@@ -188,7 +190,17 @@ export default class SettingsService extends BaseService {
 		this.plugin.localSettings = {
 			...DEFAULT_LOCAL_SETTINGS,
 			...stored,
-			ai: stored.ai ?? {},
+			ai: {
+				...stored.ai,
+				chatboxLocation:
+					stored.ai?.chatboxLocation === ChatboxLocation.Editor
+						? ChatboxLocation.Editor
+						: ChatboxLocation.Sidebar,
+				sessionAppOpenMode:
+					stored.ai?.sessionAppOpenMode === SessionAppOpenMode.Manual
+						? SessionAppOpenMode.Manual
+						: SessionAppOpenMode.Automatic,
+			},
 			modules: {
 				sync: normalizeModuleState(
 					storedModules.sync ?? this.legacyModules.sync,

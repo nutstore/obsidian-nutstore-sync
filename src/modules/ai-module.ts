@@ -22,6 +22,7 @@ import {
 } from '~/views/memory-editor.view'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
+import { ChatboxLocation } from '~/settings'
 import { ModuleLifecycle, type ModuleScope } from './lifecycle'
 
 /** All AI entry points and background resources belong to this lifetime. */
@@ -171,10 +172,23 @@ export class AiModule {
 		if (!this.lifecycle.active) return
 		const scope = this.lifecycle.scope
 		const workspace = this.plugin.app.workspace
+		const inEditor =
+			this.plugin.localSettings.ai.chatboxLocation === ChatboxLocation.Editor
+		const existing = workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)
 		const leaf =
-			workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0] ||
-			workspace.getRightLeaf(false)
+			existing.find((leaf) => {
+				const root = leaf.getRoot()
+				return inEditor
+					? root === workspace.rootSplit
+					: root === workspace.leftSplit || root === workspace.rightSplit
+			}) ??
+			(inEditor ? workspace.getLeaf('tab') : workspace.getRightLeaf(false))
 		if (!leaf) return
+		// Chat state belongs to ChatService; replacing its host preserves the session
+		// and draft while ensuring subsequent opens use the device's chosen area.
+		for (const previous of existing) {
+			if (previous !== leaf) previous.detach()
+		}
 		await leaf.setViewState({ type: CHATBOX_VIEW_TYPE, active: true })
 		if (scope.signal.aborted) {
 			leaf.detach()

@@ -4,6 +4,7 @@ import type { SavedApp } from '~/ai/apps/store'
 import { appError } from '~/ai/apps/error'
 import { formatAppCreationPrompt } from '~/ai/apps/create-app-prompt'
 import i18n from '~/i18n'
+import { SessionAppOpenMode } from '~/settings'
 import AppCreationModal from './AppCreationModal'
 
 /**
@@ -153,7 +154,14 @@ export class ChatWorkspacePanel {
 		const { sessionId, appId: id, busy } = this.plugin.ai.chat.workspaceState
 		const enteredSession = sessionId !== this.observedSessionId
 		this.observedSessionId = sessionId
-		if (enteredSession && sessionId && id && Platform.isDesktopApp) {
+		if (
+			enteredSession &&
+			sessionId &&
+			id &&
+			Platform.isDesktopApp &&
+			this.plugin.localSettings.ai.sessionAppOpenMode ===
+				SessionAppOpenMode.Automatic
+		) {
 			// Restore the session's App once per entry. Workspace changes made
 			// inside that session remain explicit user actions.
 			void this.plugin.ai.openApp(id).catch((error) => {
