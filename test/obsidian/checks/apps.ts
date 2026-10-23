@@ -12,6 +12,7 @@ import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import { execVaultBash } from '~/ai/tools/bash/runtime'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { assert } from './assert'
+import type { AppAIHost } from '~/ai/apps/ai/contract'
 
 const APP_ID = 'org.example.counter'
 const APP_TITLE = '中性计数器 Neutral counter 🌿'
@@ -495,6 +496,100 @@ async function runBash(app: App, plugin: NutstorePlugin, command: string) {
 		fileSystemManager: manager,
 		signal: plugin.ai.lifecycle.scope.signal,
 	})
+}
+
+/** Exercise the production bridge/serialized client in a real opaque-origin iframe, without paid inference. */
+export async function runsAppAIThroughSandbox(app: App) {
+	const plugin = pluginFor(app)
+	assert(plugin, 'Production plugin is not loaded')
+	const id = 'org.example.ai'
+	const workspaces = plugin.ai.workspaces
+	const originalHost = workspaces.createRuntimeHost
+	let calls = 0
+	const ai: AppAIHost = async (_request, execution) => {
+		calls++
+		execution.emit({ type: 'text-delta', id: 'answer', text: '完成 Done 🌿' })
+		const output = await execution.execute(
+			'inspect',
+			{ text: '条目 Item 🌿' },
+			'inspect-call',
+		)
+		return {
+			text: JSON.stringify(output),
+			responseMessages: [],
+			finishReason: 'stop',
+			usage: {
+				inputTokens: 1,
+				outputTokens: 1,
+				totalTokens: 2,
+				inputTokenDetails: {
+					noCacheTokens: 1,
+					cacheReadTokens: 0,
+					cacheWriteTokens: 0,
+				},
+				outputTokenDetails: { textTokens: 1, reasoningTokens: 0 },
+			},
+		}
+	}
+	workspaces.createRuntimeHost = function (appId, check) {
+		const host = originalHost.call(this, appId, check)
+		if (appId === id) host.ai = ai
+		return host
+	}
+	try {
+		await workspaces.create(id, '应用助手 App helper 🌿')
+		await app.vault.adapter.write(
+			`${appDirectoryPath(id)}/${APP_ENTRY_FILE}`,
+			`<button id="ask">检查 Inspect 🌿</button><script>
+			const assistant = app.ai.createAgent({ tools: { inspect: {
+				description: '检查 Inspect 🌿', inputSchema: { type: 'object' },
+				async execute(input) { return { inspected: input.text }; }
+			} } });
+			document.querySelector('#ask').addEventListener('click', async () => {
+				try {
+					const result = await assistant.stream({ prompt: '检查 Inspect 🌿' });
+					let text = '';
+					for await (const delta of result.textStream) text += delta;
+					await app.kv.set('stream', text);
+					await app.kv.set('result', await result.text);
+				} catch (error) { await app.kv.set('failure', String(error)); }
+			});
+			window.addEventListener('message', (event) => {
+				if (event.data?.test === 'ai') document.querySelector('#ask').click();
+			});
+		</script>`,
+		)
+		await workspaces.validate(id, plugin.ai.lifecycle.scope.signal)
+		assert(Number(calls) === 0, 'Startup validation invoked AI')
+		await plugin.ai.openApp(id)
+		let frame: HTMLIFrameElement | null = null
+		await waitUntil(() => {
+			const leaf = app.workspace
+				.getLeavesOfType(APP_VIEW_TYPE)
+				.find((leaf) => leaf.view.getState().appId === id)
+			frame = leaf?.view.containerEl.querySelector('iframe') ?? null
+			return Boolean(frame)
+		}, 'AI App iframe')
+		await new Promise((resolve) => window.setTimeout(resolve, 300))
+		frame!.contentWindow!.postMessage({ test: 'ai' }, '*')
+		await waitUntil(
+			async () => (await workspaces.store.readKV(id)).result !== undefined,
+			'AI App tool and stream round-trip',
+			async () => JSON.stringify(await workspaces.store.readKV(id)),
+		)
+		const data = await workspaces.store.readKV(id)
+		assert(data.stream === '完成 Done 🌿', 'AI App lost streamed text')
+		assert(
+			data.result === '{"inspected":"条目 Item 🌿"}',
+			'AI App lost its sandbox tool result',
+		)
+		assert(calls === 1, 'Stream consumers repeated inference')
+	} finally {
+		workspaces.createRuntimeHost = originalHost
+		for (const leaf of app.workspace.getLeavesOfType(APP_VIEW_TYPE))
+			if (leaf.view.getState().appId === id) leaf.detach()
+		if (await workspaces.store.exists(id)) await workspaces.remove(id)
+	}
 }
 
 async function runAppOpenCommand(app: App, plugin: NutstorePlugin) {

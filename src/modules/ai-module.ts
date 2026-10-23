@@ -3,6 +3,7 @@ import { createSelectedTextContextItem } from '~/ai/chat/context/user-context'
 import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
 import ChatService from '~/services/chat.service'
 import { AppWorkspaces } from '~/ai/apps/workspaces'
+import { createAppAIHost } from '~/ai/apps/ai/host'
 import AppView, { APP_VIEW_TYPE } from '~/views/app.view'
 import type { AppStore } from '~/ai/apps/store'
 import { appIconContent, appIconId, validateAppIcon } from '~/ai/apps/icon'
@@ -63,7 +64,11 @@ export class AiModule {
 		this.memory = new MemoryService(this.plugin, scope)
 		this.mcp = new McpService(this.plugin, scope)
 		this.gateway = new NutstoreLlmGatewayService(this.plugin, scope)
-		this.workspaces = new AppWorkspaces(this.plugin.app, scope)
+		this.workspaces = new AppWorkspaces(
+			this.plugin.app,
+			scope,
+			createAppAIHost(() => this.plugin.settings.ai, scope),
+		)
 		this.apps = this.workspaces.store
 		this.chat = new ChatService(this.plugin, scope)
 		new AppRibbonManager(this.plugin, scope, this.apps)

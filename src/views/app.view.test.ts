@@ -135,6 +135,9 @@ function fixture() {
 		load: vi.fn(async () => structuredClone(loaded)),
 		validate: vi.fn(async () => structuredClone(loaded)),
 		createRuntimeHost: vi.fn((): RuntimeHost => ({
+			ai: vi.fn(async () => {
+				throw new Error('中性模型 Neutral model 🌿')
+			}),
 			readKV: async () => ({ '记录 Record 🌿': 1 }),
 			transact: async () => {},
 			log: () => {},
@@ -230,6 +233,9 @@ describe('App view sandbox lifetime', () => {
 		expect(runtimes).toHaveLength(1)
 		expect(runtimes[0].content).toEqual(f.loaded.content)
 		expect(runtimes[0].title).toBe('清单 Checklist 中文 🌿')
+		expect(runtimes[0].host.ai).toBe(
+			f.workspaces.createRuntimeHost.mock.results[0].value.ai,
+		)
 		expect(f.workspaces.createRuntimeHost).toHaveBeenCalledWith(
 			'neutral-app',
 			expect.any(Function),

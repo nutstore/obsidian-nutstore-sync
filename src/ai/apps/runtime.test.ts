@@ -7,6 +7,8 @@ import { AppRuntime, runtimeDocument } from './runtime'
 import { validateAppIcon, appIconContent } from './icon'
 import type { AppContent } from './source'
 import type { AppKV } from './capabilities/kv'
+import { AppAIBridge } from './ai/bridge'
+import type { AppAIHost } from './ai/contract'
 
 const content: AppContent = {
 	html: '<button id="add">增加 Add 🌿</button>',
@@ -48,6 +50,170 @@ afterEach(() => {
 })
 
 describe('App runtime and trusted SVG boundary', () => {
+	it('executes serialized AI callbacks and streams across the sandbox bridge', async () => {
+		const messages: Record<string, unknown>[] = []
+		let receive!: (data: Record<string, unknown>) => void
+		const host: AppAIHost = async (request, execution) => {
+			expect(request.call).toEqual({ prompt: '检查 Inspect 🌿' })
+			execution.emit({ type: 'text-delta', id: 'text', text: '完成 Done 🌿' })
+			const output = await execution.execute(
+				'inspect',
+				{ text: '条目 Item 🌿' },
+				'call',
+			)
+			return {
+				text: JSON.stringify(output),
+				responseMessages: [],
+				finishReason: 'stop',
+				usage: {
+					inputTokens: 1,
+					outputTokens: 1,
+					totalTokens: 2,
+					inputTokenDetails: {
+						noCacheTokens: 1,
+						cacheReadTokens: 0,
+						cacheWriteTokens: 0,
+					},
+					outputTokenDetails: { textTokens: 1, reasoningTokens: 0 },
+				},
+			}
+		}
+		const bridge = new AppAIBridge(host, (event) =>
+			receive({ ...structuredClone(event), channel: 'neutral' }),
+		)
+		const dom = new JSDOM(
+			runtimeDocument(
+				{
+					...content,
+					javascript: `
+			// AI runs with the iframe's globals, independently of host polyfills.
+			Object.fromEntries = undefined;
+			Object.hasOwn = undefined;
+			const agent = app.ai.createAgent({ tools: {
+				inspect: {
+					description: '检查 Inspect 🌿', inputSchema: { type: 'object' },
+					async execute(input, context) {
+						return { text: input.text, cancelled: context.abortSignal.aborted };
+					}
+				}
+			} });
+			document.querySelector('#add').addEventListener('click', async () => {
+				const result = await agent.stream({ prompt: '检查 Inspect 🌿' });
+				let text = '';
+				for await (const chunk of result.textStream) text += chunk;
+				await app.kv.set('流 Stream 🌿', text);
+				await app.kv.set('结果 Result 🌿', await result.text);
+			});
+		`,
+				},
+				'neutral',
+			),
+			{
+				runScripts: 'dangerously',
+				beforeParse(win) {
+					receive = (data) =>
+						win.dispatchEvent(
+							new win.MessageEvent('message', {
+								source: win as unknown as Window,
+								data,
+							}),
+						)
+					win.postMessage = (message: Record<string, unknown>) => {
+						messages.push(message)
+						if (typeof message.id !== 'number') return
+						const method = String(message.method)
+						const promise = method.startsWith('ai.')
+							? bridge.dispatch(
+									method.slice(3),
+									structuredClone(message.args) as unknown[],
+								)
+							: Promise.resolve(null)
+						void promise.then(
+							(value) => receive({ channel: 'neutral', id: message.id, value }),
+							() =>
+								receive({
+									channel: 'neutral',
+									id: message.id,
+									error: 'AI_FAILED',
+									code: 'AI_FAILED',
+								}),
+						)
+					}
+				},
+			},
+		)
+		await timeout(20)
+		;(dom.window.document.querySelector('#add') as HTMLButtonElement).click()
+		await vi.waitFor(() =>
+			expect(
+				messages.filter((message) => message.method === 'kv.transact'),
+			).toHaveLength(2),
+		)
+		expect(
+			messages
+				.filter((message) => message.method === 'kv.transact')
+				.map((message) => message.args),
+		).toEqual([
+			[[{ key: '流 Stream 🌿', value: '完成 Done 🌿' }]],
+			[
+				[
+					{
+						key: '结果 Result 🌿',
+						value: '{"text":"条目 Item 🌿","cancelled":false}',
+					},
+				],
+			],
+		])
+		bridge.close()
+		dom.window.close()
+	})
+
+	it('authenticates AI requests and aborts host inference when the iframe is destroyed', async () => {
+		let signal: AbortSignal | undefined
+		const ai = vi.fn<AppAIHost>(async (_request, execution) => {
+			signal = execution.signal
+			return new Promise(() => {})
+		})
+		const runtime = new AppRuntime(document.body, content, {
+			...createHost(),
+			ai,
+		})
+		const channel = runtime.frame.srcdoc.match(/"channel":"([^"]+)"/)![1]
+		const request = {
+			channel,
+			id: 1,
+			method: 'ai.run',
+			args: [
+				{
+					runId: 1,
+					streaming: false,
+					settings: {},
+					call: { prompt: '问候 Greet 🌿' },
+				},
+			],
+		}
+		window.dispatchEvent(
+			new MessageEvent('message', { source: window, data: request }),
+		)
+		window.dispatchEvent(
+			new MessageEvent('message', {
+				source: runtime.frame.contentWindow,
+				data: { ...request, channel: 'other' },
+			}),
+		)
+		expect(ai).not.toHaveBeenCalled()
+		window.dispatchEvent(
+			new MessageEvent('message', {
+				source: runtime.frame.contentWindow,
+				data: request,
+			}),
+		)
+		expect(ai).toHaveBeenCalledOnce()
+		expect(signal!.aborted).toBe(false)
+		runtime.destroy()
+		expect(signal!.aborted).toBe(true)
+	})
+
 	it('accepts inert icon geometry and rejects active SVG before entering host DOM', () => {
 		expect(
 			appIconContent(
@@ -336,7 +502,7 @@ describe('App runtime and trusted SVG boundary', () => {
 		await timeout(20)
 		expect(messages.some((message) => message.event === 'ready')).toBe(true)
 		expect(Object.keys((dom.window as unknown as { app: object }).app)).toEqual(
-			['fs', 'kv'],
+			['fs', 'kv', 'ai'],
 		)
 		expect((dom.window as unknown as { bad?: number }).bad).toBeUndefined()
 		expect(

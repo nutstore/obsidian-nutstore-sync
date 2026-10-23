@@ -212,6 +212,7 @@ export default class AppView extends ItemView {
 				validated.content,
 				{
 					fs: host.fs,
+					ai: host.ai,
 					readKV: async () => {
 						if (!current())
 							throw new Error('This App version is no longer active')

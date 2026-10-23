@@ -10,10 +10,19 @@ import createId from '~/utils/create-id'
 import type { AppContent } from './source'
 import { emptyAppTheme, readAppTheme, type AppTheme } from './theme'
 import type { AppLogEvent } from './logs'
+import { createAppAI } from './capabilities/ai'
+import { AppAIBridge } from './ai/bridge'
+import {
+	AppAIError,
+	type AppAIAPI,
+	type AppAIEvent,
+	type AppAIHost,
+} from './ai/contract'
 
 export interface AppRuntimeAPI {
 	fs: AppFS
 	kv: AppKVAPI
+	ai: AppAIAPI
 }
 const requestSchema = z.object({
 	channel: z.string(),
@@ -23,6 +32,7 @@ const requestSchema = z.object({
 })
 export interface RuntimeHost extends AppKVHost {
 	fs?: (method: string, args: unknown[]) => Promise<unknown>
+	ai?: AppAIHost
 	log(event: AppLogEvent): void
 	error(message: string): void
 }
@@ -88,6 +98,7 @@ function bootstrap(
 	},
 	createFS: typeof createAppFS,
 	createKV: typeof createAppKV,
+	createAI: typeof createAppAI,
 ) {
 	const channel = payload.channel
 	let nextId = 0
@@ -107,6 +118,7 @@ function bootstrap(
 			pending.set(id, { resolve, reject })
 			send({ id, method, args })
 		})
+	const ai = createAI(rpc)
 	let themeKeys: string[] = []
 	const applyTheme = (value: unknown) => {
 		if (!value || typeof value !== 'object') return
@@ -144,8 +156,13 @@ function bootstrap(
 			value?: unknown
 			event?: unknown
 			theme?: unknown
+			code?: unknown
 		}
 		if (data.channel !== channel) return
+		if (data.event === 'ai') {
+			ai.receive(event.data as AppAIEvent)
+			return
+		}
 		if (data.event === 'theme') {
 			applyTheme(data.theme)
 			return
@@ -154,7 +171,13 @@ function bootstrap(
 		const reply = pending.get(data.id)
 		if (!reply) return
 		pending.delete(data.id)
-		if (typeof data.error === 'string') reply.reject(new Error(data.error))
+		if (typeof data.error === 'string')
+			reply.reject(
+				Object.assign(new Error(data.error), {
+					...(typeof data.code === 'string' ? { code: data.code } : {}),
+					...(data.code === 'CANCELLED' ? { name: 'AbortError' } : {}),
+				}),
+			)
 		else reply.resolve(data.value)
 	})
 	const truncate = (value: string, maximum: number) =>
@@ -267,7 +290,9 @@ function bootstrap(
 	const api: AppRuntimeAPI = {
 		fs: createFS(rpc, payload.fsMethods),
 		kv: createKV(rpc),
+		ai: ai.api,
 	}
+	window.addEventListener('pagehide', () => ai.close(), { once: true })
 
 	Object.defineProperty(window, 'app', {
 		value: Object.freeze(api),
@@ -351,7 +376,7 @@ export function runtimeDocument(
 		fsMethods: appFSMethods,
 	}).replace(/</g, '\\u003c')
 	const policy = `default-src 'none'; script-src 'nonce-${channel}'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`
-	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html{color-scheme:light dark}body{margin:0;padding:16px;color:var(--text-normal,CanvasText);background:var(--background-primary,Canvas);font-family:var(--font-interface,var(--font-text,system-ui,sans-serif));font-size:var(--font-ui-medium,14px);line-height:1.5}*{box-sizing:border-box}button,input,textarea,select{font:inherit;color:var(--text-normal,CanvasText)}button{background:var(--interactive-normal,var(--background-secondary,ButtonFace));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--button-radius,var(--radius-s,6px));padding:6px 12px}button:hover{background:var(--interactive-hover,var(--background-modifier-hover,ButtonFace))}input,textarea,select{background:var(--background-modifier-form-field,var(--background-primary,Field));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--input-radius,var(--radius-s,6px));padding:6px 8px}a{color:var(--link-color,var(--text-accent,LinkText))}a:hover{color:var(--link-color-hover,var(--text-accent-hover,LinkText))}::selection{background:var(--text-selection,Highlight)}img,canvas,svg{max-width:100%}</style></head><body><script nonce="${channel}">(${bootstrap.toString()})(${payload}, ${createAppFS.toString()}, ${createAppKV.toString()});</script></body></html>`
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html{color-scheme:light dark}body{margin:0;padding:16px;color:var(--text-normal,CanvasText);background:var(--background-primary,Canvas);font-family:var(--font-interface,var(--font-text,system-ui,sans-serif));font-size:var(--font-ui-medium,14px);line-height:1.5}*{box-sizing:border-box}button,input,textarea,select{font:inherit;color:var(--text-normal,CanvasText)}button{background:var(--interactive-normal,var(--background-secondary,ButtonFace));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--button-radius,var(--radius-s,6px));padding:6px 12px}button:hover{background:var(--interactive-hover,var(--background-modifier-hover,ButtonFace))}input,textarea,select{background:var(--background-modifier-form-field,var(--background-primary,Field));border:1px solid var(--background-modifier-border,ButtonBorder);border-radius:var(--input-radius,var(--radius-s,6px));padding:6px 8px}a{color:var(--link-color,var(--text-accent,LinkText))}a:hover{color:var(--link-color-hover,var(--text-accent-hover,LinkText))}::selection{background:var(--text-selection,Highlight)}img,canvas,svg{max-width:100%}</style></head><body><script nonce="${channel}">(${bootstrap.toString()})(${payload}, ${createAppFS.toString()}, ${createAppKV.toString()}, ${createAppAI.toString()});</script></body></html>`
 }
 
 /** Each mount owns a revocable capability. A sandbox's opaque origin is authenticated by source + instance channel. */
@@ -369,6 +394,7 @@ export class AppRuntime {
 	private readonly channel = createId('runtime').replaceAll('-', '')
 	private readonly win: Window
 	private readonly timer: number
+	private readonly ai: AppAIBridge
 	constructor(
 		private readonly container: HTMLElement,
 		readonly content: AppContent,
@@ -382,6 +408,17 @@ export class AppRuntime {
 		this.frame.title = title
 		this.frame.setAttribute('sandbox', 'allow-scripts')
 		this.frame.setAttribute('referrerpolicy', 'no-referrer')
+		this.ai = new AppAIBridge(
+			host.ai,
+			(event) => {
+				if (!this.destroyed)
+					this.frame.contentWindow?.postMessage(
+						{ ...event, channel: this.channel },
+						'*',
+					)
+			},
+			this.win,
+		)
 		this.ready = new Promise((resolve, reject) => {
 			this.resolve = resolve
 			this.reject = reject
@@ -481,7 +518,14 @@ export class AppRuntime {
 			this.requestCount = 0
 		}
 		const execute = async () => {
-			if (++this.requestCount > 60) throw new Error('App request rate exceeded')
+			// Control replies settle existing bounded AI runs and must remain usable under load.
+			if (
+				!['ai.cancel', 'ai.toolResult'].includes(request.method) &&
+				++this.requestCount > 60
+			)
+				throw new Error('App request rate exceeded')
+			if (request.method.startsWith('ai.'))
+				return this.ai.dispatch(request.method.slice(3), request.args)
 			if (request.method.startsWith('fs.')) {
 				if (!this.host.fs) throw new Error('Filesystem unavailable')
 				return this.host.fs(request.method.slice(3), request.args)
@@ -513,6 +557,7 @@ export class AppRuntime {
 							channel: this.channel,
 							id: request.id,
 							error: error instanceof Error ? error.message : String(error),
+							...(error instanceof AppAIError ? { code: error.code } : {}),
 						},
 						'*',
 					)
@@ -522,6 +567,7 @@ export class AppRuntime {
 	destroy() {
 		if (this.destroyed) return
 		this.destroyed = true
+		this.ai.close()
 		this.win.clearTimeout(this.timer)
 		this.win.removeEventListener('message', this.receive)
 		this.frame.remove()

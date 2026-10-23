@@ -25,6 +25,7 @@
 		"@ai-sdk/google": "^4.0.64",
 		"@ai-sdk/openai": "^4.0.60",
 		"@ai-sdk/openai-compatible": "^3.0.44",
+		"@cfworker/json-schema": "^4.1.1",
 		"@codemirror/state": "6.5.2",
 		"@codemirror/view": "6.36.4",
 		"@modelcontextprotocol/sdk": "^1.31.0",

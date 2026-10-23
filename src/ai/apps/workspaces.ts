@@ -28,6 +28,7 @@ import { AppLogStore } from './logs'
 import { AppRuntime, type RuntimeHost } from './runtime'
 import { assembleAppContent, type AppContent } from './source'
 import { AppStore, type SavedApp } from './store'
+import type { AppAIHost } from './ai/contract'
 
 export interface LoadedApp extends SavedApp {
 	content: AppContent
@@ -54,6 +55,7 @@ export class AppWorkspaces {
 	constructor(
 		private readonly app: App,
 		private readonly scope: ModuleScope,
+		private readonly ai?: AppAIHost,
 	) {
 		this.logs = new AppLogStore(app)
 		this.store = new AppStore(guardAppIO(app, scope.check, scope.track))
@@ -219,6 +221,12 @@ export class AppWorkspaces {
 		)
 		return {
 			fs,
+			ai: this.ai
+				? async (request, execution) => {
+						check()
+						return this.ai!(request, execution)
+					}
+				: undefined,
 			readKV: async () => {
 				scope.check()
 				return apps.readKV(appId)

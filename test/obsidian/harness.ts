@@ -1,5 +1,5 @@
 import { Plugin } from 'obsidian'
-import { createsIndependentApps } from './checks/apps'
+import { createsIndependentApps, runsAppAIThroughSandbox } from './checks/apps'
 import {
 	exportsImagesThroughBrowserTransport,
 	persistsChatSessions,
@@ -118,6 +118,10 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		await run(
 			'creates independent Apps with persistent data, SVG icons and ribbon pins',
 			() => createsIndependentApps(this.app),
+		)
+		await run(
+			'streams App AI and executes App tools through the production sandbox',
+			() => runsAppAIThroughSandbox(this.app),
 		)
 		await run(
 			'skips a stale Vault Skill entry without hiding stable Skills',

@@ -140,6 +140,134 @@ do not read or write it directly — use `app.kv`.
 Use `addEventListener` for events; inline `on*` handler attributes are removed.
 Browser storage and parent-window access are unavailable.
 
+## AI inside an App
+
+`app.ai` is a host-backed subset of AI SDK semantics. Do not import `ai`, load
+an SDK from a CDN, ask for API keys or call a provider directly. Model credentials
+stay in the host. `createAgent()` snapshots configuration; it creates no chat
+session or implicit memory. Each call uses the host's configured default model,
+unless `model: { providerId, modelId }` selects an existing configured model.
+
+```js
+const assistant = app.ai.createAgent({
+	instructions: 'Help the user explore this application.',
+})
+let history = []
+async function ask(text, signal) {
+	const messages = [...history, { role: 'user', content: text }]
+	const result = await assistant.generate({ messages, abortSignal: signal })
+	history = [...messages, ...result.responseMessages]
+	return result.text
+}
+```
+
+`generate({ prompt })` and `generate({ messages })` return
+`{ text, output?, responseMessages, finishReason, usage }`. Supply exactly one
+of `prompt` and `messages`. `responseMessages` contains only messages generated
+by this call, including paired tool calls/results; append it once to your input
+history. `text` is the final step's text, and `usage` totals all steps. Keep
+history explicitly in App state; `app.kv` can persist it subject to its existing
+size limits. Instructions belong in `instructions`, not in a system message.
+
+Messages support user text/string or text parts, assistant text/reasoning/tool-call
+parts, and tool-result parts with JSON/text/error outputs. Images, attachments,
+URLs, provider configuration and provider-specific content are outside this subset.
+Returned message parts may contain JSON `providerOptions` with reasoning signatures
+or continuation identifiers. Preserve them unchanged when replaying history;
+they are model response data, not the host's API credentials or request settings.
+No main-chat history, memory or built-in Agent tools are implicitly attached.
+
+```js
+const controller = new AbortController()
+const result = await assistant.stream({
+	prompt: 'Describe the current scene.',
+	abortSignal: controller.signal,
+})
+for await (const text of result.textStream) appendAnswer(text)
+const finalText = await result.text
+const generatedMessages = await result.responseMessages
+// A Stop button can call controller.abort().
+```
+
+`stream()` starts one run and returns `textStream`, `stream` and promises for
+the same final result fields. Both streams observe that run without repeating
+inference. Final results settle even when no stream is consumed. `stream`
+preserves SDK event names and IDs for text, reasoning, tool input/call/result/error,
+step start/finish and run start/finish. Provider metadata and raw errors are omitted.
+Failures reject the final promises and stream iterators; partial text is not a
+completed answer. Breaking an iterator does not cancel inference; abort explicitly.
+
+For structured output, use a plain JSON Schema (draft 2020-12 by default) with
+an object root. The host validates tool inputs and structured outputs, including
+constraints such as `enum`, `required`, `additionalProperties` and `uniqueItems`.
+Schemas must be self-contained; external references are not fetched. Unsupported
+or invalid schema operations fail rather than granting additional capabilities.
+
+```js
+const player = app.ai.createAgent({
+	instructions: 'Select one legal move from the supplied position.',
+	output: app.ai.Output.object({
+		schema: {
+			type: 'object',
+			properties: { move: { type: 'string', enum: ['left', 'right'] } },
+			required: ['move'],
+			additionalProperties: false,
+		},
+	}),
+})
+const result = await player.generate({ prompt: JSON.stringify(position) })
+// Recheck the current position and business rules before applying result.output.move.
+```
+
+`tools` use `{ description, inputSchema, execute }`. Tool names use ASCII letters,
+digits, `_` or `-`, start with a letter or `_`, and have at most 64 characters.
+`inputSchema` is a plain JSON Schema with an object root. `execute` stays inside
+the App, receives `(input, { toolCallId, abortSignal })`, and returns JSON (use
+`null` for no value). The SDK runs the tool loop in the host; never implement a
+second model/tool loop in App code. Tool failures become tool-error results the
+model can respond to. Validate business invariants in each tool, honor cancellation,
+and use `toolCallId` for deduplication when performing a mutation. File operations
+inside tools still use `app.fs` and its permissions.
+
+```js
+const helper = app.ai.createAgent({
+	stopWhen: app.ai.isStepCount(8),
+	tools: {
+		listItems: {
+			description: 'Read the current items.',
+			inputSchema: {
+				type: 'object',
+				properties: {},
+				additionalProperties: false,
+			},
+			async execute() {
+				return (await app.kv.get('items')) ?? []
+			},
+		},
+	},
+})
+```
+
+The host allows at most 4 simultaneous runs per App runtime and 8 across Apps,
+20 steps (a smaller limit can use `app.ai.isStepCount(n)`), 64 tools and 64 pending
+tool calls per run. `maxOutputTokens` may lower the 16,384-token host ceiling;
+the configured model's lower output limit also applies. A run times out after
+180 seconds, and a tool after 30 seconds. Requests are limited to 1 MiB, streamed
+events and final results each to 2 MiB, tool inputs/results and structured output
+to 256 KiB. A step limit preserves the SDK's `finishReason` (often `tool-calls`);
+it does not guarantee a final natural-language answer. No automatic retries occur.
+
+Errors expose a stable `code`: `INVALID_REQUEST`, `MODEL_UNAVAILABLE`,
+`UNSUPPORTED_CAPABILITY`, `INVALID_OUTPUT`, `LIMIT_EXCEEDED`, `CANCELLED`,
+`AI_UNAVAILABLE_IN_VALIDATION` or `AI_FAILED`. Cancellation has name `AbortError`.
+App reload/closure and disabling the AI module cancel pending runs. Completed
+mutations are not rolled back; late tool results cannot resume a cancelled run.
+
+Hidden startup validation disables AI with `AI_UNAVAILABLE_IN_VALIDATION`.
+Initialize the interface before inference and trigger AI from user interactions;
+startup must not depend on a model response. Catch failures and show a useful
+retry/stop state in the interface.
+
 ## Virtual filesystem
 
 `app.fs` accesses the same virtual filesystem as Agent file tools. Relative
