@@ -113,12 +113,8 @@ export function createAppFS(
 	rpc: (method: string, ...args: unknown[]) => Promise<unknown>,
 	methods: string[],
 ): AppFS {
-	return Object.freeze(
-		Object.fromEntries(
-			methods.map((method) => [
-				method,
-				(...args: unknown[]) => rpc(`fs.${method}`, ...args),
-			]),
-		),
-	) as unknown as AppFS
+	const fs: Record<string, (...args: unknown[]) => Promise<unknown>> = {}
+	for (const method of methods)
+		fs[method] = (...args: unknown[]) => rpc(`fs.${method}`, ...args)
+	return Object.freeze(fs) as unknown as AppFS
 }

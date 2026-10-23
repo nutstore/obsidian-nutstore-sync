@@ -476,7 +476,7 @@ describe('App runtime and trusted SVG boundary', () => {
 		expect((await rejection) as Error).toMatchObject({ message: 'App closed' })
 	})
 
-	it('executes Unicode source and working controls without srcdoc/script breakout', async () => {
+	it('initializes without Object.fromEntries and executes Unicode source safely', async () => {
 		const messages: Record<string, unknown>[] = []
 		const runtimeContent: AppContent = {
 			html: '<button id="add" onclick="bad()">增加 Add 🌿</button><script>window.bad = 1</script>',
@@ -487,6 +487,7 @@ describe('App runtime and trusted SVG boundary', () => {
 		const dom = new JSDOM(runtimeDocument(runtimeContent, 'neutral'), {
 			runScripts: 'dangerously',
 			beforeParse(win) {
+				Reflect.deleteProperty(win.Object, 'fromEntries')
 				win.postMessage = (message: Record<string, unknown>) => {
 					messages.push(message)
 					if (message.id)
