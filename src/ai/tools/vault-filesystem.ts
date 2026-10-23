@@ -1,10 +1,6 @@
 import type { IFileSystem } from 'just-bash/browser'
 import { normalizePath, type App } from 'obsidian'
-import {
-	appIdFromPath,
-	isAppDirectoryPath,
-	isReservedAppPath,
-} from '~/ai/apps/paths'
+import { AppFs } from '~/ai/apps/fs'
 import type { AppOpenFn, AppWorkspaceBinding } from '~/ai/apps/workspaces'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
@@ -13,6 +9,7 @@ import { createAppCommands } from './bash/app'
 import { ObsidianVaultFs, ReversibleOpRecorder } from './bash/fs'
 import { MountableFs } from './bash/mountable-fs'
 import {
+	APPS_MOUNT_POINT,
 	AGENTS_MOUNT_POINT,
 	AGENTS_VAULT_PATH,
 	BUILTIN_SKILLS_MOUNT_POINT,
@@ -71,33 +68,6 @@ async function listAgentDomainPaths(app: App) {
 		}
 	}
 	return paths
-}
-
-/**
- * App files are real vault files served by the base filesystem. Only
- * host-owned files are protected from mutation, and App source edits never
- * prompt: they are sandboxed source rather than user knowledge. Reading or
- * writing an App still updates the chat selection when a pending App does not
- * exist yet, so binding failures stay non-fatal.
- */
-function createAppPathPolicy(options: CreateVaultFileSystemOptions) {
-	const touchApp = (vaultPath: string) => {
-		const appId = appIdFromPath(vaultPath)
-		if (!appId || !options.appWorkspaceBinding) return
-		void options.appWorkspaceBinding.access(appId).catch(() => {})
-	}
-	return {
-		touchApp,
-		readOnlyPath: (vaultPath: string) =>
-			isReservedAppPath(vaultPath) ||
-			isAppDirectoryPath(vaultPath) ||
-			(options.readonlyApps === true && appIdFromPath(vaultPath) !== undefined),
-		// A new App directory may be created from files; its lifecycle after that
-		// (remove/rename) belongs to the host UI.
-		creatablePath: isAppDirectoryPath,
-		autoApprovePermission: (vaultPath: string) =>
-			appIdFromPath(vaultPath) !== undefined,
-	}
 }
 
 /**
@@ -172,9 +142,7 @@ async function createScopedVaultFileSystem(
 	shared: SharedVaultFileSystem,
 	options: CreateVaultFileSystemOptions,
 ) {
-	const appPathPolicy = createAppPathPolicy(options)
 	const onRead = (path: string) => {
-		appPathPolicy.touchApp(path)
 		if (!options.recorder?.isCapturing) options.onRead?.(path)
 	}
 	const configDirMountPoint = getConfigDirMountPoint(
@@ -185,12 +153,6 @@ async function createScopedVaultFileSystem(
 		await getInitialVaultPaths(app),
 		options.permissionGuard,
 		onRead,
-		{
-			readOnlyPath: appPathPolicy.readOnlyPath,
-			creatablePath: appPathPolicy.creatablePath,
-			autoApprovePermission: appPathPolicy.autoApprovePermission,
-			onWrite: appPathPolicy.touchApp,
-		},
 	)
 	const settingsFs =
 		options.getSettingsSnapshot && options.updateSettings
@@ -204,6 +166,10 @@ async function createScopedVaultFileSystem(
 	const mountable = new MountableFs({
 		base: vaultFs,
 		mounts: [
+			{
+				mountPoint: APPS_MOUNT_POINT,
+				filesystem: new AppFs(app, options, onRead),
+			},
 			{
 				mountPoint: BUILTIN_SKILLS_MOUNT_POINT,
 				filesystem: shared.builtinSkillsFs,

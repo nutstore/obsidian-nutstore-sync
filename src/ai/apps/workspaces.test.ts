@@ -14,6 +14,7 @@ import {
 import { type AppContent } from './source'
 import { type KVChange } from './capabilities/kv'
 import { AppWorkspaces } from './workspaces'
+import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import type { RuntimeHost } from './runtime'
 
 vi.mock('obsidian', () => ({
@@ -479,7 +480,7 @@ describe('App workspaces over real App files', () => {
 		expect(logger.error).toHaveBeenCalledWith('中性错误 Neutral failure 🌿')
 	})
 
-	it('lets an App uninstall another App through the host without weakening its own source protection', async () => {
+	it('uninstalls other Apps and itself with confirmation while protecting App files', async () => {
 		const { service } = fixture()
 		const current = await service.create(
 			'org.example.files',
@@ -510,9 +511,60 @@ describe('App workspaces over real App files', () => {
 		)
 		expect(disk.has(sourcePath(target.id, APP_MANIFEST_FILE))).toBe(false)
 		expect(disk.has(sourcePath(current.id, APP_MANIFEST_FILE))).toBe(true)
+		host.log({
+			level: 'info',
+			source: 'console',
+			message: '结束记录 Final entry 🌿',
+		})
+		await host.fs!('rm', [appDirectoryPath(current.id), { recursive: true }])
 		await expect(
-			host.fs!('rm', [appDirectoryPath(current.id), { recursive: true }]),
-		).rejects.toThrow(/cannot uninstall itself/)
+			host.transact([{ key: '记录 Record 🌿', value: 1 }]),
+		).rejects.toThrow(/no longer exists/)
+		await service.logs.flush(current.id)
+		expect(disk.has(sourcePath(current.id, APP_LOG_FILE))).toBe(false)
+		expect(disk.has(sourcePath(current.id, APP_MANIFEST_FILE))).toBe(false)
+		expect(permissionGuard).toHaveBeenCalledWith(
+			expect.objectContaining({
+				fs: { kind: 'delete', path: `/${appDirectoryPath(current.id)}` },
+			}),
+		)
+	})
+
+	it('uses the same confirmed uninstall for Agent file operations and protects ancestor directories', async () => {
+		const { app, service } = fixture()
+		const created = await service.create(
+			'org.example.archive',
+			'中性归档 Neutral archive 🌿',
+		)
+		const fs = await new VaultFileSystemManager(app).create({ permissionGuard })
+		for (const path of [
+			'/.agents',
+			'/.agents/nutstore-sync',
+			'/.agents/nutstore-sync/apps',
+		]) {
+			await expect(fs.rm(path, { recursive: true })).rejects.toThrow(/EBUSY/)
+			await expect(fs.mv(path, '/Archive 归档 🌿')).rejects.toThrow(/EBUSY/)
+		}
+		await expect(
+			fs.mv(
+				`/${appDirectoryPath(created.id)}`,
+				`/${appDirectoryPath('org.example.other')}`,
+			),
+		).rejects.toThrow(/EROFS/)
+		expect(permissionGuard).not.toHaveBeenCalled()
+		permissionGuard.mockImplementationOnce(async () => {
+			throw new Error('取消 Cancelled 🌿')
+		})
+		await expect(
+			fs.rm(`/${appDirectoryPath(created.id)}`, { recursive: true }),
+		).rejects.toThrow('取消 Cancelled 🌿')
+		expect(await service.store.exists(created.id)).toBe(true)
+		await fs.rm(`/${appDirectoryPath(created.id)}`, { recursive: true })
+		expect(await service.store.exists(created.id)).toBe(false)
+		await fs.rm(`/${appDirectoryPath(created.id)}`, {
+			recursive: true,
+			force: true,
+		})
 	})
 
 	it('binds App access only when the selection actually changes and rolls back failures', async () => {

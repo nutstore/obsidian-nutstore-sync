@@ -223,6 +223,8 @@ export class AppStore {
 
 	async transact(id: string, changes: KVChange[]) {
 		return this.serial(id, async () => {
+			if (!(await this.exists(id)))
+				throw new Error(`App no longer exists: ${id}`)
 			const kv = changeKV(await this.readKV(id), changes)
 			await writeJson(this.app.vault, this.file(id, APP_DATA_FILE), {
 				schemaVersion: 1,

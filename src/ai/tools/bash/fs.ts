@@ -40,6 +40,8 @@ type WriteFileOptions = { encoding?: BufferEncoding }
  * vault-relative paths, exactly like the read observer.
  */
 export interface ObsidianVaultFsOptions {
+	/** Vault-relative storage root for a mounted filesystem. */
+	rootPath?: string
 	/**
 	 * Host-owned paths. Every mutating operation throws for these paths instead
 	 * of changing them.
@@ -380,12 +382,15 @@ export class ObsidianVaultFs implements IFileSystem {
 
 	private toPermissionPath(path: string) {
 		const normalized = ensureNotEscapingRoot(path)
-		return normalized
+		return `/${this.toVaultPath(normalized)}`
 	}
 
 	private toVaultPath(inputPath: string) {
 		const normalized = ensureNotEscapingRoot(inputPath)
-		return normalized === '/' ? '' : normalizePath(normalized.slice(1))
+		const relative = [this.options.rootPath, normalized.slice(1)]
+			.filter(Boolean)
+			.join('/')
+		return relative ? normalizePath(relative) : ''
 	}
 
 	private isAutoApprovedPermission(inputPath: string) {
@@ -419,7 +424,10 @@ export class ObsidianVaultFs implements IFileSystem {
 	private isInternalDirectory(inputPath: string) {
 		const normalized = ensureNotEscapingRoot(inputPath)
 		const configDir = `/${normalizePath(this.vault.configDir)}`
-		return normalized === `/${AGENTS_VAULT_PATH}` || normalized === configDir
+		return (
+			!this.options.rootPath &&
+			(normalized === `/${AGENTS_VAULT_PATH}` || normalized === configDir)
+		)
 	}
 
 	private async listDirectory(inputPath: string) {
@@ -436,7 +444,7 @@ export class ObsidianVaultFs implements IFileSystem {
 				this.vault.adapter,
 				adapterPath,
 			)
-			if (normalized === '/') {
+			if (normalized === '/' && !this.options.rootPath) {
 				const folders = new Set(listed.folders)
 				folders.add(AGENTS_VAULT_PATH)
 				folders.add(normalizePath(this.vault.configDir))
@@ -461,7 +469,7 @@ export class ObsidianVaultFs implements IFileSystem {
 			if (child instanceof TFile) files.push(child.path)
 			if (child instanceof TFolder) folders.push(child.path)
 		}
-		if (normalized === '/') {
+		if (normalized === '/' && !this.options.rootPath) {
 			folders.push(AGENTS_VAULT_PATH, normalizePath(this.vault.configDir))
 		}
 		return { files, folders }

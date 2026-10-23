@@ -1,6 +1,6 @@
 import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import { createAppFSDispatcher } from './capabilities/fs'
-import { normalizePath, type App } from 'obsidian'
+import type { App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 import type { ModuleScope } from '~/modules/lifecycle'
 import { guardAppIO } from '~/modules/guard-io'
@@ -18,8 +18,6 @@ import {
 	APP_LOG_FILE,
 	APP_ROOT_DIR,
 	appDirectoryPath,
-	appIdFromPath,
-	isAppDirectoryPath,
 } from './paths'
 import { changeKV, type AppKV, type KVChange } from './capabilities/kv'
 import { appError } from './error'
@@ -186,38 +184,6 @@ export class AppWorkspaces {
 				}),
 			check,
 			false,
-			async (method, args) => {
-				if (method !== 'rm') return
-				const [path, options] = args as [
-					string,
-					{ recursive?: boolean; force?: boolean }?,
-				]
-				const vaultPath = normalizePath(path).replace(/^\/+/, '')
-				const targetId = appIdFromPath(vaultPath)
-				if (!targetId || !isAppDirectoryPath(vaultPath)) return
-				if (targetId === appId) {
-					throw new Error('EPERM: an App cannot uninstall itself')
-				}
-				check()
-				if (!(await apps.exists(targetId))) {
-					if (options?.force) return { handled: true, value: undefined }
-					throw new Error(`ENOENT: no such file or directory, remove '${path}'`)
-				}
-				if (!options?.recursive) {
-					throw new Error(
-						`EISDIR: illegal operation on a directory, remove '${path}'`,
-					)
-				}
-				await permissionGuard({
-					type: 'fs',
-					fs: {
-						kind: 'delete',
-						path: `/${appDirectoryPath(targetId)}`,
-					},
-				})
-				await this.remove(targetId)
-				return { handled: true, value: undefined }
-			},
 		)
 		return {
 			fs,

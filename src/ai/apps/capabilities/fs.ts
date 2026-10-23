@@ -65,17 +65,11 @@ const reads = new Set([
 	'resolvePath',
 ])
 
-export type AppFSDispatchHook = (
-	method: keyof AppFS,
-	args: unknown[],
-) => Promise<{ handled: true; value: unknown } | undefined>
-
 /** Validate untrusted arguments before dispatch, and serialize mutations per runtime. */
 export function createAppFSDispatcher(
 	filesystem: () => Promise<IFileSystem>,
 	check: () => void,
 	readonly = false,
-	intercept?: AppFSDispatchHook,
 ) {
 	let queue: Promise<unknown> = Promise.resolve()
 	let instance: Promise<IFileSystem> | undefined
@@ -90,11 +84,6 @@ export function createAppFSDispatcher(
 				throw new Error(
 					'Filesystem writes are unavailable during startup validation; write in response to user actions',
 				)
-			const intercepted = await intercept?.(key, parsed)
-			if (intercepted) {
-				check()
-				return intercepted.value
-			}
 			const fs = await (instance ??= filesystem())
 			check()
 			// eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the original filesystem receiver.

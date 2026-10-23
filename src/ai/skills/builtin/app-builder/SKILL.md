@@ -60,8 +60,8 @@ Three files at the App directory root are owned by the host and read-only for
 the agent: `data.json` (the App's key-value data), `logs.jsonl` (runtime
 diagnostics) and `state.json` (pin flag and timestamps). Writing, renaming or
 deleting them fails, so never write them from bash and never ask the user to
-edit or delete them by hand. Delete an App through the plugin UI only; do not
-remove its directory from bash.
+edit or delete them by hand. Recursively deleting an App root directory uninstalls
+the App and its data, with the normal deletion permission check.
 
 ## Resource assembly
 
@@ -289,9 +289,9 @@ Encodings are `utf8`, `utf-8`, `base64`, `hex`, `binary` and `latin1`, supplied
 as a string or `{ encoding }`. Write payloads are limited to 4 MiB for bytes
 or 4,194,304 UTF-16 code units for strings. Filesystem errors reject the promise.
 App source and host-owned files are read-only to a running App; use `app.kv`
-for App state. An App may uninstall a different App by removing that App's root
+for App state. An App may uninstall any App, including itself, by removing that App's root
 directory with `{ recursive: true }`. This always asks the user and the host
-removes the whole App lifecycle. An App cannot uninstall itself. Ordinary file
+removes the whole App lifecycle. Self-uninstall removes the running App as well. Ordinary file
 mutations use the host's existing permission dialog. Permissions apply to the
 App independently of the authoring chat.
 

@@ -5,6 +5,33 @@ import { MountableFs } from './mountable-fs'
 import { ReversibleFs } from './reversible-fs'
 
 describe('mounted directory enumeration', () => {
+	it('protects mount ancestors and rejects cross-mount moves before mutation', async () => {
+		const base = new InMemoryFs({ '/Domain 领域 🌿/notes.md': 'Notes 笔记 🌿' })
+		const mounted = new InMemoryFs({
+			'/org.example.tool/index.html': 'Tool 工具 🌿',
+		})
+		const fs = new MountableFs({
+			base,
+			mounts: [{ mountPoint: '/Domain 领域 🌿/apps', filesystem: mounted }],
+		})
+		for (const path of [
+			'/',
+			'/Domain 领域 🌿',
+			'/Domain 领域 🌿/apps',
+			'/Domain 领域 🌿/apps/..',
+		]) {
+			await expect(fs.rm(path, { recursive: true })).rejects.toThrow(/EBUSY/)
+			await expect(fs.mv(path, '/Archive 归档 🌿')).rejects.toThrow(/EBUSY/)
+		}
+		await expect(
+			fs.mv('/Domain 领域 🌿/apps/org.example.tool', '/Archive 归档 🌿'),
+		).rejects.toThrow(/EXDEV/)
+		expect(await mounted.readFile('/org.example.tool/index.html')).toBe(
+			'Tool 工具 🌿',
+		)
+		expect(await base.exists('/Archive 归档 🌿')).toBe(false)
+	})
+
 	it('expands vault and mounted Skill globs through reversible Bash', async () => {
 		const base = new InMemoryFs({
 			'/Weekly review 每周复盘 🌱.md': 'Neutral notes / 中性笔记 🌱',

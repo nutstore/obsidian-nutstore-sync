@@ -2,7 +2,12 @@ import type { App } from 'obsidian'
 import { dirname } from 'path-browserify'
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { readLocalText } from '~/utils/local-vault-io'
-import { APP_LOG_FILE, appDirectoryPath, appIdSchema } from './paths'
+import {
+	APP_LOG_FILE,
+	APP_MANIFEST_FILE,
+	appDirectoryPath,
+	appIdSchema,
+} from './paths'
 
 export const APP_LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 export const APP_LOG_MAX_BYTES = 1_048_576
@@ -260,6 +265,13 @@ export class AppLogStore {
 	}
 
 	private async appendLines(id: string, lines: string[]) {
+		// A buffered diagnostic must not resurrect an uninstalled App.
+		if (
+			!(await this.app.vault.adapter.exists(
+				`${appDirectoryPath(id)}/${APP_MANIFEST_FILE}`,
+			))
+		)
+			return
 		const path = this.path(id)
 		await mkdirsVault(this.app.vault, dirname(path))
 		if (!(await this.app.vault.adapter.exists(path)))
