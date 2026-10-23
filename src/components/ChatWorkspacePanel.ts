@@ -76,6 +76,7 @@ export class ChatWorkspacePanel {
 				.setIcon('plus')
 				.onClick(() => this.openCreateApp()),
 		)
+		if (this.items.length) menu.addSeparator()
 		for (const app of this.items) {
 			menu.addItem((item) =>
 				item
