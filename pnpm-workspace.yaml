@@ -5,11 +5,16 @@ audit:
     # https://github.com/advisories/GHSA-hp3w-g68c-fv3c
     - GHSA-hp3w-g68c-fv3c
 catalog:
-  zod: ^4.5.4
+  zod: ^4.6.7
 overrides:
+  # GHSA-27r3-jxmh-p828 is patched in body-parser >=2.4.0.
+  body-parser@>=2.0.0 <2.4.0: ^2.4.0
+  # GHSA-w74x-v6f9-j3xg and related advisories are patched in fast-uri >=3.1.9.
+  fast-uri@>=3.0.0 <3.1.9: ^3.1.9
   # GHSA-5r4p-p66f-jhc7 is patched in hono >=4.13.11.
   hono: ^4.13.11
-  undici@>=7.0.0 <7.29.1: ^7.29.1
+  # GHSA-xjj6-f33q-929c and related advisories are patched in undici >=7.30.1.
+  undici@>=7.0.0 <7.30.1: ^7.30.1
   zod: 'catalog:'
 allowBuilds:
   '@mongodb-js/zstd': true
