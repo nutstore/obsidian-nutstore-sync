@@ -633,6 +633,8 @@
 		"complete": "✅ Sync completed",
 		"completeWithFailed": "❌ Sync completed with {{failedCount}} failed tasks",
 		"failedWithError": "Sync failed with error: {{error}}",
+		"incompleteScanAutoRetry": "The file scan could not finish completely. Sync stopped safely without changing any files. The plugin will try again at the next scheduled sync, or you can sync manually later.",
+		"incompleteScanManualRetry": "The file scan could not finish completely. Sync stopped safely without changing any files. Please try syncing manually later.",
 		"progress": "Sync progress: {{percent}}%",
 		"blockedBySync": "Sync is already running. Please try again later.",
 		"stoppingGcForSync": "Garbage collection is running. Stopping cleanup and starting sync.",

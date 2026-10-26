@@ -10,6 +10,7 @@ import {
 	onSyncProgress,
 } from '~/events'
 import i18n from '~/i18n'
+import { LocalScanError } from '~/utils/local-scan-error'
 import { is503Error } from '~/utils/is-503-error'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import { BaseService } from './service.interface'
@@ -84,13 +85,26 @@ export default class EventsService extends BaseService {
 					isError: true,
 					showNotice: false,
 				})
-				new Notice(
-					i18n.t('sync.failedWithError', {
-						error: is503Error(error)
-							? i18n.t('sync.error.requestsTooFrequent')
-							: error.message,
-					}),
-				)
+				if (error instanceof LocalScanError) {
+					const hasAutomaticRetry =
+						this.plugin.settings.autoSyncIntervalSeconds > 0
+					new Notice(
+						i18n.t(
+							hasAutomaticRetry
+								? 'sync.incompleteScanAutoRetry'
+								: 'sync.incompleteScanManualRetry',
+						),
+						10_000,
+					)
+				} else {
+					new Notice(
+						i18n.t('sync.failedWithError', {
+							error: is503Error(error)
+								? i18n.t('sync.error.requestsTooFrequent')
+								: error.message,
+						}),
+					)
+				}
 			}),
 		]
 	}

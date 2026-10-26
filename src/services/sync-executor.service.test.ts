@@ -49,7 +49,10 @@ function fixture() {
 		settings: { filterRules: { rules: [] } },
 		localSettings: { syncPolicy: 'two-way' },
 		remoteBaseDir: 'Notes 中性🌱',
-		app: { vault: { adapter: {}, configDir: '.obsidian' } },
+		app: {
+			workspace: { layoutReady: true },
+			vault: { adapter: {}, configDir: '.obsidian' },
+		},
 		isAccountConfigured: () => true,
 		getToken,
 		getRemoteAccountId: async () => 'neutral-account',
@@ -69,6 +72,45 @@ function fixture() {
 }
 
 describe('synchronization execution gate', () => {
+	it.each([SyncStartMode.AUTO_SYNC, SyncStartMode.MANUAL_SYNC])(
+		'rejects %s before host readiness and allows a later request',
+		async (mode) => {
+			const f = fixture()
+			f.plugin.app.workspace.layoutReady = false
+			await f.plugin.sync.lifecycle.update(true)
+			expect(await f.executor.executeSync({ mode })).toBe(false)
+			expect(f.getToken).not.toHaveBeenCalled()
+			expect(construct).not.toHaveBeenCalled()
+			f.plugin.app.workspace.layoutReady = true
+			expect(await f.executor.executeSync({ mode })).toBe(true)
+			expect(start).toHaveBeenCalledOnce()
+		},
+	)
+
+	it('does not immediately restart an unsuccessful round from a queued request', async () => {
+		const f = fixture()
+		let finish!: (result: { ended: boolean }) => void
+		start.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		await f.plugin.sync.lifecycle.update(true)
+		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
+		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
+		finish({ ended: false })
+		expect(await running).toBe(false)
+		expect(f.executor.isRunning()).toBe(false)
+		expect(f.runBlobGc).not.toHaveBeenCalled()
+		expect(start).toHaveBeenCalledOnce()
+		expect(
+			await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
+		).toBe(true)
+		expect(start).toHaveBeenCalledTimes(2)
+	})
+
 	it('refuses cold disabled requests before accessing credentials or showing notices', async () => {
 		const f = fixture()
 		expect(

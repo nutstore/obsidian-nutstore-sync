@@ -16,24 +16,28 @@ export default class RealtimeSyncService extends BaseService {
 	override onload() {
 		this.onunload()
 		const scope = this.plugin.sync.lifecycle.scope
-		const submit = debounce(() => {
-			if (!scope.signal.aborted && this.plugin.settings.realtimeSync)
-				void this.syncExecutor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
-		}, 8000)
-		const vault = this.plugin.app.vault
-		const changed = () => {
-			if (!scope.signal.aborted && this.plugin.settings.realtimeSync) submit()
-		}
-		const events = [
-			vault.on('create', changed),
-			vault.on('delete', changed),
-			vault.on('modify', changed),
-			vault.on('rename', changed),
-		]
-		this.dispose = () => {
-			submit.cancel()
-			events.forEach((event) => vault.offref(event))
-		}
+		// Initial vault loading emits create events; only user changes should trigger sync.
+		this.plugin.app.workspace.onLayoutReady(() => {
+			if (scope.signal.aborted) return
+			const submit = debounce(() => {
+				if (!scope.signal.aborted && this.plugin.settings.realtimeSync)
+					void this.syncExecutor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
+			}, 8000)
+			const vault = this.plugin.app.vault
+			const changed = () => {
+				if (!scope.signal.aborted && this.plugin.settings.realtimeSync) submit()
+			}
+			const events = [
+				vault.on('create', changed),
+				vault.on('delete', changed),
+				vault.on('modify', changed),
+				vault.on('rename', changed),
+			]
+			this.dispose = () => {
+				submit.cancel()
+				events.forEach((event) => vault.offref(event))
+			}
+		})
 	}
 	override onunload() {
 		this.dispose?.()

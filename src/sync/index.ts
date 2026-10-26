@@ -204,6 +204,9 @@ export class NutstoreSync {
 			)
 			const cacheService = new CacheService(this.plugin)
 
+			// Validate the entire local snapshot before creating directories or resetting records.
+			const localStats = await this.localFS.walk()
+			this.throwIfCancelled()
 			this.emitPreparationProgress({ phase: 'checkingRemote' })
 			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 
@@ -248,19 +251,24 @@ export class NutstoreSync {
 			const decider = (() => {
 				switch (syncPolicy) {
 					case SyncPolicy.SendOnly:
-						return new SendOnlySyncDecider(this, syncRecord)
+						return new SendOnlySyncDecider(this, syncRecord, localStats)
 					case SyncPolicy.SendOnlyOverrideChanges:
-						return new SendOnlyOverrideChangesSyncDecider(this, syncRecord)
+						return new SendOnlyOverrideChangesSyncDecider(
+							this,
+							syncRecord,
+							localStats,
+						)
 					case SyncPolicy.ReceiveOnly:
-						return new ReceiveOnlySyncDecider(this, syncRecord)
+						return new ReceiveOnlySyncDecider(this, syncRecord, localStats)
 					case SyncPolicy.ReceiveOnlyRevertLocalChanges:
 						return new ReceiveOnlyRevertLocalChangesSyncDecider(
 							this,
 							syncRecord,
+							localStats,
 						)
 					case SyncPolicy.TwoWay:
 					default:
-						return new TwoWaySyncDecider(this, syncRecord)
+						return new TwoWaySyncDecider(this, syncRecord, localStats)
 				}
 			})()
 			this.emitPreparationProgress({ phase: 'analyzing' })

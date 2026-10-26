@@ -29,7 +29,12 @@ export default class ScheduledSyncService extends BaseService {
 		this.stopTimer()
 		this.clearStartupTimer()
 		this.startupSyncCompleted = false
-		await this.scheduleStartupOrInterval()
+		const scope = this.scope
+		this.plugin.app.workspace.onLayoutReady(() => {
+			if (scope.signal.aborted || this.scope !== scope) return
+			this.scheduleKey = this.getScheduleKey()
+			void this.scheduleStartupOrInterval()
+		})
 	}
 
 	private startTimer(intervalSeconds: number) {
@@ -59,6 +64,7 @@ export default class ScheduledSyncService extends BaseService {
 
 	private async scheduleStartupOrInterval() {
 		if (!this.scope || this.scope.signal.aborted) return
+		if (!this.plugin.app.workspace.layoutReady) return
 		const scope = this.scope
 		const settings = this.plugin.settings
 
@@ -98,6 +104,7 @@ export default class ScheduledSyncService extends BaseService {
 
 	async updateInterval() {
 		if (!this.scope || this.scope.signal.aborted) return
+		if (!this.plugin.app.workspace.layoutReady) return
 		const key = this.getScheduleKey()
 		if (key === this.scheduleKey) return
 		this.scheduleKey = key

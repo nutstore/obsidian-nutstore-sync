@@ -633,6 +633,8 @@
 		"complete": "✅ 同步完成",
 		"completeWithFailed": "❌ 同步完成，但有 {{failedCount}} 个任务失败",
 		"failedWithError": "同步失败，错误信息: {{error}}",
+		"incompleteScanAutoRetry": "本次文件扫描未能完整完成，同步已安全停止，未执行任何文件更改。插件将在下次自动同步时重新尝试，你也可以稍后手动同步。",
+		"incompleteScanManualRetry": "本次文件扫描未能完整完成，同步已安全停止，未执行任何文件更改。请稍后手动重试。",
 		"progress": "同步进度: {{percent}}%",
 		"blockedBySync": "同步正在进行中，请稍后再试。",
 		"stoppingGcForSync": "检测到垃圾回收正在进行，正在停止清理并开始同步。",

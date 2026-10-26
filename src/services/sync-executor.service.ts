@@ -36,6 +36,8 @@ export default class SyncExecutorService extends BaseService {
 
 	executeSync(options: SyncOptions): Promise<boolean> {
 		if (!this.plugin.sync.lifecycle.active) return Promise.resolve(false)
+		// Every trigger shares the host readiness boundary, including manual requests.
+		if (!this.plugin.app.workspace.layoutReady) return Promise.resolve(false)
 		if (this.isRunning()) {
 			if (options.mode === SyncStartMode.AUTO_SYNC) this.pendingAutoSync = true
 			else new Notice(i18n.t('sync.blockedBySync'))
@@ -144,7 +146,9 @@ export default class SyncExecutorService extends BaseService {
 					logger.error('Error running auto GC after sync end:', error)
 				})
 			}
+			// Failed preparation waits for a new trigger instead of draining stale requests.
 			if (
+				result?.ended &&
 				!scope.signal.aborted &&
 				this.pendingAutoSync &&
 				!this.plugin.isSyncing

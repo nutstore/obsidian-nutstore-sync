@@ -29,6 +29,7 @@ export default abstract class BaseSyncDecider {
 	constructor(
 		protected sync: NutstoreSync,
 		protected syncRecordStorage: SyncRecord,
+		private readonly localStats: SyncDecisionInput['localStats'],
 	) {}
 
 	abstract decide(): MaybePromise<BaseTask[]>
@@ -39,9 +40,8 @@ export default abstract class BaseSyncDecider {
 
 	protected async buildDecisionInput(): Promise<SyncDecisionInput> {
 		const syncRecordStorage = this.getSyncRecordStorage()
-		const [syncRecords, localStats, remoteStats] = await Promise.all([
+		const [syncRecords, remoteStats] = await Promise.all([
 			syncRecordStorage.getRecords(),
-			this.sync.localFS.walk(),
 			this.sync.remoteFs.walk(),
 		])
 
@@ -108,7 +108,7 @@ export default abstract class BaseSyncDecider {
 				syncMode: this.settings.syncMode,
 				configDir: this.vault.configDir,
 			},
-			localStats,
+			localStats: this.localStats,
 			remoteStats,
 			syncRecords,
 			remoteBaseDir: this.remoteBaseDir,
