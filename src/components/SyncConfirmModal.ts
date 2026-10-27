@@ -1,5 +1,6 @@
 import { App, ButtonComponent, Modal, setIcon } from 'obsidian'
 import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
+import createId from '~/utils/create-id'
 import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import i18n from '../i18n'
 import {
@@ -16,7 +17,7 @@ import { renderSyncPolicyRules } from './sync-policy-rules'
 export default class SyncConfirmModal extends Modal {
 	// Modal.open() owns `selection` for restoring the editor's text selection.
 	#syncSelection: SyncSelection
-	private readonly optionGroup = crypto.randomUUID()
+	private readonly optionGroup = createId('sync-confirm')
 
 	constructor(
 		app: App,
