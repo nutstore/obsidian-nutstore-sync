@@ -77,12 +77,11 @@ export type SyncPolicyNameI18nKey =
 	| 'settings.syncPolicy.receiveOnly'
 	| 'settings.syncPolicy.receiveOnlyRevertLocalChanges'
 
-export type SyncPolicyDescI18nKey =
-	| 'settings.syncPolicy.modal.twoWayDesc'
-	| 'settings.syncPolicy.modal.sendOnlyDesc'
-	| 'settings.syncPolicy.modal.sendOnlyOverrideChangesDesc'
-	| 'settings.syncPolicy.modal.receiveOnlyDesc'
-	| 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
+/** A confirmed manual run uses these values without changing saved defaults. */
+export interface SyncSelection {
+	syncPolicy: SyncPolicy
+	conflictStrategy: ConflictStrategy
+}
 
 export type ConflictStrategyI18nKey =
 	'noConflictMerge' | 'diff3' | 'localPriority' | 'serverPriority'
@@ -134,24 +133,6 @@ export function getSyncPolicyNameI18nKey(
 		case SyncPolicy.TwoWay:
 		default:
 			return 'settings.syncPolicy.twoWay'
-	}
-}
-
-export function getSyncPolicyDescI18nKey(
-	policy: SyncPolicy,
-): SyncPolicyDescI18nKey {
-	switch (policy) {
-		case SyncPolicy.SendOnly:
-			return 'settings.syncPolicy.modal.sendOnlyDesc'
-		case SyncPolicy.SendOnlyOverrideChanges:
-			return 'settings.syncPolicy.modal.sendOnlyOverrideChangesDesc'
-		case SyncPolicy.ReceiveOnly:
-			return 'settings.syncPolicy.modal.receiveOnlyDesc'
-		case SyncPolicy.ReceiveOnlyRevertLocalChanges:
-			return 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
-		case SyncPolicy.TwoWay:
-		default:
-			return 'settings.syncPolicy.modal.twoWayDesc'
 	}
 }
 

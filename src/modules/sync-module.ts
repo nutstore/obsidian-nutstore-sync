@@ -13,7 +13,7 @@ import { ProgressService } from '~/services/progress.service'
 import { StatusService } from '~/services/status.service'
 import { SyncRibbonManager } from '~/components/SyncRibbonManager'
 import SyncConfirmModal from '~/components/SyncConfirmModal'
-import type { SyncPolicy } from '~/settings'
+import type { SyncSelection } from '~/settings'
 import { ModuleLifecycle, type ModuleScope } from './lifecycle'
 
 /** Owns synchronization, its triggers and its presentation for one plugin. */
@@ -112,11 +112,11 @@ export class SyncModule {
 			this.plugin.app.setting?.openTabById(this.plugin.manifest.id)
 			return
 		}
-		const run = (syncPolicy?: SyncPolicy) => {
+		const run = (selection: Partial<SyncSelection> = {}) => {
 			if (!scope.signal.aborted)
 				void this.executor.executeSync({
 					mode: SyncStartMode.MANUAL_SYNC,
-					syncPolicy,
+					...selection,
 				})
 		}
 		if (this.plugin.settings.confirmBeforeSync) {

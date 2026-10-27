@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type NutstorePlugin from '~/index'
+import type { SyncSelection } from '~/settings'
 import { ModuleLifecycle } from '~/modules/lifecycle'
 import { SyncStartMode } from '~/sync'
 import SyncExecutorService from './sync-executor.service'
@@ -46,7 +47,10 @@ function fixture() {
 	const getToken = vi.fn(async () => 'test-only-token')
 	const plugin = {
 		isSyncing: false,
-		settings: { filterRules: { rules: [] } },
+		settings: {
+			filterRules: { rules: [] },
+			conflictStrategy: 'no-conflict-merge',
+		},
 		localSettings: { syncPolicy: 'two-way' },
 		remoteBaseDir: 'Notes 中性🌱',
 		app: {
@@ -72,6 +76,39 @@ function fixture() {
 }
 
 describe('synchronization execution gate', () => {
+	it('uses a manual selection without changing defaults or leaking into the next sync', async () => {
+		const f = fixture()
+		await f.plugin.sync.lifecycle.update(true)
+		const selection = {
+			syncPolicy: 'two-way',
+			conflictStrategy: 'server-priority',
+		} as SyncSelection
+		const defaults = structuredClone(f.plugin.settings)
+		expect(
+			await f.executor.executeSync({
+				mode: SyncStartMode.MANUAL_SYNC,
+				...selection,
+			}),
+		).toBe(true)
+		expect(construct).toHaveBeenLastCalledWith(
+			f.plugin,
+			expect.objectContaining({
+				conflictStrategy: selection.conflictStrategy,
+				remoteBaseDir: 'Notes 中性🌱',
+			}),
+		)
+		expect(start).toHaveBeenLastCalledWith({
+			mode: SyncStartMode.MANUAL_SYNC,
+			syncPolicy: selection.syncPolicy,
+		})
+		expect(f.plugin.settings).toEqual(defaults)
+		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
+		expect(construct).toHaveBeenLastCalledWith(
+			f.plugin,
+			expect.objectContaining({ conflictStrategy: defaults.conflictStrategy }),
+		)
+	})
+
 	it.each([SyncStartMode.AUTO_SYNC, SyncStartMode.MANUAL_SYNC])(
 		'rejects %s before host readiness and allows a later request',
 		async (mode) => {

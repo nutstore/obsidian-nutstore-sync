@@ -104,7 +104,7 @@ export default abstract class BaseSyncDecider {
 				skipLargeFiles: this.settings.skipLargeFiles,
 				mobileAppDownloadFileChunkSize:
 					this.settings.mobileAppDownloadFileChunkSize,
-				conflictStrategy: this.settings.conflictStrategy,
+				conflictStrategy: this.sync.conflictStrategy,
 				syncMode: this.settings.syncMode,
 				configDir: this.vault.configDir,
 			},

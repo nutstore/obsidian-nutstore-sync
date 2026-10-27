@@ -9,16 +9,14 @@ import i18n from '~/i18n'
 import type { SyncStartResult } from '~/sync'
 import { getConfigDirPruningRule } from '~/utils/config-dir-rules'
 import { getSyncPolicyLabel, getSyncTriggerLabel } from '~/sync/log'
-import { type SyncPolicy } from '~/settings'
+import { type SyncSelection } from '~/settings'
 import logger from '~/utils/logger'
 import waitUntil from '~/utils/wait-until'
 import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
-export interface SyncOptions {
+export interface SyncOptions extends Partial<SyncSelection> {
 	mode: SyncStartMode
-	/** A manual-sync override. This is deliberately not persisted. */
-	syncPolicy?: SyncPolicy
 }
 
 export default class SyncExecutorService extends BaseService {
@@ -58,6 +56,8 @@ export default class SyncExecutorService extends BaseService {
 		this.pendingAutoSync = false
 		const syncPolicy =
 			options.syncPolicy ?? this.plugin.localSettings.syncPolicy
+		const conflictStrategy =
+			options.conflictStrategy ?? this.plugin.settings.conflictStrategy
 
 		let result: SyncStartResult | undefined
 		try {
@@ -96,6 +96,7 @@ export default class SyncExecutorService extends BaseService {
 			logger.info('Sync starting with settings:', {
 				triggerMode: getSyncTriggerLabel(options.mode),
 				syncPolicy: getSyncPolicyLabel(syncPolicy),
+				conflictStrategy,
 				loginMode: this.plugin.settings.loginMode,
 				remoteBaseDir: this.plugin.remoteBaseDir,
 				syncMode: this.plugin.settings.syncMode,
@@ -117,6 +118,7 @@ export default class SyncExecutorService extends BaseService {
 			scope.check()
 
 			const sync = new NutstoreSync(this.plugin, {
+				conflictStrategy,
 				vault: guardVault(this.plugin.app.vault, scope.check, scope.track),
 				signal: scope.signal,
 				token: await scope.wait(this.plugin.getToken()),

@@ -128,6 +128,8 @@ export class NutstoreSync {
 			remoteBaseDir: string
 			webdav: WebDAVClient
 			signal?: AbortSignal
+			/** Per-run selection, never written to plugin settings. */
+			conflictStrategy?: ConflictStrategy
 		},
 	) {
 		this.options = Object.freeze(this.options)
@@ -861,6 +863,10 @@ export class NutstoreSync {
 
 	get settings() {
 		return this.plugin.settings
+	}
+
+	get conflictStrategy() {
+		return this.options.conflictStrategy ?? this.settings.conflictStrategy
 	}
 
 	get localSettings() {

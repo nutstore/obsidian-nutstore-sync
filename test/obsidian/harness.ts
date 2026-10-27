@@ -1,4 +1,5 @@
 import { Plugin } from 'obsidian'
+import { rendersSyncConfirmation } from './checks/sync-confirm'
 import { createsIndependentApps, runsAppAIThroughSandbox } from './checks/apps'
 import {
 	exportsImagesThroughBrowserTransport,
@@ -89,6 +90,10 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 
 		await run('loads the production plugin', () =>
 			loadsProductionPlugin(this.app),
+		)
+		await run(
+			'renders compact sync choices, Unicode paths and a reachable footer',
+			() => rendersSyncConfirmation(this.app),
 		)
 		await run(
 			'keeps the Chatbox composer above phone navigation across keyboard and layout changes',
