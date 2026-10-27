@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.6.0] - 2026-10-27
 
 - 引入沙盒应用工作区、文件系统访问权限、应用创建弹窗及自动打开绑定应用的功能 | Introduced sandboxed App workspaces, filesystem access, App creation modal, and auto-opening of bound Apps.
 - 重新设计同步确认弹窗，增加实时远程扫描进度显示及热切换同步/AI 模块的功能 | Redesigned sync confirmation modal, added live remote scan progress, and hot-toggle controls for sync and AI modules.
