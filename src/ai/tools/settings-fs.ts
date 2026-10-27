@@ -10,13 +10,9 @@ import type {
 import { posix as pathPosix } from 'path-browserify'
 import type { NutstoreSettings } from '~/settings'
 import type { PermissionGuard } from './permission-guard'
-import {
-	encodeContent,
-	normalizeVirtualPath,
-	toArrayBuffer,
-	toRelativePath,
-} from './bash/fs'
+import { encodeContent, toArrayBuffer } from './bash/fs'
 import { SETTINGS_MOUNT_POINT } from './bash/mount-points'
+import { normalizeVirtualPath, toRelativePath } from './bash/virtual-path'
 import {
 	describeSettingsPatch,
 	getChangedSettingsPatch,

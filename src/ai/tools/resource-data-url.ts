@@ -1,20 +1,19 @@
 import type { App } from 'obsidian'
-import { posix as pathPosix } from 'path-browserify'
 import { bytesToDataUrl } from '~/utils/data-url'
 
 import {
 	BUILTIN_SKILLS_MOUNT_POINT,
 	SETTINGS_MOUNT_POINT,
 } from './bash/mount-points'
+import { normalizeVirtualPath } from './bash/virtual-path'
 
 export async function resolveResourceDataUrl(
 	app: App,
 	path: string,
 	mediaType: string,
 ) {
-	const normalizedPath = pathPosix.normalize(path)
+	const normalizedPath = normalizeVirtualPath(path)
 	if (
-		!normalizedPath.startsWith('/') ||
 		normalizedPath === '/' ||
 		normalizedPath === SETTINGS_MOUNT_POINT ||
 		normalizedPath.startsWith(`${SETTINGS_MOUNT_POINT}/`) ||

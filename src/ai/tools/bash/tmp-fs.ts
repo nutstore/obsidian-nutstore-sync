@@ -3,6 +3,7 @@ import { posix as pathPosix } from 'path-browserify'
 
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { BASH_TMP_MOUNT_POINT, BASH_TMP_VAULT_PATH } from './mount-points'
+import { normalizeVirtualPath } from './virtual-path'
 
 function getBashTmpAdapterRoot() {
 	return normalizePath(BASH_TMP_VAULT_PATH)
@@ -15,7 +16,7 @@ export async function existsBashTmpPath(app: App, absolutePath: string) {
 }
 
 export function resolveBashTmpAdapterPath(absolutePath: string) {
-	const normalized = pathPosix.normalize(absolutePath)
+	const normalized = normalizeVirtualPath(absolutePath)
 	if (
 		normalized !== BASH_TMP_MOUNT_POINT &&
 		!normalized.startsWith(`${BASH_TMP_MOUNT_POINT}/`)

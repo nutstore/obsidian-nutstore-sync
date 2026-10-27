@@ -5,6 +5,55 @@ import { MountableFs } from './mountable-fs'
 import { ReversibleFs } from './reversible-fs'
 
 describe('mounted directory enumeration', () => {
+	it('rejects non-POSIX path aliases before any filesystem routing', async () => {
+		const base = new InMemoryFs({
+			'/Workspace 工作区 🌿/notes.md': 'Notes 笔记 🌱',
+		})
+		const mounted = new InMemoryFs()
+		const fs = new MountableFs({
+			base,
+			mounts: [
+				{ mountPoint: '/Workspace 工作区 🌿/apps', filesystem: mounted },
+			],
+		})
+		const alias = '/Workspace 工作区 🌿\\apps'
+
+		await expect(fs.exists(alias)).rejects.toThrow(/EINVAL/)
+		await expect(
+			fs.writeFile(alias, '中性内容 Neutral content 🌿'),
+		).rejects.toThrow(/EINVAL/)
+		await expect(fs.rm(alias, { recursive: true })).rejects.toThrow(/EINVAL/)
+		await expect(fs.mv(alias, '/Archive 归档 🌿')).rejects.toThrow(/EINVAL/)
+		expect(await base.readFile('/Workspace 工作区 🌿/notes.md')).toBe(
+			'Notes 笔记 🌱',
+		)
+		expect(await mounted.readdir('/')).toEqual([])
+	})
+
+	it('canonicalizes Unicode before resolving mount protection', async () => {
+		const base = new InMemoryFs()
+		const mounted = new InMemoryFs({
+			'/Notes 笔记 🧭.md': '中性笔记 Neutral note 🌱',
+		})
+		const fs = new MountableFs({
+			base,
+			mounts: [
+				{
+					mountPoint: '/Cafe\u0301 咖啡馆 🌿/apps',
+					filesystem: mounted,
+				},
+			],
+		})
+
+		expect(
+			await fs.readFile('/Caf\u00e9 咖啡馆 🌿/apps/Notes 笔记 🧭.md'),
+		).toBe('中性笔记 Neutral note 🌱')
+		await expect(
+			fs.rm('/Cafe\u0301 咖啡馆 🌿', { recursive: true }),
+		).rejects.toThrow(/EBUSY/)
+		await expect(base.exists('/Cafe\u0301 咖啡馆 🌿')).resolves.toBe(false)
+	})
+
 	it('protects mount ancestors and rejects cross-mount moves before mutation', async () => {
 		const base = new InMemoryFs({ '/Domain 领域 🌿/notes.md': 'Notes 笔记 🌿' })
 		const mounted = new InMemoryFs({

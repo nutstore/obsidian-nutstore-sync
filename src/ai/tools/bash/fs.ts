@@ -29,6 +29,7 @@ import {
 import { mkdirsVault } from '~/utils/mkdirs-vault'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { AGENTS_VAULT_PATH } from './mount-points'
+import { normalizeVirtualPath } from './virtual-path'
 
 const FILE_MODE = 0o644
 const DIR_MODE = 0o755
@@ -142,26 +143,8 @@ function getPathDepth(path: string) {
 	return path.split('/').filter(Boolean).length
 }
 
-export function normalizeVirtualPath(inputPath: string) {
-	const normalized = pathPosix.normalize(pathPosix.resolve('/', inputPath))
-	return normalized === '' ? '/' : normalized
-}
-
-export function toRelativePath(path: string) {
-	const normalized = normalizeVirtualPath(path)
-	return normalized === '/' ? '' : normalized.slice(1)
-}
-
 function joinVirtualPath(parent: string, name: string) {
 	return parent === '/' ? `/${name}` : `${parent}/${name}`
-}
-
-function ensureNotEscapingRoot(inputPath: string) {
-	const normalized = normalizeVirtualPath(inputPath)
-	if (!normalized.startsWith('/')) {
-		throw new Error(`EINVAL: invalid path '${inputPath}'`)
-	}
-	return normalized
 }
 
 async function copyRecursive(
@@ -205,7 +188,7 @@ class MutableVaultPathIndex implements VaultPathIndex {
 	}
 
 	recordPath(inputPath: string) {
-		const normalized = ensureNotEscapingRoot(inputPath)
+		const normalized = normalizeVirtualPath(inputPath)
 		this.paths.add('/')
 		let current = ''
 		for (const part of normalized.split('/').filter(Boolean)) {
@@ -215,7 +198,7 @@ class MutableVaultPathIndex implements VaultPathIndex {
 	}
 
 	forgetPath(inputPath: string) {
-		const normalized = ensureNotEscapingRoot(inputPath)
+		const normalized = normalizeVirtualPath(inputPath)
 		for (const path of [...this.paths]) {
 			if (path === normalized || path.startsWith(`${normalized}/`)) {
 				this.paths.delete(path)
@@ -381,12 +364,12 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	private toPermissionPath(path: string) {
-		const normalized = ensureNotEscapingRoot(path)
+		const normalized = normalizeVirtualPath(path)
 		return `/${this.toVaultPath(normalized)}`
 	}
 
 	private toVaultPath(inputPath: string) {
-		const normalized = ensureNotEscapingRoot(inputPath)
+		const normalized = normalizeVirtualPath(inputPath)
 		const relative = [this.options.rootPath, normalized.slice(1)]
 			.filter(Boolean)
 			.join('/')
@@ -422,7 +405,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	private isInternalDirectory(inputPath: string) {
-		const normalized = ensureNotEscapingRoot(inputPath)
+		const normalized = normalizeVirtualPath(inputPath)
 		const configDir = `/${normalizePath(this.vault.configDir)}`
 		return (
 			!this.options.rootPath &&
@@ -431,7 +414,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	private async listDirectory(inputPath: string) {
-		const normalized = ensureNotEscapingRoot(inputPath)
+		const normalized = normalizeVirtualPath(inputPath)
 		const adapterPath = this.toVaultPath(normalized)
 		if (typeof this.vault.adapter.list === 'function') {
 			if (
@@ -523,7 +506,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		content: FileContent,
 		options?: WriteFileOptions | BufferEncoding,
 	): Promise<void> {
-		const normalized = ensureNotEscapingRoot(path)
+		const normalized = normalizeVirtualPath(path)
 		this.assertWritable(normalized)
 		await this.checkPermission({ kind: 'write', path: normalized })
 		await this.withBatch(async () => {
@@ -546,7 +529,7 @@ export class ObsidianVaultFs implements IFileSystem {
 		content: FileContent,
 		options?: WriteFileOptions | BufferEncoding,
 	): Promise<void> {
-		const normalized = ensureNotEscapingRoot(path)
+		const normalized = normalizeVirtualPath(path)
 		this.assertWritable(normalized)
 		await this.checkPermission({ kind: 'write', path: normalized })
 		await this.withBatch(async () => {
@@ -562,7 +545,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async exists(path: string): Promise<boolean> {
-		const normalized = ensureNotEscapingRoot(path)
+		const normalized = normalizeVirtualPath(path)
 		if (normalized === '/') {
 			return true
 		}
@@ -571,7 +554,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async stat(path: string): Promise<FsStat> {
-		const normalized = ensureNotEscapingRoot(path)
+		const normalized = normalizeVirtualPath(path)
 		if (normalized === '/') {
 			return {
 				isFile: false,
@@ -614,7 +597,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async mkdir(path: string, options?: MkdirOptions): Promise<void> {
-		const normalized = ensureNotEscapingRoot(path)
+		const normalized = normalizeVirtualPath(path)
 		if (normalized === '/') {
 			return
 		}
@@ -667,7 +650,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async rm(path: string, options?: RmOptions): Promise<void> {
-		const normalized = ensureNotEscapingRoot(path)
+		const normalized = normalizeVirtualPath(path)
 		if (normalized === '/') {
 			throw new Error(`EPERM: operation not permitted, remove '${path}'`)
 		}
@@ -688,8 +671,8 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async cp(src: string, dest: string, options?: CpOptions): Promise<void> {
-		const normalizedSrc = ensureNotEscapingRoot(src)
-		const normalizedDest = ensureNotEscapingRoot(dest)
+		const normalizedSrc = normalizeVirtualPath(src)
+		const normalizedDest = normalizeVirtualPath(dest)
 		// A copy only reads the source, so just the destination tree must be writable.
 		this.assertWritable(normalizedDest)
 		await this.checkPermission({
@@ -704,8 +687,8 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	async mv(src: string, dest: string): Promise<void> {
-		const normalizedSrc = ensureNotEscapingRoot(src)
-		const normalizedDest = ensureNotEscapingRoot(dest)
+		const normalizedSrc = normalizeVirtualPath(src)
+		const normalizedDest = normalizeVirtualPath(dest)
 		this.assertWritable(normalizedSrc, normalizedDest)
 		await this.checkPermission({
 			kind: 'move',
@@ -762,7 +745,7 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	resolvePath(base: string, path: string): string {
-		return ensureNotEscapingRoot(pathPosix.resolve(base || '/', path))
+		return normalizeVirtualPath(pathPosix.resolve(base || '/', path))
 	}
 
 	getAllPaths(): string[] {
@@ -796,7 +779,7 @@ export class ObsidianVaultFs implements IFileSystem {
 
 	async realpath(path: string): Promise<string> {
 		await this.assertExists(path)
-		return ensureNotEscapingRoot(path)
+		return normalizeVirtualPath(path)
 	}
 
 	async utimes(path: string, _atime: Date, _mtime: Date): Promise<void> {

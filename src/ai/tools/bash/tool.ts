@@ -1,6 +1,5 @@
 import { tool } from 'ai'
 import { idAgent } from 'id-agent'
-import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod/mini'
 import {
 	AGENTS_MOUNT_POINT,
@@ -10,6 +9,7 @@ import {
 	VAULT_MOUNT_POINT,
 } from '~/ai/tools/bash/runtime'
 import { BASH_TMP_MOUNT_POINT, writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
+import { normalizeVirtualPath } from '~/ai/tools/bash/virtual-path'
 import { withPermissionPurpose } from '~/ai/tools/permission-guard'
 import {
 	appDep,
@@ -24,13 +24,6 @@ import i18n from '~/i18n'
 import { booleanValue, textValue } from '../shared'
 
 const MAX_INLINE_BASH_OUTPUT_CHARS = 20 * 1024
-
-function isAllowedBashCwd(pathValue: string) {
-	const normalized = pathPosix.normalize(
-		pathPosix.resolve('/', pathValue || '/'),
-	)
-	return normalized.startsWith('/')
-}
 
 export const bashTool = tool({
 	description: [
@@ -74,12 +67,7 @@ export const bashTool = tool({
 			getSettingsSnapshot,
 			updateSettings,
 		} = context
-		const cwd = params.cwd || VAULT_MOUNT_POINT
-		if (!isAllowedBashCwd(cwd)) {
-			throw new Error(
-				`Invalid bash cwd: ${cwd}. The cwd must be an absolute virtual path.`,
-			)
-		}
+		const cwd = normalizeVirtualPath(params.cwd || VAULT_MOUNT_POINT)
 
 		const result = await execVaultBash(app, params.script, {
 			cwd,

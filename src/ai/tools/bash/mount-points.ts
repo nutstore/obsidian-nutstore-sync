@@ -1,5 +1,6 @@
 import { posix as pathPosix } from 'path-browserify'
 import { APP_ROOT_DIR } from '~/ai/apps/paths'
+import { normalizeVirtualPath } from './virtual-path'
 
 export const VAULT_MOUNT_POINT = '/'
 export const AGENTS_MOUNT_POINT = '/.agents'
@@ -51,5 +52,5 @@ export function getConfigDirMountPoint(configDir: string) {
 	) {
 		throw new Error(`Invalid Obsidian config directory: '${configDir}'`)
 	}
-	return `/${normalized.replace(/^\/+|\/+$/g, '')}`
+	return normalizeVirtualPath(normalized)
 }

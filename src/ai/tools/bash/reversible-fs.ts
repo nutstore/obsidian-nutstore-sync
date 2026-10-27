@@ -10,6 +10,7 @@ import type {
 import type { ReversibleFileSnapshot } from '~/ai/chat/types'
 import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
 import type { ReversibleOpRecorder } from './fs'
+import { normalizeVirtualPath } from './virtual-path'
 
 type Snapshot = ReversibleFileSnapshot | { kind: 'dir' }
 type ReadOptions = Parameters<IFileSystem['readFile']>[1]
@@ -22,10 +23,6 @@ export interface ReversibleFsOptions {
 	 * are recorded as Vault-relative paths.
 	 */
 	absoluteMountPoints?: readonly string[]
-}
-
-function normalizePath(path: string) {
-	return pathPosix.normalize(pathPosix.resolve('/', path))
 }
 
 function joinPath(parent: string, child: string) {
@@ -43,7 +40,7 @@ export class ReversibleFs implements IFileSystem {
 	) {}
 
 	private toRecordedPath(path: string) {
-		const normalized = normalizePath(path)
+		const normalized = normalizeVirtualPath(path)
 		if (!this.options.absoluteMountPoints) return normalized
 		if (
 			normalized === '/' ||
@@ -58,7 +55,7 @@ export class ReversibleFs implements IFileSystem {
 	}
 
 	private async snapshot(path: string, result = new Map<string, Snapshot>()) {
-		const normalized = normalizePath(path)
+		const normalized = normalizeVirtualPath(path)
 		if (!(await this.inner.exists(normalized))) return result
 		const stat = await this.inner.stat(normalized)
 		if (stat.isDirectory) {
@@ -119,7 +116,7 @@ export class ReversibleFs implements IFileSystem {
 	}
 
 	private async writePaths(path: string) {
-		const paths = [normalizePath(path)]
+		const paths = [normalizeVirtualPath(path)]
 		let parent = pathPosix.dirname(paths[0])
 		while (parent !== '/' && !(await this.inner.exists(parent))) {
 			paths.push(parent)
