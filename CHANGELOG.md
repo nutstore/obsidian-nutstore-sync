@@ -2,6 +2,20 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 引入沙盒应用工作区、文件系统访问权限、应用创建弹窗及自动打开绑定应用的功能 | Introduced sandboxed App workspaces, filesystem access, App creation modal, and auto-opening of bound Apps.
+- 重新设计同步确认弹窗，增加实时远程扫描进度显示及热切换同步/AI 模块的功能 | Redesigned sync confirmation modal, added live remote scan progress, and hot-toggle controls for sync and AI modules.
+- 增强模型与供应商管理，新增模型选择弹窗、坚果云 AI 供应商图标及使用情况概览弹窗 | Enhanced model and provider management with a new selection modal, Nutstore AI provider icon, and usage overview modal.
+- 升级聊天框体验，支持可编辑的跨会话记忆、多 Agent 持续通信、增强的进度分组显示及布局优化 | Upgraded chatbox experience with editable cross-session memory, durable inter-agent communication, grouped assistant process timeline, and layout optimizations.
+- 改进设置界面，支持设置搜索、选项卡切换动画、分组展示及故障排查诊断信息 | Improved settings UI with searchable settings, animated tab transitions, grouped sections, and troubleshooting diagnostics.
+- 提升 App 稳定性，允许应用自我卸载或卸载其他应用，并修复了挂载文件系统的相关逻辑 | Improved App stability with self-uninstallation, inter-app uninstallation, and fixed filesystem mounting logic.
+- 修复同步与文件系统相关的多项问题，包括虚拟文件系统路径规范化、WebDAV 容错及 Bash 通配符支持 | Fixed sync and filesystem issues including VFS path canonicalization, WebDAV resilience, and Bash glob support.
+- 优化移动端适配，修复了下载临时文件重命名、WebView 压缩流兼容性及 UI 层级遮挡问题 | Optimized mobile experience by fixing temp-file renaming, polyfilling DecompressionStream for older WebViews, and resolving z-index issues.
+- 强化系统健壮性，自动恢复失败的模块生命周期与 IndexedDB 服务，并优化了上下文压缩的内存限制 | Enhanced robustness with automatic recovery for module lifecycle and IndexedDB failures, and optimized context compression limits.
+- 安全性与依赖更新，修补了易受攻击的传递依赖，并更新了 Hono 等核心库版本 | Security and dependency updates, including patches for vulnerable transitive dependencies and updates to core libraries like Hono.
+
+
 ## [1.5.0] - 2026-09-08
 
 - 引入子代理（Subagent）设置、模型选择回退机制及长期记忆归档功能。 | Introduced subagent settings, model selection resolution with fallback, and long-term memory archive injection.
