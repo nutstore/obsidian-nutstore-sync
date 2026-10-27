@@ -16,9 +16,16 @@ import { type KVChange } from './capabilities/kv'
 import { AppWorkspaces } from './workspaces'
 import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import type { RuntimeHost } from './runtime'
+import { readLocalText } from '~/utils/local-vault-io'
 
 vi.mock('obsidian', () => ({
-	normalizePath: (path: string) => path.replace(/^\/+|\/+$/g, ''),
+	normalizePath: (path: string) =>
+		path
+			.normalize('NFC')
+			.replace(/\\/g, '/')
+			.replace(/\u00a0|\u202f/g, ' ')
+			.replace(/\/+/g, '/')
+			.replace(/^\/+|\/+$/g, ''),
 	TFile: class {},
 	TFolder: class {},
 }))
@@ -26,6 +33,10 @@ vi.mock('obsidian', () => ({
 const disk = vi.hoisted(() => new Map<string, string>())
 const binary = vi.hoisted(() => new Map<string, ArrayBuffer>())
 const pathListeners = vi.hoisted(() => new Set<(path: string) => void>())
+const logWrite = vi.hoisted(() => ({
+	gate: undefined as Promise<void> | undefined,
+	started: undefined as (() => void) | undefined,
+}))
 const logger = vi.hoisted(() => ({ error: vi.fn() }))
 const permissionGuard = vi.hoisted(() => vi.fn(async () => {}))
 const runtimeControl = vi.hoisted(() => ({
@@ -56,10 +67,10 @@ vi.mock('~/utils/local-vault-io', () => ({
 		binary.has(path) ||
 		[...disk.keys()].some((key) => key.startsWith(`${path}/`)) ||
 		[...binary.keys()].some((key) => key.startsWith(`${path}/`)),
-	readLocalText: async (_vault: unknown, path: string) => {
+	readLocalText: vi.fn(async (_vault: unknown, path: string) => {
 		if (!disk.has(path)) throw new Error(`Missing file: ${path}`)
 		return disk.get(path)!
-	},
+	}),
 	readLocalBinary: async (_vault: unknown, path: string) => {
 		if (!binary.has(path)) throw new Error(`Missing file: ${path}`)
 		return binary.get(path)!
@@ -157,6 +168,10 @@ const adapter = {
 	},
 	process: async (path: string, update: (content: string) => string) => {
 		const target = normalize(path)
+		if (target.endsWith(`/${APP_LOG_FILE}`)) {
+			logWrite.started?.()
+			await logWrite.gate
+		}
 		const next = update(disk.get(target) ?? '')
 		disk.set(target, next)
 		return next
@@ -216,6 +231,13 @@ function sourcePath(id: string, name: string) {
 function bytes(value: string) {
 	return new TextEncoder().encode(value).buffer as ArrayBuffer
 }
+function deferred() {
+	let resolve!: () => void
+	const promise = new Promise<void>((complete) => {
+		resolve = complete
+	})
+	return { promise, resolve }
+}
 function text(path: string) {
 	return disk.get(path) ?? ''
 }
@@ -224,6 +246,8 @@ beforeEach(() => {
 	disk.clear()
 	binary.clear()
 	pathListeners.clear()
+	logWrite.gate = undefined
+	logWrite.started = undefined
 	logger.error.mockClear()
 	permissionGuard.mockClear()
 	runtimeControl.fail = false
@@ -536,7 +560,10 @@ describe('App workspaces over real App files', () => {
 			'org.example.archive',
 			'中性归档 Neutral archive 🌿',
 		)
-		const fs = await new VaultFileSystemManager(app).create({ permissionGuard })
+		const fs = await new VaultFileSystemManager(app).create({
+			appLifecycle: service,
+			permissionGuard,
+		})
 		for (const path of [
 			'/.agents',
 			'/.agents/nutstore-sync',
@@ -565,6 +592,107 @@ describe('App workspaces over real App files', () => {
 			recursive: true,
 			force: true,
 		})
+	})
+
+	it('rejects Vault path aliases before mount routing or permission checks', async () => {
+		const { app, service } = fixture()
+		const created = await service.create(
+			'org.example.reader',
+			'中性阅读器 Neutral reader 🌿',
+		)
+		const fs = await new VaultFileSystemManager(app).create({
+			appLifecycle: service,
+			permissionGuard,
+		})
+		const appRoot = appDirectoryPath(created.id)
+		const appAlias = `/${appRoot.split('/').join('\\')}`
+
+		await expect(
+			fs.rm('/.agents\\nutstore-sync', { recursive: true }),
+		).rejects.toThrow(/EINVAL/)
+		await expect(
+			fs.writeFile(`${appAlias}\\data.json`, '{"记录 Record 🌿":1}'),
+		).rejects.toThrow(/EINVAL/)
+		await expect(fs.rm(`${appAlias}\\data.json`)).rejects.toThrow(/EINVAL/)
+
+		expect(await service.store.exists(created.id)).toBe(true)
+		expect(permissionGuard).not.toHaveBeenCalled()
+	})
+
+	it('queues uninstall behind an in-flight KV transaction', async () => {
+		const { service } = fixture()
+		const created = await service.create(
+			'org.example.counter',
+			'中性计数器 Neutral counter 🌿',
+		)
+		await service.store.transact(created.id, [
+			{ key: '初始 Initial 🌱', value: 1 },
+		])
+		const host = service.createRuntimeHost(created.id)
+		const readStarted = deferred()
+		const releaseRead = deferred()
+		const removeApp = vi.spyOn(service.store, 'remove')
+		vi.mocked(readLocalText).mockImplementationOnce(async (_vault, path) => {
+			if (path === sourcePath(created.id, APP_DATA_FILE)) {
+				readStarted.resolve()
+				await releaseRead.promise
+			}
+			if (!disk.has(path)) throw new Error(`Missing file: ${path}`)
+			return disk.get(path)!
+		})
+
+		const transaction = host.transact([{ key: '更新 Update 🧭', value: 2 }])
+		await readStarted.promise
+		const removal = host.fs!('rm', [
+			appDirectoryPath(created.id),
+			{ recursive: true },
+		])
+		try {
+			await vi.waitFor(() =>
+				expect(removeApp).toHaveBeenCalledWith(created.id, {
+					force: undefined,
+				}),
+			)
+		} finally {
+			releaseRead.resolve()
+		}
+		await Promise.all([transaction, removal])
+
+		expect(await service.store.exists(created.id)).toBe(false)
+		expect(
+			[...disk.keys()].some((path) =>
+				path.startsWith(`${appDirectoryPath(created.id)}/`),
+			),
+		).toBe(false)
+	})
+
+	it('queues uninstall behind an in-flight log flush', async () => {
+		const { service } = fixture()
+		const created = await service.create(
+			'org.example.diagnostics',
+			'中性诊断 Neutral diagnostics 🌿',
+		)
+		const writeStarted = deferred()
+		const releaseWrite = deferred()
+		logWrite.gate = releaseWrite.promise
+		logWrite.started = writeStarted.resolve
+		service.logs.append(created.id, {
+			level: 'info',
+			source: 'runtime',
+			message: '日志写入 Log write 🌿',
+		})
+
+		const flushing = service.logs.flush(created.id)
+		await writeStarted.promise
+		const removal = service.remove(created.id)
+		releaseWrite.resolve()
+		await Promise.all([flushing, removal])
+
+		expect(
+			[...disk.keys()].some((path) =>
+				path.startsWith(`${appDirectoryPath(created.id)}/`),
+			),
+		).toBe(false)
 	})
 
 	it('binds App access only when the selection actually changes and rolls back failures', async () => {

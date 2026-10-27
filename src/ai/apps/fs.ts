@@ -1,9 +1,10 @@
 import type { App } from 'obsidian'
 import type { RmOptions } from 'just-bash/browser'
-import { ObsidianVaultFs, normalizeVirtualPath } from '~/ai/tools/bash/fs'
+import { ObsidianVaultFs } from '~/ai/tools/bash/fs'
+import { normalizeVirtualPath } from '~/ai/tools/bash/virtual-path'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import type { AppWorkspaceBinding } from './workspaces'
-import { removeLocalPath } from '~/utils/local-vault-io'
+import type { AppLifecycle } from './lifecycle'
 import {
 	APP_ROOT_DIR,
 	appIdFromPath,
@@ -14,13 +15,14 @@ import {
 interface AppFsOptions {
 	permissionGuard?: PermissionGuard
 	appWorkspaceBinding?: AppWorkspaceBinding
+	appLifecycle?: AppLifecycle
 	readonlyApps?: boolean
 }
 
 /** Mounted App files: directory deletion is uninstall, independent of the caller. */
 export class AppFs extends ObsidianVaultFs {
 	constructor(
-		private readonly host: Pick<App, 'vault' | 'fileManager'>,
+		host: Pick<App, 'vault' | 'fileManager'>,
 		private readonly policy: AppFsOptions,
 		onRead?: (path: string) => void,
 	) {
@@ -61,10 +63,12 @@ export class AppFs extends ObsidianVaultFs {
 		}
 		if (!options?.recursive)
 			throw new Error(`EISDIR: recursive removal required for '${path}'`)
+		if (!this.policy.appLifecycle)
+			throw new Error(`ENOTSUP: App lifecycle is unavailable, remove '${path}'`)
 		await this.policy.permissionGuard?.({
 			type: 'fs',
 			fs: { kind: 'delete', path: `/${vaultPath}` },
 		})
-		await removeLocalPath(this.host, vaultPath, true)
+		await this.policy.appLifecycle.remove(id, { force: options.force })
 	}
 }

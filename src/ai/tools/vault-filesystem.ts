@@ -1,6 +1,7 @@
 import type { IFileSystem } from 'just-bash/browser'
 import { normalizePath, type App } from 'obsidian'
 import { AppFs } from '~/ai/apps/fs'
+import type { AppLifecycle } from '~/ai/apps/lifecycle'
 import type { AppOpenFn, AppWorkspaceBinding } from '~/ai/apps/workspaces'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
@@ -28,6 +29,7 @@ export interface CreateVaultFileSystemOptions {
 	updateSettings?: SettingsUpdater
 	fileSystemManager?: VaultFileSystemManager
 	appWorkspaceBinding?: AppWorkspaceBinding
+	appLifecycle?: AppLifecycle
 	openApp?: AppOpenFn
 	readonlyApps?: boolean
 }
@@ -82,7 +84,7 @@ export class VaultFileSystemManager {
 		private readonly app: App,
 		private readonly defaults: Pick<
 			CreateVaultFileSystemOptions,
-			'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
+			'appLifecycle' | 'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
 		> = {},
 		sharedPromise?: Promise<SharedVaultFileSystem>,
 	) {
@@ -92,7 +94,7 @@ export class VaultFileSystemManager {
 	withDefaults(
 		overrides: Pick<
 			CreateVaultFileSystemOptions,
-			'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
+			'appLifecycle' | 'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
 		>,
 	) {
 		return new VaultFileSystemManager(

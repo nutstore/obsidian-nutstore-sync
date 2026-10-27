@@ -3,10 +3,16 @@ import type { App } from 'obsidian'
 import { describe, expect, it, vi } from 'vitest'
 import { MountableFs } from '~/ai/tools/bash/mountable-fs'
 import { AppFs } from './fs'
-import { APP_ROOT_DIR } from './paths'
+import { APP_ROOT_DIR, appDirectoryPath } from './paths'
 
 vi.mock('obsidian', () => ({
-	normalizePath: (path: string) => path.replace(/^\/+|\/+$/g, ''),
+	normalizePath: (path: string) =>
+		path
+			.normalize('NFC')
+			.replace(/\\/g, '/')
+			.replace(/\u00a0|\u202f/g, ' ')
+			.replace(/\/+/g, '/')
+			.replace(/^\/+|\/+$/g, ''),
 	TFile: class {},
 	TFolder: class {},
 }))
@@ -50,12 +56,21 @@ function fixture(readonlyApps = false) {
 	} as unknown as App
 	const permissionGuard = vi.fn(async () => {})
 	const onRead = vi.fn()
+	const appLifecycle = {
+		remove: async (id: string) => {
+			await disk.rm(`/${appDirectoryPath(id)}`, { recursive: true })
+		},
+	}
 	const fs = new MountableFs({
 		base: new InMemoryFs(),
 		mounts: [
 			{
 				mountPoint: `/${APP_ROOT_DIR}`,
-				filesystem: new AppFs(app, { permissionGuard, readonlyApps }, onRead),
+				filesystem: new AppFs(
+					app,
+					{ appLifecycle, permissionGuard, readonlyApps },
+					onRead,
+				),
 			},
 		],
 	})

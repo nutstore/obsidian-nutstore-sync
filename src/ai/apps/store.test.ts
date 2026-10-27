@@ -11,6 +11,7 @@ import { emptyAppManifest } from './manifest'
 import { newAppState } from './store'
 import { MAX_VALUE_BYTES } from './capabilities/kv'
 import { AppStore } from './store'
+import { AppLifecycleQueue } from './lifecycle'
 import { writeLocalTextAtomic } from '~/utils/local-vault-io'
 
 const disk = vi.hoisted(() => new Map<string, string>())
@@ -94,7 +95,10 @@ function seedApp(
 	return { id, manifest, state }
 }
 
+let lifecycle: AppLifecycleQueue
+
 beforeEach(() => {
+	lifecycle = new AppLifecycleQueue()
 	disk.clear()
 	pathListeners.clear()
 })
@@ -105,7 +109,7 @@ afterEach(() => {
 
 describe('App store over real vault directories', () => {
 	it('creates an App directory with a manifest and host state as the only files', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -134,7 +138,7 @@ describe('App store over real vault directories', () => {
 	})
 
 	it('rejects a duplicate App identity without touching the existing directory', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -158,7 +162,7 @@ describe('App store over real vault directories', () => {
 		'org.example.🌿',
 		'../org.example.counter',
 	])('rejects invalid App identity %s', async (id) => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		await expect(store.create(id, '中性应用 Neutral app 🌿')).rejects.toThrow()
 		expect(disk.size).toBe(0)
 		await expect(store.read(id)).rejects.toThrow()
@@ -219,7 +223,7 @@ describe('App store over real vault directories', () => {
 	])('rejects read for a %s', async (_name, mutate, message) => {
 		const fixture = seedApp()
 		mutate(fixture.id)
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		await expect(store.read(fixture.id)).rejects.toThrow(message)
 	})
 
@@ -229,7 +233,7 @@ describe('App store over real vault directories', () => {
 			`${APP_ROOT_DIR}/org.example.files/${APP_MANIFEST_FILE}`,
 			JSON.stringify(manifest),
 		)
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 
 		const read = await store.read('org.example.files')
 
@@ -243,7 +247,7 @@ describe('App store over real vault directories', () => {
 	})
 
 	it('lists only directories whose manifest makes them an App', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -284,13 +288,13 @@ describe('App store over real vault directories', () => {
 	})
 
 	it('returns an empty list before any App directory exists', async () => {
-		expect(await new AppStore(app).list()).toEqual([])
+		expect(await new AppStore(app, lifecycle).list()).toEqual([])
 	})
 
 	it('persists pinned host state and advances only updatedAt', async () => {
 		vi.useFakeTimers({ toFake: ['Date'] })
 		vi.setSystemTime(1_000)
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -315,13 +319,13 @@ describe('App store over real vault directories', () => {
 		).toEqual(expect.objectContaining({ pinned: true, updatedAt: 2_000 }))
 
 		vi.setSystemTime(3_000)
-		await new AppStore(app).setPinned(created.id, false)
+		await new AppStore(app, lifecycle).setPinned(created.id, false)
 		expect((await store.read(created.id)).state.pinned).toBe(false)
 		expect((await store.read(created.id)).state.updatedAt).toBe(3_000)
 	})
 
 	it('reads empty App data by default and persists the versioned envelope', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -355,7 +359,7 @@ describe('App store over real vault directories', () => {
 	})
 
 	it('rejects lossy, unsafe and oversized data at the store boundary', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -391,7 +395,7 @@ describe('App store over real vault directories', () => {
 	})
 
 	it('serializes concurrent transactions so no update is lost', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -412,7 +416,7 @@ describe('App store over real vault directories', () => {
 	})
 
 	it('removes the whole App directory and leaves other Apps untouched', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',
@@ -434,6 +438,11 @@ describe('App store over real vault directories', () => {
 		).toBe(false)
 		expect(await store.exists(created.id)).toBe(false)
 		await expect(store.read(created.id)).rejects.toThrow()
+		expect(
+			[...disk.keys()].some((path) =>
+				path.startsWith(`${directory(created.id)}/`),
+			),
+		).toBe(false)
 		expect(await store.read(other.id)).toEqual(other)
 		expect(events).toContain(created.id)
 		expect(events).not.toContain(other.id)
@@ -441,7 +450,7 @@ describe('App store over real vault directories', () => {
 	})
 
 	it('notifies source and state changes but never host data or log writes', async () => {
-		const store = new AppStore(app)
+		const store = new AppStore(app, lifecycle)
 		const created = await store.create(
 			'org.example.checklist',
 			'中性清单 Neutral checklist 🌿',

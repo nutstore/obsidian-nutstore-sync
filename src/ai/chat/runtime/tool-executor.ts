@@ -211,6 +211,7 @@ export class ToolExecutor {
 		return {
 			app,
 			fileSystemManager: this.fileSystemManager.withDefaults({
+				appLifecycle: this.workspaces?.service,
 				appWorkspaceBinding,
 				openApp: async (appId) => {
 					check()

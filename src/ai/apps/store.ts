@@ -22,6 +22,7 @@ import {
 	emptyAppManifest,
 	type AppManifest,
 } from './manifest'
+import type { AppLifecycleQueue, AppRemovalOptions } from './lifecycle'
 import {
 	appDataFileSchema,
 	changeKV,
@@ -58,14 +59,17 @@ async function writeJson(vault: App['vault'], path: string, value: unknown) {
 /**
  * Apps are plain vault directories. The store owns host state (`state.json`),
  * App data (`data.json`) and validation; source files are read and assembled by
- * `AppWorkspaces`. One queue per App serializes host-state read-modify-write.
+ * `AppWorkspaces`. One queue per App serializes every host-owned write and the
+ * App directory lifecycle.
  */
 export class AppStore {
-	private readonly queues = new Map<string, Promise<unknown>>()
 	private readonly listeners = new Set<(appId?: string) => void>()
 	private unsubscribeLocalPaths?: () => void
 
-	constructor(private readonly app: Pick<App, 'vault' | 'fileManager'>) {}
+	constructor(
+		private readonly app: Pick<App, 'vault' | 'fileManager'>,
+		private readonly lifecycle: AppLifecycleQueue,
+	) {}
 
 	/** Notify on source/state changes; host data writes never cause a reload. */
 	subscribe(listener: (appId?: string) => void) {
@@ -103,17 +107,8 @@ export class AppStore {
 		return `${this.directory(id)}/${name}`
 	}
 
-	private serial<T>(id: string, action: () => Promise<T>): Promise<T> {
-		const next = (this.queues.get(id) ?? Promise.resolve())
-			.catch(() => {})
-			.then(action)
-		this.queues.set(id, next)
-		void next
-			.finally(() => {
-				if (this.queues.get(id) === next) this.queues.delete(id)
-			})
-			.catch(() => {})
-		return next
+	private async hasDirectory(id: string) {
+		return this.app.vault.adapter.exists(this.directory(id))
 	}
 
 	async exists(id: string) {
@@ -130,6 +125,11 @@ export class AppStore {
 	}
 
 	async readState(id: string): Promise<AppState> {
+		return this.lifecycle.run(id, () => this.readStateNow(id))
+	}
+
+	private async readStateNow(id: string): Promise<AppState> {
+		if (!(await this.exists(id))) throw new Error(`App no longer exists: ${id}`)
 		const path = this.file(id, APP_STATE_FILE)
 		if (!(await this.app.vault.adapter.exists(path))) {
 			// Authoring agents may create an App directory from files; first use
@@ -183,7 +183,7 @@ export class AppStore {
 	}
 
 	async create(id: string, title: string): Promise<SavedApp> {
-		return this.serial(id, async () => {
+		return this.lifecycle.run(id, async () => {
 			if (await this.exists(id)) throw new Error(`App already exists: ${id}`)
 			const manifest = emptyAppManifest(title)
 			const state = newAppState()
@@ -200,8 +200,8 @@ export class AppStore {
 	}
 
 	async setPinned(id: string, pinned: boolean) {
-		return this.serial(id, async () => {
-			const state = await this.readState(id)
+		return this.lifecycle.run(id, async () => {
+			const state = await this.readStateNow(id)
 			await writeJson(this.app.vault, this.file(id, APP_STATE_FILE), {
 				...state,
 				pinned,
@@ -222,7 +222,7 @@ export class AppStore {
 	}
 
 	async transact(id: string, changes: KVChange[]) {
-		return this.serial(id, async () => {
+		return this.lifecycle.run(id, async () => {
 			if (!(await this.exists(id)))
 				throw new Error(`App no longer exists: ${id}`)
 			const kv = changeKV(await this.readKV(id), changes)
@@ -233,13 +233,17 @@ export class AppStore {
 		})
 	}
 
-	async remove(id: string) {
-		return this.serial(id, async () => {
+	async remove(id: string, options?: AppRemovalOptions) {
+		return this.lifecycle.run(id, async () => {
+			if (!(await this.hasDirectory(id))) {
+				if (options?.force) return
+				throw new Error(`ENOENT: App no longer exists: ${id}`)
+			}
 			await removeLocalPath(this.app, this.directory(id), true)
 		})
 	}
 
 	async settle() {
-		while (this.queues.size) await Promise.allSettled([...this.queues.values()])
+		await this.lifecycle.settle()
 	}
 }

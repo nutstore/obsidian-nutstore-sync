@@ -27,6 +27,11 @@ import { AppRuntime, type RuntimeHost } from './runtime'
 import { assembleAppContent, type AppContent } from './source'
 import { AppStore, type SavedApp } from './store'
 import type { AppAIHost } from './ai/contract'
+import {
+	AppLifecycleQueue,
+	type AppLifecycle,
+	type AppRemovalOptions,
+} from './lifecycle'
 
 export interface LoadedApp extends SavedApp {
 	content: AppContent
@@ -46,7 +51,7 @@ export interface AppWorkspaceBinding {
 }
 
 /** Apps are plain files; this layer owns assembly, validation and runtime lifetime. */
-export class AppWorkspaces {
+export class AppWorkspaces implements AppLifecycle {
 	readonly store: AppStore
 	readonly logs: AppLogStore
 
@@ -55,8 +60,12 @@ export class AppWorkspaces {
 		private readonly scope: ModuleScope,
 		private readonly ai?: AppAIHost,
 	) {
-		this.logs = new AppLogStore(app)
-		this.store = new AppStore(guardAppIO(app, scope.check, scope.track))
+		const lifecycle = new AppLifecycleQueue()
+		this.logs = new AppLogStore(app, lifecycle)
+		this.store = new AppStore(
+			guardAppIO(app, scope.check, scope.track),
+			lifecycle,
+		)
 	}
 
 	async create(id: string, title: string) {
@@ -120,7 +129,7 @@ export class AppWorkspaces {
 					() =>
 						new VaultFileSystemManager(
 							guardAppIO(this.app, check, this.scope.track),
-						).create({ readonlyApps: true }),
+						).create({ appLifecycle: this, readonlyApps: true }),
 					check,
 					true,
 				),
@@ -179,6 +188,7 @@ export class AppWorkspaces {
 				new VaultFileSystemManager(
 					guardAppIO(this.app, check, scope.track),
 				).create({
+					appLifecycle: this,
 					readonlyApps: true,
 					permissionGuard,
 				}),
@@ -213,9 +223,9 @@ export class AppWorkspaces {
 		await this.store.setPinned(appId, pinned)
 	}
 
-	async remove(appId: string) {
+	async remove(appId: string, options?: AppRemovalOptions) {
 		this.scope.check()
-		await this.store.remove(appId)
+		await this.store.remove(appId, options)
 	}
 
 	validateIcon(iconSvg: string) {

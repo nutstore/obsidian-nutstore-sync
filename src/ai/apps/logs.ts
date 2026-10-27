@@ -8,6 +8,7 @@ import {
 	appDirectoryPath,
 	appIdSchema,
 } from './paths'
+import type { AppLifecycleQueue } from './lifecycle'
 
 export const APP_LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 export const APP_LOG_MAX_BYTES = 1_048_576
@@ -175,25 +176,14 @@ export class AppLogStore {
 	private readonly pending = new Map<string, string[]>()
 	private readonly timers = new Map<string, number>()
 	private readonly rates = new Map<string, RateBucket>()
-	private readonly queues = new Map<string, Promise<unknown>>()
 
-	constructor(private readonly app: Pick<App, 'vault'>) {}
+	constructor(
+		private readonly app: Pick<App, 'vault'>,
+		private readonly lifecycle: AppLifecycleQueue,
+	) {}
 
 	private path(id: string) {
 		return `${appDirectoryPath(id)}/${APP_LOG_FILE}`
-	}
-
-	private serial<T>(id: string, action: () => Promise<T>): Promise<T> {
-		const next = (this.queues.get(id) ?? Promise.resolve())
-			.catch(() => {})
-			.then(action)
-		this.queues.set(id, next)
-		void next
-			.finally(() => {
-				if (this.queues.get(id) === next) this.queues.delete(id)
-			})
-			.catch(() => {})
-		return next
 	}
 
 	private schedule(id: string) {
@@ -292,7 +282,7 @@ export class AppLogStore {
 		const dropped = this.droppedNotice(id)
 		if (dropped) lines.push(dropped)
 		if (!lines.length) return
-		await this.serial(id, async () => {
+		await this.lifecycle.run(id, async () => {
 			try {
 				await this.appendLines(id, lines)
 			} catch {
@@ -305,7 +295,7 @@ export class AppLogStore {
 
 	async read(id: string) {
 		await this.flush(id)
-		return this.serial(id, async () => {
+		return this.lifecycle.run(id, async () => {
 			const path = this.path(id)
 			let content: string
 			try {
@@ -331,12 +321,8 @@ export class AppLogStore {
 			timerHost().clearTimeout(timer)
 			this.timers.delete(id)
 		}
-		const ids = new Set([
-			...this.pending.keys(),
-			...this.queues.keys(),
-			...this.rates.keys(),
-		])
+		const ids = new Set([...this.pending.keys(), ...this.rates.keys()])
 		await Promise.allSettled([...ids].map((id) => this.flush(id)))
-		while (this.queues.size) await Promise.allSettled([...this.queues.values()])
+		await this.lifecycle.settle()
 	}
 }
