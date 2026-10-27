@@ -1,18 +1,32 @@
 import { Plugin } from 'obsidian'
-import { persistsChatSessions, toleratesCorruptChatMeta } from './checks/chat'
+import { rendersSyncConfirmation } from './checks/sync-confirm'
+import { createsIndependentApps, runsAppAIThroughSandbox } from './checks/apps'
+import {
+	exportsImagesThroughBrowserTransport,
+	persistsChatSessions,
+	toleratesCorruptChatMeta,
+} from './checks/chat'
 import {
 	detachesChatboxWhenProductionPluginIsDisabled,
+	listsOnlyVaultSkillsInSettings,
+	hotTogglesFeatureModules,
 	loadsProductionPlugin,
+	opensChatboxInChosenLocation,
+	keepsChatboxAboveMobileNavigation,
+	respectsSessionAppOpenMode,
 	reloadsProductionPlugin,
+	rendersSearchableSettings,
 	rendersSyncProgress,
+	type LifecycleStep,
 } from './checks/plugin'
-import { createsProviderModels } from './checks/providers'
 import {
 	excludesUnrelatedHiddenPathsFromGlobSnapshot,
 	expandsAgentDomainPathsInBash,
 	expandsExistingVaultPathsInBash,
+	filtersDisabledSkillsFromAgentCatalog,
 	preservesBashHeredocUtf8,
 	resolvesResourceDataUrls,
+	respectsVaultDeletionPreference,
 	roundTripsVaultAdapterContent,
 	skipsStaleVaultSkillEntries,
 } from './checks/vault'
@@ -38,13 +52,27 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 	}
 
 	private async runChecks(results: TestResult[]) {
+		const lifecycleSteps: LifecycleStep[] = []
+		let activeCheck: { name: string; startedAt: string } | undefined
 		const writeSnapshot = () =>
 			this.app.vault.adapter.write(
 				OBSIDIAN_E2E_RESULT_PATH,
-				JSON.stringify({ passed: false, started: true, results }, null, 2),
+				JSON.stringify(
+					{
+						passed: false,
+						started: true,
+						results,
+						lifecycleSteps,
+						activeCheck,
+					},
+					null,
+					2,
+				),
 			)
 
 		const run = async (name: string, check: () => Promise<void>) => {
+			activeCheck = { name, startedAt: new Date().toISOString() }
+			await writeSnapshot()
 			try {
 				await check()
 				results.push({ name })
@@ -54,6 +82,7 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 					error: error instanceof Error ? error.stack : String(error),
 				})
 			}
+			activeCheck = undefined
 			// Record progress per check: a hung check must still leave every
 			// completed result behind for failure diagnostics.
 			await writeSnapshot()
@@ -62,11 +91,27 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		await run('loads the production plugin', () =>
 			loadsProductionPlugin(this.app),
 		)
-		await run('creates provider models through the real Obsidian runtime', () =>
-			createsProviderModels(),
+		await run(
+			'renders compact sync choices, Unicode paths and a reachable footer',
+			() => rendersSyncConfirmation(this.app),
+		)
+		await run(
+			'keeps the Chatbox composer above phone navigation across keyboard and layout changes',
+			() => keepsChatboxAboveMobileNavigation(this.app),
+		)
+		await run(
+			'respects automatic and manual session App opening independently of Chatbox location',
+			() => respectsSessionAppOpenMode(this.app),
+		)
+		await run(
+			'opens Chatbox in the chosen area while preserving its session and Unicode draft',
+			() => opensChatboxInChosenLocation(this.app),
 		)
 		await run('reloads the production plugin through the real lifecycle', () =>
 			reloadsProductionPlugin(this.app),
+		)
+		await run('hot toggles synchronization and AI modules independently', () =>
+			hotTogglesFeatureModules(this.app),
 		)
 		await run('expands existing Vault paths in Bash wildcards', () =>
 			expandsExistingVaultPathsInBash(this.app),
@@ -76,9 +121,6 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		)
 		await run('expands plugin agent domain paths in Bash wildcards', () =>
 			expandsAgentDomainPathsInBash(this.app),
-		)
-		await run('detaches ChatBox when the production plugin is disabled', () =>
-			detachesChatboxWhenProductionPluginIsDisabled(this.app),
 		)
 		await run('round-trips Vault adapter paths and content', () =>
 			roundTripsVaultAdapterContent(this.app),
@@ -94,9 +136,41 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			persistsChatSessions(this.app),
 		)
 		await run(
+			'creates independent Apps with persistent data, SVG icons and ribbon pins',
+			() => createsIndependentApps(this.app),
+		)
+		await run(
+			'streams App AI and executes App tools through the production sandbox',
+			() => runsAppAIThroughSandbox(this.app),
+		)
+		await run(
 			'skips a stale Vault Skill entry without hiding stable Skills',
 			() => skipsStaleVaultSkillEntries(this.app),
 		)
+		await run(
+			'hides disabled Vault Skills while keeping built-in Skills active',
+			() => filtersDisabledSkillsFromAgentCatalog(this.app),
+		)
+		await run(
+			'respects deletion preferences without a permanent-delete fallback',
+			() => respectsVaultDeletionPreference(this.app),
+		)
+		await run(
+			'exports remote and local images without the native HTTP bridge',
+			() => exportsImagesThroughBrowserTransport(this.app),
+		)
+
+		await run(
+			'renders searchable settings through shared section renderers',
+			() => rendersSearchableSettings(this.app),
+		)
+		await run('lists only Vault Skills in the Skills settings', () =>
+			listsOnlyVaultSkillsInSettings(this.app, async (step) => {
+				lifecycleSteps.push(step)
+				await writeSnapshot()
+			}),
+		)
+
 		await run('tolerates a corrupt chat meta file', () =>
 			toleratesCorruptChatMeta(this.app),
 		)
@@ -105,10 +179,21 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			() => rendersSyncProgress(this.app),
 		)
 
+		await run('detaches ChatBox when the production plugin is disabled', () =>
+			detachesChatboxWhenProductionPluginIsDisabled(this.app, async (step) => {
+				lifecycleSteps.push(step)
+				await writeSnapshot()
+			}),
+		)
+
 		await this.app.vault.adapter.write(
 			OBSIDIAN_E2E_RESULT_PATH,
 			JSON.stringify(
-				{ passed: results.every((result) => !result.error), results },
+				{
+					passed: results.every((result) => !result.error),
+					results,
+					lifecycleSteps,
+				},
 				null,
 				2,
 			),

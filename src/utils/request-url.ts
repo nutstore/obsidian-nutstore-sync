@@ -1,16 +1,7 @@
-import {
-	requestUrl as req,
-	RequestUrlParam,
-	RequestUrlResponse,
-} from 'obsidian'
+import { requestUrl as req, RequestUrlParam } from 'obsidian'
 import logger from './logger'
+import { RequestUrlError } from './request-url-error'
 import { isNutstoreHost, MOCK_USER_AGENT, NS_SYNC_USER_AGENT } from './ua'
-
-class RequestUrlError extends Error {
-	constructor(public res: RequestUrlResponse) {
-		super(`${res.status}: ${res.text}`)
-	}
-}
 
 export default async function requestUrl(p: RequestUrlParam | string) {
 	const url = typeof p === 'string' ? p : p.url

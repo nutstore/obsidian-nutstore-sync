@@ -1,6 +1,5 @@
-import { posix as pathPosix } from 'path-browserify'
-import { idAgent } from 'id-agent'
 import { tool } from 'ai'
+import { idAgent } from 'id-agent'
 import { z } from 'zod/mini'
 import {
 	AGENTS_MOUNT_POINT,
@@ -10,6 +9,7 @@ import {
 	VAULT_MOUNT_POINT,
 } from '~/ai/tools/bash/runtime'
 import { BASH_TMP_MOUNT_POINT, writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
+import { normalizeVirtualPath } from '~/ai/tools/bash/virtual-path'
 import { withPermissionPurpose } from '~/ai/tools/permission-guard'
 import {
 	appDep,
@@ -25,19 +25,12 @@ import { booleanValue, textValue } from '../shared'
 
 const MAX_INLINE_BASH_OUTPUT_CHARS = 20 * 1024
 
-function isAllowedBashCwd(pathValue: string) {
-	const normalized = pathPosix.normalize(
-		pathPosix.resolve('/', pathValue || '/'),
-	)
-	return normalized.startsWith('/')
-}
-
 export const bashTool = tool({
 	description: [
 		`Execute a browser-based bash subset against a virtual filesystem where the Obsidian vault is rooted at ${VAULT_MOUNT_POINT}, agent data is available at ${AGENTS_MOUNT_POINT}, built-in Skills are read-only under ${BUILTIN_SKILLS_MOUNT_POINT}, and plugin settings are editable at ${SETTINGS_MOUNT_POINT}/settings.json.`,
 		'This is not the host shell: node, python, xxd, and some command flags are unavailable.',
-		'Prefer supported commands such as ls, cat, rg, jq, sed, awk, od, gzip, gunzip, zcat, zip, unzip, mkdir, mv, cp, and rm. zip and unzip support standard store/deflate archives, but not encrypted, Zip64, or uncommon compression formats.',
-		`Wildcards expand against a snapshot index of the vault (notes and attachments, plus ${AGENTS_MOUNT_POINT}); other hidden dot-folders are not in that index, so globs can report no matches for files that do exist. When a glob or rg finds nothing, list the parent directory or read the explicit path directly before concluding a file is missing.`,
+		'Prefer supported commands such as ls, cat, rg, jq, sed, awk, od, gzip, gunzip, zcat, zip, unzip, mkdir, mv, cp, and rm. App files are ordinary files edited with these commands; the only App command is `app open [appId]`, which opens the App view immediately. zip and unzip support standard store/deflate archives, but not encrypted, Zip64, or uncommon compression formats.',
+		`Wildcards enumerate live directories in the virtual filesystem. Hidden dot-prefixed entries require a dot-prefixed pattern or shopt -s dotglob. When a glob or rg finds nothing, list the parent directory or read the explicit path directly before concluding a file is missing.`,
 		`Treat the filesystem root as the user's personal knowledge base — only write there for content the user intends to keep; use ${BASH_TMP_MOUNT_POINT} for intermediate or scratch work.`,
 		`The plugin settings file ${SETTINGS_MOUNT_POINT}/settings.json is virtual and reflects live settings (whitelist only, never credentials). To change settings, write the complete file as valid JSON — prefer jq or a full-file rewrite; the plugin validates and applies it on save.`,
 		`The required "purpose" field is a very short (up to 120 characters) plain-language summary of what this command does and why it is being run, written in the same language as the user's request and safe for users who cannot read shell — no code, no markdown, no newlines, no shell syntax.`,
@@ -64,7 +57,7 @@ export const bashTool = tool({
 		updateSettings: updateSettingsDep,
 	}),
 	outputSchema: z.string(),
-	execute: async (params, { context, toolCallId }) => {
+	execute: async (params, { context, toolCallId, abortSignal }) => {
 		const {
 			app,
 			fileSystemManager,
@@ -74,15 +67,11 @@ export const bashTool = tool({
 			getSettingsSnapshot,
 			updateSettings,
 		} = context
-		const cwd = params.cwd || VAULT_MOUNT_POINT
-		if (!isAllowedBashCwd(cwd)) {
-			throw new Error(
-				`Invalid bash cwd: ${cwd}. The cwd must be an absolute virtual path.`,
-			)
-		}
+		const cwd = normalizeVirtualPath(params.cwd || VAULT_MOUNT_POINT)
 
 		const result = await execVaultBash(app, params.script, {
 			cwd,
+			signal: abortSignal,
 			stdin: params.stdin,
 			rawScript: params.rawScript,
 			permissionGuard: withPermissionPurpose(permissionGuard, params.purpose),

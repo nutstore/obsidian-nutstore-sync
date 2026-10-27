@@ -1,4 +1,6 @@
-import { chunk } from 'lodash-es'
+import { closeModalOnAbort } from '~/modules/modal-lifetime'
+import { isAbortError } from '~/utils/abort'
+import { chunk } from 'es-toolkit/compat'
 import { Notice, Platform, Vault, moment, normalizePath } from 'obsidian'
 import { dirname } from 'path-browserify'
 import { Subscription } from 'rxjs'
@@ -92,11 +94,17 @@ export interface SyncStartResult {
 export class NutstoreSync {
 	remoteFs: IFileSystem
 	localFS: IFileSystem
-	isCancelled: boolean = false
+	private cancelled = false
+	get isCancelled() {
+		return this.cancelled || this.options.signal?.aborted === true
+	}
+	set isCancelled(value: boolean) {
+		this.cancelled = value
+	}
 	private preparationProgressEnabled = false
 
 	private emitPreparationProgress(progress: SyncPreparationProgress): void {
-		if (this.preparationProgressEnabled) {
+		if (this.preparationProgressEnabled && !this.isCancelled) {
 			emitSyncPreparationProgress(progress)
 		}
 	}
@@ -119,6 +127,9 @@ export class NutstoreSync {
 			remoteAccountId: string
 			remoteBaseDir: string
 			webdav: WebDAVClient
+			signal?: AbortSignal
+			/** Per-run selection, never written to plugin settings. */
+			conflictStrategy?: ConflictStrategy
 		},
 	) {
 		this.options = Object.freeze(this.options)
@@ -165,6 +176,7 @@ export class NutstoreSync {
 		})
 		this.currentLogger = createSyncLogger(this.currentLogPrefix)
 		try {
+			this.throwIfCancelled()
 			const showNotice = mode === SyncStartMode.MANUAL_SYNC
 			this.preparationProgressEnabled = showNotice
 			let preparingEmitted = false
@@ -194,6 +206,9 @@ export class NutstoreSync {
 			)
 			const cacheService = new CacheService(this.plugin)
 
+			// Validate the entire local snapshot before creating directories or resetting records.
+			const localStats = await this.localFS.walk()
+			this.throwIfCancelled()
 			this.emitPreparationProgress({ phase: 'checkingRemote' })
 			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 
@@ -238,19 +253,24 @@ export class NutstoreSync {
 			const decider = (() => {
 				switch (syncPolicy) {
 					case SyncPolicy.SendOnly:
-						return new SendOnlySyncDecider(this, syncRecord)
+						return new SendOnlySyncDecider(this, syncRecord, localStats)
 					case SyncPolicy.SendOnlyOverrideChanges:
-						return new SendOnlyOverrideChangesSyncDecider(this, syncRecord)
+						return new SendOnlyOverrideChangesSyncDecider(
+							this,
+							syncRecord,
+							localStats,
+						)
 					case SyncPolicy.ReceiveOnly:
-						return new ReceiveOnlySyncDecider(this, syncRecord)
+						return new ReceiveOnlySyncDecider(this, syncRecord, localStats)
 					case SyncPolicy.ReceiveOnlyRevertLocalChanges:
 						return new ReceiveOnlyRevertLocalChangesSyncDecider(
 							this,
 							syncRecord,
+							localStats,
 						)
 					case SyncPolicy.TwoWay:
 					default:
-						return new TwoWaySyncDecider(this, syncRecord)
+						return new TwoWaySyncDecider(this, syncRecord, localStats)
 				}
 			})()
 			this.emitPreparationProgress({ phase: 'analyzing' })
@@ -320,14 +340,14 @@ export class NutstoreSync {
 				settings.confirmBeforeSync &&
 				firstTaskIdxNeedingConfirmation > -1
 			) {
-				this.plugin.progressService.closeProgressModal()
-				const confirmExec = await new TaskListConfirmModal(
-					this.app,
-					confirmedTasks,
+				this.plugin.sync.progress.closeProgressModal()
+				const confirmExec = await closeModalOnAbort(
+					new TaskListConfirmModal(this.app, confirmedTasks),
+					this.options.signal,
 				).openAndWait()
 				if (confirmExec.confirm) {
 					confirmedTasks = confirmExec.tasks
-					this.plugin.progressService.showProgressModal()
+					this.plugin.sync.progress.showProgressModal()
 				} else {
 					emitSyncCancelled()
 					return {
@@ -348,11 +368,10 @@ export class NutstoreSync {
 				)
 				if (removeLocalTasks.length > 0) {
 					new Notice(i18n.t('deleteConfirm.warningNotice'), 3000)
-					const { tasksToDelete, tasksToReupload } =
-						await new DeleteConfirmModal(
-							this.app,
-							removeLocalTasks,
-						).openAndWait()
+					const { tasksToDelete, tasksToReupload } = await closeModalOnAbort(
+						new DeleteConfirmModal(this.app, removeLocalTasks),
+						this.options.signal,
+					).openAndWait()
 
 					// Create corresponding Push/Mkdir tasks for each task to reupload
 					const reuploadMap = new Map<
@@ -635,13 +654,20 @@ export class NutstoreSync {
 						})
 					}
 				}
-				new FailedTasksModal(this.app, failedTasksInfo).open()
+				closeModalOnAbort(
+					new FailedTasksModal(this.app, failedTasksInfo),
+					this.options.signal,
+				).open()
 			}
 
 			emitEndSync({ failedCount, showNotice })
 			return { ended: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
-			if (error instanceof SyncCancelledError) {
+			if (
+				this.isCancelled ||
+				error instanceof SyncCancelledError ||
+				isAbortError(error)
+			) {
 				emitSyncCancelled()
 				this.logger.info('Sync cancelled')
 			} else {
@@ -837,6 +863,10 @@ export class NutstoreSync {
 
 	get settings() {
 		return this.plugin.settings
+	}
+
+	get conflictStrategy() {
+		return this.options.conflictStrategy ?? this.settings.conflictStrategy
 	}
 
 	get localSettings() {

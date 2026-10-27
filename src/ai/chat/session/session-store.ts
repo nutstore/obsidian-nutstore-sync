@@ -1,3 +1,4 @@
+import { isAbortError } from '~/utils/abort'
 import { Notice } from 'obsidian'
 import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 
@@ -186,6 +187,7 @@ export class SessionStore {
 					title: payload.title || cached?.title || i18n.t('chatbox.newChat'),
 					createdAt: cached?.createdAt ?? numberOrZero(session.createdAt),
 					updatedAt: cached?.updatedAt ?? numberOrZero(session.updatedAt),
+					appId: session.appId,
 				})
 			} catch {
 				/* skip corrupt session files */
@@ -344,7 +346,8 @@ export class SessionStore {
 				}
 			})
 			.catch((error) => {
-				logger.error('Failed to persist chat session', error)
+				if (!isAbortError(error))
+					logger.error('Failed to persist chat session', error)
 			})
 		await write
 	}
@@ -356,6 +359,7 @@ export class SessionStore {
 				title: item.title,
 				createdAt: item.createdAt,
 				updatedAt: item.updatedAt,
+				appId: item.appId,
 			}
 		}
 		const meta: ChatMetaFile = {
@@ -448,12 +452,7 @@ export class SessionStore {
 			const storedPendingInputs = Array.isArray(agent.pendingInputs)
 				? agent.pendingInputs
 				: []
-			const pendingInputs =
-				agent.id === MASTER_AGENT_ID
-					? // Master continuation is runtime-only now; do not revive persisted
-						// execution input after reload.
-						[]
-					: storedPendingInputs.map(normalizeMessage)
+			const pendingInputs = storedPendingInputs.map(normalizeMessage)
 			const timeline = Array.isArray(agent.timeline)
 				? agent.timeline.map(normalizeMessage)
 				: []
@@ -466,9 +465,6 @@ export class SessionStore {
 							modelId: agent.model.modelId,
 						}
 					: undefined
-			if (agent.id === MASTER_AGENT_ID && storedPendingInputs.length > 0) {
-				changed = true
-			}
 			if (agent.model !== undefined && !model) changed = true
 			return {
 				id: agent.id,
@@ -482,6 +478,8 @@ export class SessionStore {
 				finishedAt: normalizeTimestamp(agent.finishedAt),
 				resultPath:
 					typeof agent.resultPath === 'string' ? agent.resultPath : undefined,
+				executionId: agent.executionId,
+				executions: agent.executions,
 				timeline,
 				pendingInputs,
 				operations: Object.fromEntries(
@@ -531,6 +529,7 @@ export class SessionStore {
 						)
 					: undefined,
 				subagents: { master },
+				appId: session.appId,
 			},
 			changed,
 		}
@@ -552,6 +551,7 @@ export class SessionStore {
 			title: title ?? existingTitle,
 			createdAt: session.createdAt,
 			updatedAt: session.updatedAt,
+			appId: session.appId,
 		}
 		const existingIndex = this.state.sessionIndex.findIndex(
 			(entry) => entry.id === session.id,

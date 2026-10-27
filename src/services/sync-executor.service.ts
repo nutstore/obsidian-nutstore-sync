@@ -1,3 +1,6 @@
+import type { ModuleScope } from '~/modules/lifecycle'
+import { guardVault } from '~/modules/guard-io'
+import { isAbortError } from '~/utils/abort'
 import { NutstoreSync, SyncStartMode } from '~/sync'
 import { Notice } from 'obsidian'
 import { IN_DEV } from '~/consts'
@@ -6,21 +9,20 @@ import i18n from '~/i18n'
 import type { SyncStartResult } from '~/sync'
 import { getConfigDirPruningRule } from '~/utils/config-dir-rules'
 import { getSyncPolicyLabel, getSyncTriggerLabel } from '~/sync/log'
-import { type SyncPolicy } from '~/settings'
+import { type SyncSelection } from '~/settings'
 import logger from '~/utils/logger'
 import waitUntil from '~/utils/wait-until'
 import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
 
-export interface SyncOptions {
+export interface SyncOptions extends Partial<SyncSelection> {
 	mode: SyncStartMode
-	/** A manual-sync override. This is deliberately not persisted. */
-	syncPolicy?: SyncPolicy
 }
 
 export default class SyncExecutorService extends BaseService {
 	private inFlight = false
 	private pendingAutoSync = false
+	private work?: Promise<boolean>
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
@@ -30,29 +32,41 @@ export default class SyncExecutorService extends BaseService {
 		return this.inFlight || this.plugin.isSyncing
 	}
 
-	async executeSync(options: SyncOptions) {
+	executeSync(options: SyncOptions): Promise<boolean> {
+		if (!this.plugin.sync.lifecycle.active) return Promise.resolve(false)
+		// Every trigger shares the host readiness boundary, including manual requests.
+		if (!this.plugin.app.workspace.layoutReady) return Promise.resolve(false)
 		if (this.isRunning()) {
-			if (options.mode === SyncStartMode.AUTO_SYNC) {
-				this.pendingAutoSync = true
-				return false
-			}
-			new Notice(i18n.t('sync.blockedBySync'))
-			return false
+			if (options.mode === SyncStartMode.AUTO_SYNC) this.pendingAutoSync = true
+			else new Notice(i18n.t('sync.blockedBySync'))
+			return Promise.resolve(false)
 		}
+		const work = this.performSync(options, this.plugin.sync.lifecycle.scope)
+		this.work = work
+		return work
+	}
 
+	async stop() {
+		this.pendingAutoSync = false
+		await this.work
+	}
+
+	private async performSync(options: SyncOptions, scope: ModuleScope) {
 		this.inFlight = true
 		this.pendingAutoSync = false
 		const syncPolicy =
 			options.syncPolicy ?? this.plugin.localSettings.syncPolicy
+		const conflictStrategy =
+			options.conflictStrategy ?? this.plugin.settings.conflictStrategy
 
 		let result: SyncStartResult | undefined
 		try {
-			if (this.plugin.gcService.isRunningNow()) {
+			if (this.plugin.sync.gc.isRunningNow()) {
 				if (IN_DEV && options.mode === SyncStartMode.MANUAL_SYNC) {
 					new Notice(i18n.t('sync.stoppingGcForSync'))
 				}
 				emitStopGc()
-				await this.plugin.gcService.waitUntilIdle()
+				await scope.wait(this.plugin.sync.gc.waitUntilIdle())
 			}
 
 			if (!this.plugin.isAccountConfigured()) {
@@ -82,6 +96,7 @@ export default class SyncExecutorService extends BaseService {
 			logger.info('Sync starting with settings:', {
 				triggerMode: getSyncTriggerLabel(options.mode),
 				syncPolicy: getSyncPolicyLabel(syncPolicy),
+				conflictStrategy,
 				loginMode: this.plugin.settings.loginMode,
 				remoteBaseDir: this.plugin.remoteBaseDir,
 				syncMode: this.plugin.settings.syncMode,
@@ -94,14 +109,22 @@ export default class SyncExecutorService extends BaseService {
 				configDirSyncMode: this.plugin.settings.configDirSyncMode ?? 'none',
 			})
 
-			await waitUntil(() => this.plugin.isSyncing === false, 500)
+			await scope.wait(
+				waitUntil(
+					() => this.plugin.isSyncing === false || scope.signal.aborted,
+					500,
+				),
+			)
+			scope.check()
 
 			const sync = new NutstoreSync(this.plugin, {
-				vault: this.plugin.app.vault,
-				token: await this.plugin.getToken(),
-				remoteAccountId: await this.plugin.getRemoteAccountId(),
+				conflictStrategy,
+				vault: guardVault(this.plugin.app.vault, scope.check, scope.track),
+				signal: scope.signal,
+				token: await scope.wait(this.plugin.getToken()),
+				remoteAccountId: await scope.wait(this.plugin.getRemoteAccountId()),
 				remoteBaseDir: this.plugin.remoteBaseDir,
-				webdav: await this.plugin.webDAVService.createWebDAVClient(),
+				webdav: await this.plugin.sync.webdav.createWebDAVClient(),
 			})
 
 			result = await sync.start({
@@ -109,22 +132,29 @@ export default class SyncExecutorService extends BaseService {
 				syncPolicy,
 			})
 
-			return result.ended
+			return result.ended && !scope.signal.aborted
 		} catch (error) {
+			if (scope.signal.aborted || isAbortError(error)) return false
 			emitSyncError(error as Error)
 			logger.error('Sync error:', error)
 			return false
 		} finally {
 			this.inFlight = false
-			if (result?.ended) {
+			if (result?.ended && !scope.signal.aborted) {
 				if (result.shouldReloadSettings) {
 					this.plugin.settingsService.scheduleReloadSettingsFromDisk()
 				}
-				await this.plugin.gcService.runBlobGc().catch((error) => {
+				await this.plugin.sync.gc.runBlobGc().catch((error) => {
 					logger.error('Error running auto GC after sync end:', error)
 				})
 			}
-			if (this.pendingAutoSync && !this.plugin.isSyncing) {
+			// Failed preparation waits for a new trigger instead of draining stale requests.
+			if (
+				result?.ended &&
+				!scope.signal.aborted &&
+				this.pendingAutoSync &&
+				!this.plugin.isSyncing
+			) {
 				this.pendingAutoSync = false
 				void this.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 			}

@@ -1,3 +1,4 @@
+import { throwIfAborted } from '~/utils/abort'
 import type { App } from 'obsidian'
 import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import AIPermissionModal from '~/components/AIPermissionModal'
@@ -95,9 +96,14 @@ function formatDeniedSummary(request: PermissionRequest) {
 export function createPermissionGuard(
 	app: App,
 	runtimeAutoApproveOperationStore?: RuntimeAutoApproveOperationStore,
-	context?: { sessionTitle?: string; modalMountTarget?: ChatModalMountTarget },
+	context?: {
+		sessionTitle?: string
+		modalMountTarget?: ChatModalMountTarget
+		signal?: AbortSignal
+	},
 ): PermissionGuard {
 	return async (request: PermissionRequest) => {
+		throwIfAborted(context?.signal)
 		const signature = getPermissionRequestOperationSignature(request)
 		if (runtimeAutoApproveOperationStore?.has(signature)) {
 			return
@@ -114,11 +120,15 @@ export function createPermissionGuard(
 		// `openAndWait` is the plugin modal's result-aware API. Keep a small
 		// compatibility path for test doubles and older integrations that expose
 		// the original Promise-returning `open` method only.
+		const close = () => modal.close()
+		context?.signal?.addEventListener('abort', close, { once: true })
 		const result =
 			typeof modal.openAndWait === 'function'
 				? await modal.openAndWait()
 				: await (modal.open() as unknown as Promise<string>)
 
+		context?.signal?.removeEventListener('abort', close)
+		throwIfAborted(context?.signal)
 		if (result === 'deny') {
 			throw new Error(
 				i18n.t('aiPermission.denied', {

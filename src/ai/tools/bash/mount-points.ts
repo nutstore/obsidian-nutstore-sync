@@ -1,10 +1,14 @@
 import { posix as pathPosix } from 'path-browserify'
+import { APP_ROOT_DIR } from '~/ai/apps/paths'
+import { normalizeVirtualPath } from './virtual-path'
 
 export const VAULT_MOUNT_POINT = '/'
 export const AGENTS_MOUNT_POINT = '/.agents'
 export const AGENTS_VAULT_PATH = '.agents'
 export const NUTSTORE_SYNC_AGENTS_MOUNT_POINT = `${AGENTS_MOUNT_POINT}/nutstore-sync`
 export const NUTSTORE_SYNC_AGENTS_VAULT_PATH = `${AGENTS_VAULT_PATH}/nutstore-sync`
+export const APPS_VAULT_PATH = APP_ROOT_DIR
+export const APPS_MOUNT_POINT = `/${APPS_VAULT_PATH}`
 export const BASH_TMP_VAULT_PATH = `${NUTSTORE_SYNC_AGENTS_VAULT_PATH}/tmp`
 export const BASH_TMP_MOUNT_POINT = `/${BASH_TMP_VAULT_PATH}`
 export const BUILTIN_SKILLS_MOUNT_POINT = `${NUTSTORE_SYNC_AGENTS_MOUNT_POINT}/builtin-skills`
@@ -48,5 +52,5 @@ export function getConfigDirMountPoint(configDir: string) {
 	) {
 		throw new Error(`Invalid Obsidian config directory: '${configDir}'`)
 	}
-	return `/${normalized.replace(/^\/+|\/+$/g, '')}`
+	return normalizeVirtualPath(normalized)
 }

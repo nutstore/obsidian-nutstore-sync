@@ -18,6 +18,8 @@ import { copyUserContextItems } from '~/ai/chat/context/user-context'
 import {
 	captureWorkspaceContexts,
 	computeChangedContexts,
+	refreshWorkspaceContextSources,
+	type WorkspaceContextSources,
 } from '~/ai/chat/context/workspace-context'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import {
@@ -27,7 +29,6 @@ import {
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { RecallMessageResult } from '~/ai/chat/ui/types'
 import logger from '~/utils/logger'
-import type { SkillRepository } from '~/ai/skills/repository'
 import {
 	createVaultFileSystem,
 	type VaultFileSystemManager,
@@ -94,7 +95,7 @@ export class MessageOps {
 			sessionId: string,
 			targetMessageId: string,
 		) => boolean,
-		private skillRepository?: SkillRepository,
+		private contextSources: WorkspaceContextSources = {},
 		private settingsIo?: {
 			getSettingsSnapshot: SettingsSnapshotFn
 			updateSettings: SettingsUpdater
@@ -228,7 +229,7 @@ export class MessageOps {
 			(message) => message.id === targetMessageId,
 		)
 		if (idx === -1) return undefined
-		await this.skillRepository?.refresh()
+		await refreshWorkspaceContextSources(this.contextSources)
 		if (!isCurrent()) return undefined
 
 		const originalTimeline = agent.timeline.slice()
@@ -260,7 +261,7 @@ export class MessageOps {
 		}
 		if (lastUserIdx !== -1) {
 			const prevMessages = prefix.slice(0, lastUserIdx)
-			const current = captureWorkspaceContexts(this.app, this.skillRepository)
+			const current = captureWorkspaceContexts(this.app, this.contextSources)
 			const changed = computeChangedContexts(prevMessages, current)
 			const message = prefix[lastUserIdx]
 			prefix[lastUserIdx] = {

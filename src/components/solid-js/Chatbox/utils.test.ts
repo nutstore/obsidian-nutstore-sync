@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { listMemoryEntries } from '~/ai/memory/memory-note'
 import {
 	fencedCode,
 	formatDuration,
@@ -79,11 +80,13 @@ describe('chat detail markdown', () => {
 
 	it('formats bilingual system notification data as JSON', () => {
 		const markdown = formatSystemNotificationMarkdown({
-			message: '状态更新 / Status update',
+			kind: 'task-result-ready',
+			taskId: '状态更新 / Status update 🌿',
+			resultPath: '/result.txt',
 		})
 
 		expect(markdown).toContain('```json')
-		expect(markdown).toContain('"message": "状态更新 / Status update"')
+		expect(markdown).toContain('"taskId": "状态更新 / Status update 🌿"')
 	})
 
 	it('omits the params section when params are hidden', () => {
@@ -161,5 +164,33 @@ describe('toolCallDisplayTitle', () => {
 		for (const input of [undefined, null, 'string', { purpose: 42 }, {}]) {
 			expect(toolCallDisplayTitle(makeToolCall(input))).toBe('bash')
 		}
+	})
+
+	it('titles memory calls with the entries they remember and forget', () => {
+		const id = listMemoryEntries('Old preference 旧偏好 📦')[0].id
+		const title = toolCallDisplayTitle(
+			makeToolCall(
+				{ remember: ['Prefers metric 偏好公制 📏'], forget: [id, 7] },
+				'memory',
+			),
+		)
+		expect(title).toContain('Prefers metric 偏好公制 📏')
+		expect(title).toContain(id)
+		expect(toolCallDisplayTitle(makeToolCall({}, 'memory'))).toBe('memory')
+	})
+
+	it('shows resolved deleted text instead of IDs after a memory edit succeeds', () => {
+		const text = 'Old preference 旧偏好 📦'
+		const id = listMemoryEntries(text)[0].id
+		const title = toolCallDisplayTitle({
+			type: 'dynamic-tool',
+			toolCallId: 'memory-delete',
+			toolName: 'memory',
+			input: { forget: [id] },
+			state: 'output-available',
+			output: { forgotten: [text] },
+		})
+		expect(title).toContain(text)
+		expect(title).not.toContain(id)
 	})
 })

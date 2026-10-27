@@ -17,9 +17,12 @@ export default class ProtocolService extends BaseService {
 		this.plugin.registerObsidianProtocolHandler(
 			'nutstore-sync/sso',
 			async (data) => {
+				if (!this.plugin.sync.lifecycle.active) return
+				const scope = this.plugin.sync.lifecycle.scope
 				if (data?.s) {
 					this.plugin.settings.oauthResponseText = data.s
 					await this.plugin.settingsService.saveSettings()
+					if (scope.signal.aborted) return
 					new Notice(i18n.t('settings.login.success'), 5000)
 				}
 				emitSsoReceive({
@@ -45,6 +48,8 @@ export default class ProtocolService extends BaseService {
 		providerId: string,
 		mountTarget?: ChatModalMountTarget,
 	) {
+		if (!this.plugin.ai.lifecycle.active) return
+		const scope = this.plugin.ai.lifecycle.scope
 		const provider = getProviderById(
 			this.plugin.settings.ai.providers,
 			providerId,
@@ -63,6 +68,7 @@ export default class ProtocolService extends BaseService {
 			this.plugin,
 			provider,
 			async (savedProvider) => {
+				scope.check()
 				this.plugin.settings.ai.providers = {
 					...this.plugin.settings.ai.providers,
 					[providerId]: savedProvider,

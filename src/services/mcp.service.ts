@@ -1,3 +1,6 @@
+import { throwIfAborted } from '~/utils/abort'
+import { guardAppIO } from '~/modules/guard-io'
+import type { ModuleScope } from '~/modules/lifecycle'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type {
@@ -62,21 +65,23 @@ export default class McpService extends BaseService {
 	private servers: McpServerConfigs = {}
 	private parseError?: string
 	private configMtime?: number
+	private get app() {
+		return guardAppIO(this.plugin.app, this.scope.check, this.scope.track)
+	}
 	private readonly clients = new Map<string, ConnectedMcpServer>()
 	private reloadPromise?: Promise<void>
 
-	constructor(private plugin: NutstorePlugin) {
+	constructor(
+		private plugin: NutstorePlugin,
+		private readonly scope: ModuleScope,
+	) {
 		super()
 	}
 
-	override async onload() {
-		void this.reload().catch((error) => {
-			logger.warn('Failed to initialize MCP servers', error)
-		})
-	}
-
-	override onunload() {
-		void this.closeAllClients()
+	async close() {
+		await this.closeAllClients()
+		await this.reloadPromise?.catch(() => {})
+		await this.closeAllClients()
 	}
 
 	getServers(): McpServerConfigs {
@@ -108,6 +113,7 @@ export default class McpService extends BaseService {
 	}
 
 	async reload() {
+		this.scope.check()
 		if (this.reloadPromise) {
 			return this.reloadPromise
 		}
@@ -128,8 +134,9 @@ export default class McpService extends BaseService {
 	 * file watcher (dotfiles produce no vault events).
 	 */
 	async refreshIfChanged() {
+		this.scope.check()
 		try {
-			const adapter = this.plugin.app.vault.adapter
+			const adapter = this.app.vault.adapter
 			if (!(await adapter.exists(MCP_CONFIG_VAULT_PATH))) {
 				if (
 					this.configMtime !== undefined ||
@@ -149,7 +156,8 @@ export default class McpService extends BaseService {
 	}
 
 	private async reloadInternal() {
-		const adapter = this.plugin.app.vault.adapter
+		this.scope.check()
+		const adapter = this.app.vault.adapter
 		let servers: McpServerConfigs = {}
 		let parseError: string | undefined
 		let mtime: number | undefined
@@ -166,6 +174,7 @@ export default class McpService extends BaseService {
 			parseError = toErrorMessage(error)
 			logger.warn('Failed to load MCP config', error)
 		}
+		this.scope.check()
 		this.servers = servers
 		this.parseError = parseError
 		this.configMtime = mtime
@@ -173,6 +182,7 @@ export default class McpService extends BaseService {
 	}
 
 	private async reconcileClients() {
+		this.scope.check()
 		const desired = new Map(
 			Object.entries(this.servers).filter(([, config]) =>
 				isMcpServerEnabled(config),
@@ -190,9 +200,11 @@ export default class McpService extends BaseService {
 			}
 			try {
 				const connected = await this.connect(config)
+				this.scope.check()
 				this.clients.set(name, connected)
 				this.connectErrors.delete(name)
 			} catch (error) {
+				if (this.scope.signal.aborted) return
 				logger.warn(`Failed to connect MCP server '${name}'`, error)
 				this.connectErrors.set(name, toErrorMessage(error))
 			}
@@ -202,7 +214,7 @@ export default class McpService extends BaseService {
 	private async connect(config: McpServerConfig): Promise<ConnectedMcpServer> {
 		const client = await this.createClient(config)
 		try {
-			const { tools } = await client.listTools()
+			const { tools } = await this.scope.wait(client.listTools())
 			return {
 				client,
 				signature: JSON.stringify(config),
@@ -222,6 +234,7 @@ export default class McpService extends BaseService {
 	}
 
 	private async createClient(config: McpServerConfig): Promise<Client> {
+		this.scope.check()
 		if (config.type !== 'http') {
 			throw new Error('Unsupported MCP server type')
 		}
@@ -233,11 +246,26 @@ export default class McpService extends BaseService {
 			{ jsonSchemaValidator: noopJsonSchemaValidator },
 		)
 		const transport = new StreamableHTTPClientTransport(new URL(config.url), {
-			fetch: obsidianFetch,
+			fetch: (input, init) => {
+				this.scope.check()
+				return this.scope.wait(obsidianFetch(input, init))
+			},
 			requestInit: config.headers ? { headers: config.headers } : undefined,
 		})
-		await client.connect(transport)
-		return client
+		const release = this.scope.register(() => {
+			const closing = client.close()
+			this.scope.track(closing)
+			void closing.catch(() => {})
+		})
+		client.onclose = release
+		try {
+			await this.scope.wait(client.connect(transport))
+			return client
+		} catch (error) {
+			release()
+			await client.close().catch(() => {})
+			throw error
+		}
 	}
 
 	private async closeClient(name: string) {
@@ -255,7 +283,8 @@ export default class McpService extends BaseService {
 	}
 
 	async saveServers(servers: McpServerConfigs) {
-		const vault = this.plugin.app.vault
+		this.scope.check()
+		const vault = this.app.vault
 		await mkdirsVault(vault, dirname(MCP_CONFIG_VAULT_PATH))
 		await vault.adapter.write(
 			MCP_CONFIG_VAULT_PATH,
@@ -265,9 +294,10 @@ export default class McpService extends BaseService {
 	}
 
 	async testConnection(config: McpServerConfig) {
+		this.scope.check()
 		const client = await this.createClient(config)
 		try {
-			const { tools } = await client.listTools()
+			const { tools } = await this.scope.wait(client.listTools())
 			return tools.map((tool) => ({
 				name: tool.name,
 				description: tool.description,
@@ -286,6 +316,7 @@ export default class McpService extends BaseService {
 		sessionId: string,
 		disabledServers: readonly string[] = [],
 	): ToolSet {
+		this.scope.check()
 		const disabled = new Set(disabledServers)
 		const result: ToolSet = {}
 		for (const [name, connected] of this.clients) {
@@ -313,17 +344,29 @@ export default class McpService extends BaseService {
 		return dynamicTool({
 			description: toolInfo.description ?? `MCP tool: ${toolInfo.name}`,
 			inputSchema: jsonSchema(toolInfo.inputSchema),
-			execute: async (input: unknown) => {
-				const result = await client.callTool({
-					name: toolInfo.name,
-					arguments: (input ?? {}) as Record<string, unknown>,
-				})
-				return formatMcpToolResult(this.plugin.app, {
-					sessionId,
-					serverName,
-					toolName: toolInfo.name,
-					result,
-				})
+			execute: async (input: unknown, { abortSignal }) => {
+				throwIfAborted(abortSignal)
+				this.scope.check()
+				const result = await this.scope.wait(
+					client.callTool(
+						{
+							name: toolInfo.name,
+							arguments: (input ?? {}) as Record<string, unknown>,
+						},
+						undefined,
+						{ signal: abortSignal ?? this.scope.signal },
+					),
+				)
+				this.scope.check()
+				return formatMcpToolResult(
+					guardAppIO(this.app, () => throwIfAborted(abortSignal)),
+					{
+						sessionId,
+						serverName,
+						toolName: toolInfo.name,
+						result,
+					},
+				)
 			},
 		})
 	}

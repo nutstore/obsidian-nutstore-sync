@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
-import { getSyncPolicyDescI18nKey, SyncPolicy } from '~/settings'
+import { getSyncPolicyNameI18nKey, SyncPolicy } from '~/settings'
+import { renderSyncPolicyRules } from './sync-policy-rules'
 
 export default class SyncPolicyModal extends Modal {
 	private policy: SyncPolicy
@@ -30,9 +31,10 @@ export default class SyncPolicyModal extends Modal {
 
 		const { contentEl } = this
 
-		const desc = i18n.t(getSyncPolicyDescI18nKey(this.policy))
-
-		contentEl.createEl('pre', { cls: ':uno: whitespace-pre-wrap', text: desc })
+		contentEl.createEl('p', {
+			text: i18n.t(getSyncPolicyNameI18nKey(this.policy)),
+		})
+		renderSyncPolicyRules(contentEl.createDiv(), this.policy)
 
 		new Setting(contentEl)
 			.addButton((btn) =>

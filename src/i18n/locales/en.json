@@ -3,6 +3,11 @@
 		"filenameUnsupportedChars": "File {{path}} contains unsupported characters: {{chars}}"
 	},
 	"settings": {
+		"modules": {
+			"sync": "Enable synchronization",
+			"ai": "Enable AI",
+			"description": "Takes effect immediately. Turning off stops this module and preserves its settings and data."
+		},
 		"language": {
 			"name": "Language",
 			"desc": "Select interface language",
@@ -58,7 +63,8 @@
 			"loggedIn": "Logged in",
 			"notLoggedIn": "Not logged in",
 			"logout": "Logout",
-			"logoutSuccess": "Logged out successfully"
+			"logoutSuccess": "Logged out successfully",
+			"webViewerWarning": "Warning: Web Viewer may cause authorization to fail. Disable it in Obsidian's core plugins before authorizing."
 		},
 		"backupWarning": {
 			"name": "Backup warning",
@@ -68,7 +74,7 @@
 			"name": "Conflict resolution strategy",
 			"desc": "Choose how to resolve file conflicts. \nNote: We recommend backing up important files before using auto-merge to prevent data loss.",
 			"noConflictMerge": "Conflict-free merge",
-			"diff3": "Auto-merge (keeps both sides' edits, marked inline)",
+			"diff3": "Auto merge (keep conflict markers)",
 			"localPriority": "Local priority (overwrite server)",
 			"serverPriority": "Server priority (overwrite local)"
 		},
@@ -100,13 +106,128 @@
 			"receiveOnlyRevertLocalChanges": "Receive Only: Revert Local Changes",
 			"modal": {
 				"title": "Confirm sync policy",
-				"twoWayDesc": "Sync rules: two-way sync\n\n• Local-only change → update the cloud\n• Cloud-only change → update the local vault\n• Both local and cloud changed → use the configured conflict strategy\n• One side deleted, the other unchanged → propagate the deletion\n• One side deleted, the other changed → keep the changed copy and restore the deleted side",
-				"sendOnlyDesc": "Sync rules: local → cloud (protect cloud-side changes)\n\n• Local new or modified file, unless the cloud copy was independently deleted → upload to the cloud\n• Cloud-only new or modified file → preserve it; do not download it\n• Both local and cloud changed → skip and preserve the cloud copy\n• Local deleted, cloud unchanged → delete the cloud copy\n• Local deleted, cloud also changed → skip and preserve the cloud copy\n• A file with sync history that was deleted in the cloud → preserve the cloud deletion; it is not restored unless you choose “Send Only: Override Changes”\n\nBest for: local as source of truth while protecting independent cloud changes.",
-				"sendOnlyOverrideChangesDesc": "Sync rules: cloud ← current local state\n\n• Local files → create or overwrite the cloud copy\n• Cloud exists, local does not → delete the cloud copy\n• Same path differs on both sides → use the local copy\n\n⚠️ May delete cloud-only content.\nUse when you need the cloud to match this device exactly.",
-				"receiveOnlyDesc": "Sync rules: cloud → local (protect local-side changes)\n\n• Cloud new or modified file, unless the local copy has a deletion to protect → download to the local vault\n• Local-only new or modified file → preserve it; do not upload it\n• Both local and cloud changed → skip and preserve the local copy\n• Cloud deleted, local unchanged → delete the local copy\n• Cloud deleted, local also changed → skip and preserve the local copy\n• A file with sync history that was deleted locally → preserve the local deletion; it is not restored unless you choose “Receive Only: Revert Local Changes”\n\nBest for: cloud as source of truth while protecting independent local changes.",
-				"receiveOnlyRevertLocalChangesDesc": "Sync rules: local ← current cloud state\n\n• Cloud files → create or overwrite the local copy\n• Local exists, cloud does not → delete the local copy\n• Same path differs on both sides → use the cloud copy\n\n⚠️ May delete local-only content.\nUse when you need the local vault to match the cloud exactly.",
 				"confirm": "Confirm",
 				"cancel": "Cancel"
+			},
+			"rules": {
+				"twoWay": {
+					"rows": [
+						{
+							"condition": "Local-only change",
+							"result": "update the cloud"
+						},
+						{
+							"condition": "Cloud-only change",
+							"result": "update the local vault"
+						},
+						{
+							"condition": "Both local and cloud changed",
+							"result": "{{strategy}}",
+							"conflict": true
+						},
+						{
+							"condition": "One side deleted, the other unchanged",
+							"result": "propagate the deletion"
+						},
+						{
+							"condition": "One side deleted, the other changed",
+							"result": "keep the changed copy and restore the deleted side"
+						}
+					],
+					"note": ""
+				},
+				"sendOnly": {
+					"rows": [
+						{
+							"condition": "Local new or modified file, unless the cloud copy was independently deleted",
+							"result": "upload to the cloud"
+						},
+						{
+							"condition": "Cloud-only new or modified file",
+							"result": "preserve it; do not download it"
+						},
+						{
+							"condition": "Both local and cloud changed",
+							"result": "skip and preserve the cloud copy"
+						},
+						{
+							"condition": "Local deleted, cloud unchanged",
+							"result": "delete the cloud copy"
+						},
+						{
+							"condition": "Local deleted, cloud also changed",
+							"result": "skip and preserve the cloud copy"
+						},
+						{
+							"condition": "A file with sync history that was deleted in the cloud",
+							"result": "preserve the cloud deletion; it is not restored unless you choose “Send Only: Override Changes”"
+						}
+					],
+					"note": "Best for: local as source of truth while protecting independent cloud changes."
+				},
+				"sendOnlyOverrideChanges": {
+					"rows": [
+						{
+							"condition": "Local files",
+							"result": "create or overwrite the cloud copy"
+						},
+						{
+							"condition": "Cloud exists, local does not",
+							"result": "delete the cloud copy"
+						},
+						{
+							"condition": "Same path differs on both sides",
+							"result": "use the local copy"
+						}
+					],
+					"note": "⚠️ May delete cloud-only content.\nUse when you need the cloud to match this device exactly."
+				},
+				"receiveOnly": {
+					"rows": [
+						{
+							"condition": "Cloud new or modified file, unless the local copy has a deletion to protect",
+							"result": "download to the local vault"
+						},
+						{
+							"condition": "Local-only new or modified file",
+							"result": "preserve it; do not upload it"
+						},
+						{
+							"condition": "Both local and cloud changed",
+							"result": "skip and preserve the local copy"
+						},
+						{
+							"condition": "Cloud deleted, local unchanged",
+							"result": "delete the local copy"
+						},
+						{
+							"condition": "Cloud deleted, local also changed",
+							"result": "skip and preserve the local copy"
+						},
+						{
+							"condition": "A file with sync history that was deleted locally",
+							"result": "preserve the local deletion; it is not restored unless you choose “Receive Only: Revert Local Changes”"
+						}
+					],
+					"note": "Best for: cloud as source of truth while protecting independent local changes."
+				},
+				"receiveOnlyRevertLocalChanges": {
+					"rows": [
+						{
+							"condition": "Cloud files",
+							"result": "create or overwrite the local copy"
+						},
+						{
+							"condition": "Local exists, cloud does not",
+							"result": "delete the local copy"
+						},
+						{
+							"condition": "Same path differs on both sides",
+							"result": "use the cloud copy"
+						}
+					],
+					"note": "⚠️ May delete local-only content.\nUse when you need the local vault to match the cloud exactly."
+				}
 			}
 		},
 		"startupSyncDelay": {
@@ -125,7 +246,10 @@
 		},
 		"sections": {
 			"account": "Account",
-			"common": "General",
+			"sync": "Synchronization",
+			"automation": "Automatic sync",
+			"transfer": "File transfer",
+			"interface": "Interface",
 			"filters": "Filter rules",
 			"ai": "AI"
 		},
@@ -135,7 +259,20 @@
 			"troubleshooting": "Troubleshoot"
 		},
 		"ai": {
+			"preferences": "Preferences",
+			"sessionAppOpenMode": {
+				"name": "Session App opening mode",
+				"desc": "Choose whether entering a chat session automatically opens its linked App on desktop. Applies to this device; manual opening is always available.",
+				"automatic": "Open automatically",
+				"manual": "Open manually"
+			},
 			"saved": "AI settings saved",
+			"chatboxLocation": {
+				"name": "Chatbox opening location",
+				"desc": "Where Chatbox opens on this device. Applies the next time you open Chatbox. Editor view provides more space on mobile.",
+				"sidebar": "Sidebar",
+				"editor": "Editor view"
+			},
 			"none": "Not set",
 			"unnamedProvider": "Unnamed provider",
 			"unnamedModel": "Unnamed model",
@@ -144,7 +281,7 @@
 				"desc": "Optional model selected for new chat sessions"
 			},
 			"nutstoreLlmGateway": {
-				"name": "Nutstore AI (Experimental)",
+				"name": "Nutstore AI",
 				"providerName": "Nutstore",
 				"desc": "Authorize to use models provided by Nutstore.",
 				"pendingDesc": "Finish authorization in your browser. Current code: {{code}}",
@@ -156,12 +293,43 @@
 				"authorized": "Nutstore AI authorized",
 				"disconnect": "Disconnect",
 				"disconnected": "Nutstore AI disconnected",
-				"refreshModels": "Refresh",
-				"betaModal": {
-					"title": "Feature in Beta",
-					"message": "Nutstore AI is currently in beta and not yet available to all users. If you are not on the beta list, you may not be able to use the feature after authorizing. We are gradually opening access — please check back later.",
-					"cancel": "Cancel",
-					"confirm": "I understand, continue"
+				"refreshModels": "Refresh models",
+				"tabs": {
+					"models": "Models",
+					"usage": "Credits"
+				},
+				"models": {
+					"title": "Available models",
+					"available": "Models available now",
+					"count": "{{count}} total",
+					"empty": "No available models.",
+					"changes": "Model list changes",
+					"diffSummary": "+{{added}} added · −{{removed}} removed",
+					"refreshed": "Updated",
+					"updatedAt": "Model list updated {{time}}"
+				},
+				"usage": {
+					"button": "Overview",
+					"title": "Nutstore AI overview",
+					"description": "View quota usage or refresh the available model list.",
+					"refresh": "Refresh credits",
+					"refreshing": "Refreshing…",
+					"refreshed": "Updated",
+					"updatingModels": "Updating…",
+					"loading": "Loading quota…",
+					"loadFailed": "Failed to load quota information",
+					"empty": "The service did not return quota or usage information.",
+					"updatedAt": "Updated {{time}}",
+					"availableCredit": "Credits available now",
+					"requestLimit": "Request limit",
+					"monthly": "Monthly credits",
+					"grant": "Granted credits",
+					"topup": "Purchased credits",
+					"requestCount": "{{used}} / {{total}} requests used",
+					"creditAmount": "{{used}} / {{total}} credits used",
+					"resetsAt": "Resets at {{time}}",
+					"expiresAt": "Expires {{time}}",
+					"usedPercent": "{{percent}}% used"
 				},
 				"errors": {
 					"authorizationRequired": "Authorize Nutstore AI first",
@@ -170,6 +338,7 @@
 					"missingClientId": "Missing LLM_GATEWAY_CLIENT_ID. Nutstore AI authorization cannot start.",
 					"modelsFailed": "Failed to fetch Nutstore AI models: {{status}}",
 					"emptyModels": "Nutstore AI did not return any available models",
+					"usageFailed": "Failed to fetch Nutstore AI quota: {{status}}",
 					"refreshFailed": "Failed to refresh Nutstore AI models"
 				}
 			},
@@ -223,12 +392,30 @@
 				"name": "Models",
 				"desc": "Models available under this provider",
 				"add": "Add model",
-				"empty": "No model configured yet."
+				"fetch": "Fetch models",
+				"fetching": "Fetching...",
+				"empty": "No model configured yet.",
+				"selectModelsTitle": "Select models to add",
+				"selectModelsDesc": "Below are the available models from the provider. Check the models you want to add.",
+				"searchPlaceholder": "Search models",
+				"selectAll": "Select all",
+				"deselectAll": "Deselect all",
+				"addSelected": "Add selected",
+				"noModelsFound": "No available models found",
+				"noModelsSelected": "Please select at least one model",
+				"modelsAdded": "Successfully added {{count}} model(s)",
+				"noMatchingModels": "No matching models found",
+				"fetchFailed": "Failed to fetch models: {{reason}}",
+				"invalidJsonResponse": "Invalid JSON response from server"
 			},
 			"model": {
 				"id": "Model ID",
 				"idDesc": "Model identifier sent to the API (e.g. gpt-4o)",
-				"inputModalities": "Input modalities"
+				"inputModalities": "Input modalities",
+				"contextLimit": "Context Window Limit",
+				"contextLimitDesc": "Context window token limit, supports numbers or shorthand like 128k, 1M",
+				"outputLimit": "Max Output Tokens",
+				"outputLimitDesc": "Maximum output tokens limit, supports numbers or shorthand like 4k, 65k"
 			},
 			"modals": {
 				"confirmDeleteLabel": "Confirm",
@@ -299,6 +486,19 @@
 				"name": "Full access",
 				"desc": "⚠️ When on, the AI can edit files and change plugin settings without asking for confirmation each time."
 			},
+			"memory": {
+				"heading": "Memory",
+				"enabled": {
+					"name": "Enable memory",
+					"desc": "The AI remembers preferences, conventions, decisions and ongoing work across chats. Changes appear in the chat and can be undone by recalling the message and restoring its changes. Memory is stored in the plugin directory and can be viewed and edited here."
+				},
+				"path": {
+					"name": "Memory note",
+					"desc": "Markdown file inside .agents/nutstore-sync/. Created when the AI first remembers something.",
+					"invalid": "Memory must be a .md file inside .agents/nutstore-sync/."
+				},
+				"open": "Edit"
+			},
 			"subagents": {
 				"heading": "Subagents",
 				"explorer": {
@@ -308,14 +508,14 @@
 						"name": "Explorer model",
 						"desc": "Leave blank to inherit the model of the agent that dispatches the task."
 					}
-				},
-				"memory": {
-					"name": "Memory",
-					"desc": "An agent for retrieving and maintaining cross-session preferences, conventions and decisions.",
-					"model": {
-						"name": "Memory model",
-						"desc": "Leave blank to inherit the model of the agent that dispatches the task."
-					}
+				}
+			},
+			"skills": {
+				"heading": "Skills",
+				"empty": "No Vault Skills discovered in this vault.",
+				"enabled": "Enabled",
+				"diagnostics": {
+					"heading": "Skill diagnostics"
 				}
 			},
 			"errors": {
@@ -324,6 +524,8 @@
 				"invalidProvidersConfig": "AI provider configuration is invalid. Please fix it in settings. Details: {{reason}}",
 				"emptyModelId": "Model ID cannot be empty",
 				"duplicateModelId": "A model with this ID already exists",
+				"invalidContextLimit": "Context window limit is invalid (supports numbers or 128k, 1M)",
+				"invalidOutputLimit": "Max output tokens limit is invalid (supports numbers or 4k, 65k)",
 				"emptyProviderId": "Provider name cannot be empty",
 				"duplicateProviderId": "A provider with this name already exists",
 				"reservedProviderId": "This provider name is reserved by Nutstore AI. Use another name.",
@@ -404,7 +606,13 @@
 			"clearDesc": "Delete all console output records"
 		},
 		"troubleshooting": {
-			"title": "Troubleshoot"
+			"title": "Troubleshoot",
+			"pluginInfo": "Plugin and environment information",
+			"platform": "Platform",
+			"language": "Interface language",
+			"unknownPlatform": "Unknown platform",
+			"webviewRuntime": "Runtime",
+			"unknownRuntime": "Unknown"
 		},
 		"cache": {
 			"title": "Cache management",
@@ -521,6 +729,11 @@
 		"requestsTooFrequent": "Requests too frequent, plugin will resume sync at {{time}}",
 		"preparing": "📋 Preparing sync",
 		"preparation": {
+			"progressLabel": "Scan progress",
+			"scannedDirectories": "Directories scanned",
+			"queuedDirectories": "Directories queued",
+			"discoveredItems": "Items found",
+			"knownDirectoriesHint": "Based on known directories; more may be discovered during scanning",
 			"checkingRemote": "Checking the remote directory…",
 			"loadingState": "Reading sync state…",
 			"scanningRemote": "Scanning remote directories…",
@@ -535,6 +748,8 @@
 		"complete": "✅ Sync completed",
 		"completeWithFailed": "❌ Sync completed with {{failedCount}} failed tasks",
 		"failedWithError": "Sync failed with error: {{error}}",
+		"incompleteScanAutoRetry": "The file scan could not finish completely. Sync stopped safely without changing any files. The plugin will try again at the next scheduled sync, or you can sync manually later.",
+		"incompleteScanManualRetry": "The file scan could not finish completely. Sync stopped safely without changing any files. Please try syncing manually later.",
 		"progress": "Sync progress: {{percent}}%",
 		"blockedBySync": "Sync is already running. Please try again later.",
 		"stoppingGcForSync": "Garbage collection is running. Stopping cleanup and starting sync.",
@@ -582,14 +797,29 @@
 		},
 		"confirmModal": {
 			"title": "Sync confirmation",
-			"policyTitle": "Sync policy for this sync",
-			"policyBasis": "Basis for the decision: current local and cloud states are compared with the last sync record.\nWithout a sync record, Loose mode treats same-path, same-type files with the same size as equal; Strict mode follows the selected policy.",
+			"policyTitle": "Sync direction",
+			"policyBasis": "Compare each side with the last sync record. Without a record, loose mode treats files with the same path, type and size as identical; strict mode follows the selected policy.",
 			"policyRecordNote": "Preserved or skipped items are not marked as synchronized; the next sync will evaluate them again against the sync record.",
-			"message": "⚠️ Please note:\n\n1. Sync operation may modify or delete local files\n2. We recommend backing up important files before syncing\n3. In case of file conflicts, manual resolution may be required\n4. Initial sync will process all files and may take longer, please be patient\n\nAre you sure you want to start syncing?",
+			"message": "Sync may modify or delete local files. Back up important files manually first. Conflicts may need manual resolution; the first sync processes all files and may take longer.",
 			"confirm": "Confirm sync",
 			"cancel": "Cancel",
 			"remoteDir": "Remote directory: {{dir}}",
-			"strategy": "Conflict strategy: {{strategy}}"
+			"conflictTitle": "Conflict resolution",
+			"rulesTitle": "Sync rules",
+			"mergeFilesOnly": "Merging applies only to supported file types.",
+			"priorityFilesOnly": "Determines the version of conflicting files only.",
+			"scope": "Applies to this sync only",
+			"condition": "Situation",
+			"result": "Action for this sync",
+			"configuredStrategy": "Use the configured conflict strategy",
+			"basisTitle": "Comparison basis",
+			"actions": {
+				"twoWay": "Confirm sync",
+				"sendOnly": "Confirm send",
+				"sendOnlyOverrideChanges": "Overwrite cloud and send",
+				"receiveOnly": "Confirm receive",
+				"receiveOnlyRevertLocalChanges": "Restore local and receive"
+			}
 		}
 	},
 	"taskList": {
@@ -710,11 +940,15 @@
 				"toolCall": "Tool call",
 				"params": "Params",
 				"result": "Result",
-				"queuedSubmissions": "Queued Submissions",
+				"queuedSubmissions": "Up next",
 				"contextArea": "Context",
 				"reasoning": "Reasoning",
 				"todoList": "Todo List",
-				"systemNotification": "System Notification"
+				"systemNotification": "System Notification",
+				"agentMessage": "Agent message",
+				"followupTask": "Follow-up task",
+				"sender": "From",
+				"recipient": "To"
 			},
 			"fileChanges": {
 				"create": "Added",
@@ -726,7 +960,8 @@
 				"loading": "Restoring chat…",
 				"empty": "Start by sending a message",
 				"dragFilePrompt": "Drop to add file",
-				"thinking": "Thinking",
+				"thoughtProcess": "Execution process",
+				"thinking": "Processing",
 				"compressing": "Compressing",
 				"processingTools": "Processing Tools",
 				"noProvider": "No provider",
@@ -743,7 +978,8 @@
 				"noSubagentMessages": "This subagent has not produced any messages yet.",
 				"copied": "Copied!",
 				"loadingContextItem": "Loading…",
-				"todoEmpty": "No todos"
+				"todoEmpty": "No todos",
+				"agentWaiting": "Waiting for agent messages"
 			},
 			"placeholders": {
 				"input": "Type a message. Enter to send, Shift+Enter for newline"
@@ -812,6 +1048,10 @@
 			"agentNotDispatchable": "Agent type cannot be dispatched: {{agentType}}",
 			"taskSessionUnavailable": "The task session or model configuration is no longer available",
 			"contextCompressionFailed": "Context compression returned no summary"
+		},
+		"memory": {
+			"remember": "Remember",
+			"forget": "Forget"
 		}
 	},
 	"taskSelectionVirtualList": {
@@ -841,5 +1081,36 @@
 		"labels": {
 			"currentPath": "Current Path"
 		}
+	},
+	"memory": {
+		"openCommand": "Edit AI memory",
+		"openFailed": "Could not open the memory note {{path}}.",
+		"saveFailed": "Could not save memory file {{path}}.",
+		"changed": "Memory has changed. Copy your edits and reopen memory before saving.",
+		"saveAndClose": "Save and close",
+		"cancel": "Cancel"
+	},
+	"apps": {
+		"openApp": "Open App",
+		"modify": "Continue editing",
+		"pin": "Pin to ribbon",
+		"unpin": "Unpin from ribbon",
+		"createApp": "Create App",
+		"createAppName": "App name",
+		"createAppNameDesc": "Optional. Used as the App title.",
+		"createAppNamePlaceholder": "For example: Task checklist",
+		"createAppDescription": "App description",
+		"createAppDescriptionDesc": "Required. Describe the features and behavior you want.",
+		"createAppDescriptionPlaceholder": "Describe the layout, features, and interactions.",
+		"create": "Create",
+		"cancel": "Cancel",
+		"deleteApp": "Delete App",
+		"deleteAppPrompt": "Delete this App and its data? Chat history will be kept.",
+		"workspace": "App workspace",
+		"noWorkspace": "General chat",
+		"missingApp": "App workspace is unavailable",
+		"describeApp": "Describe what you want to build in chat. Your App will appear here.",
+		"createPrompt": "Write an App. Here is its description:",
+		"createPromptName": "App name: {{name}}"
 	}
 }

@@ -1,4 +1,4 @@
-import { normalizePath, Vault } from 'obsidian'
+import { normalizePath, type App } from 'obsidian'
 import type { PersistedChatSession } from '~/ai/chat/session/session-persistence'
 import {
 	readLocalText,
@@ -34,6 +34,7 @@ export interface ChatMetaSessionInfo {
 	title: string
 	createdAt: number
 	updatedAt: number
+	appId?: string
 }
 
 export interface ChatMetaFile {
@@ -77,7 +78,11 @@ function stringifyJsonFile(value: unknown) {
 }
 
 export class SessionsFileBackend {
-	constructor(private vault: Vault) {}
+	constructor(private app: Pick<App, 'vault' | 'fileManager'>) {}
+
+	private get vault() {
+		return this.app.vault
+	}
 
 	private get adapter() {
 		return this.vault.adapter
@@ -132,7 +137,9 @@ export class SessionsFileBackend {
 	}
 
 	async deleteSessionFile(id: string) {
-		await removeLocalPath(this.vault, getChatSessionPath(id))
+		if (!id || id === '.' || id === '..' || /[/\\]/.test(id))
+			throw new Error('Invalid session identity')
+		await removeLocalPath(this.app, getChatSessionPath(id))
 	}
 
 	async listSessionIds(): Promise<string[]> {

@@ -29,6 +29,7 @@ export default abstract class BaseSyncDecider {
 	constructor(
 		protected sync: NutstoreSync,
 		protected syncRecordStorage: SyncRecord,
+		private readonly localStats: SyncDecisionInput['localStats'],
 	) {}
 
 	abstract decide(): MaybePromise<BaseTask[]>
@@ -39,9 +40,8 @@ export default abstract class BaseSyncDecider {
 
 	protected async buildDecisionInput(): Promise<SyncDecisionInput> {
 		const syncRecordStorage = this.getSyncRecordStorage()
-		const [syncRecords, localStats, remoteStats] = await Promise.all([
+		const [syncRecords, remoteStats] = await Promise.all([
 			syncRecordStorage.getRecords(),
-			this.sync.localFS.walk(),
 			this.sync.remoteFs.walk(),
 		])
 
@@ -63,7 +63,11 @@ export default abstract class BaseSyncDecider {
 			createNoopTask: (options: TaskOptions) =>
 				new NoopTask({ ...commonTaskOptions, ...options }),
 			createRemoveLocalTask: (options: TaskOptions) =>
-				new RemoveLocalTask({ ...commonTaskOptions, ...options }),
+				new RemoveLocalTask({
+					...commonTaskOptions,
+					...options,
+					fileManager: this.sync.app.fileManager,
+				}),
 			createRemoveRemoteTask: (options: TaskOptions) =>
 				new RemoveRemoteTask({ ...commonTaskOptions, ...options }),
 			createMkdirLocalTask: (options: TaskOptions) =>
@@ -100,11 +104,11 @@ export default abstract class BaseSyncDecider {
 				skipLargeFiles: this.settings.skipLargeFiles,
 				mobileAppDownloadFileChunkSize:
 					this.settings.mobileAppDownloadFileChunkSize,
-				conflictStrategy: this.settings.conflictStrategy,
+				conflictStrategy: this.sync.conflictStrategy,
 				syncMode: this.settings.syncMode,
 				configDir: this.vault.configDir,
 			},
-			localStats,
+			localStats: this.localStats,
 			remoteStats,
 			syncRecords,
 			remoteBaseDir: this.remoteBaseDir,

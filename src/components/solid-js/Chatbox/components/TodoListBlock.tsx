@@ -26,10 +26,10 @@ export function TodoListBlock(props: {
 	const visual = () => toolStatusVisual(props.block.toolCall)
 
 	return (
-		<div class=":uno: rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
-			<div class=":uno: flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)]">
+		<div class=":uno: chatbox-todo-list rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-secondary)]">
+			<div class=":uno: chatbox-todo-header flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)]">
 				<span
-					class=":uno: flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
+					class=":uno: chatbox-todo-icon flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
 					title={visual().label}
 					aria-label={visual().label}
 					role="img"
@@ -39,7 +39,7 @@ export function TodoListBlock(props: {
 						aria-hidden="true"
 					/>
 				</span>
-				<div class=":uno: truncate font-medium text-[var(--text-normal)]">
+				<div class=":uno: chatbox-todo-text truncate font-medium text-[var(--text-normal)]">
 					{isEmpty()
 						? t('chatbox.ui.states.todoEmpty')
 						: t('chatbox.ui.labels.todoList')}
@@ -65,7 +65,7 @@ export function TodoListBlock(props: {
 							{(todo) => (
 								<li class=":uno: flex items-start gap-1.5 rounded-2 px-1.5 py-1 text-xs leading-5">
 									<span
-										class={`:uno: ${statusIconClass(todo.status)} mt-0.5 size-4 shrink-0`}
+										class={`:uno: chatbox-todo-icon ${statusIconClass(todo.status)} mt-0.5 size-4 shrink-0`}
 										aria-hidden="true"
 									/>
 									<span
@@ -73,7 +73,7 @@ export function TodoListBlock(props: {
 											':uno: min-w-0 flex-1 break-words',
 											todo.status === 'cancelled'
 												? ':uno: text-[var(--text-faint)] line-through'
-												: ':uno: text-[var(--text-normal)]',
+												: ':uno: chatbox-todo-text text-[var(--text-normal)]',
 										].join(' ')}
 									>
 										{todo.content}

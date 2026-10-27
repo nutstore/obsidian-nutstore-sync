@@ -10,6 +10,7 @@ import {
 	onSyncProgress,
 } from '~/events'
 import i18n from '~/i18n'
+import { LocalScanError } from '~/utils/local-scan-error'
 import { is503Error } from '~/utils/is-503-error'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import { BaseService } from './service.interface'
@@ -27,23 +28,23 @@ export default class EventsService extends BaseService {
 		this.subscriptions = [
 			onPreparingSync().subscribe(({ showNotice }) => {
 				this.plugin.toggleSyncUI(true)
-				this.plugin.statusService.updateSyncStatus({
+				this.plugin.sync.status.updateSyncStatus({
 					text: i18n.t('sync.preparing'),
 					showNotice,
 				})
 				if (showNotice) {
-					this.plugin.progressService.showProgressModal()
+					this.plugin.sync.progress.showProgressModal()
 				}
 			}),
 
 			onSyncPreparationProgress().subscribe((progress) => {
-				this.plugin.statusService.updateSyncStatus({
+				this.plugin.sync.status.updateSyncStatus({
 					text: getSyncPreparationText(progress).operation,
 				})
 			}),
 
 			onStartSync().subscribe(({ showNotice }) => {
-				this.plugin.statusService.updateSyncStatus({
+				this.plugin.sync.status.updateSyncStatus({
 					text: i18n.t('sync.start'),
 					showNotice,
 				})
@@ -52,14 +53,14 @@ export default class EventsService extends BaseService {
 			onSyncProgress().subscribe((progress) => {
 				const percent =
 					Math.round((progress.completed.length / progress.total) * 10000) / 100
-				this.plugin.statusService.updateSyncStatus({
+				this.plugin.sync.status.updateSyncStatus({
 					text: i18n.t('sync.progress', { percent }),
 				})
 			}),
 
 			onSyncCancelled().subscribe(() => {
 				this.plugin.toggleSyncUI(false)
-				this.plugin.statusService.updateSyncStatus({
+				this.plugin.sync.status.updateSyncStatus({
 					text: i18n.t('sync.cancelled'),
 				})
 			}),
@@ -67,8 +68,8 @@ export default class EventsService extends BaseService {
 			onEndSync().subscribe(({ failedCount, showNotice }) => {
 				this.plugin.toggleSyncUI(false)
 				const now = Date.now()
-				this.plugin.statusService.setLastSyncTime(now, failedCount)
-				if (showNotice && !this.plugin.progressService.hasVisibleSyncModal()) {
+				this.plugin.sync.status.setLastSyncTime(now, failedCount)
+				if (showNotice && !this.plugin.sync.progress.hasVisibleSyncModal()) {
 					const text =
 						failedCount > 0
 							? i18n.t('sync.completeWithFailed', { failedCount })
@@ -79,18 +80,31 @@ export default class EventsService extends BaseService {
 
 			onSyncError().subscribe((error) => {
 				this.plugin.toggleSyncUI(false)
-				this.plugin.statusService.updateSyncStatus({
+				this.plugin.sync.status.updateSyncStatus({
 					text: i18n.t('sync.failedStatus'),
 					isError: true,
 					showNotice: false,
 				})
-				new Notice(
-					i18n.t('sync.failedWithError', {
-						error: is503Error(error)
-							? i18n.t('sync.error.requestsTooFrequent')
-							: error.message,
-					}),
-				)
+				if (error instanceof LocalScanError) {
+					const hasAutomaticRetry =
+						this.plugin.settings.autoSyncIntervalSeconds > 0
+					new Notice(
+						i18n.t(
+							hasAutomaticRetry
+								? 'sync.incompleteScanAutoRetry'
+								: 'sync.incompleteScanManualRetry',
+						),
+						10_000,
+					)
+				} else {
+					new Notice(
+						i18n.t('sync.failedWithError', {
+							error: is503Error(error)
+								? i18n.t('sync.error.requestsTooFrequent')
+								: error.message,
+						}),
+					)
+				}
 			}),
 		]
 	}

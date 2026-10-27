@@ -116,7 +116,7 @@ function FileChangeSummary(props: {
 	return (
 		<div class=":uno: flex min-w-0 items-center gap-2">
 			<span
-				class=":uno: flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
+				class=":uno: chatbox-collapsible-icon flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
 				title={operationLabel()}
 				aria-label={operationLabel()}
 				role="img"
@@ -129,6 +129,13 @@ function FileChangeSummary(props: {
 			<button
 				type="button"
 				class=":uno: min-w-0 flex-1 cursor-pointer truncate text-left text-[var(--link-color)] hover:underline !border-none !bg-transparent !p-0 !shadow-none"
+				style={{
+					'font-size': 'inherit',
+					'line-height': 'inherit',
+					height: 'auto',
+					'min-height': '0',
+					margin: '0',
+				}}
 				onClick={(event) => {
 					event.stopPropagation()
 					void props.onOpenFile?.(props.diff.vaultPath, openLine())
@@ -144,7 +151,7 @@ function FileChangeStats(props: { diff: FileDiff }) {
 	const stats = () => computeStats(props.diff)
 	return (
 		<Show when={props.diff.hunks}>
-			<span class=":uno: shrink-0 text-xs">
+			<span class=":uno: shrink-0">
 				<span class=":uno: text-[var(--color-green)]">+{stats().added}</span>{' '}
 				<span class=":uno: text-[var(--color-red)]">-{stats().removed}</span>
 			</span>
@@ -189,7 +196,7 @@ export function FileChangesBlock(props: {
 }) {
 	return (
 		<Show when={props.changes?.length}>
-			<div class=":uno: mt-2">
+			<div class=":uno: chatbox-file-changes mt-2">
 				<div class=":uno: flex flex-col gap-2">
 					<For each={props.changes}>
 						{(change) => (

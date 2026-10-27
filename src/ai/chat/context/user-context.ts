@@ -179,6 +179,21 @@ export function getUserContextItemHash(item: UserContextItem): string {
 	})
 }
 
+/** Context chips are semantically a deduplicated set; their display order is not identity. */
+export function haveSameUserContextItems(
+	left: UserContextItem[],
+	right: UserContextItem[],
+): boolean {
+	const hashes = (items: UserContextItem[]) =>
+		[...new Set(items.map(getUserContextItemHash))].sort()
+	const leftHashes = hashes(left)
+	const rightHashes = hashes(right)
+	return (
+		leftHashes.length === rightHashes.length &&
+		leftHashes.every((hash, index) => hash === rightHashes[index])
+	)
+}
+
 export function ensureUserContextItemHash(
 	item: UserContextItem,
 ): UserContextItem {

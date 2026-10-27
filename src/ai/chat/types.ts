@@ -26,10 +26,7 @@ export type ReasoningPart = Extract<
 >
 
 export type ChatMessageContentPart =
-	| TextPart
-	| FilePart
-	| ReasoningPart
-	| ToolCallPart
+	TextPart | FilePart | ReasoningPart | ToolCallPart
 
 interface ContextCheckpointData {
 	mode: 'summary' | 'reset'
@@ -45,10 +42,32 @@ interface ContextCheckpointData {
 	preservedTurnCount?: number
 }
 
-export interface SystemNotificationData {
-	kind: 'task-result-ready'
-	taskId: string
-	resultPath: string
+export type SystemNotificationData =
+	| {
+			kind: 'task-result-ready'
+			taskId: string
+			resultPath: string
+			runId?: string
+			sender?: string
+			recipient?: string
+			createdAt?: number
+	  }
+	| {
+			kind: 'agent-message' | 'followup-task'
+			sender: string
+			recipient: string
+			message: string
+			createdAt: number
+	  }
+
+/** Identity survives execution. Each explicit task has its own immutable result. */
+export interface AgentExecution {
+	id: string
+	initiator: string
+	createdAt: number
+	finishedAt?: number
+	status?: 'completed' | 'failed' | 'cancelled'
+	resultPath?: string
 }
 
 type ChatDataParts = {
@@ -141,6 +160,7 @@ export type ChatRunState =
 	| 'thinking'
 	| 'compressing'
 	| 'waiting_for_tools'
+	| 'waiting_for_agents'
 
 export interface ChatMessageMeta {
 	providerId?: string
@@ -175,6 +195,7 @@ export type ChatAgentStatus =
 	| 'idle'
 	| 'queued'
 	| 'running'
+	| 'waiting'
 	| 'completed'
 	| 'failed'
 	| 'cancelled'
@@ -195,8 +216,10 @@ export interface ChatAgentState {
 	finishedAt?: number
 	/** Persisted result artifact for a terminal task that can notify its parent. */
 	resultPath?: string
+	executionId?: string
+	executions?: AgentExecution[]
 	timeline: AppUIMessage[]
-	/** Continuation inbox for non-master subagents; the master scheduler owns master input. */
+	/** Sole durable source of messages awaiting a complete model step boundary. */
 	pendingInputs: AppUIMessage[]
 	operations: Record<string, ReversibleToolOp[]>
 	toolTimings: Record<string, ToolTiming>

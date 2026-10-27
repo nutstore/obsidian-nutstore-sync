@@ -1,10 +1,10 @@
 import { parse as bytesParse } from 'bytes-iec'
-import { clamp, isNil, isNumber } from 'lodash-es'
+import { clamp, isNil, isNumber } from 'es-toolkit/compat'
 import i18n from '~/i18n'
 import type { NutstoreSettings } from '~/settings'
+import { normalizeByteSizeInput } from '~/utils/download-chunk-size'
 import type { GlobFilterRule } from '~/utils/glob-match'
 import GlobMatch, { isVoidGlobMatchOptions } from '~/utils/glob-match'
-import { normalizeByteSizeInput } from '~/utils/download-chunk-size'
 
 /**
  * The subset of plugin settings the AI agent is allowed to read and modify

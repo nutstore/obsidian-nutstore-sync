@@ -6,14 +6,17 @@ import { removeIncompleteToolCalls } from '~/ai/chat/messages/ui-message'
 export function normalizeRehydratedExecution(session: ChatSession) {
 	let changed = removeIncompleteToolCalls(session.subagents.master)
 	for (const agent of getSessionSubagents(session)) {
-		if (agent.pendingInputs.length > 0) {
-			agent.pendingInputs = []
-			changed = true
-		}
 		if (removeIncompleteToolCalls(agent)) changed = true
 		if (!isTerminalAgent(agent)) {
 			agent.status = 'cancelled'
 			agent.finishedAt = Date.now()
+			const execution = agent.executions?.find(
+				(run) => run.id === agent.executionId,
+			)
+			if (execution && !execution.status) {
+				execution.status = 'cancelled'
+				execution.finishedAt = agent.finishedAt
+			}
 			changed = true
 		}
 	}

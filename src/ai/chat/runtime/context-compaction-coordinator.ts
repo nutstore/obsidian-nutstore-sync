@@ -13,7 +13,7 @@ import {
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
-import { createAbortError } from '~/ai/transport/abort'
+import { createAbortError } from '~/utils/abort'
 
 export { createContextCompactionRevision } from '~/ai/chat/runtime/context-compaction-revision'
 

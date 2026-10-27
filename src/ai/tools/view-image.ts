@@ -1,7 +1,7 @@
 import { tool } from 'ai'
-import { posix as pathPosix } from 'path-browserify'
 import { z } from 'zod/mini'
 import i18n from '~/i18n'
+import { normalizeVirtualPath } from './bash/virtual-path'
 import { createVaultFileSystem, VAULT_MOUNT_POINT } from './vault-filesystem'
 import {
 	appDep,
@@ -36,9 +36,7 @@ function isViewableImagePath(path: string) {
 }
 
 function resolveImagePath(path: string) {
-	return path.startsWith('/')
-		? pathPosix.normalize(path)
-		: pathPosix.resolve('/', path)
+	return normalizeVirtualPath(path)
 }
 
 const viewImageOutputSchema = z.object({

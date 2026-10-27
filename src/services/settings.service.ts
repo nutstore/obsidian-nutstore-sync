@@ -1,17 +1,25 @@
-import { debounce } from 'lodash-es'
+import { type ModuleState, normalizeModuleState } from '~/modules/lifecycle'
+import { debounce } from 'es-toolkit/compat'
 import { normalizePath, Notice } from 'obsidian'
 import {
 	sanitizeDefaultSelections,
 	sanitizeProviders,
 } from '~/ai/catalog/config'
 import {
+	normalizeMemoryNotePath,
+	type MemorySettings,
+} from '~/ai/memory/memory-note'
+import {
 	applyNormalizedSettingsPatch,
 	type NormalizedSettingsPatch,
 } from '~/ai/tools/settings-whitelist'
 import i18n from '~/i18n'
 import {
+	ChatboxLocation,
+	SessionAppOpenMode,
 	DEFAULT_LOCAL_SETTINGS,
 	DEFAULT_SETTINGS,
+	type FeatureModule,
 	type NutstoreLocalSettings,
 	type NutstoreSettings,
 } from '~/settings'
@@ -22,8 +30,15 @@ import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import { BaseService } from './service.interface'
 
+/** Earlier builds stored module states in the synced `data.json`. */
+interface LegacyModuleSettings {
+	syncModule?: unknown
+	aiModule?: unknown
+}
+
 export default class SettingsService extends BaseService {
 	private reloadSettingsPromise: Promise<void> | null = null
+	private legacyModules: Partial<Record<FeatureModule, unknown>> = {}
 	private readonly debouncedReloadSettingsFromDisk = debounce(() => {
 		void this.reloadSettingsFromDisk()
 	}, 500)
@@ -35,8 +50,6 @@ export default class SettingsService extends BaseService {
 	override async onload() {
 		await this.loadSettings()
 		await this.loadLocalSettings()
-		this.plugin.modelsPresetService.initializeFromLocalSettings()
-		await this.plugin.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
 	}
 
 	override onunload() {
@@ -49,7 +62,18 @@ export default class SettingsService extends BaseService {
 			loadedSettings && typeof loadedSettings === 'object'
 				? (loadedSettings as Partial<NutstoreSettings>)
 				: {}
-		this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS, storedSettings)
+		const {
+			syncModule: legacySyncModule,
+			aiModule: legacyAiModule,
+			...syncedSettings
+		} = storedSettings as Partial<NutstoreSettings> & LegacyModuleSettings
+		// Module states moved to device-local settings; keep the old synced
+		// values only as a one-time seed for devices without a local choice.
+		this.legacyModules = {
+			sync: legacySyncModule,
+			ai: legacyAiModule,
+		}
+		this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS, syncedSettings)
 		if (
 			storedSettings?.conflictStrategy !== undefined &&
 			!Object.values(ConflictStrategy).includes(storedSettings.conflictStrategy)
@@ -77,19 +101,34 @@ export default class SettingsService extends BaseService {
 			providers: {},
 			defaultModel: undefined,
 			yolo: false,
+			disabledSkills: [],
 			subagents: {
 				explorer: { enabled: false },
-				memory: { enabled: false },
 			},
+			memory: { ...DEFAULT_SETTINGS.ai.memory },
 		}
 		this.plugin.settings.ai.subagents ??= {
 			explorer: { enabled: false },
-			memory: { enabled: false },
 		}
 		this.plugin.settings.ai.subagents.explorer ??= { enabled: false }
-		this.plugin.settings.ai.subagents.memory ??= { enabled: false }
 		this.plugin.settings.ai.subagents.explorer.enabled ??= false
-		this.plugin.settings.ai.subagents.memory.enabled ??= false
+		const memory: Partial<MemorySettings> = this.plugin.settings.ai.memory ?? {}
+		this.plugin.settings.ai.memory = {
+			enabled: memory.enabled ?? DEFAULT_SETTINGS.ai.memory.enabled,
+			path:
+				normalizeMemoryNotePath(memory.path ?? '') ??
+				DEFAULT_SETTINGS.ai.memory.path,
+		}
+		this.plugin.settings.ai.disabledSkills = [
+			...new Set(
+				(Array.isArray(this.plugin.settings.ai.disabledSkills)
+					? this.plugin.settings.ai.disabledSkills
+					: []
+				).filter(
+					(name): name is string => typeof name === 'string' && name.length > 0,
+				),
+			),
+		]
 		this.plugin.settings.ai.nutstoreLlmGateway ??= {}
 		if (Array.isArray(this.plugin.settings.ai.providers)) {
 			this.plugin.settings.ai.providers = {}
@@ -120,44 +159,64 @@ export default class SettingsService extends BaseService {
 	}
 
 	async saveSettings() {
-		await this.plugin.saveData(this.plugin.settings)
-		await this.plugin.chatService.handleSettingsChanged()
-		await this.plugin.aiConflictResolverService.refresh()
+		// Begin revocation before the first persistence await.
+		const applied = this.plugin.applySettings()
+		await Promise.all([this.plugin.saveData(this.plugin.settings), applied])
 	}
 
-	/**
-	 * Applies an AI-originated, already-validated settings patch and runs the
-	 * same side-effect chain used after reloading settings from disk (language
-	 * refresh, chat coordination, conflict refresh, schedule update, settings
-	 * tab rerender).
-	 */
 	async applySettingsPatch(patch: NormalizedSettingsPatch) {
 		applyNormalizedSettingsPatch(this.plugin.settings, patch)
-		await this.plugin.saveData(this.plugin.settings)
-		await this.plugin.i18nService.update()
-		await this.plugin.chatService.handleSettingsChanged()
-		await this.plugin.aiConflictResolverService.refresh()
-		await this.plugin.scheduledSyncService.updateInterval()
+		await this.saveSettings()
 		await this.plugin.settingTab?.rerenderIfVisible()
 	}
 
 	async loadLocalSettings() {
 		const path = normalizePath(`${this.plugin.manifest.dir}/data.local.json`)
-		if (!(await this.plugin.app.vault.adapter.exists(path))) {
-			this.plugin.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
-			return
-		}
+		let stored: Partial<NutstoreLocalSettings> = {}
 		try {
-			const raw = await this.plugin.app.vault.adapter.read(path)
-			this.plugin.localSettings = Object.assign(
-				{},
-				DEFAULT_LOCAL_SETTINGS,
-				JSON.parse(raw),
-			) as NutstoreLocalSettings
-			this.plugin.localSettings.ai ??= {}
+			if (await this.plugin.app.vault.adapter.exists(path)) {
+				const parsed = JSON.parse(
+					await this.plugin.app.vault.adapter.read(path),
+				) as unknown
+				if (parsed && typeof parsed === 'object') stored = parsed
+			}
 		} catch {
-			this.plugin.localSettings = { ...DEFAULT_LOCAL_SETTINGS }
+			stored = {}
 		}
+		const storedModules: Partial<Record<FeatureModule, unknown>> =
+			stored.modules ?? {}
+		const migrateModules =
+			storedModules.sync === undefined || storedModules.ai === undefined
+		this.plugin.localSettings = {
+			...DEFAULT_LOCAL_SETTINGS,
+			...stored,
+			ai: {
+				...stored.ai,
+				chatboxLocation:
+					stored.ai?.chatboxLocation === ChatboxLocation.Editor
+						? ChatboxLocation.Editor
+						: ChatboxLocation.Sidebar,
+				sessionAppOpenMode:
+					stored.ai?.sessionAppOpenMode === SessionAppOpenMode.Manual
+						? SessionAppOpenMode.Manual
+						: SessionAppOpenMode.Automatic,
+			},
+			modules: {
+				sync: normalizeModuleState(
+					storedModules.sync ?? this.legacyModules.sync,
+				),
+				ai: normalizeModuleState(storedModules.ai ?? this.legacyModules.ai),
+			},
+		}
+		if (migrateModules) await this.saveLocalSettings()
+	}
+
+	/** Module states are device-local: persist locally and reconcile lifetimes. */
+	async setModuleState(module: FeatureModule, state: ModuleState) {
+		this.plugin.localSettings.modules[module] = state
+		// Begin revocation before the first persistence await.
+		const applied = this.plugin.applySettings()
+		await Promise.all([this.saveLocalSettings(), applied])
 	}
 
 	async saveLocalSettings() {
@@ -180,12 +239,17 @@ export default class SettingsService extends BaseService {
 		const reloadPromise = (async () => {
 			await this.loadSettings()
 			await this.loadLocalSettings()
-			this.plugin.modelsPresetService.initializeFromLocalSettings()
-			await this.plugin.nutstoreLlmGatewayService.initializeProviderFromStoredAuth()
-			await this.plugin.i18nService.update()
-			await this.plugin.chatService.handleSettingsChanged()
-			await this.plugin.aiConflictResolverService.refresh()
-			await this.plugin.scheduledSyncService.updateInterval()
+			const previousGateway = this.plugin.ai.gateway
+			await this.plugin.applySettings()
+			if (
+				this.plugin.ai.lifecycle.active &&
+				this.plugin.ai.gateway === previousGateway
+			) {
+				await this.plugin.ai.lifecycle.scope.background(
+					() => previousGateway.initializeProviderFromStoredAuth(),
+					(error) => logger.error(error),
+				)
+			}
 			await this.plugin.settingTab?.rerenderIfVisible()
 		})()
 

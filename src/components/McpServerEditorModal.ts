@@ -1,4 +1,4 @@
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Notice, Setting } from 'obsidian'
 import { type HttpMcpServerConfig, isValidMcpServerName } from '~/ai/mcp/types'
 import i18n from '~/i18n'
@@ -27,6 +27,7 @@ export default class McpServerEditorModal extends Modal {
 		private isNew: boolean,
 	) {
 		super(plugin.app)
+		plugin.ai.lifecycle.scope.ownModal(this)
 		this.draft = cloneDeep(draft)
 		this.headerRows = Object.entries(this.draft.config.headers ?? {}).map(
 			([key, value]) => ({ key, value }),
@@ -61,6 +62,7 @@ export default class McpServerEditorModal extends Modal {
 			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case -- URL examples are case-sensitive machine input, not prose.
 					.setPlaceholder('https://example.com/mcp')
 					.setValue(this.draft.config.url)
 					.onChange((value) => {

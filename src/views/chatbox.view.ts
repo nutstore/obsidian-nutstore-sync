@@ -1,3 +1,5 @@
+import { ChatWorkspacePanel } from '~/components/ChatWorkspacePanel'
+import type ChatService from '~/services/chat.service'
 import {
 	Component,
 	ItemView,
@@ -11,6 +13,7 @@ import {
 } from 'obsidian'
 import type { EditorView } from '@codemirror/view'
 import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
+import { appIdFromPath } from '~/ai/apps/paths'
 import { resolveResourceDataUrl } from '~/ai/tools/resource-data-url'
 import {
 	createImageContextItem,
@@ -62,6 +65,7 @@ function normalizeDroppedVaultPath(path: string): string | null {
 
 export default class ChatboxView extends ItemView {
 	private rootEl!: HTMLDivElement
+	private workspacePanel?: ChatWorkspacePanel
 	private controller?: ChatboxController
 	private unsub?: () => void
 	private unsubWindowMigrated?: () => void
@@ -83,7 +87,7 @@ export default class ChatboxView extends ItemView {
 			component.load()
 
 			const fallbackText = markdown
-			const renderedEl = el.ownerDocument.createElement('div')
+			const renderedEl = el.ownerDocument.win.createDiv()
 			const sourcePath = this.getMarkdownSourcePath(true)
 
 			try {
@@ -141,7 +145,7 @@ export default class ChatboxView extends ItemView {
 				if (action.type === 'protocol' && action.providerId) {
 					void plugin.protocolService.openProviderEditor(
 						action.providerId,
-						plugin.chatService.getChatModalMountTarget(),
+						this.chat.getChatModalMountTarget(),
 					)
 					return
 				}
@@ -158,11 +162,14 @@ export default class ChatboxView extends ItemView {
 			}
 		}
 
+	private readonly chat: ChatService
+
 	constructor(
 		leaf: WorkspaceLeaf,
 		private plugin: NutstorePlugin,
 	) {
 		super(leaf)
+		this.chat = plugin.ai.chat
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', (leaf) => {
 				this.handleActiveLeafChange(leaf)
@@ -388,6 +395,11 @@ export default class ChatboxView extends ItemView {
 	}
 
 	private async openFileChange(vaultPath: string, line?: number) {
+		const appId = appIdFromPath(vaultPath)
+		if (appId) {
+			await this.plugin.ai.openApp(appId)
+			return
+		}
 		const target = this.app.vault.getAbstractFileByPath(
 			normalizePath(vaultPath),
 		)
@@ -415,7 +427,7 @@ export default class ChatboxView extends ItemView {
 	}
 
 	private getChatboxProps(): ChatboxProps {
-		const viewProps = this.plugin.chatService.getViewProps()
+		const viewProps = this.chat.getViewProps()
 		const activeContextItems = this.getActiveContextItems().filter((item) => {
 			const hash = getUserContextItemHash(item)
 			return !viewProps.draft.userContext.some(
@@ -426,14 +438,19 @@ export default class ChatboxView extends ItemView {
 			...viewProps,
 			activeContextItems,
 			renderMarkdown: this.renderMarkdown,
-			onModalHostChange: (rootEl) =>
-				this.plugin.chatService.setChatModalHost(rootEl),
+			onWorkspaceHostChange: (host) => {
+				this.workspacePanel?.destroy()
+				this.workspacePanel = host
+					? new ChatWorkspacePanel(host, this.plugin)
+					: undefined
+			},
+			onModalHostChange: (rootEl) => this.chat.setChatModalHost(rootEl),
 			onOpenFileChange: (vaultPath, line) =>
 				this.openFileChange(vaultPath, line),
 			onResolveResourceDataUrl: (path, mediaType) =>
 				resolveResourceDataUrl(this.app, path, mediaType),
 			onSendMessage: (text: string, contextItems?: UserContextItem[]) =>
-				this.plugin.chatService.sendMessage(text, contextItems ?? []),
+				this.chat.sendMessage(text, contextItems ?? []),
 			onCaptureActiveContext: () => {
 				this.captureActiveContextSnapshot(true)
 				this.preservingSelectionForChatFocus = !!this.activeSelectionSnapshot
@@ -441,13 +458,13 @@ export default class ChatboxView extends ItemView {
 				this.controller?.update(this.getChatboxProps())
 			},
 			onAddUserContext: (item) => {
-				this.plugin.chatService.addUserContext(item)
+				this.chat.addUserContext(item)
 			},
 			onDropContextItem: async (path: string) => {
 				const abstract = this.resolveDroppedAbstractFile(path)
 				if (!abstract) return
 				if (abstract instanceof TFolder) {
-					this.plugin.chatService.addUserContext(
+					this.chat.addUserContext(
 						createVaultPathContextItem(abstract.path, 'folder'),
 					)
 					return
@@ -455,33 +472,27 @@ export default class ChatboxView extends ItemView {
 				if (abstract instanceof TFile) {
 					if (this.isVaultImageFile(abstract)) {
 						const pending = createPendingContextItem('image', abstract.name)
-						this.plugin.chatService.addUserContext(pending)
+						this.chat.addUserContext(pending)
 						try {
 							const item = await this.createDroppedImageContextItem(abstract)
-							this.plugin.chatService.resolvePendingContextItem(
-								pending.id,
-								item,
-							)
+							this.chat.resolvePendingContextItem(pending.id, item)
 						} catch (error) {
-							this.plugin.chatService.resolvePendingContextItem(
-								pending.id,
-								null,
-							)
+							this.chat.resolvePendingContextItem(pending.id, null)
 							throw error
 						}
 						return
 					}
-					this.plugin.chatService.addUserContext(
+					this.chat.addUserContext(
 						createVaultPathContextItem(abstract.path, 'file'),
 					)
 					return
 				}
 			},
 			onRemoveUserContext: (index: number) => {
-				this.plugin.chatService.removeUserContext(index)
+				this.chat.removeUserContext(index)
 			},
 			onResolvePendingContextItem: (id: string, replacement) => {
-				this.plugin.chatService.resolvePendingContextItem(id, replacement)
+				this.chat.resolvePendingContextItem(id, replacement)
 			},
 		}
 	}
@@ -491,38 +502,44 @@ export default class ChatboxView extends ItemView {
 		this.unsub = undefined
 		this.controller?.destroy()
 		this.controller = mountChatbox(this.rootEl, this.getChatboxProps())
-		this.unsub = this.plugin.chatService.subscribe(() => {
+		this.unsub = this.chat.subscribe(() => {
 			this.controller?.update(this.getChatboxProps())
 		})
 	}
 
 	async onOpen() {
+		if (!this.plugin.ai.lifecycle.active) {
+			this.leaf.detach()
+			return
+		}
 		this.contentEl.empty()
 		this.rootEl = this.contentEl.createDiv({
 			cls: ':uno: nutstore-chatbox-view h-full',
 		})
 		this.captureActiveContextSnapshot(true)
-		this.plugin.chatService.setChatModalHost(this.rootEl)
+		this.chat.setChatModalHost(this.rootEl)
 		this.unsubWindowMigrated?.()
 		this.unsubWindowMigrated = this.rootEl.onWindowMigrated(() => {
-			this.plugin.chatService.setChatModalHost(this.rootEl)
+			this.chat.setChatModalHost(this.rootEl)
 			this.remountChatbox()
 		})
 		this.remountChatbox()
-		void this.plugin.chatService.ensureSession().catch((error) => {
+		void this.chat.ensureSession().catch((error) => {
 			logger.error('Failed to restore ChatBox session', error)
 		})
 	}
 
 	async onClose() {
 		this.clearSelectionHighlight()
+		this.workspacePanel?.destroy()
+		this.workspacePanel = undefined
 		this.unsubWindowMigrated?.()
 		this.unsubWindowMigrated = undefined
 		this.unsub?.()
 		this.unsub = undefined
 		this.controller?.destroy()
 		this.controller = undefined
-		this.plugin.chatService.setChatModalHost(undefined)
+		this.chat?.setChatModalHost(undefined)
 		this.contentEl.empty()
 	}
 }

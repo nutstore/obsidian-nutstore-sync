@@ -45,11 +45,12 @@ export default class CacheServiceV1 extends BaseService {
 		try {
 			const kvKey = await this.getKVKey()
 			const localCache = await traverseWebDAVKV.get(kvKey)
-			if (localCache?.queue?.length === 0) {
+			// Local progress, including suspended verification, must survive a restart.
+			if (localCache) {
 				return false
 			}
 
-			const webdav = await this.plugin.webDAVService.createWebDAVClient()
+			const webdav = await this.plugin.sync.webdav.createWebDAVClient()
 			const filePath = this.remoteCacheFilePath
 			const fileExists = await webdav.exists(filePath).catch(() => false)
 			if (!fileExists) {
@@ -60,7 +61,12 @@ export default class CacheServiceV1 extends BaseService {
 				format: 'binary',
 			})) as BufferLike
 			const exportedStorage = this.decodeStorage(fileContent)
-			if (!exportedStorage.traverseWebDAVCache) {
+			if (
+				!exportedStorage.traverseWebDAVCache ||
+				exportedStorage.traverseWebDAVCache.queue.length > 0 ||
+				(exportedStorage.traverseWebDAVCache.pendingVerification?.length ?? 0) >
+					0
+			) {
 				return false
 			}
 			if (
@@ -102,7 +108,11 @@ export default class CacheServiceV1 extends BaseService {
 			const traverseWebDAVCache = await traverseWebDAVKV.get(
 				await this.getKVKey(),
 			)
-			if (!traverseWebDAVCache || traverseWebDAVCache.queue.length > 0) {
+			if (
+				!traverseWebDAVCache ||
+				traverseWebDAVCache.queue.length > 0 ||
+				(traverseWebDAVCache.pendingVerification?.length ?? 0) > 0
+			) {
 				return false
 			}
 
@@ -110,7 +120,7 @@ export default class CacheServiceV1 extends BaseService {
 			const nodesHash = hashObject(filteredCache.nodes)
 			const metaKey = await this.getKVKey()
 
-			const webdav = await this.plugin.webDAVService.createWebDAVClient()
+			const webdav = await this.plugin.sync.webdav.createWebDAVClient()
 			if (isCancelled()) {
 				return false
 			}
@@ -164,7 +174,7 @@ export default class CacheServiceV1 extends BaseService {
 		}
 		return deflateSync(new TextEncoder().encode(serializedStr), {
 			level: 9,
-		}) as Uint8Array<ArrayBuffer>
+		})
 	}
 
 	private decodeStorage(fileContent: BufferLike): ExportedStorage {

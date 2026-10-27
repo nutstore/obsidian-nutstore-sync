@@ -17,12 +17,14 @@ export default class SelectRemoteBaseDirModal extends Modal {
 	}
 
 	async onOpen() {
+		const scope = this.plugin.sync.lifecycle.scope
+		scope.ownModal(this)
 		const { contentEl } = this
 
 		const explorer = createDiv()
 		contentEl.appendChild(explorer)
 
-		const webdav = await this.plugin.webDAVService.createWebDAVClient()
+		const webdav = await this.plugin.sync.webdav.createWebDAVClient()
 
 		mountWebDAVExplorer(explorer, {
 			fs: {
@@ -32,6 +34,7 @@ export default class SelectRemoteBaseDirModal extends Modal {
 						this.plugin.settings,
 						token,
 						target,
+						scope.check,
 					)
 					return items.map(fileStatToStatModel)
 				},
@@ -44,6 +47,7 @@ export default class SelectRemoteBaseDirModal extends Modal {
 				this.close()
 			},
 			onConfirm: (path) => {
+				scope.check()
 				void Promise.resolve(this.onConfirm(stdRemotePath(path))).then(() => {
 					explorer.remove()
 					this.close()

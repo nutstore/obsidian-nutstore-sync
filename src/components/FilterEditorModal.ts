@@ -1,4 +1,4 @@
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
 import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'

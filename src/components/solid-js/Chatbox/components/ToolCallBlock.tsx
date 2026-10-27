@@ -378,6 +378,11 @@ function agentStatusVisual(status: ChatAgentView['status']) {
 			)
 		case 'running':
 			return runningVisual()
+		case 'waiting':
+			return waitingVisual(
+				t('chatbox.ui.states.agentWaiting'),
+				':uno: i-lucide-mail',
+			)
 		case 'idle':
 			return waitingVisual(
 				t('chatbox.ui.states.taskWaiting'),

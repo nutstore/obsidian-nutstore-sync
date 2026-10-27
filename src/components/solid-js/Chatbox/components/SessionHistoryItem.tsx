@@ -14,6 +14,32 @@ export function SessionHistoryItem(props: {
 }) {
 	const activate = () => props.onSelect(props.session.id)
 
+	const showSessionMenu = (event: MouseEvent) => {
+		event.preventDefault()
+		event.stopPropagation()
+		const sessionId = props.session.id
+		const onExport = props.onExport
+		const onDelete = props.onDelete
+		const menu = new Menu()
+		// The history sheet stacks above Obsidian's menu layer; lift only this menu
+		// so native menus elsewhere keep their own layering.
+		menu.dom?.addClass('nutstore-sync-session-menu')
+		menu.addItem((item) =>
+			item
+				.setTitle(t('chatbox.ui.actions.exportAsMarkdown'))
+				.setIcon('download')
+				.onClick(() => onExport(sessionId)),
+		)
+		menu.addItem((item) => {
+			item
+				.setTitle(t('chatbox.ui.actions.deleteSession'))
+				.setIcon('trash')
+				.setWarning(true)
+				.onClick(() => onDelete(sessionId))
+		})
+		menu.showAtMouseEvent(event)
+	}
+
 	return (
 		<div
 			role="button"
@@ -25,6 +51,7 @@ export function SessionHistoryItem(props: {
 					: ':uno: border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] hover:bg-[var(--background-modifier-hover)] hover:cursor-pointer',
 			].join(' ')}
 			onClick={activate}
+			onContextMenu={showSessionMenu}
 			onKeyDown={(event) => {
 				if (event.key === 'Enter' || event.key === ' ') {
 					event.preventDefault()
@@ -42,6 +69,9 @@ export function SessionHistoryItem(props: {
 					</div>
 					<div class=":uno: mt-2 flex items-center gap-1 text-xs text-[var(--text-muted)]">
 						{formatTime(props.session.createdAt)}
+						<Show when={props.session.appId}>
+							<span title={t('apps.workspace')}> · App</span>
+						</Show>
 						<Show when={props.isRunning}>
 							<span class=":uno: font-medium text-[var(--color-yellow)]">
 								· {t('chatbox.ui.history.sessionRunning')}
@@ -53,28 +83,7 @@ export function SessionHistoryItem(props: {
 					<div
 						class=":uno: i-lucide-ellipsis-vertical flex justify-center items-center hover:text-[--interactive-accent] hover:cursor-pointer transition-colors"
 						aria-label={t('chatbox.ui.history.sessionActions')}
-						onClick={(event) => {
-							event.preventDefault()
-							event.stopPropagation()
-							const sessionId = props.session.id
-							const onExport = props.onExport
-							const onDelete = props.onDelete
-							const menu = new Menu()
-							menu.addItem((item) =>
-								item
-									.setTitle(t('chatbox.ui.actions.exportAsMarkdown'))
-									.setIcon('download')
-									.onClick(() => onExport(sessionId)),
-							)
-							menu.addItem((item) => {
-								item
-									.setTitle(t('chatbox.ui.actions.deleteSession'))
-									.setIcon('trash')
-									.setWarning(true)
-									.onClick(() => onDelete(sessionId))
-							})
-							menu.showAtMouseEvent(event)
-						}}
+						onClick={showSessionMenu}
 					/>
 				</div>
 			</div>

@@ -45,8 +45,7 @@ export const taskTool = tool({
 			'Returns immediately with a task ID while the subagent continues asynchronously.',
 			'The subagent receives only prompt, so include all necessary context.',
 			'After dispatching, continue only with work that neither overlaps with this task nor depends on its result.',
-			'Otherwise, stop and wait for the task-result-ready system notification.',
-			'When the task settles, the notification provides the absolute result file path.',
+			'Otherwise, finish the current response; when the task settles, a durable task-result-ready notification automatically schedules this caller and provides the absolute result file path.',
 		].join(' ')
 	},
 	inputSchema: z.object({
@@ -79,7 +78,7 @@ export const taskTool = tool({
 	outputSchema: taskOutputSchema,
 	toModelOutput: ({ output }) => ({
 		type: 'text',
-		value: `Task dispatched. Task ID: ${output.taskId}. Do not attempt to read the task result yet. Continue only with work that neither overlaps with this task nor depends on its result. Otherwise, stop and wait for the task-result-ready system notification. When the notification arrives, the task has completed, failed, or been cancelled; use tool to read its resultPath.`,
+		value: `Task dispatched. Task ID: ${output.taskId}. Do not attempt to read the task result yet. Continue only with work that neither overlaps with this task nor depends on its result. Otherwise, finish the current response; task completion automatically schedules this caller with a durable task-result-ready notification. When the notification arrives, the task has completed, failed, or been cancelled; use a tool to read its resultPath.`,
 	}),
 	execute: async (params, { context }) =>
 		context.dispatchTask(

@@ -1,6 +1,6 @@
 import { getReasonPhrase } from 'http-status-codes'
-import { raceWithAbort } from './abortable'
-import { throwIfAborted } from './abort'
+import { raceWithAbort } from '~/utils/abortable'
+import { throwIfAborted } from '~/utils/abort'
 import requestUrl from '~/utils/request-url'
 
 function toHeadersRecord(headers?: HeadersInit) {

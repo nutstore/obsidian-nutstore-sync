@@ -33,6 +33,8 @@ export interface LegacyChatSession extends ChatSessionBase {
 export interface ChatSession extends ChatSessionBase {
 	schemaVersion: 2
 	subagents: { master: ChatAgentState }
+	/** Optional App workspace; the referenced App owns all executable code and data. */
+	appId?: string
 }
 
 export interface ChatSessionIndexItem {
@@ -40,6 +42,7 @@ export interface ChatSessionIndexItem {
 	title: string
 	createdAt: number
 	updatedAt: number
+	appId?: string
 }
 
 export function resolveUsedContextTokens(usage?: LanguageModelUsage) {

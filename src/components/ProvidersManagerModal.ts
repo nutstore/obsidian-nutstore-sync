@@ -1,4 +1,4 @@
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Notice, Setting, setIcon } from 'obsidian'
 import { Subscription } from 'rxjs'
 import {
@@ -10,6 +10,7 @@ import {
 	listPresetProviders,
 	listProviders,
 } from '~/ai/catalog/config'
+import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
 import { AIProviderConfig } from '~/ai/core/types'
 import { getProviderDefaultBaseURL } from '~/ai/providers/defaults'
 import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
@@ -22,7 +23,7 @@ import {
 } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
-import NutstoreLlmGatewayBetaConfirmModal from './NutstoreLlmGatewayBetaConfirmModal'
+import NutstoreLlmGatewayModal from './NutstoreLlmGatewayModal'
 import ProviderEditorModal from './ProviderEditorModal'
 import ProviderModelsUpdateConfirmModal from './ProviderModelsUpdateConfirmModal'
 
@@ -34,6 +35,8 @@ interface PresetModelsRefreshSummary {
 }
 
 export default class ProvidersManagerModal extends Modal {
+	private readonly moduleScope
+	private readonly gateway
 	private selectedPresetId = CUSTOM_OPTION
 	private authSubscription: Subscription | null = null
 	private presetModelsRefreshState: PresetModelsRefreshState = 'idle'
@@ -47,6 +50,9 @@ export default class ProvidersManagerModal extends Modal {
 		private onChanged: () => Promise<void> | void,
 	) {
 		super(plugin.app)
+		this.moduleScope = plugin.ai.lifecycle.scope
+		this.gateway = plugin.ai.gateway
+		this.moduleScope.ownModal(this)
 	}
 
 	onOpen() {
@@ -57,6 +63,7 @@ export default class ProvidersManagerModal extends Modal {
 	}
 
 	private render() {
+		if (this.moduleScope.signal.aborted) return
 		const { contentEl } = this
 		contentEl.empty()
 		contentEl.createEl('h2', {
@@ -116,8 +123,8 @@ export default class ProvidersManagerModal extends Modal {
 					}
 					this.render()
 					try {
-						const result =
-							await this.plugin.modelsPresetService.refreshFromRemote()
+						const result = await this.plugin.ai.models.refreshFromRemote()
+						if (this.moduleScope.signal.aborted) return
 						this.presetModelsRefreshState = result.success ? 'success' : 'error'
 						this.presetModelsRefreshSummary = {
 							providersDelta: result.providersDelta,
@@ -135,6 +142,7 @@ export default class ProvidersManagerModal extends Modal {
 							)
 						}
 					} catch (error) {
+						if (this.moduleScope.signal.aborted) return
 						logger.error(error)
 						this.presetModelsRefreshState = 'error'
 						new Notice(
@@ -204,8 +212,7 @@ export default class ProvidersManagerModal extends Modal {
 		this.renderNutstoreGatewaySection()
 
 		const providers = listProviders(this.plugin.settings.ai.providers).filter(
-			(provider) =>
-				!this.plugin.nutstoreLlmGatewayService.isManagedProvider(provider),
+			(provider) => !this.gateway.isManagedProvider(provider),
 		)
 		if (providers.length === 0) {
 			contentEl.createDiv({
@@ -243,12 +250,16 @@ export default class ProvidersManagerModal extends Modal {
 						.setButtonText(i18n.t('settings.ai.providers.updateModels'))
 						.setCta()
 						.onClick(async () => {
-							const confirmed = await new ProviderModelsUpdateConfirmModal(
-								this.plugin.app,
-								provider,
-								missingPresetModels,
-							).openAndWait()
-							if (!confirmed) return
+							const confirmed = await this.moduleScope
+								.ownModal(
+									new ProviderModelsUpdateConfirmModal(
+										this.plugin.app,
+										provider,
+										missingPresetModels,
+									),
+								)
+								.openAndWait()
+							if (!confirmed || this.moduleScope.signal.aborted) return
 							await this.addMissingPresetModels(provider, missingPresetModels)
 						})
 				})
@@ -263,12 +274,17 @@ export default class ProvidersManagerModal extends Modal {
 									if (!this.validateProviderKey(savedProvider, provider.id)) {
 										return false
 									}
-									const { [provider.id]: _old, ...rest } =
-										this.plugin.settings.ai.providers
-									this.plugin.settings.ai.providers = {
-										...rest,
-										[savedProvider.id]: savedProvider,
+									const nextProviders: Record<string, AIProviderConfig> = {}
+									for (const [key, val] of Object.entries(
+										this.plugin.settings.ai.providers,
+									)) {
+										if (key === provider.id) {
+											nextProviders[savedProvider.id] = savedProvider
+										} else {
+											nextProviders[key] = val
+										}
 									}
+									this.plugin.settings.ai.providers = nextProviders
 									await this.onChanged()
 									this.render()
 									return true
@@ -333,27 +349,32 @@ export default class ProvidersManagerModal extends Modal {
 
 	private renderNutstoreGatewaySection() {
 		const { contentEl } = this
-		const isAuthorized = this.plugin.nutstoreLlmGatewayService.isAuthorized()
-		const isAuthorizing = this.plugin.nutstoreLlmGatewayService.isAuthorizing()
-		const pendingAuthorization =
-			this.plugin.nutstoreLlmGatewayService.getPendingAuthorization()
+		const isAuthorized = this.gateway.isAuthorized()
+		const isAuthorizing = this.gateway.isAuthorizing()
+		const pendingAuthorization = this.gateway.getPendingAuthorization()
 		const provider =
 			this.plugin.settings.ai.providers[NUTSTORE_LLM_GATEWAY_PROVIDER_ID]
 		const modelsCount = listModels(provider).length
+		const providerName = i18n.t('settings.ai.nutstoreLlmGateway.name')
 
-		const setting = new Setting(contentEl)
-			.setName(i18n.t('settings.ai.nutstoreLlmGateway.name'))
-			.setDesc(
-				isAuthorized
-					? i18n.t('settings.ai.nutstoreLlmGateway.connectedDesc', {
-							count: modelsCount,
+		const setting = new Setting(contentEl).setDesc(
+			isAuthorized
+				? i18n.t('settings.ai.nutstoreLlmGateway.connectedDesc', {
+						count: modelsCount,
+					})
+				: pendingAuthorization
+					? i18n.t('settings.ai.nutstoreLlmGateway.pendingDesc', {
+							code: pendingAuthorization.userCode,
 						})
-					: pendingAuthorization
-						? i18n.t('settings.ai.nutstoreLlmGateway.pendingDesc', {
-								code: pendingAuthorization.userCode,
-							})
-						: i18n.t('settings.ai.nutstoreLlmGateway.desc'),
-			)
+					: i18n.t('settings.ai.nutstoreLlmGateway.desc'),
+		)
+		setting.nameEl.addClass('nutstore-llm-gateway__provider-name')
+		const providerIcon = setting.nameEl.createSpan({
+			cls: 'nutstore-llm-gateway__provider-icon',
+		})
+		providerIcon.setAttribute('aria-hidden', 'true')
+		setIcon(providerIcon, CHATBOX_AI_ICON_ID)
+		setting.nameEl.createSpan({ text: providerName })
 
 		if (!isAuthorized) {
 			setting.addButton((button) => {
@@ -374,22 +395,21 @@ export default class ProvidersManagerModal extends Modal {
 					)
 					return
 				}
-				button.onClick(() => {
-					new NutstoreLlmGatewayBetaConfirmModal(this.plugin.app, async () => {
-						try {
-							await this.plugin.nutstoreLlmGatewayService.startAuthorization()
-							await this.plugin.nutstoreLlmGatewayService.openPendingAuthorizationPage()
-							this.render()
-						} catch (error) {
-							logger.error(error)
-							new Notice(
-								error instanceof Error
-									? error.message
-									: i18n.t('settings.login.failure'),
-								10000,
-							)
-						}
-					}).open()
+				button.onClick(async () => {
+					try {
+						await this.gateway.startAuthorization()
+						await this.gateway.openPendingAuthorizationPage()
+						this.render()
+					} catch (error) {
+						if (this.moduleScope.signal.aborted) return
+						logger.error(error)
+						new Notice(
+							error instanceof Error
+								? error.message
+								: i18n.t('settings.login.failure'),
+							10000,
+						)
+					}
 				})
 			})
 			if (pendingAuthorization) {
@@ -400,8 +420,9 @@ export default class ProvidersManagerModal extends Modal {
 						)
 						.onClick(async () => {
 							try {
-								await this.plugin.nutstoreLlmGatewayService.openPendingAuthorizationPage()
+								await this.gateway.openPendingAuthorizationPage()
 							} catch (error) {
+								if (this.moduleScope.signal.aborted) return
 								logger.error(error)
 								new Notice(
 									error instanceof Error
@@ -419,7 +440,7 @@ export default class ProvidersManagerModal extends Modal {
 							i18n.t('settings.ai.nutstoreLlmGateway.cancelAuthorization'),
 						)
 						.onClick(async () => {
-							await this.plugin.nutstoreLlmGatewayService.disconnect()
+							await this.gateway.disconnect()
 							this.render()
 						})
 				})
@@ -430,26 +451,13 @@ export default class ProvidersManagerModal extends Modal {
 		setting
 			.addButton((button) =>
 				button
-					.setButtonText(i18n.t('settings.ai.nutstoreLlmGateway.refreshModels'))
-					.onClick(async () => {
-						try {
-							await this.plugin.nutstoreLlmGatewayService.refreshModels({
-								removeOnAuthError: true,
-							})
-							await this.plugin.settingsService.saveSettings()
+					.setButtonText(i18n.t('settings.ai.nutstoreLlmGateway.usage.button'))
+					.onClick(() =>
+						new NutstoreLlmGatewayModal(this.plugin, async () => {
+							await this.onChanged()
 							this.render()
-						} catch (error) {
-							logger.error(error)
-							new Notice(
-								error instanceof Error
-									? error.message
-									: i18n.t(
-											'settings.ai.nutstoreLlmGateway.errors.refreshFailed',
-										),
-								10000,
-							)
-						}
-					}),
+						}).open(),
+					),
 			)
 			.addButton((button) => {
 				let confirmDisconnect = false
@@ -471,7 +479,7 @@ export default class ProvidersManagerModal extends Modal {
 						addClassTokens(button.buttonEl, ':uno: mod-warning')
 						return
 					}
-					await this.plugin.nutstoreLlmGatewayService.disconnect()
+					await this.gateway.disconnect()
 					this.render()
 				})
 
@@ -484,7 +492,7 @@ export default class ProvidersManagerModal extends Modal {
 			new Notice(i18n.t('settings.ai.errors.emptyProviderId'))
 			return false
 		}
-		if (this.plugin.nutstoreLlmGatewayService.isProviderId(provider.id)) {
+		if (this.gateway.isProviderId(provider.id)) {
 			new Notice(i18n.t('settings.ai.errors.reservedProviderId'))
 			return false
 		}
@@ -505,6 +513,7 @@ export default class ProvidersManagerModal extends Modal {
 			new Notice(i18n.t('settings.ai.modals.provider.deleted'))
 			this.render()
 		} catch (error) {
+			if (this.moduleScope.signal.aborted) return
 			logger.error(error)
 			new Notice(
 				error instanceof Error
@@ -540,6 +549,7 @@ export default class ProvidersManagerModal extends Modal {
 			)
 			this.render()
 		} catch (error) {
+			if (this.moduleScope.signal.aborted) return
 			logger.error(error)
 			new Notice(
 				error instanceof Error

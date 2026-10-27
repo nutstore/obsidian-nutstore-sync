@@ -1,4 +1,3 @@
-import { normalizePath } from 'obsidian'
 import { posix as pathPosix } from 'path-browserify'
 import { tool } from 'ai'
 import { z } from 'zod/mini'
@@ -10,6 +9,10 @@ import {
 	SETTINGS_FILE_PATH,
 	VAULT_MOUNT_POINT,
 } from '~/ai/tools/bash/mount-points'
+import {
+	assertCanonicalVirtualPathCharacters,
+	normalizeVirtualPath,
+} from '~/ai/tools/bash/virtual-path'
 import { createVaultFileSystem } from '~/ai/tools/vault-filesystem'
 import { withPermissionPurpose } from './permission-guard'
 import { textValue } from './shared'
@@ -199,16 +202,15 @@ function resolveVirtualPath(rawPath: string): string {
 	if (!trimmed) {
 		invalidPatch(`empty path`)
 	}
+	assertCanonicalVirtualPathCharacters(trimmed)
 	const normalized = pathPosix.normalize(trimmed)
-
-	if (normalized.startsWith('/')) {
-		return normalized
-	}
-	const rel = normalizePath(pathPosix.normalize(trimmed))
-	if (!rel || rel === '.' || rel === '..' || rel.startsWith('../')) {
+	if (
+		!pathPosix.isAbsolute(normalized) &&
+		(normalized === '.' || normalized === '..' || normalized.startsWith('../'))
+	) {
 		invalidPatch(`path escapes the vault: "${rawPath}"`)
 	}
-	return pathPosix.resolve(VAULT_MOUNT_POINT, rel)
+	return normalizeVirtualPath(trimmed)
 }
 
 /**
@@ -217,7 +219,7 @@ function resolveVirtualPath(rawPath: string): string {
  * settings file is tracked by its full virtual path.
  */
 function toReadKey(virtualPath: string): string {
-	const normalized = pathPosix.normalize(virtualPath)
+	const normalized = normalizeVirtualPath(virtualPath)
 	if (
 		normalized === SETTINGS_FILE_PATH ||
 		normalized.startsWith(`${SETTINGS_FILE_PATH}/`)
@@ -229,7 +231,7 @@ function toReadKey(virtualPath: string): string {
 
 /** User-facing path: vault-relative for vault (back-compat), virtual otherwise. */
 function toDisplayKey(virtualPath: string): string {
-	const normalized = pathPosix.normalize(virtualPath)
+	const normalized = normalizeVirtualPath(virtualPath)
 	if (
 		normalized === AGENTS_MOUNT_POINT ||
 		normalized.startsWith(`${AGENTS_MOUNT_POINT}/`) ||
@@ -487,6 +489,6 @@ export const applyPatchTool = tool({
 	},
 	toModelOutput: ({ output }) => ({
 		type: 'text',
-		value: `Done!\n${output.files.map((path) => `- ${path}`).join('\n')}`,
+		value: ['Done!', ...output.files.map((path) => `- ${path}`)].join('\n'),
 	}),
 })

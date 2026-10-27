@@ -1,10 +1,16 @@
-import { MountableFs, type IFileSystem } from 'just-bash/browser'
+import type { IFileSystem } from 'just-bash/browser'
 import { normalizePath, type App } from 'obsidian'
+import { AppFs } from '~/ai/apps/fs'
+import type { AppLifecycle } from '~/ai/apps/lifecycle'
+import type { AppOpenFn, AppWorkspaceBinding } from '~/ai/apps/workspaces'
 import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
+import { createAppCommands } from './bash/app'
 import { ObsidianVaultFs, ReversibleOpRecorder } from './bash/fs'
+import { MountableFs } from './bash/mountable-fs'
 import {
+	APPS_MOUNT_POINT,
 	AGENTS_MOUNT_POINT,
 	AGENTS_VAULT_PATH,
 	BUILTIN_SKILLS_MOUNT_POINT,
@@ -22,6 +28,10 @@ export interface CreateVaultFileSystemOptions {
 	getSettingsSnapshot?: SettingsSnapshotFn
 	updateSettings?: SettingsUpdater
 	fileSystemManager?: VaultFileSystemManager
+	appWorkspaceBinding?: AppWorkspaceBinding
+	appLifecycle?: AppLifecycle
+	openApp?: AppOpenFn
+	readonlyApps?: boolean
 }
 
 interface SharedVaultFileSystem {
@@ -29,11 +39,9 @@ interface SharedVaultFileSystem {
 }
 
 /**
- * just-bash expands globs from IFileSystem.getAllPaths() before it asks the
- * filesystem to read a directory. Seed that synchronous index from Obsidian's
- * in-memory vault index — the authoritative view shared with the file explorer
- * — plus the plugin's agent domain directory, which the vault index excludes
- * because it is hidden. Other hidden paths stay out of the snapshot.
+ * Seed the synchronous path snapshot from Obsidian's loaded vault files and
+ * the hidden agent domain. Other hidden paths stay out of this snapshot.
+ * Bash globs enumerate directories through readdirWithFileTypes instead.
  */
 async function getInitialVaultPaths(app: App) {
 	const paths = app.vault.getAllLoadedFiles().map((file) => file.path)
@@ -51,9 +59,12 @@ async function listAgentDomainPaths(app: App) {
 				app.vault.adapter,
 				directory,
 			)
-			for (const path of [...listed.files, ...listed.folders])
+			for (const path of [...listed.files, ...listed.folders]) {
 				paths.push(normalizePath(path))
-			for (const path of listed.folders) directories.push(normalizePath(path))
+			}
+			for (const path of listed.folders) {
+				directories.push(normalizePath(path))
+			}
 		} catch {
 			// A missing agent domain directory simply contributes nothing.
 		}
@@ -69,11 +80,50 @@ async function listAgentDomainPaths(app: App) {
 export class VaultFileSystemManager {
 	private sharedPromise?: Promise<SharedVaultFileSystem>
 
-	constructor(private readonly app: App) {}
+	constructor(
+		private readonly app: App,
+		private readonly defaults: Pick<
+			CreateVaultFileSystemOptions,
+			'appLifecycle' | 'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
+		> = {},
+		sharedPromise?: Promise<SharedVaultFileSystem>,
+	) {
+		this.sharedPromise = sharedPromise
+	}
+
+	withDefaults(
+		overrides: Pick<
+			CreateVaultFileSystemOptions,
+			'appLifecycle' | 'appWorkspaceBinding' | 'openApp' | 'readonlyApps'
+		>,
+	) {
+		return new VaultFileSystemManager(
+			this.app,
+			{ ...this.defaults, ...overrides },
+			this.getShared(),
+		)
+	}
 
 	async create(options: CreateVaultFileSystemOptions = {}) {
 		const shared = await this.getShared()
-		return createScopedVaultFileSystem(this.app, shared, options)
+		return createScopedVaultFileSystem(this.app, shared, {
+			...this.defaults,
+			...options,
+		})
+	}
+
+	/** Commands and filesystem share one invocation's defaults without wrapper identity. */
+	async createBashEnvironment(options: CreateVaultFileSystemOptions = {}) {
+		const scoped = { ...this.defaults, ...options }
+		const fs = await this.create(scoped)
+		const { openApp, appWorkspaceBinding } = scoped
+		return {
+			fs,
+			customCommands: createAppCommands({
+				openApp,
+				selectedAppId: () => appWorkspaceBinding?.selectedAppId(),
+			}),
+		}
 	}
 
 	private getShared() {
@@ -101,7 +151,7 @@ async function createScopedVaultFileSystem(
 		normalizePath(app.vault.configDir),
 	)
 	const vaultFs = new ObsidianVaultFs(
-		app.vault,
+		app,
 		await getInitialVaultPaths(app),
 		options.permissionGuard,
 		onRead,
@@ -119,6 +169,10 @@ async function createScopedVaultFileSystem(
 		base: vaultFs,
 		mounts: [
 			{
+				mountPoint: APPS_MOUNT_POINT,
+				filesystem: new AppFs(app, options, onRead),
+			},
+			{
 				mountPoint: BUILTIN_SKILLS_MOUNT_POINT,
 				filesystem: shared.builtinSkillsFs,
 			},
@@ -132,7 +186,7 @@ async function createScopedVaultFileSystem(
 				: []),
 		],
 	})
-	return options.recorder
+	const result = options.recorder
 		? new ReversibleFs(mountable, options.recorder, {
 				absoluteMountPoints: [
 					AGENTS_MOUNT_POINT,
@@ -141,6 +195,7 @@ async function createScopedVaultFileSystem(
 				],
 			})
 		: mountable
+	return result
 }
 
 export async function createVaultFileSystem(

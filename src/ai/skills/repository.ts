@@ -1,5 +1,5 @@
 import { App, normalizePath } from 'obsidian'
-import { BUILTIN_SKILLS } from '~/ai/skills/builtin'
+import { BUILTIN_SKILLS, isBuiltinSkillPath } from '~/ai/skills/builtin'
 import { parseYamlFrontmatter } from '~/ai/skills/frontmatter'
 import { AGENTS_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 import type {
@@ -90,6 +90,8 @@ export class SkillRepository {
 	constructor(
 		private app: App,
 		private builtinSkills: readonly BuiltinSkill[] = BUILTIN_SKILLS,
+		/** Policy read on every access so settings changes need no refresh. */
+		private isDisabled: (name: string) => boolean = () => false,
 	) {
 		this.skills = this.getBuiltinMetadata()
 	}
@@ -196,7 +198,31 @@ export class SkillRepository {
 		}
 	}
 
+	/** Vault Skills that users can activate or deactivate. */
+	discoverConfigurable(): {
+		skills: SkillMetadata[]
+		diagnostics: SkillDiagnostic[]
+	} {
+		const { skills, diagnostics } = this.discover()
+		return {
+			skills: skills.filter((skill) => !isBuiltinSkillPath(skill.path)),
+			diagnostics,
+		}
+	}
+
+	/**
+	 * Skills advertised to the agent. Built-in entries are not configurable.
+	 * A same-named Vault Skill replaces its built-in entry and remains configurable.
+	 * Deactivated Vault Skills are hidden here but stay in `discover()`, and
+	 * their files remain ordinary vault reads for Bash: deactivation governs
+	 * discovery, not file access.
+	 */
 	getCatalog(): SkillMetadata[] {
-		return this.skills.map((skill) => ({ ...skill }))
+		return this.skills
+			.filter(
+				(skill) =>
+					isBuiltinSkillPath(skill.path) || !this.isDisabled(skill.name),
+			)
+			.map((skill) => ({ ...skill }))
 	}
 }

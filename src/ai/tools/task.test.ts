@@ -22,6 +22,8 @@ describe('task tool execution context', () => {
 		})
 
 		expect(result).toContain('neutral-agent: Handles neutral work 🌿')
+		expect(result).toContain('automatically schedules this caller')
+		expect(result).not.toContain('wait_agent')
 	})
 
 	it('forwards the captured turn origin instead of resolving a global active turn', async () => {

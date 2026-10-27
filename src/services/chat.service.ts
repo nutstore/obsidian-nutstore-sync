@@ -1,3 +1,6 @@
+import type { ModuleScope } from '~/modules/lifecycle'
+import { guardAppIO } from '~/modules/guard-io'
+import { getSessionSubagents, isTerminalAgent } from '~/ai/chat/domain'
 import type { LanguageModelUsage } from 'ai'
 import { Notice } from 'obsidian'
 import {
@@ -7,7 +10,10 @@ import {
 	listProviders,
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
-import { type UserContextItem } from '~/ai/chat/context/user-context'
+import {
+	haveSameUserContextItems,
+	type UserContextItem,
+} from '~/ai/chat/context/user-context'
 import { UserContextManager } from '~/ai/chat/context/user-context-manager'
 import type { ChatSession, ChatSessionIndexItem } from '~/ai/chat/domain'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
@@ -62,8 +68,9 @@ import {
 	collectOtherBusySessionIds,
 } from '~/ai/chat/ui/view-projection'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import { BUILTIN_SKILLS } from '~/ai/skills/builtin'
 import { SkillRepository } from '~/ai/skills/repository'
-import { createAbortError, isAbortError } from '~/ai/transport/abort'
+import { createAbortError, isAbortError } from '~/utils/abort'
 import SessionExportModal from '~/components/SessionExportModal'
 import i18n from '~/i18n'
 import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
@@ -120,9 +127,15 @@ export default class ChatService extends BaseService {
 	private readonly compactionCoordinator: ContextCompactionCoordinator
 	private readonly skillRepository: SkillRepository
 
-	constructor(private plugin: NutstorePlugin) {
+	constructor(
+		private plugin: NutstorePlugin,
+		private readonly scope: ModuleScope,
+	) {
 		super()
-		this.skillRepository = new SkillRepository(plugin.app)
+		const app = guardAppIO(plugin.app, scope.check, scope.track)
+		this.skillRepository = new SkillRepository(app, BUILTIN_SKILLS, (name) =>
+			plugin.settings.ai.disabledSkills.includes(name),
+		)
 		this.selection = new Selection(
 			() => plugin.settings.ai,
 			this.state,
@@ -133,23 +146,41 @@ export default class ChatService extends BaseService {
 		this.store = new SessionStore(
 			this.state,
 			this.selection,
-			new SessionsFileBackend(plugin.app.vault),
+			new SessionsFileBackend(app),
 			legacyStore,
 			(sessionId, session) => {
 				this.runtimeStates.resetExecution(sessionId)
 				this.taskManager?.cleanupSessionAgentTracking(session)
 			},
 		)
+		const memory = plugin.ai.memory.repository
+		const contextSources = { skills: this.skillRepository, memory }
 		this.toolExecutor = new ToolExecutor(
-			plugin.app,
+			app,
 			() => plugin.settings.ai,
 			this.state,
 			this.runtimeStates,
-			plugin.mcpService,
+			plugin.ai.mcp,
 			{
-				getSettingsSnapshot: () => plugin.settings,
-				updateSettings: (patch) =>
-					plugin.settingsService.applySettingsPatch(patch),
+				getSettingsSnapshot: () => {
+					scope.check()
+					return plugin.settings
+				},
+				updateSettings: (patch) => {
+					scope.check()
+					return plugin.settingsService.applySettingsPatch(patch)
+				},
+			},
+			memory,
+			scope,
+			{
+				service: plugin.ai.workspaces,
+				persist: async (session) => {
+					await this.store.persistSession(session)
+					this.store.upsertSessionIndexItem(session)
+					await this.store.persistMetaAndIndex()
+					this.notify()
+				},
 			},
 		)
 		this.userContextManager = new UserContextManager(
@@ -158,25 +189,29 @@ export default class ChatService extends BaseService {
 			() => this.notify(),
 		)
 		this.messageFactory = new MessageFactory(
-			plugin.app,
+			app,
 			() => this.notify(),
-			this.skillRepository,
+			contextSources,
 		)
-		const ensureProviderReady = (provider: AIProviderConfig) =>
-			plugin.nutstoreLlmGatewayService.ensureProviderReady(provider)
+		const gateway = plugin.ai.gateway
+		const ensureProviderReady = async (provider: AIProviderConfig) => {
+			scope.check()
+			await gateway.ensureProviderReady(provider)
+			scope.check()
+		}
 		const agentRunner = new AgentRunner(
 			this.toolExecutor,
 			this.store,
 			this.messageFactory,
 			() => this.notify(),
-			plugin.app,
+			app,
 		)
 		this.compactionCoordinator = new ContextCompactionCoordinator(
 			this.store,
 			this.messageFactory,
 		)
 		this.taskManager = new TaskManager(
-			plugin.app,
+			app,
 			ensureProviderReady,
 			this.state,
 			this.selection,
@@ -187,12 +222,23 @@ export default class ChatService extends BaseService {
 			agentRunner,
 			this.compactionCoordinator,
 		)
+		this.toolExecutor.setAgentCommunication(this.taskManager)
 		this.toolExecutor.setDispatchTaskHandler((params, origin) =>
 			this.taskManager.dispatchTask(params, origin),
 		)
+		this.toolExecutor.setAppOpenHandler(async (appId) => {
+			scope.check()
+			const saved = await plugin.ai.openApp(appId)
+			scope.check()
+			if (!saved)
+				throw new Error(
+					'App opening is unavailable while the AI module is inactive',
+				)
+			return { appId, title: saved.manifest.title }
+		})
 		const reportTransientError = (message: string) => new Notice(message)
 		this.messageOps = new MessageOps(
-			plugin.app,
+			app,
 			this.state,
 			this.runtimeStates,
 			this.store,
@@ -202,11 +248,16 @@ export default class ChatService extends BaseService {
 			(session) => this.selection.validateSessionSelection(session),
 			(sessionId, messageId) =>
 				this.sessionProcessor.enqueueRegenerate(sessionId, messageId),
-			this.skillRepository,
+			contextSources,
 			{
-				getSettingsSnapshot: () => plugin.settings,
-				updateSettings: (patch) =>
-					plugin.settingsService.applySettingsPatch(patch),
+				getSettingsSnapshot: () => {
+					scope.check()
+					return plugin.settings
+				},
+				updateSettings: (patch) => {
+					scope.check()
+					return plugin.settingsService.applySettingsPatch(patch)
+				},
 			},
 			this.toolExecutor.getFileSystemManager(),
 		)
@@ -225,12 +276,16 @@ export default class ChatService extends BaseService {
 			this.taskManager,
 			reportTransientError,
 		)
+		this.taskManager.setUserInputPendingHandler((sessionId) =>
+			this.sessionProcessor.hasQueuedUserInput(sessionId),
+		)
 		this.taskManager.setMasterAgentInputHandler((sessionId, input, origin) =>
 			this.sessionProcessor.enqueueAgentInput(sessionId, input, origin),
 		)
 	}
 
 	private notify() {
+		if (this.scope.signal.aborted) return
 		this.notifier.notify()
 	}
 
@@ -244,7 +299,18 @@ export default class ChatService extends BaseService {
 		}
 	}
 
+	/** Settle cancellation before another activation reads the same session files. */
+	async suspend() {
+		const pending = [...this.state.runtimeBySessionId.values()].map(
+			(runtime) => runtime.processing,
+		)
+		const initialization = this.state.initialization
+		this.onunload()
+		await Promise.allSettled([...pending, initialization])
+	}
+
 	async initialize() {
+		this.scope.check()
 		if (this.state.initialization) {
 			return this.state.initialization
 		}
@@ -263,12 +329,15 @@ export default class ChatService extends BaseService {
 
 	private async initializeInternal() {
 		const initialSession = await this.store.loadInitialSession()
+		this.scope.check()
 		if (initialSession) {
 			this.taskManager.restoreMasterTaskContinuations(initialSession)
+			await this.store.persistSession(initialSession)
 		}
 
-		if (this.state.sessionIndex.length === 0) {
+		if (!this.state.sessionIndex.length) {
 			const session = await this.createEmptySession()
+			this.scope.check()
 			this.state.activeSessionId = session.id
 			this.state.loadedSessions.set(session.id, session)
 			this.store.upsertSessionIndexItem(session)
@@ -283,6 +352,7 @@ export default class ChatService extends BaseService {
 	}
 
 	async handleSettingsChanged() {
+		if (this.scope.signal.aborted) return
 		this.selection.syncPendingSelectionWithSettings()
 		if (!this.state.initialization) {
 			this.notify()
@@ -290,6 +360,7 @@ export default class ChatService extends BaseService {
 		}
 
 		await this.initialize()
+		this.scope.check()
 		const persisted: Promise<unknown>[] = []
 		for (const session of this.state.loadedSessions.values()) {
 			if (this.selection.sanitizeSessionSelection(session)) {
@@ -301,6 +372,12 @@ export default class ChatService extends BaseService {
 			await Promise.all(persisted)
 		}
 		this.notify()
+	}
+
+	async listConfigurableSkills() {
+		this.scope.check()
+		await this.skillRepository.refresh()
+		return this.skillRepository.discoverConfigurable()
 	}
 
 	getViewProps(): ChatboxProps {
@@ -336,7 +413,15 @@ export default class ChatService extends BaseService {
 			providers: this.buildProviderOptions(),
 			selectedProviderId: selection.selectedProviderId,
 			selectedModelId: selection.selectedModelId,
-			runState: activeRuntime.runState,
+			runState:
+				activeSession &&
+				(activeSession.subagents.master.status === 'waiting' ||
+					(activeRuntime.runState === 'idle' &&
+						getSessionSubagents(activeSession).some(
+							(agent) => !isTerminalAgent(agent),
+						)))
+					? 'waiting_for_agents'
+					: activeRuntime.runState,
 			draft: {
 				text: activeRuntime.draft.text,
 				userContext: activeRuntime.draft.userContext.slice(),
@@ -361,7 +446,7 @@ export default class ChatService extends BaseService {
 
 	private buildMcpServerOptions(activeSession?: ChatSession) {
 		const disabled = new Set(activeSession?.disabledMcpServers ?? [])
-		return this.plugin.mcpService
+		return this.plugin.ai.mcp
 			.getServerRuntimes()
 			.filter((runtime) => runtime.enabled)
 			.map((runtime) => ({
@@ -495,6 +580,7 @@ export default class ChatService extends BaseService {
 
 	async toggleSessionMcpServer(serverName: string) {
 		await this.initialize()
+		this.scope.check()
 		const session = this.getLoadedActiveSession()
 		if (!session) {
 			return
@@ -514,15 +600,59 @@ export default class ChatService extends BaseService {
 
 	async ensureSession() {
 		await this.initialize()
+		this.scope.check()
+	}
+
+	get workspaceState() {
+		const session = this.getLoadedActiveSession()
+		return {
+			sessionId: session?.id,
+			appId: session?.appId,
+			busy:
+				!session ||
+				isSessionExecutionPending(this.runtimeStates.get(session.id)),
+		}
+	}
+	get activeAppId() {
+		return this.workspaceState.appId
+	}
+
+	async selectWorkspace(appId?: string) {
+		await this.ensureSession()
+		const session = this.getLoadedActiveSession()
+		if (!session) throw new Error('No active chat')
+		if (isSessionExecutionPending(this.runtimeStates.get(session.id)))
+			throw new Error(
+				'Wait for the current run to finish before switching workspace',
+			)
+		if (appId) await this.plugin.ai.apps.read(appId)
+		if (isSessionExecutionPending(this.runtimeStates.get(session.id)))
+			throw new Error(
+				'Wait for the current run to finish before switching workspace',
+			)
+		this.scope.check()
+		const previous = session.appId
+		session.appId = appId
+		try {
+			await this.store.persistSession(session)
+		} catch (error) {
+			session.appId = previous
+			throw error
+		}
+		this.store.upsertSessionIndexItem(session)
+		await this.store.persistMetaAndIndex()
+		this.notify()
 	}
 
 	async createSession() {
 		await this.initialize()
+		this.scope.check()
 		const activeSession = this.getLoadedActiveSession()
 		if (activeSession && this.isUntitledEmptyActiveSession(activeSession)) {
 			return activeSession
 		}
 		const session = await this.createEmptySession()
+		this.scope.check()
 		this.state.loadedSessions.set(session.id, session)
 		this.state.activeSessionId = session.id
 		this.store.upsertSessionIndexItem(session, i18n.t('chatbox.newChat'), true)
@@ -538,7 +668,21 @@ export default class ChatService extends BaseService {
 	}
 
 	async createDraftSession(text: string, userContext: UserContextItem[] = []) {
+		await this.initialize()
+		this.scope.check()
+		const activeSession = this.getLoadedActiveSession()
+		if (activeSession) {
+			const draft = this.runtimeStates.get(activeSession.id).draft
+			if (
+				draft.text === text &&
+				haveSameUserContextItems(draft.userContext, userContext)
+			) {
+				return activeSession
+			}
+		}
+
 		const session = await this.createSession()
+		this.scope.check()
 		for (const item of userContext) {
 			this.userContextManager.addUserContext(item)
 		}
@@ -549,19 +693,23 @@ export default class ChatService extends BaseService {
 
 	async switchSession(sessionId: string) {
 		await this.initialize()
+		this.scope.check()
 		if (!this.state.sessionIndex.some((item) => item.id === sessionId)) {
 			return
 		}
 
 		const session = await this.store.loadSessionById(sessionId)
+		this.scope.check()
 		this.state.activeSessionId = sessionId
 		this.taskManager.restoreMasterTaskContinuations(session)
+		await this.store.persistSession(session)
 		await this.store.persistMetaAndIndex()
 		this.notify()
 	}
 
 	async deleteSession(sessionId: string) {
 		await this.initialize()
+		this.scope.check()
 		if (!this.state.sessionIndex.some((item) => item.id === sessionId)) {
 			return
 		}
@@ -599,6 +747,7 @@ export default class ChatService extends BaseService {
 		modalMountTarget?: ChatModalMountTarget,
 	) {
 		await this.initialize()
+		this.scope.check()
 		if (!this.state.sessionIndex.some((item) => item.id === sessionId)) {
 			new Notice(i18n.t('chatbox.errors.sessionNotFound'))
 			return
@@ -607,18 +756,21 @@ export default class ChatService extends BaseService {
 		const options = await SessionExportModal.open(
 			this.plugin.app,
 			modalMountTarget ?? this.getChatModalMountTarget(),
+			this.scope.signal,
 		)
-		if (!options) {
+		if (!options || this.scope.signal.aborted) {
 			return
 		}
 
 		try {
 			const session = await this.store.loadSessionById(sessionId)
+			this.scope.check()
 			const title =
 				this.state.sessionIndex.find((item) => item.id === sessionId)?.title ||
 				deriveTitle(session)
 			const file = await exportSessionToMarkdownFile({
-				vault: this.plugin.app.vault,
+				vault: guardAppIO(this.plugin.app, this.scope.check, this.scope.track)
+					.vault,
 				manifestId: this.plugin.manifest.id,
 				manifestVersion: this.plugin.manifest.version,
 				session,
@@ -678,26 +830,32 @@ export default class ChatService extends BaseService {
 	}
 
 	selectProvider(providerId: string) {
+		this.scope.check()
 		this.selection.selectProvider(providerId)
 	}
 
 	selectModel(modelId: string) {
+		this.scope.check()
 		this.selection.selectModel(modelId)
 	}
 
 	addUserContext(item: UserContextItem) {
+		this.scope.check()
 		this.userContextManager.addUserContext(item)
 	}
 
 	removeUserContext(index: number) {
+		this.scope.check()
 		this.userContextManager.removeUserContext(index)
 	}
 
 	resolvePendingContextItem(id: string, replacement: UserContextItem | null) {
+		this.scope.check()
 		this.userContextManager.resolvePendingContextItem(id, replacement)
 	}
 
 	updateInputDraft(text: string) {
+		this.scope.check()
 		this.userContextManager.updateInputDraft(text)
 	}
 
@@ -706,6 +864,7 @@ export default class ChatService extends BaseService {
 		activeContextItems: UserContextItem[] = [],
 	): Promise<boolean> {
 		await this.initialize()
+		this.scope.check()
 		const normalizedText = text.trim()
 		const session =
 			this.getLoadedActiveSession() || (await this.createSession())
@@ -740,6 +899,7 @@ export default class ChatService extends BaseService {
 
 	async compressContext() {
 		await this.initialize()
+		this.scope.check()
 		const session = this.getLoadedActiveSession()
 		if (!session) {
 			return
@@ -765,9 +925,7 @@ export default class ChatService extends BaseService {
 			try {
 				if (agent.timeline.length > 0) {
 					const provider = this.selection.getProviderOrThrow(session)
-					await this.plugin.nutstoreLlmGatewayService.ensureProviderReady(
-						provider,
-					)
+					await this.plugin.ai.gateway.ensureProviderReady(provider)
 					if (abortController.signal.aborted) {
 						return
 					}
@@ -836,7 +994,7 @@ export default class ChatService extends BaseService {
 				if (runtime.processing === task) runtime.processing = undefined
 				runtime.runState = 'idle'
 				this.notify()
-				if (runtime.scheduler.queued.length > 0) {
+				if (!this.scope.signal.aborted && runtime.scheduler.queued.length > 0) {
 					void this.sessionProcessor.start(session.id)
 				}
 			}
@@ -856,6 +1014,7 @@ export default class ChatService extends BaseService {
 	}
 
 	deleteMessage(messageId: string) {
+		this.scope.check()
 		this.messageOps.deleteMessage(messageId)
 	}
 
@@ -863,10 +1022,12 @@ export default class ChatService extends BaseService {
 		messageId: string,
 		options?: { restoreFiles?: boolean },
 	): Promise<RecallMessageResult | void> {
+		this.scope.check()
 		return this.messageOps.recallMessage(messageId, options)
 	}
 
 	async regenerateMessage(messageId: string) {
+		this.scope.check()
 		await this.messageOps.regenerateMessage(messageId)
 	}
 
@@ -878,6 +1039,10 @@ export default class ChatService extends BaseService {
 		if (await this.sessionProcessor.stopActiveTurn(session.id)) {
 			if (options.waitForWorker) await runtime.processing
 			return
+		}
+		if (this.taskManager.cancelAllNonTerminalAgents(session)) {
+			await this.store.persistSession(session)
+			this.notify()
 		}
 		const controller = runtime.manualCompressionAbortController
 		if (!controller) return

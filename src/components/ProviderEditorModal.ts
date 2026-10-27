@@ -1,21 +1,28 @@
-import { cloneDeep } from 'lodash-es'
-import { Modal, Notice, Setting, setIcon } from 'obsidian'
+import { cloneDeep } from 'es-toolkit/compat'
+import { ButtonComponent, Modal, Notice, Setting, setIcon } from 'obsidian'
 import {
 	createModelConfig,
 	listModels,
 	slugifyProviderId,
 } from '~/ai/catalog/config'
+import { fetchProviderModels } from '~/ai/catalog/fetch-models'
 import { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import { getProviderDefaultBaseURL } from '~/ai/providers/defaults'
 import {
 	applyObsidianModalMountTarget,
 	type ChatModalMountTarget,
 } from '~/ai/chat/ui/modal-mount'
 import i18n from '~/i18n'
-import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
+import {
+	addClassTokens,
+	removeClassTokens,
+	toggleClassTokens,
+} from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
 import ProviderCorsConfirmModal from './ProviderCorsConfirmModal'
+import ProviderSelectModelsModal from './ProviderSelectModelsModal'
 
 const API_FORMAT_OPTIONS = [
 	{
@@ -35,6 +42,7 @@ const API_FORMAT_OPTIONS = [
 export default class ProviderEditorModal extends Modal {
 	private draft: AIProviderConfig
 	private cleanupModalMount?: () => void
+	private isFetchingModels = false
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -44,6 +52,7 @@ export default class ProviderEditorModal extends Modal {
 		private readonly mountTarget?: ChatModalMountTarget,
 	) {
 		super(plugin.app)
+		plugin.ai.lifecycle.scope.ownModal(this)
 		this.draft = cloneDeep(provider)
 	}
 
@@ -107,6 +116,7 @@ export default class ProviderEditorModal extends Modal {
 			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case -- URL examples are case-sensitive machine input, not prose.
 					.setPlaceholder('https://api.openai.com/v1')
 					.setValue(this.draft.api || '')
 					.onChange((value) => {
@@ -136,10 +146,13 @@ export default class ProviderEditorModal extends Modal {
 							this.draft.allowBrowserCors = false
 							return
 						}
-						const confirmed = await new ProviderCorsConfirmModal(
-							this.app,
-							this.mountTarget,
-						).openAndWait()
+						const scope = this.plugin.ai.lifecycle.scope
+						const confirmed = await scope
+							.ownModal(
+								new ProviderCorsConfirmModal(this.app, this.mountTarget),
+							)
+							.openAndWait()
+						if (scope.signal.aborted) return
 						if (!confirmed) {
 							this.render()
 							return
@@ -154,6 +167,12 @@ export default class ProviderEditorModal extends Modal {
 		new Setting(modelContainer)
 			.setName(i18n.t('settings.ai.models.name'))
 			.setDesc(i18n.t('settings.ai.models.desc'))
+			.addButton((button) => {
+				this.updateFetchButton(button)
+				button.onClick(async () => {
+					await this.fetchModels(button)
+				})
+			})
 			.addButton((button) =>
 				button.setButtonText(i18n.t('settings.ai.models.add')).onClick(() => {
 					new ModelEditorModal(
@@ -219,8 +238,15 @@ export default class ProviderEditorModal extends Modal {
 										new Notice(i18n.t('settings.ai.errors.duplicateModelId'))
 										return false
 									}
-									const { [model.id]: _old, ...rest } = this.draft.models
-									this.draft.models = { ...rest, [savedModel.id]: savedModel }
+									const nextModels: Record<string, AIModelConfig> = {}
+									for (const [key, val] of Object.entries(this.draft.models)) {
+										if (key === model.id) {
+											nextModels[savedModel.id] = savedModel
+										} else {
+											nextModels[key] = val
+										}
+									}
+									this.draft.models = nextModels
 									this.render()
 									return true
 								},
@@ -292,6 +318,83 @@ export default class ProviderEditorModal extends Modal {
 		this.draft.models = models
 		new Notice(i18n.t('settings.ai.modals.model.deleted'))
 		this.render()
+	}
+
+	private updateFetchButton(button: ButtonComponent) {
+		button
+			.setDisabled(this.isFetchingModels)
+			.setButtonText(
+				i18n.t(
+					this.isFetchingModels
+						? 'settings.ai.models.fetching'
+						: 'settings.ai.models.fetch',
+				),
+			)
+		toggleClassTokens(
+			button.buttonEl,
+			':uno: connection-button loading opacity-50 pointer-events-none',
+			this.isFetchingModels,
+		)
+	}
+
+	private async fetchModels(button: ButtonComponent) {
+		if (this.isFetchingModels) return
+		const baseURL =
+			this.draft.api?.trim() || getProviderDefaultBaseURL(this.draft.npm)
+		if (!baseURL) {
+			new Notice(i18n.t('chatbox.errors.providerBaseUrlRequired'))
+			return
+		}
+
+		this.isFetchingModels = true
+		this.updateFetchButton(button)
+
+		const scope = this.plugin.ai.lifecycle.scope
+
+		try {
+			const models = await fetchProviderModels(this.draft, {
+				signal: scope.signal,
+			})
+			if (scope.signal.aborted) return
+
+			if (models.length === 0) {
+				new Notice(i18n.t('settings.ai.models.noModelsFound'))
+				return
+			}
+
+			new ProviderSelectModelsModal(
+				this.plugin,
+				models,
+				(selected) => {
+					const models = { ...this.draft.models }
+					for (const item of selected) {
+						models[item.id] = item.modelConfig
+					}
+					this.draft.models = models
+					this.render()
+					new Notice(
+						i18n.t('settings.ai.models.modelsAdded', {
+							count: selected.length,
+						}),
+					)
+				},
+				this.mountTarget,
+			).open()
+		} catch (error) {
+			if (scope.signal.aborted) return
+			logger.error('Failed to fetch provider models', error)
+			new Notice(
+				i18n.t('settings.ai.models.fetchFailed', {
+					reason: error instanceof Error ? error.message : String(error),
+				}),
+				10000,
+			)
+		} finally {
+			if (!scope.signal.aborted) {
+				this.isFetchingModels = false
+				this.updateFetchButton(button)
+			}
+		}
 	}
 
 	open() {

@@ -3,6 +3,11 @@
 		"filenameUnsupportedChars": "文件 {{path}} 包含不支持的字符：{{chars}}"
 	},
 	"settings": {
+		"modules": {
+			"sync": "启用同步模块",
+			"ai": "启用 AI 模块",
+			"description": "关闭后停止该模块，会禁用相关代码，保留已有配置和数据。"
+		},
 		"language": {
 			"name": "语言",
 			"desc": "选择界面语言",
@@ -44,7 +49,7 @@
 			"name": "冲突解决策略",
 			"desc": "选择解决文件冲突的方式。\n注意：建议在使用自动合并功能前，先手动备份重要文件，以防数据丢失。",
 			"noConflictMerge": "无冲突合并",
-			"diff3": "自动合并（保留双方改动并用标记标出）",
+			"diff3": "自动合并（保留冲突标记）",
 			"localPriority": "本地优先（覆盖服务器）",
 			"serverPriority": "服务器优先（覆盖本地）"
 		},
@@ -57,7 +62,8 @@
 			"loggedIn": "已登录",
 			"notLoggedIn": "未登录",
 			"logout": "退出登录",
-			"logoutSuccess": "已退出登录"
+			"logoutSuccess": "已退出登录",
+			"webViewerWarning": "警告：Web Viewer 可能导致授权失败。请先在 Obsidian 核心插件中关闭它，再进行授权。"
 		},
 		"logout": {
 			"confirmTitle": "确认退出",
@@ -83,7 +89,10 @@
 		},
 		"sections": {
 			"account": "账号设置",
-			"common": "通用设置",
+			"sync": "同步设置",
+			"automation": "自动同步",
+			"transfer": "文件传输",
+			"interface": "界面",
 			"filters": "过滤规则",
 			"ai": "AI 设置"
 		},
@@ -93,6 +102,19 @@
 			"troubleshooting": "排障"
 		},
 		"ai": {
+			"preferences": "偏好设置",
+			"sessionAppOpenMode": {
+				"name": "会话 App 打开方式",
+				"desc": "选择桌面端进入会话时是否自动打开关联的 App。仅对当前设备生效，始终可以手动打开。",
+				"automatic": "自动打开",
+				"manual": "手动打开"
+			},
+			"chatboxLocation": {
+				"name": "Chatbox 打开位置",
+				"desc": "设置当前设备上 Chatbox 的打开位置，下次打开时生效。手机上可选择编辑器视图以获得更大空间。",
+				"sidebar": "侧边栏",
+				"editor": "编辑器视图"
+			},
 			"saved": "AI 设置已保存",
 			"none": "未设置",
 			"unnamedProvider": "未命名模型提供商",
@@ -102,7 +124,7 @@
 				"desc": "新建对话时可选的默认模型"
 			},
 			"nutstoreLlmGateway": {
-				"name": "坚果云 AI（实验性）",
+				"name": "坚果云 AI",
 				"providerName": "坚果云",
 				"desc": "授权后可使用坚果云提供的模型。",
 				"pendingDesc": "请在浏览器中完成授权，当前验证码：{{code}}",
@@ -114,12 +136,43 @@
 				"authorized": "坚果云 AI 授权成功",
 				"disconnect": "断开",
 				"disconnected": "已断开坚果云 AI",
-				"refreshModels": "更新",
-				"betaModal": {
-					"title": "功能内测中",
-					"message": "坚果云 AI 目前处于内测阶段，尚未向所有用户开放。如果您不在内测名单中，授权后可能暂时无法使用相关功能，请继续等待，我们正在陆续开放中。",
-					"cancel": "取消",
-					"confirm": "我知道了，继续授权"
+				"refreshModels": "更新模型",
+				"tabs": {
+					"models": "模型列表",
+					"usage": "额度"
+				},
+				"models": {
+					"title": "可用模型",
+					"available": "当前可用模型",
+					"count": "共 {{count}} 个",
+					"empty": "当前暂无可用模型。",
+					"changes": "模型列表变更",
+					"diffSummary": "+{{added}} 新增 · −{{removed}} 移除",
+					"refreshed": "已更新",
+					"updatedAt": "模型列表更新于 {{time}}"
+				},
+				"usage": {
+					"button": "概览",
+					"title": "坚果云 AI 概览",
+					"description": "查看额度用量，或更新可用模型列表。",
+					"refresh": "刷新额度",
+					"refreshing": "刷新中…",
+					"refreshed": "已刷新",
+					"updatingModels": "更新中…",
+					"loading": "正在获取额度信息…",
+					"loadFailed": "获取额度信息失败",
+					"empty": "服务端暂未返回额度或用量信息。",
+					"updatedAt": "更新于 {{time}}",
+					"availableCredit": "当前可用积分",
+					"requestLimit": "请求限额",
+					"monthly": "月度积分",
+					"grant": "赠送积分",
+					"topup": "充值积分",
+					"requestCount": "已使用 {{used}} / {{total}} 次",
+					"creditAmount": "已使用 {{used}} / {{total}} 积分",
+					"resetsAt": "下次重置：{{time}}",
+					"expiresAt": "到期时间：{{time}}",
+					"usedPercent": "已使用 {{percent}}%"
 				},
 				"errors": {
 					"authorizationRequired": "请先授权坚果云 AI",
@@ -128,6 +181,7 @@
 					"missingClientId": "缺少 LLM_GATEWAY_CLIENT_ID，无法启动坚果云 AI 授权",
 					"modelsFailed": "获取坚果云 AI 模型失败：{{status}}",
 					"emptyModels": "坚果云 AI 没有返回可用模型",
+					"usageFailed": "获取坚果云 AI 额度失败：{{status}}",
 					"refreshFailed": "刷新坚果云 AI 模型失败"
 				}
 			},
@@ -181,12 +235,30 @@
 				"name": "模型",
 				"desc": "在当前模型提供商下可用的模型",
 				"add": "新增模型",
-				"empty": "当前模型提供商下还没有模型。"
+				"fetch": "获取模型",
+				"fetching": "获取中...",
+				"empty": "当前模型提供商下还没有模型。",
+				"selectModelsTitle": "选择要添加的模型",
+				"selectModelsDesc": "以下是模型提供商的可用模型，勾选要添加的模型。",
+				"searchPlaceholder": "搜索模型",
+				"selectAll": "全选",
+				"deselectAll": "取消全选",
+				"addSelected": "添加所选",
+				"noModelsFound": "未获取到可用模型",
+				"noModelsSelected": "请至少勾选一个模型",
+				"modelsAdded": "已成功添加 {{count}} 个模型",
+				"noMatchingModels": "未找到匹配的模型",
+				"fetchFailed": "获取模型失败：{{reason}}",
+				"invalidJsonResponse": "模型列表响应不是合法的 JSON 数据"
 			},
 			"model": {
 				"id": "模型 ID",
 				"idDesc": "请求 API 时使用的模型标识（如 gpt-4o）",
-				"inputModalities": "输入模态"
+				"inputModalities": "输入模态",
+				"contextLimit": "上下文窗口大小",
+				"contextLimitDesc": "模型上下文限制，支持纯数字或 128k、1M 等缩写",
+				"outputLimit": "最大输出 Token",
+				"outputLimitDesc": "单次生成的最大 Token 限制，支持纯数字或 4k、65k 等缩写"
 			},
 			"modals": {
 				"confirmDeleteLabel": "确认",
@@ -257,6 +329,19 @@
 				"name": "完全访问权限",
 				"desc": "⚠️ 开启后，AI 可自动修改文件和插件设置，不再逐次询问确认"
 			},
+			"memory": {
+				"heading": "记忆",
+				"enabled": {
+					"name": "启用记忆",
+					"desc": "AI 会跨会话记住偏好、约定、决定和进行中的工作。每次改动都会显示在对话中，撤回消息并还原修改即可撤销。记忆保存在插件目录中，可在此查看和编辑。"
+				},
+				"path": {
+					"name": "记忆笔记",
+					"desc": "位于 .agents/nutstore-sync/ 内的 Markdown 文件。AI 第一次记住内容时创建。",
+					"invalid": "记忆必须是 .agents/nutstore-sync/ 内的 .md 文件。"
+				},
+				"open": "编辑"
+			},
 			"subagents": {
 				"heading": "子 Agent",
 				"explorer": {
@@ -266,14 +351,14 @@
 						"name": "Explorer 模型",
 						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
 					}
-				},
-				"memory": {
-					"name": "Memory",
-					"desc": "用于检索和维护跨会话偏好、约定和决定的 Agent。",
-					"model": {
-						"name": "Memory 模型",
-						"desc": "留空时继承派发该任务的 Agent 所使用的模型。"
-					}
+				}
+			},
+			"skills": {
+				"heading": "技能",
+				"empty": "未在库中发现可管理的技能。",
+				"enabled": "启用",
+				"diagnostics": {
+					"heading": "技能诊断"
 				}
 			},
 			"errors": {
@@ -282,6 +367,8 @@
 				"invalidProvidersConfig": "AI 模型提供商配置无效，请在设置中修正。详情：{{reason}}",
 				"emptyModelId": "模型 ID 不能为空",
 				"duplicateModelId": "已存在相同 ID 的模型",
+				"invalidContextLimit": "上下文窗口大小格式不正确（支持 128k、1M 或纯数字）",
+				"invalidOutputLimit": "最大输出 Token 格式不正确（支持 4k、65k 或纯数字）",
 				"emptyProviderId": "模型提供商名称不能为空",
 				"duplicateProviderId": "已存在相同名称的模型提供商",
 				"reservedProviderId": "该模型提供商名称由坚果云 AI 保留，请使用其他名称",
@@ -319,13 +406,128 @@
 			"receiveOnlyRevertLocalChanges": "仅接收：还原本地变更",
 			"modal": {
 				"title": "确认同步策略",
-				"twoWayDesc": "同步规则：双向同步\n\n• 仅本地变更 → 更新云端\n• 仅云端变更 → 更新本地\n• 本地和云端都变更 → 按已配置的冲突策略处理\n• 一侧删除、另一侧未变更 → 将删除同步到另一侧\n• 一侧删除、另一侧已变更 → 保留已变更内容，并恢复被删除的一侧",
-				"sendOnlyDesc": "同步规则：本地 → 云端（保护云端独立变更）\n\n• 本地新增或修改，且云端未独立删除 → 上传到云端\n• 云端独立新增或修改 → 保留云端，不下载\n• 本地和云端都修改 → 跳过并保留云端\n• 本地删除、云端未变更 → 删除云端\n• 本地删除、云端也变更 → 跳过并保留云端\n• 已有同步记录的文件若已在云端删除 → 保留云端删除，不自动恢复；需要“仅发送：覆盖云端”才恢复\n\n适合：以本地为主，同时保护云端独立变更。",
-				"sendOnlyOverrideChangesDesc": "同步规则：云端 ← 本地当前状态\n\n• 本地存在的文件 → 创建或覆盖云端文件\n• 云端存在、本地不存在 → 删除云端\n• 同一路径两边不一致 → 以本地为准\n\n⚠️ 可能删除云端多余文件。\n适合：需要让云端与本地完全一致时使用。",
-				"receiveOnlyDesc": "同步规则：云端 → 本地（保护本地独立变更）\n\n• 云端新增或修改，且本地没有需要保护的删除 → 下载到本地\n• 本地独立新增或修改 → 保留本地，不上传\n• 本地和云端都修改 → 跳过并保留本地\n• 云端删除、本地未变更 → 删除本地\n• 云端删除、本地也变更 → 跳过并保留本地\n• 已有同步记录的文件若已在本地删除 → 保留本地删除，不自动恢复；需要“仅接收：还原本地”才恢复\n\n适合：以云端为主，同时保护本地独立变更。",
-				"receiveOnlyRevertLocalChangesDesc": "同步规则：本地 ← 云端当前状态\n\n• 云端存在的文件 → 创建或覆盖本地文件\n• 本地存在、云端不存在 → 删除本地\n• 同一路径两边不一致 → 以云端为准\n\n⚠️ 可能删除本地多余文件。\n适合：需要让本地与云端完全一致时使用。",
 				"confirm": "确认",
 				"cancel": "取消"
+			},
+			"rules": {
+				"twoWay": {
+					"rows": [
+						{
+							"condition": "仅本地变更",
+							"result": "更新云端"
+						},
+						{
+							"condition": "仅云端变更",
+							"result": "更新本地"
+						},
+						{
+							"condition": "本地和云端都变更",
+							"result": "{{strategy}}",
+							"conflict": true
+						},
+						{
+							"condition": "一侧删除、另一侧未变更",
+							"result": "将删除同步到另一侧"
+						},
+						{
+							"condition": "一侧删除、另一侧已变更",
+							"result": "保留已变更内容，并恢复被删除的一侧"
+						}
+					],
+					"note": ""
+				},
+				"sendOnly": {
+					"rows": [
+						{
+							"condition": "本地新增或修改，且云端未独立删除",
+							"result": "上传到云端"
+						},
+						{
+							"condition": "云端独立新增或修改",
+							"result": "保留云端，不下载"
+						},
+						{
+							"condition": "本地和云端都修改",
+							"result": "跳过并保留云端"
+						},
+						{
+							"condition": "本地删除、云端未变更",
+							"result": "删除云端"
+						},
+						{
+							"condition": "本地删除、云端也变更",
+							"result": "跳过并保留云端"
+						},
+						{
+							"condition": "已有同步记录的文件若已在云端删除",
+							"result": "保留云端删除，不自动恢复；需要“仅发送：覆盖云端”才恢复"
+						}
+					],
+					"note": "适合：以本地为主，同时保护云端独立变更。"
+				},
+				"sendOnlyOverrideChanges": {
+					"rows": [
+						{
+							"condition": "本地存在的文件",
+							"result": "创建或覆盖云端文件"
+						},
+						{
+							"condition": "云端存在、本地不存在",
+							"result": "删除云端"
+						},
+						{
+							"condition": "同一路径两边不一致",
+							"result": "以本地为准"
+						}
+					],
+					"note": "⚠️ 可能删除云端多余文件。\n适合：需要让云端与本地完全一致时使用。"
+				},
+				"receiveOnly": {
+					"rows": [
+						{
+							"condition": "云端新增或修改，且本地没有需要保护的删除",
+							"result": "下载到本地"
+						},
+						{
+							"condition": "本地独立新增或修改",
+							"result": "保留本地，不上传"
+						},
+						{
+							"condition": "本地和云端都修改",
+							"result": "跳过并保留本地"
+						},
+						{
+							"condition": "云端删除、本地未变更",
+							"result": "删除本地"
+						},
+						{
+							"condition": "云端删除、本地也变更",
+							"result": "跳过并保留本地"
+						},
+						{
+							"condition": "已有同步记录的文件若已在本地删除",
+							"result": "保留本地删除，不自动恢复；需要“仅接收：还原本地”才恢复"
+						}
+					],
+					"note": "适合：以云端为主，同时保护本地独立变更。"
+				},
+				"receiveOnlyRevertLocalChanges": {
+					"rows": [
+						{
+							"condition": "云端存在的文件",
+							"result": "创建或覆盖本地文件"
+						},
+						{
+							"condition": "本地存在、云端不存在",
+							"result": "删除本地"
+						},
+						{
+							"condition": "同一路径两边不一致",
+							"result": "以云端为准"
+						}
+					],
+					"note": "⚠️ 可能删除本地多余文件。\n适合：需要让本地与云端完全一致时使用。"
+				}
 			}
 		},
 		"startupSyncDelay": {
@@ -404,7 +606,13 @@
 			"clearDesc": "删除所有控制台输出记录"
 		},
 		"troubleshooting": {
-			"title": "排障"
+			"title": "排障",
+			"pluginInfo": "插件与环境信息",
+			"platform": "运行平台",
+			"language": "界面语言",
+			"unknownPlatform": "未知平台",
+			"webviewRuntime": "运行时",
+			"unknownRuntime": "未知"
 		},
 		"cache": {
 			"title": "缓存管理",
@@ -521,6 +729,11 @@
 		"requestsTooFrequent": "请求过于频繁，插件将在 {{time}} 后自动继续同步任务",
 		"preparing": "📋 准备同步",
 		"preparation": {
+			"progressLabel": "扫描进度",
+			"scannedDirectories": "已扫描目录",
+			"queuedDirectories": "待扫描目录",
+			"discoveredItems": "已发现项目",
+			"knownDirectoriesHint": "按当前已发现目录计算，扫描中会继续发现新目录",
 			"checkingRemote": "正在检查远端目录…",
 			"loadingState": "正在读取同步状态…",
 			"scanningRemote": "正在扫描远端目录…",
@@ -535,6 +748,8 @@
 		"complete": "✅ 同步完成",
 		"completeWithFailed": "❌ 同步完成，但有 {{failedCount}} 个任务失败",
 		"failedWithError": "同步失败，错误信息: {{error}}",
+		"incompleteScanAutoRetry": "本次文件扫描未能完整完成，同步已安全停止，未执行任何文件更改。插件将在下次自动同步时重新尝试，你也可以稍后手动同步。",
+		"incompleteScanManualRetry": "本次文件扫描未能完整完成，同步已安全停止，未执行任何文件更改。请稍后手动重试。",
 		"progress": "同步进度: {{percent}}%",
 		"blockedBySync": "同步正在进行中，请稍后再试。",
 		"stoppingGcForSync": "检测到垃圾回收正在进行，正在停止清理并开始同步。",
@@ -582,14 +797,29 @@
 		},
 		"confirmModal": {
 			"title": "同步确认",
-			"policyTitle": "本次同步策略",
-			"policyBasis": "判断基准：将当前本地与云端状态分别和上次同步记录比较。\n没有同步记录时，宽松模式会把同路径、同类型且大小相同的文件视为一致；严格模式按所选策略处理。",
+			"policyTitle": "同步方式",
+			"policyBasis": "分别与上次同步记录比较。无记录时，宽松模式视同路径、同类型且大小相同的文件为一致；严格模式按所选策略处理。",
 			"policyRecordNote": "“保留”或“跳过”不会标记为已同步，下一次仍会按同步记录重新判断。",
-			"message": "⚠️ 请注意：\n\n1. 同步操作可能会修改或删除本地文件\n2. 建议在同步前手动备份重要文件\n3. 如果出现文件冲突，可能需要手动解决\n4. 首次同步需要处理所有文件，可能会比较慢，请耐心等待\n\n确定要开始同步吗？",
+			"message": "同步可能修改或删除本地文件，建议先手动备份重要文件。冲突可能需手动处理；首次同步需处理所有文件，耗时可能较长。",
 			"confirm": "确认同步",
 			"cancel": "取消",
 			"remoteDir": "远程目录：{{dir}}",
-			"strategy": "冲突处理策略：{{strategy}}"
+			"conflictTitle": "冲突处理",
+			"rulesTitle": "同步规则",
+			"mergeFilesOnly": "合并策略仅适用于支持合并的文件。",
+			"priorityFilesOnly": "仅决定冲突文件的版本。",
+			"scope": "选择仅对本次生效",
+			"condition": "情况",
+			"result": "本次处理",
+			"configuredStrategy": "按已配置的冲突策略处理",
+			"basisTitle": "判断依据",
+			"actions": {
+				"twoWay": "确认同步",
+				"sendOnly": "确认发送",
+				"sendOnlyOverrideChanges": "覆盖云端并发送",
+				"receiveOnly": "确认接收",
+				"receiveOnlyRevertLocalChanges": "还原本地并接收"
+			}
 		}
 	},
 	"taskList": {
@@ -710,11 +940,15 @@
 				"toolCall": "工具调用",
 				"params": "参数",
 				"result": "结果",
-				"queuedSubmissions": "排队内容",
+				"queuedSubmissions": "待发送",
 				"contextArea": "上下文",
 				"reasoning": "推理",
 				"todoList": "待办列表",
-				"systemNotification": "系统通知"
+				"systemNotification": "系统通知",
+				"agentMessage": "Agent 消息",
+				"followupTask": "后续任务",
+				"sender": "发送方",
+				"recipient": "接收方"
 			},
 			"fileChanges": {
 				"create": "新增",
@@ -726,7 +960,8 @@
 				"loading": "正在恢复聊天…",
 				"empty": "开始发送一条消息",
 				"dragFilePrompt": "松手以添加文件",
-				"thinking": "思考中",
+				"thoughtProcess": "执行过程",
+				"thinking": "处理中",
 				"compressing": "压缩中",
 				"processingTools": "工具处理中",
 				"noProvider": "未选择 Provider",
@@ -743,7 +978,8 @@
 				"noSubagentMessages": "该子 Agent 尚未产生消息。",
 				"copied": "已复制",
 				"loadingContextItem": "加载中…",
-				"todoEmpty": "暂无待办"
+				"todoEmpty": "暂无待办",
+				"agentWaiting": "正在等待 Agent 消息"
 			},
 			"placeholders": {
 				"input": "输入消息，Enter 发送，Shift+Enter 换行"
@@ -812,6 +1048,10 @@
 			"agentNotDispatchable": "该 Agent 类型不可派发：{{agentType}}",
 			"taskSessionUnavailable": "任务对应的会话或模型配置已不可用",
 			"contextCompressionFailed": "上下文压缩未返回摘要"
+		},
+		"memory": {
+			"remember": "记住",
+			"forget": "忘记"
 		}
 	},
 	"taskSelectionVirtualList": {
@@ -841,5 +1081,36 @@
 		"labels": {
 			"currentPath": "当前路径"
 		}
+	},
+	"memory": {
+		"openCommand": "编辑 AI 记忆",
+		"openFailed": "无法打开记忆笔记 {{path}}。",
+		"saveFailed": "无法保存记忆文件 {{path}}。",
+		"changed": "记忆文件已发生变化。请复制你的修改，重新打开后再编辑保存。",
+		"saveAndClose": "保存并关闭",
+		"cancel": "取消"
+	},
+	"apps": {
+		"openApp": "打开 App",
+		"modify": "继续修改",
+		"pin": "固定到 ribbon",
+		"unpin": "取消 ribbon 固定",
+		"createApp": "创建 App",
+		"createAppName": "App 名称",
+		"createAppNameDesc": "可选。将作为 App 的名称。",
+		"createAppNamePlaceholder": "例如：任务清单",
+		"createAppDescription": "App 描述",
+		"createAppDescriptionDesc": "必填。描述 App 的用途和功能。",
+		"createAppDescriptionPlaceholder": "描述界面、功能和操作方式。",
+		"create": "创建",
+		"cancel": "取消",
+		"deleteApp": "删除 App",
+		"deleteAppPrompt": "删除此 App 及其数据？会话记录会保留。",
+		"workspace": "App 工作区",
+		"noWorkspace": "普通对话",
+		"missingApp": "App 工作区已不存在或无法读取",
+		"describeApp": "在聊天中描述你想制作的内容，App 会在这里呈现。",
+		"createPrompt": "写一个App，这是他的描述：",
+		"createPromptName": "App 名称：{{name}}"
 	}
 }

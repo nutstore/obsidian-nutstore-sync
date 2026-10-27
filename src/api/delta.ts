@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import { decode as decodeHtmlEntities } from 'html-entities'
-import { isNil } from 'lodash-es'
+import { isNil } from 'es-toolkit/compat'
 import type { NutstoreSettings } from '~/settings'
 import { apiLimiter } from '~/utils/api-limiter'
 import { NSAPI } from '~/utils/ns-api'
@@ -29,10 +29,18 @@ interface GetDeltaInput {
 	cursor?: string
 	settings: NutstoreSettings
 	token: string
+	throwIfCancelled?: () => void
 }
 
 export const getDelta = apiLimiter.wrap(
-	async ({ folderName, cursor, settings, token }: GetDeltaInput) => {
+	async ({
+		folderName,
+		cursor,
+		settings,
+		token,
+		throwIfCancelled,
+	}: GetDeltaInput) => {
+		throwIfCancelled?.()
 		const body = `<?xml version="1.0" encoding="utf-8"?>
               <s:delta xmlns:s="http://ns.jianguoyun.com">
                   <s:folderName>${folderName}</s:folderName>
@@ -48,6 +56,7 @@ export const getDelta = apiLimiter.wrap(
 			body,
 		})
 
+		throwIfCancelled?.()
 		const parseXml = new XMLParser({
 			attributeNamePrefix: '',
 			removeNSPrefix: true,

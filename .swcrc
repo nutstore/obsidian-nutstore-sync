@@ -14,10 +14,20 @@
 			"topLevelAwait": false,
 			"importMeta": false
 		},
-		"target": "es5",
 		"loose": false,
 		"externalHelpers": false,
-		"keepClassNames": false
+		"keepClassNames": false,
+		"minify": {
+			"compress": true,
+			"mangle": true
+		}
 	},
-	"minify": true
+	"minify": true,
+	"env": {
+		"targets": {
+			"chrome": "69",
+			"electron": "30",
+			"ios": "12"
+		}
+	}
 }

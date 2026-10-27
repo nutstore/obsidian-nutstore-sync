@@ -4,7 +4,6 @@ import {
 	type AssistantModelMessage,
 	type ContentPart,
 	type ModelMessage,
-	type StopCondition,
 	type ToolCallPart,
 	type ToolSet,
 } from 'ai'
@@ -13,6 +12,9 @@ import type { ChatSession } from '~/ai/chat/domain'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import { messageToText } from '~/ai/chat/messages/message-utils'
 import {
+	consumePendingInputs,
+	hasPendingInputs,
+	isTerminalToolPart,
 	selectContextTimeline,
 	uiMessagesToModelMessages,
 } from '~/ai/chat/messages/ui-message'
@@ -44,12 +46,32 @@ import {
 	createViewImageAttachmentMessage,
 	InMemoryViewImageAttachmentRegistry,
 } from '~/ai/tools/view-image-attachments'
-import { createAbortError } from '~/ai/transport/abort'
+import { createAbortError } from '~/utils/abort'
 import i18n from '~/i18n'
 
 export type AgentTurnResult =
 	| { status: 'completed'; text: string }
-	| { status: 'needs-compaction'; continuation: ToolCallRepeatState }
+	| {
+			status: 'needs-compaction' | 'needs-input'
+			continuation: ToolCallRepeatState
+	  }
+
+/**
+ * Tool calls of the most recent assistant step. A run that yielded at a tool
+ * boundary never reached the next prepareStep, so these calls can still hold
+ * uninjected tool images when the transcript is replayed.
+ */
+function findLastAssistantToolCalls(messages: ModelMessage[]): ToolCallPart[] {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index]
+		if (message.role !== 'assistant' || !Array.isArray(message.content))
+			continue
+		return message.content.filter(
+			(part): part is ToolCallPart => part.type === 'tool-call',
+		)
+	}
+	return []
+}
 
 interface RunAgentTurnOptions {
 	session: ChatSession
@@ -64,6 +86,8 @@ interface RunAgentTurnOptions {
 	continuation?: ToolCallRepeatState
 	abortSignal?: AbortSignal
 	shouldSuspendAfterToolStep?: () => boolean | Promise<boolean>
+	/** Finish at a fully paired tool boundary so the scheduler can admit new input. */
+	shouldYieldAfterToolStep?: () => boolean
 	buildMessages?: (
 		agent: ChatAgentState,
 		tools: ToolSet,
@@ -91,12 +115,17 @@ export class AgentRunner {
 		const stableContext = this.toolExecutor.createStableToolsContext(
 			session,
 			definition,
+			options.abortSignal,
 		)
 		const systemPrompt = await buildAgentSystemPrompt(
 			this.app,
 			agent.type,
 			session.systemPrompt,
+			undefined,
+			agent.id,
+			session.appId,
 		)
+		consumePendingInputs(agent)
 		const messages = options.buildMessages
 			? await options.buildMessages(agent, tools)
 			: await uiMessagesToModelMessages(
@@ -134,7 +163,16 @@ export class AgentRunner {
 			readTracker,
 			recordMetadata,
 		}
+		const communicationContext = {
+			session,
+			agentId: agent.id,
+			origin: options.taskOrigin,
+			communication: stableContext.communication!,
+		}
 		const toolsContext = {
+			list_agents: communicationContext,
+			send_message: communicationContext,
+			followup_task: communicationContext,
 			bash: {
 				...fileToolsContext,
 				getSettingsSnapshot: stableContext.getSettingsSnapshot,
@@ -152,6 +190,12 @@ export class AgentRunner {
 				viewImageAttachments,
 			},
 			update_session_title: { recordMetadata },
+			memory: {
+				app: stableContext.app,
+				fileSystemManager: stableContext.fileSystemManager,
+				recordMetadata,
+				memory: stableContext.memory,
+			},
 			...(tools.todowrite ? { todowrite: { session, recordMetadata } } : {}),
 			...(tools.task
 				? {
@@ -172,34 +216,52 @@ export class AgentRunner {
 		}
 		let shouldSuspend = false
 		let finalMessage: AssistantModelMessage | undefined
-		const repeatedToolCalls: StopCondition<typeof tools> = ({ steps }) => {
-			const calls = steps.at(-1)?.toolCalls ?? []
+		const repeatedToolCalls = ({
+			steps,
+		}: {
+			steps: Array<{ toolCalls: Array<ToolCallPart | undefined> }>
+		}) => {
+			const calls =
+				steps
+					.at(-1)
+					?.toolCalls.filter((call): call is ToolCallPart => !!call) ?? []
 			if (!calls.length) return false
-			repeatState = updateToolCallRepeatState(
-				repeatState,
-				calls as ToolCallPart[],
-			)
+			repeatState = updateToolCallRepeatState(repeatState, calls)
 			return repeatState.isRepeatedTooManyTimes
 		}
-		const suspendAtStepBoundary: StopCondition<typeof tools> = async ({
+		const suspendAtStepBoundary = async ({
 			steps,
+		}: {
+			steps: Array<{ toolCalls: unknown[] }>
 		}) => {
 			if (!steps.at(-1)?.toolCalls.length) return false
+			// Provider tools may defer their results to another step. Never insert
+			// a new user message while any call still lacks its terminal outcome.
+			if (
+				agent.timeline.some((message) =>
+					message.parts.some(
+						(part) => part.type === 'dynamic-tool' && !isTerminalToolPart(part),
+					),
+				)
+			)
+				return false
+			if (hasPendingInputs(agent) || options.shouldYieldAfterToolStep?.())
+				return true
 			shouldSuspend = (await options.shouldSuspendAfterToolStep?.()) ?? false
 			return shouldSuspend
 		}
 		const toolLoop = new ToolLoopAgent({
 			model,
 			instructions: systemPrompt,
-			tools,
-			toolsContext,
 			stopWhen: [isLoopFinished(), repeatedToolCalls, suspendAtStepBoundary],
 			maxOutputTokens: resolveModelOutputLimit(options.model),
-			prepareStep: async ({ messages, steps }) => {
+			prepareStep: async ({ messages }) => {
 				readTracker.resetSnapshot()
 				await projector.project({ type: 'step-start' })
+				// A scheduler handoff can end the previous run before prepareStep
+				// attached its tool images. Recover them from the rebuilt transcript.
 				const attachments = viewImageAttachments.takeUninjected(
-					(steps.at(-1)?.toolCalls ?? []) as ToolCallPart[],
+					findLastAssistantToolCalls(messages),
 				)
 				const attachmentMessage = createViewImageAttachmentMessage(attachments)
 				if (!attachmentMessage) return {}
@@ -207,6 +269,8 @@ export class AgentRunner {
 					messages: [...messages, attachmentMessage],
 				}
 			},
+			tools,
+			toolsContext,
 		})
 		const result = await toolLoop.stream({
 			messages: prepareMessagesForModel(
@@ -271,6 +335,20 @@ export class AgentRunner {
 			if (chunk.type === 'text-delta' && chunk.text) {
 				await projector.project({ type: 'text-delta', delta: chunk.text })
 			}
+			if (chunk.type === 'reasoning-delta')
+				await projector.project({ type: 'reasoning-delta', delta: chunk.text })
+			if (chunk.type === 'tool-input-start')
+				await projector.project({
+					type: 'tool-input-start',
+					id: chunk.id,
+					toolName: chunk.toolName,
+				})
+			if (chunk.type === 'tool-input-delta')
+				await projector.project({
+					type: 'tool-input-delta',
+					id: chunk.id,
+					delta: chunk.delta,
+				})
 			if (chunk.type === 'error') throw chunk.error
 			if (chunk.type === 'abort') {
 				throw options.abortSignal?.reason ?? new Error('Agent run aborted')
@@ -279,6 +357,9 @@ export class AgentRunner {
 
 		if (!options.isTurnAlive()) {
 			throw createAbortError('Agent turn cancelled')
+		}
+		if (hasPendingInputs(agent)) {
+			return { status: 'needs-input', continuation: repeatState }
 		}
 		if (shouldSuspend) {
 			return {

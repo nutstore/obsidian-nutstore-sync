@@ -18,6 +18,7 @@ import type {
 	ReversibleToolOp,
 	WorkspaceContextDelta,
 } from '~/ai/chat/types'
+import { serializeWorkspaceContext } from '~/ai/chat/context/workspace-context-serialization'
 import { MASTER_AGENT_ID } from '~/ai/chat/agents/registry'
 import { CHECKPOINT_PREAMBLE } from '~/ai/chat/prompts'
 import type { UserContextManager } from '~/ai/chat/context/user-context-manager'
@@ -262,6 +263,17 @@ export function getMessageText(message: AppUIMessage) {
 		.join('\n')
 }
 
+/** Tool part states whose outcome is final and can be replayed to the model. */
+export function isTerminalToolPart(
+	part: Extract<AppUIMessagePart, { type: 'dynamic-tool' }>,
+) {
+	return (
+		part.state === 'output-available' ||
+		part.state === 'output-error' ||
+		part.state === 'output-denied'
+	)
+}
+
 /** Remove tool calls that cannot be resumed after their owning execution ends. */
 export function removeIncompleteToolCalls(agent: ChatAgentState) {
 	let changed = false
@@ -269,10 +281,7 @@ export function removeIncompleteToolCalls(agent: ChatAgentState) {
 		if (message.role !== 'assistant') return true
 		const nextParts = message.parts.filter((part) => {
 			if (part.type !== 'dynamic-tool') return true
-			const complete =
-				part.state === 'output-available' ||
-				part.state === 'output-error' ||
-				part.state === 'output-denied'
+			const complete = isTerminalToolPart(part)
 			if (!complete) changed = true
 			return complete
 		})
@@ -355,6 +364,7 @@ export function selectContextTimeline(
 			...messages.slice(checkpointIndex + 1),
 		]
 	}
+	// eslint-disable-next-line @typescript-eslint/no-deprecated -- Read legacy checkpoints created before snapshot compaction.
 	if (checkpoint.data.preservedTurnCount === undefined) {
 		return messages.slice(checkpointIndex)
 	}
@@ -362,6 +372,7 @@ export function selectContextTimeline(
 	const priorContext: AppUIMessage[] = selectContextTimeline(
 		messages.slice(0, checkpointIndex),
 	)
+	// eslint-disable-next-line @typescript-eslint/no-deprecated -- Preserve the retained turns of legacy checkpoints.
 	let remainingTurns = checkpoint.data.preservedTurnCount
 	let preservedStart = priorContext.length
 	for (let index = priorContext.length - 1; index >= 0; index -= 1) {
@@ -393,11 +404,7 @@ export async function uiMessagesToModelMessages(
 			if (part.type === 'data-workspace-context') {
 				return {
 					type: 'text',
-					text: `<AdditionalContext>${JSON.stringify(
-						Object.fromEntries(
-							part.data.deltas.map((entry) => [entry.key, entry.content]),
-						),
-					)}</AdditionalContext>`,
+					text: serializeWorkspaceContext(part.data.deltas),
 				}
 			}
 			if (part.type === 'data-context-checkpoint') {
@@ -410,7 +417,7 @@ export async function uiMessagesToModelMessages(
 			if (part.type === 'data-system-notification') {
 				return {
 					type: 'text',
-					text: `<SystemNotification>${JSON.stringify(part.data)}</SystemNotification>`,
+					text: `<AgentInformation>${JSON.stringify(part.data)}</AgentInformation>`,
 				}
 			}
 			if (part.type === 'data-model-file') {
@@ -421,16 +428,30 @@ export async function uiMessagesToModelMessages(
 	})
 }
 
+// Only committed deliveries may enter a model transcript. The set is transient;
+// every inbox entry read from disk is already durable.
+const uncommittedInputs = new WeakSet<AppUIMessage>()
+export function stagePendingInput(agent: ChatAgentState, input: AppUIMessage) {
+	uncommittedInputs.add(input)
+	agent.pendingInputs.push(input)
+}
+export function commitPendingInput(input: AppUIMessage) {
+	uncommittedInputs.delete(input)
+}
+export function hasPendingInputs(agent: ChatAgentState) {
+	return (
+		!!agent.pendingInputs[0] && !uncommittedInputs.has(agent.pendingInputs[0])
+	)
+}
 export function consumePendingInputs(agent: ChatAgentState) {
-	const inputs = agent.pendingInputs.splice(0)
+	const inputs: AppUIMessage[] = []
+	while (
+		agent.pendingInputs.length &&
+		!uncommittedInputs.has(agent.pendingInputs[0])
+	)
+		inputs.push(agent.pendingInputs.shift()!)
 	agent.timeline.push(...inputs)
 	return inputs.length > 0
-}
-
-export function assertMasterPendingInputsEmpty(agent: ChatAgentState) {
-	if (agent.id === MASTER_AGENT_ID && agent.pendingInputs.length > 0) {
-		throw new Error('Master agent pendingInputs must remain empty')
-	}
 }
 
 /**

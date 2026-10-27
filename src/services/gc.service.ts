@@ -39,7 +39,10 @@ export default class GcService extends BaseService {
 	}
 
 	async runBlobGc(): Promise<GcRunResult> {
-		if (this.plugin.syncExecutorService.isRunning()) {
+		if (!this.plugin.sync.lifecycle.active)
+			return { ok: false, reason: 'cancelled' }
+		const scope = this.plugin.sync.lifecycle.scope
+		if (this.plugin.sync.executor.isRunning()) {
 			if (IN_DEV) {
 				new Notice(i18n.t('settings.cache.gcBlockedBySync'))
 			}
@@ -62,7 +65,7 @@ export default class GcService extends BaseService {
 			const start = window.performance?.now?.() ?? Date.now()
 			let stoppedEarly = false
 			const deletedCount = await collectBlobGarbage(emitGcProgress, () => {
-				if (this.stopRequested) {
+				if (this.stopRequested || scope.signal.aborted) {
 					stoppedEarly = true
 					return true
 				}

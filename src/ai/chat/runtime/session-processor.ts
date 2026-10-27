@@ -6,7 +6,8 @@ import { extractErrorMessage } from '~/ai/chat/error-utils'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import { deriveTitle } from '~/ai/chat/messages/message-utils'
 import {
-	assertMasterPendingInputsEmpty,
+	consumePendingInputs,
+	hasPendingInputs,
 	buildAgentMessages,
 } from '~/ai/chat/messages/ui-message'
 import { runAgentLoop, type AgentLoopError } from '~/ai/chat/runtime/agent-loop'
@@ -20,6 +21,7 @@ import {
 	cancelActiveTurn,
 	claimNextTurn,
 	completeActiveTurn,
+	discardCancelledAgentInputs,
 	discardQueuedTurns,
 	enqueueAgentInput,
 	enqueueRegenerate,
@@ -41,7 +43,7 @@ import type {
 	ChatSubmission,
 } from '~/ai/chat/types'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
-import { createAbortError } from '~/ai/transport/abort'
+import { createAbortError } from '~/utils/abort'
 import i18n from '~/i18n'
 
 interface MessageOpsPort {
@@ -91,6 +93,7 @@ interface CompactionCoordinatorPort {
 }
 
 interface SubagentCancellationPort {
+	wakeForUserInput?(sessionId: string): void
 	cancelAllNonTerminalAgents(
 		session: ChatSession,
 		originTurnId: string,
@@ -115,6 +118,12 @@ export class SessionProcessor {
 		private reportTransientError: (message: string) => void = () => {},
 	) {}
 
+	hasQueuedUserInput(sessionId: string) {
+		return this.runtimeStates
+			.get(sessionId)
+			.scheduler.queued.some((turn) => turn.kind === 'user-submission')
+	}
+
 	enqueueUserSubmission(sessionId: string, submission: ChatSubmission) {
 		if (
 			this.state.deletedSessionIds.has(sessionId) ||
@@ -123,6 +132,7 @@ export class SessionProcessor {
 			return undefined
 		const runtime = this.runtimeStates.get(sessionId)
 		const turnId = enqueueUserSubmission(runtime, submission)
+		this.subagentCancellation.wakeForUserInput?.(sessionId)
 		this.notify()
 		void this.start(sessionId)
 		return turnId
@@ -139,6 +149,15 @@ export class SessionProcessor {
 		)
 			return false
 		const runtime = this.runtimeStates.get(sessionId)
+		const agent = this.messageFactory.getActiveAgent(
+			this.state.loadedSessions.get(sessionId)!,
+		)
+		if (
+			![...agent.timeline, ...agent.pendingInputs].some(
+				(message) => message.id === input.id,
+			)
+		)
+			agent.pendingInputs.push(input)
 		const turnId = enqueueAgentInput(runtime, input, origin)
 		if (!turnId) return false
 		this.notify()
@@ -216,6 +235,9 @@ export class SessionProcessor {
 			)
 		}
 		runtime.processing = undefined
+		// Cancelled agent inputs can no longer run; drop them so no queue state
+		// outlives the worker that was waiting on it.
+		discardCancelledAgentInputs(runtime)
 		if (
 			hasQueuedTurns(runtime) &&
 			!this.state.deletedSessionIds.has(sessionId) &&
@@ -239,9 +261,7 @@ export class SessionProcessor {
 		) {
 			const session = this.state.loadedSessions.get(sessionId)
 			if (!session) return
-			assertMasterPendingInputsEmpty(
-				this.messageFactory.getActiveAgent(session),
-			)
+			this.discardConsumedAgentInputs(session, runtime)
 			const active = claimNextTurn(runtime)
 			if (!active) return
 			await this.runActiveTurn(session, runtime, active)
@@ -253,8 +273,8 @@ export class SessionProcessor {
 		runtime: SessionRuntimeState,
 		active: ActiveMasterTurn,
 	) {
-		const { turn, abortController } = active
-		const { turnId } = turn
+		const { inputs, abortController } = active
+		const { turnId } = inputs[0]
 		const agent = this.messageFactory.getActiveAgent(session)
 		const taskOrigin: TaskOrigin = {
 			turnId,
@@ -282,7 +302,15 @@ export class SessionProcessor {
 					modelName: string
 			  }
 			| undefined
+		let inputMaterializationError: Error | undefined
+		const rememberInputMaterializationError = (error: unknown) => {
+			inputMaterializationError ??=
+				error instanceof Error
+					? error
+					: new Error('Input materialization failed', { cause: error })
+		}
 
+		agent.status = 'running'
 		runtime.runState = 'thinking'
 		this.notify()
 		try {
@@ -291,66 +319,72 @@ export class SessionProcessor {
 				return
 			}
 
-			switch (turn.kind) {
-				case 'user-submission': {
-					const preparedContext =
-						await this.userContextManager.prepareUserContextForMessage(
-							turn.submission.userContext,
-						)
-					if (!canMaterialize()) {
-						await this.cancelTurn(session, runtime, active, agent)
-						return
-					}
-					const message = await this.messageFactory.appendUserMessage(
-						agent,
-						turn.submission.text,
-						session,
-						preparedContext.dedupedItems.length > 0
-							? preparedContext.dedupedItems
-							: undefined,
-						canMaterialize,
-					)
-					if (!message) {
-						await this.cancelTurn(session, runtime, active, agent)
-						return
-					}
-					this.store.upsertSessionIndexItem(session, deriveTitle(session))
-					await this.store.persistSession(session)
-					void this.store.persistMetaAndIndex()
-					this.notify()
-					break
-				}
-				case 'agent-input':
-					if (
-						!this.messageFactory.appendAgentInput(
-							agent,
-							turn.input,
-							session,
-							isAlive,
-						)
-					) {
-						await this.cancelTurn(session, runtime, active, agent)
-						return
-					}
-					await this.store.persistSession(session)
-					this.notify()
-					break
-				case 'regenerate':
-					regeneration = await this.messageOps.beginRegeneration(
-						session,
-						turn.targetMessageId,
-						isAlive,
-					)
-					if (!regeneration) {
-						if (!isAlive()) {
+			for (const input of active.inputs) {
+				if (input.kind === 'agent-input' && input.origin.signal.aborted)
+					continue
+				switch (input.kind) {
+					case 'user-submission': {
+						let preparedContext:
+							| Awaited<
+									ReturnType<UserContextManager['prepareUserContextForMessage']>
+							  >
+							| undefined
+						try {
+							preparedContext =
+								await this.userContextManager.prepareUserContextForMessage(
+									input.submission.userContext,
+								)
+						} catch (error) {
+							rememberInputMaterializationError(error)
+						}
+						if (!canMaterialize()) {
 							await this.cancelTurn(session, runtime, active, agent)
 							return
 						}
-						throw new Error('Regeneration target is no longer available')
+						const message = await this.messageFactory.appendUserMessage(
+							agent,
+							input.submission.text,
+							session,
+							preparedContext && preparedContext.dedupedItems.length > 0
+								? preparedContext.dedupedItems
+								: undefined,
+							canMaterialize,
+						)
+						if (!message) {
+							await this.cancelTurn(session, runtime, active, agent)
+							return
+						}
+						this.store.upsertSessionIndexItem(session, deriveTitle(session))
+						try {
+							await this.store.persistSession(session)
+						} catch (error) {
+							rememberInputMaterializationError(error)
+						}
+						void this.store.persistMetaAndIndex()
+						this.notify()
+						break
 					}
-					this.notify()
-					break
+					case 'agent-input':
+						// The scheduler holds a wake ticket; message bodies live only in the inbox.
+						break
+					case 'regenerate':
+						regeneration = await this.messageOps.beginRegeneration(
+							session,
+							input.targetMessageId,
+							isAlive,
+						)
+						if (!regeneration) {
+							if (!isAlive()) {
+								await this.cancelTurn(session, runtime, active, agent)
+								return
+							}
+							throw new Error('Regeneration target is no longer available')
+						}
+						this.notify()
+						break
+				}
 			}
+			if (inputMaterializationError) throw inputMaterializationError
 
 			if (!isAlive()) {
 				await this.cancelTurn(session, runtime, active, agent, regeneration)
@@ -369,43 +403,56 @@ export class SessionProcessor {
 				modelName: resolvedModel.name,
 			}
 			assistantMeta = currentAssistantMeta
-			const loopResult = await runAgentLoop({
-				compactionCoordinator: this.compactionCoordinator,
-				createCompactionRequest: () =>
-					this.createCompactionRequest(
-						session,
-						agent,
-						resolvedProvider,
-						resolvedModel,
-						isAlive,
-					),
-				isTurnAlive: isAlive,
-				onStateChange: (state) => {
-					if (state === 'compacting') runtime.runState = 'compressing'
-					if (state === 'running-turn') runtime.runState = 'thinking'
-					this.notify()
-				},
-				runTurn: async (continuation, shouldSuspendAtSafePoint) => {
-					await this.ensureProviderReady(resolvedProvider)
-					if (!isAlive()) throw createAbortError('Agent loop cancelled')
-					return this.agentRunner.runTurn({
-						session,
-						agent,
-						provider: resolvedProvider,
-						model: resolvedModel,
-						depth: 0,
-						assistantMeta: currentAssistantMeta,
-						runtime,
-						isTurnAlive: isAlive,
-						taskOrigin,
-						continuation,
-						abortSignal: abortController.signal,
-						buildMessages: (currentAgent, tools) =>
-							this.buildMessagesForAgent(currentAgent, tools),
-						shouldSuspendAfterToolStep: shouldSuspendAtSafePoint,
-					})
-				},
-			})
+			let loopResult
+			do {
+				loopResult = await runAgentLoop({
+					compactionCoordinator: this.compactionCoordinator,
+					createCompactionRequest: () =>
+						this.createCompactionRequest(
+							session,
+							agent,
+							resolvedProvider,
+							resolvedModel,
+							isAlive,
+						),
+					isTurnAlive: isAlive,
+					onStateChange: (state) => {
+						if (state === 'compacting') runtime.runState = 'compressing'
+						if (state === 'running-turn') runtime.runState = 'thinking'
+						this.notify()
+					},
+					runTurn: async (continuation, shouldSuspendAtSafePoint) => {
+						await this.ensureProviderReady(resolvedProvider)
+						if (!isAlive()) throw createAbortError('Agent loop cancelled')
+						return this.agentRunner.runTurn({
+							session,
+							agent,
+							provider: resolvedProvider,
+							model: resolvedModel,
+							depth: 0,
+							assistantMeta: currentAssistantMeta,
+							runtime,
+							isTurnAlive: isAlive,
+							taskOrigin,
+							continuation,
+							abortSignal: abortController.signal,
+							buildMessages: (currentAgent, tools) =>
+								this.buildMessagesForAgent(currentAgent, tools),
+							shouldSuspendAfterToolStep: shouldSuspendAtSafePoint,
+							// Regeneration owns a detached timeline suffix until commit;
+							// finish that transaction before admitting another input.
+							shouldYieldAfterToolStep: () =>
+								!regeneration &&
+								isAlive() &&
+								this.hasPendingTurns(session, runtime),
+						})
+					},
+				})
+			} while (
+				loopResult.status === 'completed' &&
+				hasPendingInputs(agent) &&
+				isAlive()
+			)
 
 			if (!isAlive() || loopResult.status === 'cancelled') {
 				await this.cancelTurn(session, runtime, active, agent, regeneration)
@@ -464,6 +511,7 @@ export class SessionProcessor {
 				assistantMeta,
 			)
 		} finally {
+			agent.status = 'idle'
 			this.compactionCoordinator.cancel(session.id, agent.id)
 			runtime.runState = 'idle'
 			if (!this.state.deletedSessionIds.has(session.id)) this.notify()
@@ -478,12 +526,9 @@ export class SessionProcessor {
 		regeneration?: RegenerationTransaction,
 		regenerationCommitted = false,
 	) {
+		const { turnId } = active.inputs[0]
 		if (this.state.loadedSessions.get(session.id) !== session) {
-			cancelActiveTurn(
-				runtime,
-				active.turn.turnId,
-				active.abortController.signal,
-			)
+			cancelActiveTurn(runtime, turnId, active.abortController.signal)
 			return
 		}
 		this.cancelExecutionTree(session, active, 'Turn cancelled', agent.id)
@@ -501,11 +546,7 @@ export class SessionProcessor {
 			if (regeneration) await this.store.persistMetaAndIndex()
 			await this.store.persistSession(session)
 		} finally {
-			cancelActiveTurn(
-				runtime,
-				active.turn.turnId,
-				active.abortController.signal,
-			)
+			cancelActiveTurn(runtime, turnId, active.abortController.signal)
 		}
 	}
 
@@ -523,8 +564,9 @@ export class SessionProcessor {
 			modelName: string
 		},
 	) {
+		const { turnId } = active.inputs[0]
 		if (this.state.loadedSessions.get(session.id) !== session) {
-			failActiveTurn(runtime, active.turn.turnId, active.abortController.signal)
+			failActiveTurn(runtime, turnId, active.abortController.signal)
 			return
 		}
 		this.cancelExecutionTree(session, active, 'Turn failed', agent.id)
@@ -544,7 +586,7 @@ export class SessionProcessor {
 			if (regeneration) await this.store.persistMetaAndIndex()
 			await this.store.persistSession(session)
 		} finally {
-			failActiveTurn(runtime, active.turn.turnId, active.abortController.signal)
+			failActiveTurn(runtime, turnId, active.abortController.signal)
 		}
 	}
 
@@ -562,6 +604,7 @@ export class SessionProcessor {
 		model: AIModelConfig,
 		isAlive: () => boolean,
 	): CompactionRequest {
+		consumePendingInputs(agent)
 		const revision = createContextCompactionRevision(session, provider, model)
 		return {
 			session,
@@ -589,19 +632,38 @@ export class SessionProcessor {
 		reason: string,
 		agentId?: string,
 	) {
+		const { turnId } = active.inputs[0]
 		this.compactionCoordinator.cancel(session.id, agentId)
 		if (!active.abortController.signal.aborted) {
 			active.abortController.abort(createAbortError(reason))
 		}
-		this.discardAgentInputsForOrigin(session.id, active.turn.turnId)
+		this.discardAgentInputsForOrigin(session.id, turnId)
 		const changed = this.subagentCancellation.cancelAllNonTerminalAgents(
 			session,
-			active.turn.turnId,
+			turnId,
 		)
 		if (!changed) return
 		void this.store.persistSession(session)
 		this.notify()
 		this.subagentCancellation.startQueuedAgentsForSession(session)
+	}
+
+	private discardConsumedAgentInputs(
+		session: ChatSession,
+		runtime: SessionRuntimeState,
+	) {
+		const inbox = this.messageFactory.getActiveAgent(session).pendingInputs
+		discardQueuedTurns(
+			runtime,
+			(turn) =>
+				turn.kind === 'agent-input' &&
+				!inbox.some((input) => input.id === turn.inputId),
+		)
+	}
+
+	private hasPendingTurns(session: ChatSession, runtime: SessionRuntimeState) {
+		this.discardConsumedAgentInputs(session, runtime)
+		return hasQueuedTurns(runtime)
 	}
 
 	private async buildMessagesForAgent(

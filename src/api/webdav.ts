@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
-import { isNil, partial } from 'lodash-es'
+import { isNil, partial } from 'es-toolkit/compat'
 import { basename, join } from 'path-browserify'
 import { FileStat } from 'webdav'
 import type { NutstoreSettings } from '~/settings'
@@ -57,6 +57,7 @@ export async function getDirectoryContents(
 	settings: NutstoreSettings,
 	token: string,
 	path: string,
+	throwIfCancelled?: () => void,
 ): Promise<FileStat[]> {
 	const contents: FileStat[] = []
 	const davEndpoint = getNutstoreDavEndpoint(settings)
@@ -68,6 +69,7 @@ export async function getDirectoryContents(
 	let currentUrl = `${davEndpoint}${path}`
 
 	while (true) {
+		throwIfCancelled?.()
 		try {
 			const response = await requestUrl({
 				url: currentUrl,
@@ -88,6 +90,7 @@ export async function getDirectoryContents(
           </prop>
         </propfind>`,
 			})
+			throwIfCancelled?.()
 			const parseXml = new XMLParser({
 				attributeNamePrefix: '',
 				removeNSPrefix: true,
@@ -124,7 +127,10 @@ export async function getDirectoryContents(
 		} catch (e) {
 			if (is503Error(e as Error)) {
 				logger.error('503 error, retrying...')
-				await sleep(60_000)
+				for (let elapsed = 0; elapsed < 60_000; elapsed += 500) {
+					throwIfCancelled?.()
+					await sleep(500)
+				}
 				continue
 			}
 			throw e

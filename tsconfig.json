@@ -30,7 +30,8 @@
 		"importHelpers": true,
 		"inlineSourceMap": true,
 		"inlineSources": true,
-		"isolatedModules": true
+		"isolatedModules": true,
+		"types": ["node"]
 	},
 	"include": [
 		"**/*.ts",

@@ -1,4 +1,4 @@
-import { throttle } from 'lodash-es'
+import { throttle } from 'es-toolkit/compat'
 import { Notice } from 'obsidian'
 import SyncProgressModal from '../components/SyncProgressModal'
 import {
@@ -91,6 +91,7 @@ export class ProgressService extends BaseService {
 	}
 
 	public showProgressModal() {
+		if (!this.plugin.sync.lifecycle.active) return
 		if (!this.plugin.isSyncing) {
 			new Notice(i18n.t('sync.notSyncing'))
 			return
@@ -121,5 +122,6 @@ export class ProgressService extends BaseService {
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
 		this.subscriptions = []
 		this.closeProgressModal()
+		this.updateModal.cancel()
 	}
 }

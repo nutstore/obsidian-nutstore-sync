@@ -6,24 +6,26 @@ import { ContextArea } from './ContextArea'
 export function PendingList(props: { pending: ChatboxProps['pending'] }) {
 	return (
 		<Show when={props.pending.length > 0}>
-			<div class=":uno: rounded-3 border border-dashed border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] p-3">
-				<div class=":uno: text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-					{t('chatbox.ui.labels.queuedSubmissions')}
+			<div class="chatbox-pending">
+				<div class="chatbox-pending-heading" role="status">
+					<span class=":uno: i-lucide-list-start size-3.5" aria-hidden="true" />
+					<span>{t('chatbox.ui.labels.queuedSubmissions')}</span>
+					<span class="chatbox-pending-count">{props.pending.length}</span>
 				</div>
-				<div class=":uno: mt-2 flex flex-col gap-2">
+				<ol class="chatbox-pending-items">
 					<For each={props.pending}>
 						{(submission) => (
-							<div class=":uno: rounded-2 bg-[var(--background-secondary)] p-3 text-sm text-[var(--text-normal)] whitespace-pre-wrap break-words select-text">
+							<li class="chatbox-pending-item">
 								<Show when={submission.userContext.length > 0}>
 									<ContextArea items={submission.userContext} />
 								</Show>
 								<Show when={submission.text.trim().length > 0}>
-									<div>{submission.text}</div>
+									<div class="chatbox-pending-text">{submission.text}</div>
 								</Show>
-							</div>
+							</li>
 						)}
 					</For>
-				</div>
+				</ol>
 			</div>
 		</Show>
 	)

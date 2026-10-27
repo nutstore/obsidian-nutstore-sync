@@ -18,25 +18,27 @@ export function MarkdownContent(props: {
 		const renderMarkdown = props.renderMarkdown
 		const currentVersion = ++renderVersion
 
-		cleanup?.()
-		cleanup = undefined
-
 		if (!el) {
 			return
 		}
 
-		el.replaceChildren()
-
-		if (!markdown) {
-			return
-		}
-
-		if (!renderMarkdown) {
+		if (!markdown || !renderMarkdown) {
+			cleanup?.()
+			cleanup = undefined
 			el.textContent = markdown
 			return
 		}
 
-		void Promise.resolve(renderMarkdown(el, markdown, { streaming })).then(
+		// Keep the mounted version until its replacement is ready. Clearing it
+		// while awaiting Markdown can shrink scrollHeight and clamp scrollTop.
+		// eslint-disable-next-line obsidianmd/prefer-create-el -- Keep this optional-renderer component independent of host DOM extensions and in its owner document.
+		const target = el.ownerDocument.createElement('div')
+		target.className = 'ns-chatbox-markdown markdown-rendered'
+		// New rows can move into the process while their Markdown is rendering.
+		// Give those rows content immediately instead of an empty placeholder.
+		if (!el.hasChildNodes()) el.textContent = markdown
+
+		void Promise.resolve(renderMarkdown(target, markdown, { streaming })).then(
 			(nextCleanup) => {
 				if (currentVersion !== renderVersion) {
 					if (typeof nextCleanup === 'function') {
@@ -44,6 +46,10 @@ export function MarkdownContent(props: {
 					}
 					return
 				}
+				// Retain the render target itself: renderers may attach listeners
+				// and cleanup ownership to it, rather than only to its children.
+				el.replaceChildren(target)
+				cleanup?.()
 				cleanup = typeof nextCleanup === 'function' ? nextCleanup : undefined
 			},
 		)

@@ -27,7 +27,7 @@ function sessionSnapshot(id: string): PersistedChatSession {
 export async function persistsChatSessions(app: App) {
 	const { SessionsFileBackend } =
 		await import('~/ai/chat/session/session-files')
-	const backend = new SessionsFileBackend(app.vault)
+	const backend = new SessionsFileBackend(app)
 	const id = 'session-neutral-🌱'
 	await backend.writeSessionFile(id, {
 		session: sessionSnapshot(id),
@@ -53,7 +53,7 @@ export async function persistsChatSessions(app: App) {
 export async function toleratesCorruptChatMeta(app: App) {
 	const { SessionsFileBackend } =
 		await import('~/ai/chat/session/session-files')
-	const backend = new SessionsFileBackend(app.vault)
+	const backend = new SessionsFileBackend(app)
 	const meta = { orderedSessionIds: [], sessions: {} }
 	await backend.writeMetaFile(meta)
 	assert(
@@ -65,4 +65,88 @@ export async function toleratesCorruptChatMeta(app: App) {
 		(await backend.readMetaFile()) === null,
 		'Corrupt chat meta file was accepted',
 	)
+}
+
+export async function exportsImagesThroughBrowserTransport(app: App) {
+	const { decodeChatSessionFromStorage } =
+		await import('~/ai/chat/session/session-persistence')
+	const { exportSessionToMarkdownFile } =
+		await import('~/ai/chat/messages/export-session')
+	const session = decodeChatSessionFromStorage(
+		sessionSnapshot('neutral-export'),
+	)
+	assert('subagents' in session, 'Expected a current session snapshot')
+	const content = new TextEncoder().encode(
+		'<svg xmlns="http://www.w3.org/2000/svg"><text>Neutral 中性 🌱</text></svg>',
+	)
+	const remoteUrl = 'https://example.test/neutral-image.svg'
+	const resourceUrl = URL.createObjectURL(
+		new Blob([content], { type: 'image/svg+xml' }),
+	)
+	const originalFetch = window.fetch
+	const calls: string[] = []
+	window.fetch = async (input, init) => {
+		const url =
+			typeof input === 'string'
+				? input
+				: input instanceof URL
+					? input.href
+					: input.url
+		calls.push(url)
+		if (url === remoteUrl)
+			return new Response(content, {
+				headers: { 'content-type': 'image/svg+xml' },
+			})
+		return originalFetch.call(window, input, init)
+	}
+	try {
+		session.subagents.master.timeline = [
+			{
+				id: 'neutral-image-message',
+				role: 'user',
+				parts: [
+					{ type: 'text', text: 'Neutral image 中性图片 🌱' },
+					...[remoteUrl, resourceUrl].map((url) => ({
+						type: 'data-model-file' as const,
+						data: {
+							file: {
+								type: 'file' as const,
+								mediaType: 'image/svg+xml',
+								data: url,
+							},
+						},
+					})),
+				],
+			},
+		]
+		const file = await exportSessionToMarkdownFile({
+			vault: app.vault,
+			manifestId: 'neutral-export',
+			manifestVersion: '1.0.0',
+			session,
+			title: 'Neutral export 中性导出 🌱',
+			includeToolMessages: false,
+		})
+		const markdown = await app.vault.read(file)
+		assert(
+			calls.includes(remoteUrl) && calls.includes(resourceUrl),
+			'Image export bypassed browser transport',
+		)
+		const references = [...markdown.matchAll(/!\[\]\(([^)]+)\)/g)]
+		assert(
+			references.length === 2,
+			'Export did not save both remote and browser-owned images',
+		)
+		for (const reference of references) {
+			const path = `${file.parent!.path}/${reference[1]}`
+			const bytes = await app.vault.adapter.readBinary(path)
+			assert(
+				new TextDecoder().decode(bytes) === new TextDecoder().decode(content),
+				'Export changed Unicode image bytes',
+			)
+		}
+	} finally {
+		window.fetch = originalFetch
+		URL.revokeObjectURL(resourceUrl)
+	}
 }

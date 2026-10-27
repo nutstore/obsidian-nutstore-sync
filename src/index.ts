@@ -6,31 +6,13 @@ import './webdav-patch'
 import './assets/styles/global.css'
 
 import { toBase64 } from 'js-base64'
-import { Menu, normalizePath, Plugin } from 'obsidian'
-import { createSelectedTextContextItem } from './ai/chat/context/user-context'
+import { normalizePath, Plugin } from 'obsidian'
 import { registerChatboxAiIcon } from './assets/icons/obsidian-nutstore-ai-icon'
-import { SyncRibbonManager } from './components/SyncRibbonManager'
-import { emitCancelSync } from './events'
 import i18n from './i18n'
-import AIConflictResolverService from './services/ai-conflict-resolver.service'
-import ChatService from './services/chat.service'
-import CommandService from './services/command.service'
-import EventsService from './services/events.service'
-import GcService from './services/gc.service'
 import I18nService from './services/i18n.service'
 import LoggerService from './services/logger.service'
-import McpService from './services/mcp.service'
-import ModelsPresetService from './services/models-preset.service'
-import NutstoreLlmGatewayService from './services/nutstore-llm-gateway.service'
-import { ProgressService } from './services/progress.service'
 import ProtocolService from './services/protocol.service'
-import RealtimeSyncService from './services/realtime-sync.service'
-import ScheduledSyncService from './services/scheduled-sync.service'
-import { BaseService } from './services/service.interface'
 import SettingsService from './services/settings.service'
-import { StatusService } from './services/status.service'
-import SyncExecutorService from './services/sync-executor.service'
-import { WebDAVService } from './services/webdav.service'
 import {
 	NutstoreLocalSettings,
 	NutstoreSettings,
@@ -38,7 +20,10 @@ import {
 } from './settings'
 import { decryptOAuthResponse } from './utils/decrypt-ticket-response'
 import { stdRemotePath } from './utils/std-remote-path'
-import ChatboxView, { CHATBOX_VIEW_TYPE } from './views/chatbox.view'
+import { SyncModule } from './modules/sync-module'
+import { AiModule } from './modules/ai-module'
+import { ModuleState } from './modules/lifecycle'
+import logger from './utils/logger'
 
 export default class NutstorePlugin extends Plugin {
 	declare public settings: NutstoreSettings
@@ -47,122 +32,61 @@ export default class NutstorePlugin extends Plugin {
 	public localSettings!: NutstoreLocalSettings
 	public settingTab!: NutstoreSettingTab
 
-	public commandService = new CommandService(this)
-	public eventsService = new EventsService(this)
-	public i18nService = new I18nService(this)
-	public loggerService = new LoggerService(this)
-	public mcpService = new McpService(this)
-	public modelsPresetService = new ModelsPresetService(this)
-	public nutstoreLlmGatewayService = new NutstoreLlmGatewayService(this)
-	public protocolService = new ProtocolService(this)
-	public progressService = new ProgressService(this)
-	public ribbonService = new SyncRibbonManager(this)
-	public statusService = new StatusService(this)
-	public webDAVService = new WebDAVService(this)
-	public settingsService = new SettingsService(this)
-	public syncExecutorService = new SyncExecutorService(this)
-	public gcService = new GcService(this)
-	public chatService = new ChatService(this)
-	public aiConflictResolverService = new AIConflictResolverService(this)
-	public realtimeSyncService = new RealtimeSyncService(
-		this,
-		this.syncExecutorService,
-	)
-	public scheduledSyncService = new ScheduledSyncService(
-		this,
-		this.syncExecutorService,
-	)
-
-	private get services(): BaseService[] {
-		return [
-			this.loggerService,
-			this.modelsPresetService,
-			this.nutstoreLlmGatewayService,
-			this.webDAVService,
-			this.syncExecutorService,
-			this.gcService,
-			this.settingsService,
-			this.i18nService,
-			this.statusService,
-			this.progressService,
-			this.eventsService,
-			this.commandService,
-			this.ribbonService,
-			this.protocolService,
-			this.realtimeSyncService,
-			this.mcpService,
-			this.chatService,
-			this.aiConflictResolverService,
-			this.scheduledSyncService,
-		]
-	}
+	public readonly settingsService = new SettingsService(this)
+	public readonly i18nService = new I18nService(this)
+	public readonly loggerService = new LoggerService(this)
+	public readonly protocolService = new ProtocolService(this)
+	public readonly sync = new SyncModule(this)
+	public readonly ai = new AiModule(this)
+	private loaded = false
 
 	async onload() {
+		this.loggerService.onload()
+		await this.settingsService.onload()
+		await this.i18nService.onload()
 		registerChatboxAiIcon()
-		for (const service of this.services) {
-			await service.onload()
-		}
 		this.settingTab = new NutstoreSettingTab(this.app, this)
+		this.loaded = true
+		await this.applySettings()
+		this.ai.registerViews()
+		this.protocolService.onload()
 		this.addSettingTab(this.settingTab)
-		this.registerView(CHATBOX_VIEW_TYPE, (leaf) => new ChatboxView(leaf, this))
-		this.registerEvent(
-			this.app.workspace.on('editor-menu', (menu: Menu, editor, view) => {
-				if (!editor.somethingSelected()) return
-				menu.addItem((item) => {
-					item
-						.setTitle(
-							i18n.language.startsWith('zh') ? '坚果云同步' : 'Nutstore Sync',
-						)
-						.setIcon('cloud')
-					item.setSubmenu()
-					const submenu = item.submenu
-					if (!submenu) return
-					submenu.addItem((subItem) => {
-						subItem
-							.setTitle(i18n.t('chatbox.addToContext'))
-							.setIcon('message-square-plus')
-							.onClick(async () => {
-								const sel = editor.listSelections()[0]
-								if (!sel) return
-								const file = (
-									view as {
-										file?: { path: string; basename: string } | null
-									}
-								).file
-								if (!file) return
-								this.chatService.addUserContext(
-									createSelectedTextContextItem({
-										type: 'selection',
-										filePath: file.path,
-										range: {
-											from: { line: sel.anchor.line, ch: sel.anchor.ch },
-											to: { line: sel.head.line, ch: sel.head.ch },
-										},
-										selectedText: editor.getSelection(),
-									}),
-								)
-								await this.commandService.openChatbox()
-							})
-					})
-				})
-			}),
-		)
+	}
 
-		await this.chatService.handleSettingsChanged()
+	/** Every settings writer reconciles the same two module lifetimes. */
+	async applySettings() {
+		if (!this.loaded) return
+		await Promise.all([
+			this.sync.lifecycle.update(
+				this.localSettings.modules.sync === ModuleState.Enabled,
+			),
+			this.ai.lifecycle.update(
+				this.localSettings.modules.ai === ModuleState.Enabled,
+			),
+		])
+
+		await this.i18nService.update()
+		if (this.sync.lifecycle.active) await this.sync.scheduled.updateInterval()
+		if (this.ai.lifecycle.active) {
+			this.ai.models.initializeFromLocalSettings()
+			await this.ai.chat.handleSettingsChanged()
+			await this.ai.conflicts.refresh()
+		}
 	}
 
 	onunload() {
+		this.loaded = false
 		this.settingTab?.unload()
-
-		emitCancelSync()
-		for (const service of [...this.services].reverse()) {
-			void service.onunload()
-		}
+		this.settingsService.onunload()
+		void Promise.all([
+			this.sync.lifecycle.update(false),
+			this.ai.lifecycle.update(false),
+		]).catch((error: unknown) => logger.error('Module shutdown failed', error))
 	}
 
 	toggleSyncUI(isSyncing: boolean) {
 		this.isSyncing = isSyncing
-		this.ribbonService.update()
+		this.sync.ribbon.update()
 	}
 
 	async getDecryptedOAuthInfo() {

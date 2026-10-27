@@ -38,7 +38,10 @@ function buildAgentTimeline(
 	agent: import('~/ai/chat/types').ChatAgentState,
 	createdAt: number,
 ): ChatboxProps['timeline'] {
-	const messages = snapshotViewValue(agent.timeline)
+	const messages = snapshotViewValue([
+		...agent.timeline,
+		...agent.pendingInputs,
+	])
 	const toolTimings = snapshotViewValue(agent.toolTimings)
 	const operations = snapshotViewValue(agent.operations)
 	const timeline = projectTimelineMessageGroups(
@@ -107,7 +110,10 @@ export function collectOtherBusySessionIds(
 				!!runtime.processing ||
 				runtime.scheduler.queued.length > 0 ||
 				getSessionSubagents(session).some(
-					(agent) => agent.status === 'running' || agent.status === 'queued',
+					(agent) =>
+						agent.status === 'running' ||
+						agent.status === 'queued' ||
+						agent.status === 'waiting',
 				)
 			)
 		})

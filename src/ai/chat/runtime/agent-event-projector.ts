@@ -1,3 +1,4 @@
+import { parsePartialJson } from 'ai'
 import type {
 	AssistantModelMessage,
 	ContentPart,
@@ -8,6 +9,7 @@ import type { ChatSession } from '~/ai/chat/domain'
 import { extractErrorMessage } from '~/ai/chat/error-utils'
 import type { MessageFactory } from '~/ai/chat/messages/message-factory'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
+import { isTerminalToolPart } from '~/ai/chat/messages/ui-message'
 import type { SessionRuntimeState } from '~/ai/chat/runtime/chat-state'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type {
@@ -21,6 +23,9 @@ import type { AppToolMetadata } from '~/ai/core/types'
 export type AgentProjectionEvent =
 	| { type: 'step-start' }
 	| { type: 'text-delta'; delta: string }
+	| { type: 'reasoning-delta'; delta: string }
+	| { type: 'tool-input-start'; id: string; toolName: string }
+	| { type: 'tool-input-delta'; id: string; delta: string }
 	| { type: 'tool-execution-start'; toolCall: ToolCallPart }
 	| {
 			type: 'tool-execution-end'
@@ -59,6 +64,7 @@ interface AgentEventProjectorOptions {
 export class AgentEventProjector {
 	private assistantMessage?: AppUIMessage
 	private lastStreamNotifyAt = 0
+	private readonly toolInputs = new Map<string, string>()
 
 	constructor(private options: AgentEventProjectorOptions) {}
 
@@ -73,6 +79,44 @@ export class AgentEventProjector {
 			case 'text-delta':
 				this.projectTextDelta(event.delta)
 				return
+			case 'reasoning-delta': {
+				const message = this.ensureAssistantMessage()
+				const part = message.parts.at(-1)
+				if (part?.type === 'reasoning') part.text += event.delta
+				else message.parts.push({ type: 'reasoning', text: event.delta })
+				this.touch()
+				this.options.notify()
+				return
+			}
+			case 'tool-input-start': {
+				this.toolInputs.set(event.id, '')
+				this.ensureAssistantMessage().parts.push({
+					type: 'dynamic-tool',
+					toolCallId: event.id,
+					toolName: event.toolName,
+					state: 'input-streaming',
+				})
+				this.touch()
+				this.options.notify()
+				return
+			}
+			case 'tool-input-delta': {
+				const input = this.toolInputs.get(event.id)
+				if (input === undefined) return
+				this.toolInputs.set(event.id, input + event.delta)
+				const { value } = await parsePartialJson(input + event.delta)
+				if (!this.options.isTurnAlive()) return
+				const part = this.assistantMessage?.parts.find(
+					(part) =>
+						part.type === 'dynamic-tool' && part.toolCallId === event.id,
+				)
+				if (part?.type !== 'dynamic-tool' || part.state !== 'input-streaming')
+					return
+				part.input = value
+				this.touch()
+				this.options.notify()
+				return
+			}
 			case 'tool-execution-start': {
 				const message = this.ensureAssistantMessage()
 				const existing = message.parts.find(
@@ -80,6 +124,17 @@ export class AgentEventProjector {
 						part.type === 'dynamic-tool' &&
 						part.toolCallId === event.toolCall.toolCallId,
 				)
+				this.toolInputs.delete(event.toolCall.toolCallId)
+				if (
+					existing?.type === 'dynamic-tool' &&
+					existing.state === 'input-streaming'
+				) {
+					message.parts[message.parts.indexOf(existing)] = {
+						...existing,
+						state: 'input-available',
+						input: event.toolCall.input,
+					}
+				}
 				if (!existing) {
 					message.parts.push({
 						type: 'dynamic-tool',
@@ -168,9 +223,7 @@ export class AgentEventProjector {
 							(candidate) =>
 								candidate.type === 'dynamic-tool' &&
 								candidate.toolCallId === part.toolCallId &&
-								(candidate.state === 'output-available' ||
-									candidate.state === 'output-error' ||
-									candidate.state === 'output-denied'),
+								isTerminalToolPart(candidate),
 						)
 						if (existing) message.parts[index] = existing
 					}

@@ -8,10 +8,17 @@ interface GetLatestDeltaCursorInput {
 	folderName: string
 	settings: NutstoreSettings
 	token: string
+	throwIfCancelled?: () => void
 }
 
 export const getLatestDeltaCursor = apiLimiter.wrap(
-	async ({ folderName, settings, token }: GetLatestDeltaCursorInput) => {
+	async ({
+		folderName,
+		settings,
+		token,
+		throwIfCancelled,
+	}: GetLatestDeltaCursorInput) => {
+		throwIfCancelled?.()
 		const body = `<?xml version="1.0" encoding="utf-8"?>
               <s:delta xmlns:s="http://ns.jianguoyun.com">
                   <s:folderName>${folderName}</s:folderName>
@@ -26,6 +33,7 @@ export const getLatestDeltaCursor = apiLimiter.wrap(
 			headers,
 			body,
 		})
+		throwIfCancelled?.()
 		const parseXml = new XMLParser({
 			attributeNamePrefix: '',
 			removeNSPrefix: true,

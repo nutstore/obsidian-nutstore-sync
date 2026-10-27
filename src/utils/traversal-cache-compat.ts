@@ -23,7 +23,10 @@ export function isTraversalCacheCompatible(
 	cache: TraverseWebDAVCache,
 	remoteBaseDir: string,
 ): boolean {
-	for (const path of cache.queue ?? []) {
+	for (const path of [
+		...(cache.queue ?? []),
+		...(cache.pendingVerification ?? []),
+	]) {
 		if (!belongsToRemoteBaseDir(path, remoteBaseDir)) {
 			return false
 		}

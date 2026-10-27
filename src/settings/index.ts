@@ -1,6 +1,19 @@
-import { App, PluginSettingTab, Setting } from 'obsidian'
+import ModuleSettings from './module'
+import { ModuleState } from '~/modules/lifecycle'
+import {
+	App,
+	Platform,
+	PluginSettingTab,
+	requireApiVersion,
+	type SettingDefinitionItem,
+	type SettingDefinitionRender,
+} from 'obsidian'
 import { Subscription } from 'rxjs'
 import { AIProviderConfigs, AIProviderDefinitions } from '~/ai/core/types'
+import {
+	DEFAULT_MEMORY_NOTE_PATH,
+	type MemorySettings,
+} from '~/ai/memory/memory-note'
 import { onNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import { onSsoReceive } from '~/events/sso-receive'
 import i18n from '~/i18n'
@@ -9,17 +22,37 @@ import type { NutstoreLlmGatewayAuthSettings } from '~/services/nutstore-llm-gat
 import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
 import { DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE } from '~/utils/download-chunk-size'
 import { GlobFilterRule } from '~/utils/glob-match'
-import AccountSettings from './account'
-import AISettings from './ai'
-import CommonSettings from './common'
-import FilterSettings from './filter'
+import { toggleClassTokens } from '~/utils/class-tokens'
+import AccountSettings from './sync/account'
+import AISettings from './ai/settings'
+import AIPreferencesSettings from './ai/preferences'
+import MemorySettingsSection from './ai/memory'
+import SkillsSettingsSection from './ai/skills'
+import SubagentSettingsSection from './ai/subagents'
+import AutomationSettings from './sync/automation'
+import FilterSettings from './sync/filter'
+import InterfaceSettings from './sync/interface'
+import SynchronizationSettings from './sync/synchronization'
+import TransferSettings from './sync/transfer'
+import PluginRuntimeInfoSettings from './troubleshooting/plugin-runtime-info'
 import BaseSettings from './settings.base'
+import SyncBackupReminderSettings from './sync/backup-reminder'
 import { SETTINGS_TABS, SettingsTabKey } from './tabs'
-import TroubleshootingSettings from './troubleshooting'
+import TroubleshootingSettings from './troubleshooting/settings'
 
 export enum SyncMode {
 	STRICT = 'strict',
 	LOOSE = 'loose',
+}
+
+export enum ChatboxLocation {
+	Sidebar = 'sidebar',
+	Editor = 'editor',
+}
+
+export enum SessionAppOpenMode {
+	Automatic = 'automatic',
+	Manual = 'manual',
 }
 
 export enum SyncPolicy {
@@ -44,18 +77,14 @@ export type SyncPolicyNameI18nKey =
 	| 'settings.syncPolicy.receiveOnly'
 	| 'settings.syncPolicy.receiveOnlyRevertLocalChanges'
 
-export type SyncPolicyDescI18nKey =
-	| 'settings.syncPolicy.modal.twoWayDesc'
-	| 'settings.syncPolicy.modal.sendOnlyDesc'
-	| 'settings.syncPolicy.modal.sendOnlyOverrideChangesDesc'
-	| 'settings.syncPolicy.modal.receiveOnlyDesc'
-	| 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
+/** A confirmed manual run uses these values without changing saved defaults. */
+export interface SyncSelection {
+	syncPolicy: SyncPolicy
+	conflictStrategy: ConflictStrategy
+}
 
 export type ConflictStrategyI18nKey =
-	| 'noConflictMerge'
-	| 'diff3'
-	| 'localPriority'
-	| 'serverPriority'
+	'noConflictMerge' | 'diff3' | 'localPriority' | 'serverPriority'
 
 export function getConflictStrategyI18nKey(
 	strategy: ConflictStrategy,
@@ -107,24 +136,6 @@ export function getSyncPolicyNameI18nKey(
 	}
 }
 
-export function getSyncPolicyDescI18nKey(
-	policy: SyncPolicy,
-): SyncPolicyDescI18nKey {
-	switch (policy) {
-		case SyncPolicy.SendOnly:
-			return 'settings.syncPolicy.modal.sendOnlyDesc'
-		case SyncPolicy.SendOnlyOverrideChanges:
-			return 'settings.syncPolicy.modal.sendOnlyOverrideChangesDesc'
-		case SyncPolicy.ReceiveOnly:
-			return 'settings.syncPolicy.modal.receiveOnlyDesc'
-		case SyncPolicy.ReceiveOnlyRevertLocalChanges:
-			return 'settings.syncPolicy.modal.receiveOnlyRevertLocalChangesDesc'
-		case SyncPolicy.TwoWay:
-		default:
-			return 'settings.syncPolicy.modal.twoWayDesc'
-	}
-}
-
 export interface NutstoreSettings {
 	account: string
 	credential: string
@@ -153,8 +164,10 @@ export interface NutstoreSettings {
 		yolo?: boolean
 		subagents: {
 			explorer: SubagentSettings
-			memory: SubagentSettings
 		}
+		memory: MemorySettings
+		/** Skill names excluded from the agent catalog by SkillRepository. */
+		disabledSkills: string[]
 		nutstoreLlmGateway?: NutstoreLlmGatewayAuthSettings
 	}
 	configDirSyncMode?: 'none' | 'bookmarks' | 'all'
@@ -231,16 +244,30 @@ export const DEFAULT_SETTINGS: NutstoreSettings = {
 		yolo: false,
 		subagents: {
 			explorer: { enabled: false },
-			memory: { enabled: false },
 		},
+		memory: { enabled: true, path: DEFAULT_MEMORY_NOTE_PATH },
+		disabledSkills: [],
 		nutstoreLlmGateway: {},
 	},
 	configDirSyncMode: 'none',
 }
 
+/** Feature modules whose on/off state is a per-device choice. */
+export type FeatureModule = 'sync' | 'ai'
+
+/**
+ * Device-local settings live in `data.local.json`, which config-dir sync never
+ * transfers. Anything that must not propagate between devices belongs here.
+ */
 export interface NutstoreLocalSettings {
 	syncPolicy: SyncPolicy
+	/** Disabling a module on one device must not disable it on others. */
+	modules: Record<FeatureModule, ModuleState>
 	ai: {
+		/** Opening position is device-local so mobile and desktop can differ. */
+		chatboxLocation: ChatboxLocation
+		/** Controls automatic App restoration when entering a chat session. */
+		sessionAppOpenMode: SessionAppOpenMode
 		presetModels?: AIProviderDefinitions
 		presetModelsUpdatedAt?: string
 	}
@@ -248,25 +275,41 @@ export interface NutstoreLocalSettings {
 
 export const DEFAULT_LOCAL_SETTINGS: NutstoreLocalSettings = {
 	syncPolicy: SyncPolicy.TwoWay,
-	ai: {},
-}
-
-interface SettingsSectionEntry {
-	section: BaseSettings
-	containerEl: HTMLElement
+	modules: { sync: ModuleState.Enabled, ai: ModuleState.Enabled },
+	ai: {
+		chatboxLocation: ChatboxLocation.Sidebar,
+		sessionAppOpenMode: SessionAppOpenMode.Automatic,
+	},
 }
 
 export class NutstoreSettingTab extends PluginSettingTab {
 	plugin: NutstorePlugin
 	accountSettings: AccountSettings
-	commonSettings: CommonSettings
+	synchronizationSettings: SynchronizationSettings
+	automationSettings: AutomationSettings
+	transferSettings: TransferSettings
+	interfaceSettings: InterfaceSettings
 	filterSettings: FilterSettings
 	troubleshootingSettings: TroubleshootingSettings
+	pluginRuntimeInfoSettings: PluginRuntimeInfoSettings
 	aiSettings: AISettings
-	warningContainerEl: HTMLElement
+	aiPreferencesSettings: AIPreferencesSettings
+	memorySettings: MemorySettingsSection
+	subagentSettings: SubagentSettingsSection
+	skillSettings: SkillsSettingsSection
+	syncBackupReminderSettings: SyncBackupReminderSettings
 	private tabBarEl: HTMLElement
 	private activeTab: SettingsTabKey = 'sync'
-	private readonly tabSections: Record<SettingsTabKey, SettingsSectionEntry[]>
+	private readonly tabSections: Record<SettingsTabKey, BaseSettings[]>
+
+	private readonly definitionTargets = new Map<
+		SettingDefinitionItem,
+		{
+			tab: SettingsTabKey
+			element?: HTMLElement
+			groupEl?: HTMLElement
+		}
+	>()
 
 	private readonly subscriptions: Subscription[] = [
 		onSsoReceive().subscribe(() => {
@@ -281,7 +324,13 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		super(app, plugin)
 		this.plugin = plugin
 		this.tabBarEl = this.containerEl.createDiv()
-		this.warningContainerEl = this.containerEl.createDiv()
+		const syncBackupReminderContainerEl = this.containerEl.createDiv()
+		this.syncBackupReminderSettings = new SyncBackupReminderSettings(
+			this.app,
+			this.plugin,
+			this,
+			syncBackupReminderContainerEl,
+		)
 		const accountContainerEl = this.containerEl.createDiv()
 		this.accountSettings = new AccountSettings(
 			this.app,
@@ -289,12 +338,33 @@ export class NutstoreSettingTab extends PluginSettingTab {
 			this,
 			accountContainerEl,
 		)
-		const commonContainerEl = this.containerEl.createDiv()
-		this.commonSettings = new CommonSettings(
+		const synchronizationContainerEl = this.containerEl.createDiv()
+		this.synchronizationSettings = new SynchronizationSettings(
 			this.app,
 			this.plugin,
 			this,
-			commonContainerEl,
+			synchronizationContainerEl,
+		)
+		const automationContainerEl = this.containerEl.createDiv()
+		this.automationSettings = new AutomationSettings(
+			this.app,
+			this.plugin,
+			this,
+			automationContainerEl,
+		)
+		const transferContainerEl = this.containerEl.createDiv()
+		this.transferSettings = new TransferSettings(
+			this.app,
+			this.plugin,
+			this,
+			transferContainerEl,
+		)
+		const interfaceContainerEl = this.containerEl.createDiv()
+		this.interfaceSettings = new InterfaceSettings(
+			this.app,
+			this.plugin,
+			this,
+			interfaceContainerEl,
 		)
 		const filterContainerEl = this.containerEl.createDiv()
 		this.filterSettings = new FilterSettings(
@@ -305,26 +375,190 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		)
 		const aiContainerEl = this.containerEl.createDiv()
 		this.aiSettings = new AISettings(this.app, this.plugin, this, aiContainerEl)
+		this.aiPreferencesSettings = new AIPreferencesSettings(
+			this.app,
+			this.plugin,
+			this,
+			this.containerEl.createDiv(),
+		)
+		const memoryContainerEl = this.containerEl.createDiv()
+		this.memorySettings = new MemorySettingsSection(
+			this.app,
+			this.plugin,
+			this,
+			memoryContainerEl,
+		)
+		const subagentsContainerEl = this.containerEl.createDiv()
+		this.subagentSettings = new SubagentSettingsSection(
+			this.app,
+			this.plugin,
+			this,
+			subagentsContainerEl,
+		)
+		const skillsContainerEl = this.containerEl.createDiv()
+		this.skillSettings = new SkillsSettingsSection(
+			this.app,
+			this.plugin,
+			this,
+			skillsContainerEl,
+		)
 		const troubleshootingContainerEl = this.containerEl.createDiv()
+		const pluginRuntimeInfoContainerEl = this.containerEl.createDiv()
+		this.pluginRuntimeInfoSettings = new PluginRuntimeInfoSettings(
+			this.app,
+			this.plugin,
+			this,
+			pluginRuntimeInfoContainerEl,
+		)
 		this.troubleshootingSettings = new TroubleshootingSettings(
 			this.app,
 			this.plugin,
 			this,
 			troubleshootingContainerEl,
 		)
+		const syncModuleSettings = new ModuleSettings(
+			app,
+			plugin,
+			this,
+			this.containerEl.createDiv(),
+		)
+		syncModuleSettings.module = 'sync'
+		const aiModuleSettings = new ModuleSettings(
+			app,
+			plugin,
+			this,
+			this.containerEl.createDiv(),
+		)
+		aiModuleSettings.module = 'ai'
 		this.tabSections = {
 			sync: [
-				{ section: this.accountSettings, containerEl: accountContainerEl },
-				{ section: this.commonSettings, containerEl: commonContainerEl },
-				{ section: this.filterSettings, containerEl: filterContainerEl },
+				this.syncBackupReminderSettings,
+				this.accountSettings,
+				this.synchronizationSettings,
+				this.automationSettings,
+				this.transferSettings,
+				this.interfaceSettings,
+				this.filterSettings,
+				syncModuleSettings,
 			],
-			ai: [{ section: this.aiSettings, containerEl: aiContainerEl }],
+			ai: [
+				this.aiSettings,
+				this.memorySettings,
+				this.subagentSettings,
+				this.skillSettings,
+				this.aiPreferencesSettings,
+				aiModuleSettings,
+			],
 			troubleshooting: [
-				{
-					section: this.troubleshootingSettings,
-					containerEl: troubleshootingContainerEl,
-				},
+				this.pluginRuntimeInfoSettings,
+				this.troubleshootingSettings,
 			],
+		}
+	}
+
+	// Keep every section searchable, including inactive tabs. Visual visibility
+	// belongs to our panels; definition.visible would also remove search entries.
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		this.definitionTargets.clear()
+		this.renderTabBar()
+		const definitions: SettingDefinitionItem[] = []
+		for (const tab of SETTINGS_TABS) {
+			const visibleSections = this.visibleSections(tab.key)
+			for (const section of visibleSections) {
+				const { name, containerEl, searchable, showGroupHeading } = section
+				const target: {
+					tab: SettingsTabKey
+					element?: HTMLElement
+					groupEl?: HTMLElement
+				} = {
+					tab: tab.key,
+				}
+				const definition: SettingDefinitionRender = {
+					name: name(),
+					searchable,
+					aliases: searchable
+						? [i18n.t(tab.i18nKey), ...section.getSearchTerms()]
+						: [],
+					render: (setting, group) => {
+						if (requireApiVersion('1.13.0')) {
+							const groupEl = group.listEl.closest<HTMLElement>(
+								'.ns-settings-section',
+							)
+							if (groupEl) {
+								target.groupEl = groupEl
+								this.mountTabBar(group.listEl)
+								this.setSectionVisibility(groupEl, tab.key === this.activeTab)
+							}
+						}
+						setting.settingEl.empty()
+						setting.settingEl.removeClass('setting-item')
+						setting.settingEl.appendChild(containerEl)
+						target.element = setting.settingEl
+						containerEl.show()
+						void section.display()
+						return () => {
+							target.element = undefined
+							if (section === this.accountSettings)
+								void this.accountSettings.hide()
+							if (section === this.troubleshootingSettings)
+								this.troubleshootingSettings.hide()
+						}
+					},
+				}
+				this.definitionTargets.set(definition, target)
+				definitions.push({
+					type: 'group',
+					heading: showGroupHeading ? name() : undefined,
+					cls:
+						section === visibleSections[0]
+							? 'ns-settings-section ns-settings-first-section'
+							: 'ns-settings-section',
+					items: [definition],
+				})
+			}
+		}
+		return definitions
+	}
+
+	private mountTabBar(anchorEl: HTMLElement) {
+		if (requireApiVersion('1.13.0')) {
+			if (!this.tabBarEl.isConnected) {
+				// The host reconciles group siblings; keep navigation inside a group.
+				anchorEl.before(this.tabBarEl)
+				this.renderTabBar()
+			}
+		}
+	}
+
+	// Obsidian 1.13 calls this host hook before scrolling to a search result,
+	// including on touch devices where no focus event follows. It is not yet
+	// declared in the public typings; keep the integration confined here.
+	getElementForDefinition(
+		definition: SettingDefinitionItem,
+	): HTMLElement | undefined {
+		const target = this.definitionTargets.get(definition)
+		if (!target?.element) return undefined
+		this.activeTab = target.tab
+		this.renderTabBar()
+		this.updatePanelVisibility()
+		for (const section of this.visibleSections(target.tab))
+			section.containerEl.show()
+		return target.element
+	}
+
+	private updatePanelVisibility() {
+		for (const { tab, groupEl } of this.definitionTargets.values()) {
+			if (groupEl) this.setSectionVisibility(groupEl, tab === this.activeTab)
+		}
+	}
+
+	private setSectionVisibility(groupEl: HTMLElement, visible: boolean) {
+		const containsNavigation = groupEl.contains(this.tabBarEl)
+		toggleClassTokens(groupEl, ':uno: hidden', !visible && !containsNavigation)
+		if (!containsNavigation) return
+		for (const child of Array.from(groupEl.children)) {
+			if (child !== this.tabBarEl)
+				toggleClassTokens(child, ':uno: hidden', !visible)
 		}
 	}
 
@@ -333,48 +567,74 @@ export class NutstoreSettingTab extends PluginSettingTab {
 		void this.renderActiveTabContent()
 	}
 
+	private visibleSections(tab: SettingsTabKey) {
+		const disabled =
+			(tab === 'sync' || tab === 'ai') &&
+			this.plugin.localSettings.modules[tab] === ModuleState.Disabled
+		// The module switch is the last section and stays reachable when disabled.
+		return disabled ? this.tabSections[tab].slice(-1) : this.tabSections[tab]
+	}
+
 	private async renderActiveTabContent() {
-		const isSyncTab = this.activeTab === 'sync'
-		if (isSyncTab) this.warningContainerEl.show()
-		else this.warningContainerEl.hide()
-		if (isSyncTab) {
-			this.warningContainerEl.empty()
-			new Setting(this.warningContainerEl)
-				.setName(i18n.t('settings.backupWarning.name'))
-				.setDesc(i18n.t('settings.backupWarning.desc'))
-		}
+		this.updatePanelVisibility()
 		for (const tab of SETTINGS_TABS) {
 			const isActive = tab.key === this.activeTab
-			for (const { containerEl } of this.tabSections[tab.key]) {
-				if (isActive) containerEl.show()
-				else containerEl.hide()
+			for (const section of this.tabSections[tab.key]) {
+				if (isActive && this.visibleSections(tab.key).includes(section))
+					section.containerEl.show()
+				else section.containerEl.hide()
 			}
-			if (isActive) {
-				for (const { section } of this.tabSections[tab.key]) {
-					await section.display()
-				}
-			}
+		}
+		for (const section of this.visibleSections(this.activeTab)) {
+			await section.display()
 		}
 	}
 
 	private renderTabBar() {
 		this.tabBarEl.empty()
 		const barEl = this.tabBarEl.createDiv({ cls: 'ns-settings-tabs' })
+		barEl.setAttribute('role', 'tablist')
+		// Settings may live in a host shadow root, outside body platform classes.
+		barEl.toggleClass('is-mobile', Platform.isMobile)
 		const buttonEls = new Map<SettingsTabKey, HTMLElement>()
 		for (const tab of SETTINGS_TABS) {
 			const buttonEl = barEl.createEl('button', {
 				cls: 'ns-settings-tab',
 				text: i18n.t(tab.i18nKey),
 			})
+			buttonEl.setAttribute('type', 'button')
+			buttonEl.setAttribute('role', 'tab')
+			buttonEl.tabIndex = tab.key === this.activeTab ? 0 : -1
+			buttonEl.setAttribute('aria-selected', String(tab.key === this.activeTab))
 			buttonEl.classList.toggle('is-active', tab.key === this.activeTab)
 			buttonEl.addEventListener('click', () => {
 				if (this.activeTab !== tab.key) {
 					this.activeTab = tab.key
 					for (const [key, el] of buttonEls) {
 						el.classList.toggle('is-active', key === this.activeTab)
+						el.setAttribute('aria-selected', String(key === this.activeTab))
+						el.tabIndex = key === this.activeTab ? 0 : -1
 					}
 					void this.renderActiveTabContent()
 				}
+			})
+			buttonEl.addEventListener('keydown', (event) => {
+				const index = SETTINGS_TABS.findIndex((entry) => entry.key === tab.key)
+				const next =
+					event.key === 'Home'
+						? 0
+						: event.key === 'End'
+							? SETTINGS_TABS.length - 1
+							: event.key === 'ArrowRight'
+								? (index + 1) % SETTINGS_TABS.length
+								: event.key === 'ArrowLeft'
+									? (index + SETTINGS_TABS.length - 1) % SETTINGS_TABS.length
+									: undefined
+				if (next === undefined) return
+				event.preventDefault()
+				const button = buttonEls.get(SETTINGS_TABS[next].key)
+				button?.click()
+				button?.focus()
 			})
 			buttonEls.set(tab.key, buttonEl)
 		}
@@ -385,19 +645,25 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	}
 
 	isVisible() {
-		return (
-			this.containerEl.isConnected &&
-			document.contains(this.containerEl) &&
-			this.containerEl.offsetParent !== null
-		)
+		return Object.values(this.tabSections)
+			.flat()
+			.some(
+				(section) =>
+					section.containerEl.isConnected &&
+					section.containerEl.offsetParent !== null,
+			)
 	}
 
 	async rerenderIfVisible() {
-		if (!this.isVisible()) {
+		// Obsidian 1.13+ caches translated definitions for both pages and search.
+		if (requireApiVersion('1.13.0')) {
+			this.update()
 			return
 		}
-		this.renderTabBar()
-		await this.renderActiveTabContent()
+		if (this.isVisible()) {
+			this.renderTabBar()
+			await this.renderActiveTabContent()
+		}
 	}
 
 	async onClose() {
@@ -406,6 +672,7 @@ export class NutstoreSettingTab extends PluginSettingTab {
 	}
 
 	unload() {
+		void this.accountSettings.hide()
 		for (const subscription of this.subscriptions) {
 			subscription.unsubscribe()
 		}

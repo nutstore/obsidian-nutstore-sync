@@ -1,5 +1,5 @@
 import { diff_match_patch } from 'diff-match-patch'
-import { isEqual } from 'lodash-es'
+import { isEqual } from 'es-toolkit/compat'
 import {
 	diff3Merge as nodeDiff3Merge,
 	mergeDiff3 as nodeMergeDiff3,
@@ -133,12 +133,7 @@ const MISSING_JSON_VALUE = Symbol('missing-json-value')
 
 type MissingJsonValue = typeof MISSING_JSON_VALUE
 type JsonValue =
-	| null
-	| boolean
-	| number
-	| string
-	| JsonValue[]
-	| { [key: string]: JsonValue }
+	null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
 function isPlainJsonObject(
 	value: JsonValue | MissingJsonValue,

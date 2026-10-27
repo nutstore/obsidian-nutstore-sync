@@ -15,11 +15,12 @@ import {
 import {
 	captureWorkspaceContexts,
 	computeChangedContexts,
+	refreshWorkspaceContextSources,
+	type WorkspaceContextSources,
 } from '~/ai/chat/context/workspace-context'
 import { normalizeReversibleToolOpRecord } from '~/ai/chat/messages/reversible-op-utils'
 import createId from '~/utils/create-id'
 import logger from '~/utils/logger'
-import type { SkillRepository } from '~/ai/skills/repository'
 import type { App } from 'obsidian'
 import {
 	modelMessageToUIMessage,
@@ -30,7 +31,7 @@ export class MessageFactory {
 	constructor(
 		private app: App,
 		private notify: () => void,
-		private skillRepository?: SkillRepository,
+		private contextSources: WorkspaceContextSources = {},
 	) {}
 
 	getActiveAgent(session: ChatSession) {
@@ -108,11 +109,11 @@ export class MessageFactory {
 		userContext?: UserContextItem[],
 		isCurrent?: () => boolean,
 	) {
-		await this.skillRepository?.refresh()
+		await refreshWorkspaceContextSources(this.contextSources)
 		if (isCurrent && !isCurrent()) return undefined
 		const now = Date.now()
 		if (session) session.updatedAt = now
-		const current = captureWorkspaceContexts(this.app, this.skillRepository)
+		const current = captureWorkspaceContexts(this.app, this.contextSources)
 		const changed = computeChangedContexts(agent.timeline, current)
 		const message: AppUIMessage = {
 			id: createId('message'),

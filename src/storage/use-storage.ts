@@ -7,37 +7,10 @@ export abstract class StorageInterface<T = unknown> {
 }
 
 export interface RecoverableStorageConfig<T = unknown> {
-	getFreshInstance: () => StorageInterface<T>
+	instance: StorageInterface<T>
+	recover: () => void | Promise<void>
 	shouldRecover?: (error: unknown) => boolean
 	maxRetries?: number
-}
-
-const INDEXED_DB_CONNECTION_LOST_PATTERNS = [
-	/connection to indexeddb server lost/i,
-	/connection to indexeddatabase server lost/i,
-	/internal error opening backing store/i,
-	/the database connection is closing/i,
-]
-
-export function isIndexedDbConnectionLostError(error: unknown): boolean {
-	if (!error) {
-		return false
-	}
-	const maybeError = error as { name?: unknown; message?: unknown }
-	const name = typeof maybeError.name === 'string' ? maybeError.name : ''
-	const message =
-		typeof maybeError.message === 'string'
-			? maybeError.message
-			: typeof error === 'string'
-				? error
-				: ''
-	const text = `${name} ${message}`.trim()
-	if (!text) {
-		return false
-	}
-	return INDEXED_DB_CONNECTION_LOST_PATTERNS.some((pattern) =>
-		pattern.test(text),
-	)
 }
 
 function isRecoverableStorageConfig<T = unknown>(
@@ -46,8 +19,8 @@ function isRecoverableStorageConfig<T = unknown>(
 	return (
 		typeof value === 'object' &&
 		value !== null &&
-		'getFreshInstance' in value &&
-		typeof value.getFreshInstance === 'function'
+		'recover' in value &&
+		typeof value.recover === 'function'
 	)
 }
 
@@ -59,12 +32,13 @@ export default function useStorage<T = unknown>(
 	const config = isRecoverableStorageConfig(input)
 		? input
 		: {
-				getFreshInstance: () => input,
+				instance: input,
+				recover: () => {},
 				maxRetries: 0,
 			}
 
-	let instance = config.getFreshInstance()
-	const shouldRecover = config.shouldRecover ?? isIndexedDbConnectionLostError
+	const instance = config.instance
+	const shouldRecover = config.shouldRecover ?? (() => false)
 	const maxRetries = Math.max(0, config.maxRetries ?? 0)
 
 	async function runWithRecovery<R>(
@@ -82,7 +56,7 @@ export default function useStorage<T = unknown>(
 				if (!canRetry) {
 					throw firstError ?? error
 				}
-				instance = config.getFreshInstance()
+				await config.recover()
 			}
 		}
 		throw new Error('Unexpected storage retry state')

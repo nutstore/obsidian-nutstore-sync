@@ -11,12 +11,19 @@ import { fileStatToStatModel } from './file-stat-to-stat-model'
 import { getRootFolderName } from './get-root-folder-name'
 import { is503Error } from './is-503-error'
 import logger from './logger'
+import { RequestUrlError } from './request-url-error'
 import sleep from './sleep'
 import { stdRemotePath } from './std-remote-path'
 import { isTraversalCacheCompatible } from './traversal-cache-compat'
 import { MaybePromise } from './types'
 
-const getContents = apiLimiter.wrap(getDirectoryContents)
+const getContents = (
+	settings: NutstoreSettings,
+	token: string,
+	path: string,
+	check?: () => void,
+) =>
+	apiLimiter.schedule(() => getDirectoryContents(settings, token, path, check))
 
 // Global mutex map: one lock per kvKey
 const traversalLocks = new Map<string, Mutex>()
@@ -77,6 +84,8 @@ export class ResumableWebDAVTraversal {
 
 	private rootCursor: string = ''
 	private queue: string[] = []
+	// A 404 is incomplete observation, never proof of deletion. Persist until reconciled.
+	private pendingVerification = new Set<string>()
 	private nodes: Record<string, StatModel[]> = {}
 	private processedCount: number = 0
 	private discoveredCount: number = 0
@@ -162,28 +171,33 @@ export class ResumableWebDAVTraversal {
 
 			// Use incremental scan if already traversed once
 			const isIncrementalScan =
-				this.queue.length === 0 && Object.keys(this.nodes).length > 0
+				this.queue.length === 0 &&
+				this.pendingVerification.size === 0 &&
+				Object.keys(this.nodes).length > 0
 
-			if (isIncrementalScan) {
-				await this.incrementalScan()
-			} else {
-				// Initial scan or resume: BFS traversal
-				if (this.queue.length === 0) {
-					const { response } = await this.executeWithRetry(() =>
-						getLatestDeltaCursor({
-							token: this.token,
-							settings: this.settings,
-							folderName: getRootFolderName(this.remoteBaseDir),
-						}),
-					)
-					this.rootCursor = response.cursor
-					this.queue = [this.remoteBaseDir]
+			try {
+				if (isIncrementalScan) {
+					await this.incrementalScan()
+				} else {
+					// Initial scan or resume: BFS traversal
+					if (this.queue.length === 0 && this.pendingVerification.size === 0) {
+						const { response } = await this.executeWithRetry(() =>
+							getLatestDeltaCursor({
+								token: this.token,
+								throwIfCancelled: this.throwIfCancelled,
+								settings: this.settings,
+								folderName: getRootFolderName(this.remoteBaseDir),
+							}),
+						)
+						this.rootCursor = response.cursor
+						this.queue = [this.remoteBaseDir]
+					}
+
+					await this.bfsTraverse()
 				}
-
-				await this.bfsTraverse()
+			} finally {
+				await this.saveState()
 			}
-
-			await this.saveState()
 			this.emitProgress('complete')
 
 			return this.getAllFromCache()
@@ -194,10 +208,12 @@ export class ResumableWebDAVTraversal {
 	 * BFS traversal (initial scan or resume)
 	 */
 	private async bfsTraverse(): Promise<StatModel[]> {
-		// Outer loop to handle reset scenarios without recursion
+		// Remember paths across repairs and subtree invalidation within this invocation.
+		// Normal scans may need any number of passes; the same unresolved directory
+		// must not cycle through verification -> BFS -> verification indefinitely.
+		const suspendedDirectories = new Set(this.pendingVerification)
 		while (true) {
 			const traverseStartCursor = this.rootCursor
-			const results: StatModel[] = []
 
 			while (this.queue.length > 0) {
 				this.checkCancelled()
@@ -213,7 +229,13 @@ export class ResumableWebDAVTraversal {
 						resultItems.push(...cachedItems)
 					} else {
 						const contents = await this.executeWithRetry(
-							() => getContents(this.settings, this.token, currentPath),
+							() =>
+								getContents(
+									this.settings,
+									this.token,
+									currentPath,
+									this.throwIfCancelled,
+								),
 							currentPath,
 						)
 
@@ -224,17 +246,16 @@ export class ResumableWebDAVTraversal {
 						this.discoveredCount += resultItems.length
 					}
 
-					results.push(...resultItems)
-
 					for (const item of resultItems) {
 						if (item.isDir) {
-							this.queue.push(item.path)
+							this.enqueueDirectory(item.path)
 						}
 					}
 
 					this.nodes[normalizedPath] = resultItems
 
 					this.queue.shift()
+					this.pendingVerification.delete(normalizedPath)
 					this.processedCount++
 					this.emitProgress('scanning', currentPath)
 
@@ -242,6 +263,16 @@ export class ResumableWebDAVTraversal {
 						await this.saveState()
 					}
 				} catch (err) {
+					if (
+						err instanceof RequestUrlError &&
+						err.res.status === 404 &&
+						normalizedPath !== this.normalizeDirPath(this.remoteBaseDir)
+					) {
+						this.queue.shift()
+						this.suspendDirectory(normalizedPath, suspendedDirectories)
+						await this.saveState()
+						continue
+					}
 					logger.error(`Error processing ${currentPath}`, err)
 					await this.saveState()
 					throw err
@@ -251,6 +282,7 @@ export class ResumableWebDAVTraversal {
 			const { response: endResponse } = await this.executeWithRetry(() =>
 				getLatestDeltaCursor({
 					token: this.token,
+					throwIfCancelled: this.throwIfCancelled,
 					settings: this.settings,
 					folderName: getRootFolderName(this.remoteBaseDir),
 				}),
@@ -258,26 +290,154 @@ export class ResumableWebDAVTraversal {
 			const traverseEndCursor = endResponse.cursor
 
 			if (traverseStartCursor && traverseStartCursor !== traverseEndCursor) {
-				logger.info('Changes detected during traversal, applying delta')
-				const newCursor =
+				this.rootCursor =
 					await this.applyDeltaDuringTraversal(traverseStartCursor)
-				this.rootCursor = newCursor
-
-				// If reset occurred, queue is non-empty, need to re-traverse
-				if (this.queue.length > 0) {
-					logger.info(
-						'Reset detected during delta apply, performing full re-scan',
-					)
-					continue
-				}
-
-				return this.getAllFromCache()
+			} else {
+				this.rootCursor = traverseEndCursor
 			}
 
-			this.rootCursor = traverseEndCursor
-
-			return results
+			const refreshed =
+				await this.reconcilePendingDirectories(suspendedDirectories)
+			if (
+				!refreshed &&
+				this.queue.length === 0 &&
+				this.pendingVerification.size === 0
+			) {
+				return this.getAllFromCache()
+			}
 		}
+	}
+
+	/** A path may be suspended only once per traversal, even across cache resets. */
+	private suspendDirectory(
+		path: string,
+		suspendedDirectories: Set<string>,
+	): void {
+		const key = this.normalizeDirPath(path)
+		this.pendingVerification.add(key)
+		if (suspendedDirectories.has(key)) {
+			throw new Error(
+				`Remote directory returned 404 again after suspension: ${key}`,
+			)
+		}
+		suspendedDirectories.add(key)
+	}
+
+	private enqueueDirectory(path: string): void {
+		const key = this.normalizeDirPath(path)
+		if (
+			!this.nodes[key] &&
+			!this.queue.some((item) => this.normalizeDirPath(item) === key)
+		) {
+			this.queue.push(path)
+		}
+	}
+
+	/** Invalidate an absent or untrusted subtree, including its unfinished work. */
+	private removeSubtree(path: string): void {
+		const prefix = this.normalizeDirPath(path)
+		for (const key of Object.keys(this.nodes)) {
+			if (this.normalizeDirPath(key).startsWith(prefix)) delete this.nodes[key]
+		}
+		this.queue = this.queue.filter(
+			(item) => !this.normalizeDirPath(item).startsWith(prefix),
+		)
+		for (const item of this.pendingVerification) {
+			if (item.startsWith(prefix)) this.pendingVerification.delete(item)
+		}
+	}
+
+	/** Each ascent strictly reduces path depth and must remain inside the sync root. */
+	private getRecoveryParent(path: string): string {
+		const current = this.normalizeDirPath(path)
+		const root = this.normalizeDirPath(this.remoteBaseDir)
+		const parent = this.normalizeDirPath(
+			dirname(this.normalizeForComparison(current)),
+		)
+		if (
+			!current.startsWith(root) ||
+			current === root ||
+			parent.length >= current.length ||
+			!parent.startsWith(root)
+		) {
+			throw new Error(
+				'Cannot reconcile a missing directory outside the sync root',
+			)
+		}
+		return parent
+	}
+
+	/** Fresh parent listings resolve stale paths without discarding unrelated branches. */
+	private async reconcilePendingDirectories(
+		suspendedDirectories: Set<string>,
+	): Promise<boolean> {
+		const refreshed = new Set<string>()
+		for (const missing of [...this.pendingVerification]) {
+			if (!this.pendingVerification.has(missing)) continue
+			let parent = this.getRecoveryParent(missing)
+			while (!refreshed.has(parent)) {
+				this.checkCancelled()
+				let contents: StatModel[]
+				try {
+					contents = (
+						await this.executeWithRetry(
+							() =>
+								getContents(
+									this.settings,
+									this.token,
+									parent,
+									this.throwIfCancelled,
+								),
+							parent,
+						)
+					).map(fileStatToStatModel)
+				} catch (error) {
+					if (
+						!(error instanceof RequestUrlError) ||
+						error.res.status !== 404 ||
+						parent === this.normalizeDirPath(this.remoteBaseDir)
+					)
+						throw error
+					this.suspendDirectory(parent, suspendedDirectories)
+					parent = this.getRecoveryParent(parent)
+					continue
+				}
+				refreshed.add(parent)
+				const directories = new Set(
+					contents
+						.filter((item) => item.isDir)
+						.map((item) => this.normalizeDirPath(item.path)),
+				)
+				const previous = [
+					...(this.nodes[parent] ?? [])
+						.filter((item) => item.isDir)
+						.map((item) => item.path),
+					...this.pendingVerification,
+				]
+				for (const path of previous) {
+					if (
+						this.normalizeDirPath(
+							dirname(this.normalizeForComparison(path)),
+						) === parent &&
+						!directories.has(this.normalizeDirPath(path))
+					)
+						this.removeSubtree(path)
+				}
+				this.nodes[parent] = contents
+				this.pendingVerification.delete(parent)
+				for (const path of directories) {
+					if (this.pendingVerification.has(path)) {
+						// An absent/recreated ancestor invalidates its entire old subtree.
+						this.removeSubtree(path)
+						this.pendingVerification.add(path)
+					}
+					this.enqueueDirectory(path)
+				}
+				await this.saveState()
+				break
+			}
+		}
+		return refreshed.size > 0
 	}
 
 	/**
@@ -296,6 +456,7 @@ export class ResumableWebDAVTraversal {
 			const { response } = await this.executeWithRetry(() =>
 				getDelta({
 					token: this.token,
+					throwIfCancelled: this.throwIfCancelled,
 					settings: this.settings,
 					folderName: getRootFolderName(this.remoteBaseDir),
 					cursor: currentCursor,
@@ -346,20 +507,24 @@ export class ResumableWebDAVTraversal {
 					'Delta reset during traversal, clearing cache and will trigger full re-scan',
 				)
 				this.nodes = {}
+				this.pendingVerification.clear()
 				this.queue = [this.remoteBaseDir]
 				this.processedCount = 0
 				const { response: cursorResponse } = await this.executeWithRetry(() =>
 					getLatestDeltaCursor({
 						token: this.token,
+						throwIfCancelled: this.throwIfCancelled,
 						settings: this.settings,
 						folderName: getRootFolderName(this.remoteBaseDir),
 					}),
 				)
-				return cursorResponse.cursor
+				this.rootCursor = cursorResponse.cursor
+				return this.rootCursor
 			}
 
 			if (entries.length > 0) {
 				processedEntries += this.applyDeltaEntries(entries)
+				this.rootCursor = cursor
 
 				// Save state periodically based on number of processed entries
 				if (processedEntries >= this.saveInterval) {
@@ -369,6 +534,7 @@ export class ResumableWebDAVTraversal {
 			}
 
 			finalCursor = cursor
+			this.rootCursor = cursor
 		}
 
 		await this.saveState()
@@ -380,43 +546,10 @@ export class ResumableWebDAVTraversal {
 	 * Incremental scan using fetchAllDelta
 	 */
 	private async incrementalScan(): Promise<StatModel[]> {
-		let hasAnyEntries = false
-		let processedEntries = 0
-
-		for await (const deltas of this.fetchAllDelta(this.rootCursor)) {
-			this.checkCancelled()
-			const { entries, cursor, reset } = deltas
-
-			this.rootCursor = cursor
-
-			if (reset) {
-				logger.info('Delta reset, performing full scan')
-				this.queue = [this.remoteBaseDir]
-				this.nodes = {}
-				this.processedCount = 0
-				return await this.bfsTraverse()
-			}
-
-			if (entries.length > 0) {
-				hasAnyEntries = true
-				processedEntries += this.applyDeltaEntries(entries)
-
-				// Save state periodically based on number of processed entries
-				if (processedEntries >= this.saveInterval) {
-					await this.saveState()
-					processedEntries = 0
-				}
-			} else {
-				this.emitProgress('incremental')
-			}
+		this.rootCursor = await this.applyDeltaDuringTraversal(this.rootCursor)
+		if (this.queue.length > 0 || this.pendingVerification.size > 0) {
+			return this.bfsTraverse()
 		}
-
-		await this.saveState()
-
-		if (!hasAnyEntries) {
-			logger.info('No changes detected, returning from cache')
-		}
-
 		return this.getAllFromCache()
 	}
 
@@ -446,7 +579,7 @@ export class ResumableWebDAVTraversal {
 			}
 			if (entry.isDir) {
 				if (entry.isDeleted) {
-					const parentPath = dirname(entry.path)
+					const parentPath = dirname(this.normalizeForComparison(entry.path))
 					if (parentPath) {
 						const normalizedParentPath = this.normalizeDirPath(parentPath)
 						const parentItems = this.nodes[normalizedParentPath]
@@ -462,16 +595,10 @@ export class ResumableWebDAVTraversal {
 						}
 					}
 
-					for (const nodePath in this.nodes) {
-						if (
-							nodePath === normalizedEntryPath ||
-							nodePath.startsWith(normalizedEntryPath)
-						) {
-							delete this.nodes[nodePath]
-						}
-					}
+					this.removeSubtree(entry.path)
+					if (isSelf) this.enqueueDirectory(this.remoteBaseDir)
 				} else {
-					const parentPath = dirname(entry.path)
+					const parentPath = dirname(this.normalizeForComparison(entry.path))
 
 					// Only update parent's children list if parent already exists
 					// (Avoid creating incomplete parent records)
@@ -504,13 +631,11 @@ export class ResumableWebDAVTraversal {
 						}
 					}
 
-					if (!this.nodes[normalizedEntryPath]) {
-						this.nodes[normalizedEntryPath] = []
-					}
+					this.enqueueDirectory(entry.path)
 				}
 			} else {
 				// is file
-				const parentPath = dirname(entry.path)
+				const parentPath = dirname(this.normalizeForComparison(entry.path))
 
 				// Only update parent's children list if parent exists
 				if (parentPath) {
@@ -599,11 +724,13 @@ export class ResumableWebDAVTraversal {
 				await traverseWebDAVKV.unset(this.kvKey)
 				this.rootCursor = ''
 				this.queue = []
+				this.pendingVerification.clear()
 				this.nodes = {}
 				return
 			}
 			this.rootCursor = cache.rootCursor || ''
 			this.queue = cache.queue || []
+			this.pendingVerification = new Set(cache.pendingVerification ?? [])
 			this.nodes = cache.nodes || {}
 			this.processedCount = Object.keys(this.nodes).length
 			this.discoveredCount = this.countDiscoveredItems()
@@ -614,9 +741,11 @@ export class ResumableWebDAVTraversal {
 	 * Save current state
 	 */
 	private async saveState(): Promise<void> {
+		this.checkCancelled()
 		await traverseWebDAVKV.set(this.kvKey, {
 			rootCursor: this.rootCursor,
 			queue: this.queue,
+			pendingVerification: [...this.pendingVerification],
 			nodes: this.nodes,
 		})
 	}
@@ -628,6 +757,7 @@ export class ResumableWebDAVTraversal {
 		await traverseWebDAVKV.unset(this.kvKey)
 		this.rootCursor = ''
 		this.queue = []
+		this.pendingVerification.clear()
 		this.nodes = {}
 		this.processedCount = 0
 		this.discoveredCount = 0
@@ -643,7 +773,9 @@ export class ResumableWebDAVTraversal {
 			return false
 		}
 
-		// Cache is valid if queue is empty (traversal completed)
-		return cache.queue.length === 0
+		// A drained queue may still have unresolved 404 observations.
+		return (
+			cache.queue.length === 0 && (cache.pendingVerification?.length ?? 0) === 0
+		)
 	}
 }

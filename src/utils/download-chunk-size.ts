@@ -1,6 +1,5 @@
 import { parse as bytesParse } from 'bytes-iec'
-import { isNil } from 'lodash-es'
-import { isNotNil } from 'ramda'
+import { isNil } from 'es-toolkit/compat'
 import { isNumeric } from './is-numeric'
 
 export const DEFAULT_MOBILE_APP_DOWNLOAD_FILE_CHUNK_SIZE = '16 MiB'
@@ -18,7 +17,7 @@ export function normalizeByteSizeInput(value: string, fallback: string) {
 	}
 	if (
 		isNumeric(normalized) ||
-		(isNil(bytesParse(normalized)) && isNotNil(bytesParse(normalized + 'B')))
+		(isNil(bytesParse(normalized)) && !isNil(bytesParse(normalized + 'B')))
 	) {
 		normalized += 'B'
 	}

@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch } from 'solid-js'
+import { Index, Match, Show, Switch } from 'solid-js'
 import type { ChatDisplayBlock } from '~/ai/chat/types'
 import type {
 	ChatAgentView,
@@ -127,9 +127,12 @@ function MessageDisplayBlock(props: {
 
 export function MessageCard(props: {
 	item: ChatTimelineMessageItem
+	/** Optional UI slice; actions and copying still use the original message. */
+	displayBlocks?: ChatDisplayBlock[]
 	now: number
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 	streaming?: boolean
+	process?: boolean
 	onDeleteMessage?: ChatboxProps['onDeleteMessage']
 	onRegenerateMessage?: ChatboxProps['onRegenerateMessage']
 	onRecallMessage?: ChatboxProps['onRecallMessage']
@@ -184,29 +187,43 @@ export function MessageCard(props: {
 
 	return (
 		<div
-			class={
+			class={[
+				'ns-message-card',
+				props.item.message.role === 'user'
+					? 'ns-message-card--user'
+					: props.item.message.role === 'assistant'
+						? 'ns-message-card--assistant'
+						: 'ns-message-card--tool',
 				props.item.message.metadata?.status === 'error'
 					? ':uno: text-[var(--text-error)]'
-					: undefined
-			}
+					: '',
+			]
+				.filter(Boolean)
+				.join(' ')}
 		>
-			<Show when={props.item.showHeader && !isSystemNotification()}>
-				<div class=":uno: mb-2 flex items-center justify-between gap-3 px-1 text-xs text-[var(--text-muted)]">
-					<div class=":uno: flex items-center gap-1 font-medium text-[var(--text-normal)]">
+			<Show
+				when={
+					!props.process && props.item.showHeader && !isSystemNotification()
+				}
+			>
+				<div class="ns-message-header">
+					<div class="ns-message-role-badge">
 						<span
-							class={`:uno: ${roleIconClass()} size-4 shrink-0`}
+							class={`:uno: ${roleIconClass()} size-3.5 shrink-0 ns-message-role-icon`}
 							aria-hidden="true"
 						/>
-						<span>{roleLabel()}</span>
+						<span class="ns-message-role-name">{roleLabel()}</span>
 					</div>
-					<span>{formatTime(props.item.createdAt)}</span>
+					<span class="ns-message-time">
+						{formatTime(props.item.createdAt)}
+					</span>
 				</div>
 			</Show>
-			<div class=":uno: flex flex-col gap-2">
-				<For each={props.item.displayBlocks}>
+			<div class=":uno: flex flex-col gap-[var(--ns-chatbox-block-gap)]">
+				<Index each={props.displayBlocks ?? props.item.displayBlocks}>
 					{(block) => (
 						<MessageDisplayBlock
-							block={block}
+							block={block()}
 							now={props.now}
 							renderMarkdown={props.renderMarkdown}
 							streaming={props.streaming}
@@ -216,7 +233,7 @@ export function MessageCard(props: {
 							onResolveResourceDataUrl={props.onResolveResourceDataUrl}
 						/>
 					)}
-				</For>
+				</Index>
 			</div>
 			<Show
 				when={
@@ -226,7 +243,7 @@ export function MessageCard(props: {
 					)
 				}
 			>
-				<div class=":uno: mt-2">
+				<div class=":uno: mt-[var(--ns-chatbox-block-gap)]">
 					<ContextArea
 						items={props.item.message.parts.flatMap((part) =>
 							part.type === 'data-user-context' ? part.data.items : [],
@@ -236,17 +253,18 @@ export function MessageCard(props: {
 			</Show>
 			<Show
 				when={
+					!props.process &&
 					!isSystemNotification() &&
 					(props.item.message.role === 'assistant' ||
 						props.item.message.role === 'user')
 				}
 			>
-				<div class=":uno: mt-3 flex items-center justify-between gap-2 px-1">
-					<div class=":uno: flex items-center gap-0.5">
+				<div class="ns-message-footer">
+					<div class="ns-message-actions">
 						<CopyButton getText={getText} />
 						<Show when={props.onDeleteMessage}>
 							<button
-								class=":uno: cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-error)] !border-none !bg-transparent !shadow-none"
+								class="ns-message-action-btn ns-message-action-btn--danger"
 								type="button"
 								title={t('chatbox.ui.actions.deleteMessage')}
 								onClick={() => props.onDeleteMessage?.(props.item.message.id)}
@@ -261,7 +279,7 @@ export function MessageCard(props: {
 							when={props.item.message.role === 'user' && props.onRecallMessage}
 						>
 							<button
-								class=":uno: cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
+								class="ns-message-action-btn"
 								type="button"
 								title={t('chatbox.ui.actions.recallMessage')}
 								onClick={() => {
@@ -281,7 +299,7 @@ export function MessageCard(props: {
 							}
 						>
 							<button
-								class=":uno: cursor-pointer p-1 size-6 text-[var(--text-muted)] hover:text-[var(--text-normal)] !border-none !bg-transparent !shadow-none"
+								class="ns-message-action-btn"
 								type="button"
 								title={t('chatbox.ui.actions.regenerateMessage')}
 								onClick={() =>
@@ -296,9 +314,7 @@ export function MessageCard(props: {
 						</Show>
 					</div>
 					<Show when={props.item.message.role === 'assistant' && usageText()}>
-						<div class=":uno: text-[10px] text-[var(--text-faint)]">
-							{usageText()}
-						</div>
+						<div class="ns-message-usage">{usageText()}</div>
 					</Show>
 				</div>
 			</Show>

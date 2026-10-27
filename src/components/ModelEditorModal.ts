@@ -1,6 +1,6 @@
-import { cloneDeep } from 'lodash-es'
-import { Modal, Notice, Setting } from 'obsidian'
-import { findPresetModelById } from '~/ai/catalog/config'
+import { cloneDeep } from 'es-toolkit/compat'
+import { Modal, Notice, Setting, type TextComponent } from 'obsidian'
+import { resolvePresetModel } from '~/ai/catalog/fetch-models'
 import { AIModelConfig } from '~/ai/core/types'
 import {
 	applyObsidianModalMountTarget,
@@ -9,6 +9,7 @@ import {
 import i18n from '~/i18n'
 import { addClassTokens, toggleClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
+import { formatTokenCount, parseTokenCount } from '~/utils/token-format'
 import type NutstorePlugin from '..'
 
 interface ModelEditorOptions {
@@ -31,6 +32,10 @@ export default class ModelEditorModal extends Modal {
 	private lastMatchedModelId?: string
 	private updateInputModalityTags?: () => void
 	private cleanupModalMount?: () => void
+	private contextLimitInput = ''
+	private outputLimitInput = ''
+	private contextTextComponent?: TextComponent
+	private outputTextComponent?: TextComponent
 
 	constructor(
 		plugin: NutstorePlugin,
@@ -40,8 +45,15 @@ export default class ModelEditorModal extends Modal {
 		private options: ModelEditorOptions = {},
 	) {
 		super(plugin.app)
+		plugin.ai.lifecycle.scope.ownModal(this)
 		this.draft = cloneDeep(model)
 		this.ensureModalities()
+		this.contextLimitInput = this.draft.limit?.context
+			? formatTokenCount(this.draft.limit.context)
+			: ''
+		this.outputLimitInput = this.draft.limit?.output
+			? formatTokenCount(this.draft.limit.output)
+			: ''
 		if (
 			this.isNew &&
 			!this.draft.id.trim() &&
@@ -108,6 +120,32 @@ export default class ModelEditorModal extends Modal {
 		updateTags()
 
 		new Setting(contentEl)
+			.setName(i18n.t('settings.ai.model.contextLimit'))
+			.setDesc(i18n.t('settings.ai.model.contextLimitDesc'))
+			.addText((text) => {
+				this.contextTextComponent = text
+				text
+					.setPlaceholder('1,048,576')
+					.setValue(this.contextLimitInput)
+					.onChange((value) => {
+						this.contextLimitInput = value
+					})
+			})
+
+		new Setting(contentEl)
+			.setName(i18n.t('settings.ai.model.outputLimit'))
+			.setDesc(i18n.t('settings.ai.model.outputLimitDesc'))
+			.addText((text) => {
+				this.outputTextComponent = text
+				text
+					.setPlaceholder('65,536')
+					.setValue(this.outputLimitInput)
+					.onChange((value) => {
+						this.outputLimitInput = value
+					})
+			})
+
+		new Setting(contentEl)
 			.addButton((button) =>
 				button
 					.setButtonText(i18n.t('settings.filters.save'))
@@ -117,9 +155,24 @@ export default class ModelEditorModal extends Modal {
 							new Notice(i18n.t('settings.ai.errors.emptyModelId'))
 							return
 						}
+						const parsedContext = parseTokenCount(this.contextLimitInput)
+						if (parsedContext === undefined) {
+							new Notice(i18n.t('settings.ai.errors.invalidContextLimit'))
+							return
+						}
+						const parsedOutput = parseTokenCount(this.outputLimitInput)
+						if (parsedOutput === undefined) {
+							new Notice(i18n.t('settings.ai.errors.invalidOutputLimit'))
+							return
+						}
 						try {
 							const toSave = cloneDeep(this.draft)
 							toSave.id = toSave.id.trim()
+							toSave.limit = {
+								...toSave.limit,
+								context: parsedContext,
+								output: parsedOutput,
+							}
 							toSave.modalities.input = this.normalizeInputModalities(
 								toSave.modalities.input,
 							)
@@ -154,6 +207,8 @@ export default class ModelEditorModal extends Modal {
 		this.cleanupModalMount = undefined
 		this.contentEl.empty()
 		this.updateInputModalityTags = undefined
+		this.contextTextComponent = undefined
+		this.outputTextComponent = undefined
 	}
 
 	private ensureModalities() {
@@ -176,7 +231,7 @@ export default class ModelEditorModal extends Modal {
 		const trimmedId = this.draft.id.trim()
 		if (!trimmedId || this.lastMatchedModelId === trimmedId) return
 		this.lastMatchedModelId = trimmedId
-		const presetModel = findPresetModelById(
+		const presetModel = resolvePresetModel(
 			trimmedId,
 			this.options.presetProviderApi,
 		)
@@ -188,6 +243,12 @@ export default class ModelEditorModal extends Modal {
 				...cloneDeep(presetModel.modalities),
 				input: this.normalizeInputModalities(presetModel.modalities.input),
 			},
+		}
+		if (presetModel.limit) {
+			this.contextLimitInput = formatTokenCount(presetModel.limit.context)
+			this.outputLimitInput = formatTokenCount(presetModel.limit.output)
+			this.contextTextComponent?.setValue(this.contextLimitInput)
+			this.outputTextComponent?.setValue(this.outputLimitInput)
 		}
 		this.updateInputModalityTags?.()
 	}

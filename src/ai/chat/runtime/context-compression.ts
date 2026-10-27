@@ -12,10 +12,7 @@ import { buildAgentSystemPrompt, COMPRESSION_PROMPT } from '~/ai/chat/prompts'
 import type { ToolExecutor } from '~/ai/chat/runtime/tool-executor'
 import type { SessionStore } from '~/ai/chat/session/session-store'
 import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
-import {
-	resolveModelOutputLimit,
-	resolveSummaryOutputTokenBudget,
-} from '~/ai/core/inference'
+import { resolveModelOutputLimit } from '~/ai/core/inference'
 import {
 	prepareMessagesForModel,
 	resolveLanguageModel,
@@ -65,11 +62,7 @@ export interface ContextCompressionPlan {
 }
 
 export type ContextCompressionResult =
-	| 'committed'
-	| 'unavailable'
-	| 'cancelled'
-	| 'failed'
-	| 'stale'
+	'committed' | 'unavailable' | 'cancelled' | 'failed' | 'stale'
 
 export class ContextCompressionFailedError extends Error {
 	constructor(message: string) {
@@ -318,7 +311,14 @@ export async function resolveSummaryContext(
 	try {
 		const definition = toolExecutor.getAgentDefinition(agent.type)
 		const [system, tools] = await Promise.all([
-			buildAgentSystemPrompt(app, agent.type, session.systemPrompt),
+			buildAgentSystemPrompt(
+				app,
+				agent.type,
+				session.systemPrompt,
+				undefined,
+				agent.id,
+				session.appId,
+			),
 			toolExecutor.createTools(0, definition, session, model),
 		])
 		return {
@@ -362,7 +362,7 @@ export async function generateContextCompression(
 			},
 		],
 		abortSignal: options.abortSignal,
-		maxOutputTokens: resolveSummaryOutputTokenBudget(options.model),
+		maxOutputTokens: resolveModelOutputLimit(options.model),
 	})
 	if (options.isCancelled?.()) return undefined
 	const summary = response.text.trim()

@@ -1,4 +1,9 @@
+import type { AppOpenFn, AppWorkspaces } from '~/ai/apps/workspaces'
+import type { ModuleScope } from '~/modules/lifecycle'
+import { guardAppIO } from '~/modules/guard-io'
+import { throwIfAborted } from '~/utils/abort'
 import type { App } from 'obsidian'
+import type { AgentCommunication } from '~/ai/tools/agent-communication'
 import type { ChatSession } from '~/ai/chat/domain'
 
 import { findAgent } from '~/ai/chat/agents/agent-tree'
@@ -33,6 +38,7 @@ import type {
 	SettingsSnapshotFn,
 	SettingsUpdater,
 } from '~/ai/tools/tool-context'
+import type { MemoryRepository } from '~/ai/memory/repository'
 import type McpService from '~/services/mcp.service'
 import type { NutstoreSettings } from '~/settings'
 
@@ -40,16 +46,21 @@ export interface StableToolsContext {
 	app: App
 	fileSystemManager: VaultFileSystemManager
 	permissionGuard?: PermissionGuard
+	communication?: AgentCommunication
 	dispatchTask?: DispatchTaskFn
 	dispatchableDefinitions?: readonly AgentDefinition[]
 	getSettingsSnapshot?: SettingsSnapshotFn
 	updateSettings?: SettingsUpdater
+	memory: MemoryRepository
 }
 
 export class ToolExecutor {
 	private readonly fileSystemManager: VaultFileSystemManager
 	private dispatchTaskHandler: DispatchTaskFn = () => {
 		throw new Error('task handler not set')
+	}
+	private appOpenHandler: AppOpenFn = async () => {
+		throw new Error('App open handler not set')
 	}
 
 	constructor(
@@ -62,8 +73,20 @@ export class ToolExecutor {
 			getSettingsSnapshot: SettingsSnapshotFn
 			updateSettings: SettingsUpdater
 		},
+		private memory: MemoryRepository,
+		private scope?: ModuleScope,
+		private workspaces?: {
+			service: AppWorkspaces
+			persist: (session: ChatSession) => Promise<void>
+		},
 	) {
 		this.fileSystemManager = new VaultFileSystemManager(app)
+	}
+
+	private communication?: AgentCommunication
+
+	setAgentCommunication(communication: AgentCommunication) {
+		this.communication = communication
 	}
 
 	getFileSystemManager() {
@@ -74,20 +97,30 @@ export class ToolExecutor {
 		this.dispatchTaskHandler = handler
 	}
 
+	setAppOpenHandler(handler: AppOpenFn) {
+		this.appOpenHandler = handler
+	}
+
 	getChatModalMountTarget() {
 		return resolveChatModalMountTarget(this.state.chatModalHostEl)
 	}
 
+	private getAgentDefinitionSettings() {
+		const settings = this.getSettings()
+		return {
+			fullAccess: Boolean(settings.yolo),
+			subagents: settings.subagents,
+			memory: settings.memory,
+		}
+	}
+
 	getAgentDefinitions() {
-		return createAgentDefinitions({
-			fullAccess: Boolean(this.getSettings().yolo),
-			subagents: this.getSettings().subagents,
-		})
+		return createAgentDefinitions(this.getAgentDefinitionSettings())
 	}
 
 	getSubagentModelSelection(agentType: string) {
 		const selection =
-			agentType === 'explorer' || agentType === 'memory'
+			agentType === 'explorer'
 				? this.getSettings().subagents?.[agentType]
 				: undefined
 		return selection?.model ? { ...selection.model } : undefined
@@ -107,6 +140,7 @@ export class ToolExecutor {
 		session?: ChatSession,
 		model?: AIModelConfig,
 	) {
+		this.scope?.check()
 		const allowSpawn = depth < MAX_TASK_DEPTH
 		const tools = createAITools({
 			allowSpawn,
@@ -131,7 +165,15 @@ export class ToolExecutor {
 	createStableToolsContext(
 		session: ChatSession,
 		definition: AgentDefinition,
+		signal?: AbortSignal,
 	): StableToolsContext {
+		const check = () => {
+			this.scope?.check()
+			throwIfAborted(signal)
+		}
+		check()
+		const effectiveSignal = signal ?? this.scope?.signal
+		const app = guardAppIO(this.app, check)
 		const permissionGuard =
 			definition.permissionMode === 'readonly'
 				? createReadonlyPermissionGuard()
@@ -155,20 +197,46 @@ export class ToolExecutor {
 									this.state.sessionIndex.find((item) => item.id === session.id)
 										?.title || deriveTitle(session),
 								modalMountTarget: this.getChatModalMountTarget(),
+								signal: effectiveSignal,
 							},
 						)
+		const appWorkspaceBinding =
+			definition.id === MASTER_AGENT_ID && this.workspaces
+				? this.workspaces.service.createBinding(
+						session,
+						() => this.workspaces!.persist(session),
+						effectiveSignal,
+					)
+				: undefined
 		return {
-			app: this.app,
-			fileSystemManager: this.fileSystemManager,
-			permissionGuard,
+			app,
+			fileSystemManager: this.fileSystemManager.withDefaults({
+				appLifecycle: this.workspaces?.service,
+				appWorkspaceBinding,
+				openApp: async (appId) => {
+					check()
+					const opened = await this.appOpenHandler(appId)
+					check()
+					return opened
+				},
+				readonlyApps:
+					definition.permissionMode === 'readonly' ||
+					definition.id !== MASTER_AGENT_ID,
+			}),
+			permissionGuard: async (request) => {
+				check()
+				await permissionGuard(request)
+				check()
+			},
+			communication: this.communication,
 			dispatchTask: (params, origin) =>
 				this.dispatchTaskHandler(params, origin),
-			dispatchableDefinitions: listDispatchableDefinitions({
-				fullAccess: Boolean(this.getSettings().yolo),
-				subagents: this.getSettings().subagents,
-			}),
+			dispatchableDefinitions: listDispatchableDefinitions(
+				this.getAgentDefinitionSettings(),
+			),
 			getSettingsSnapshot: this.settingsIo.getSettingsSnapshot,
 			updateSettings: this.settingsIo.updateSettings,
+			memory: this.memory,
 		}
 	}
 
