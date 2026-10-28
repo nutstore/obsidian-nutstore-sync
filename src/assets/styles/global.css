@@ -1728,87 +1728,51 @@
 }
 
 .modality-badge-text {
-	background: color-mix(
-		in srgb,
-		var(--color-blue) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-blue) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-blue) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-blue);
 }
 
 .modality-badge-image {
-	background: color-mix(
-		in srgb,
-		var(--color-green) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-green) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-green) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-green);
 }
 
 .modality-badge-audio {
-	background: color-mix(
-		in srgb,
-		var(--color-orange) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-orange) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-orange) 82%, var(--text-normal));
+	--ns-modality-color: var(--color-orange);
+	--ns-modality-text-mix: 82%;
 }
 
 .modality-badge-video {
-	background: color-mix(
-		in srgb,
-		var(--color-red) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-red) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-red) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-red);
 }
 
 .modality-badge-pdf {
-	background: color-mix(
-		in srgb,
-		var(--color-purple) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-purple) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-purple) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-purple);
 }
 
 .modality-badge-file {
+	--ns-modality-color: var(--color-cyan);
+}
+
+.modality-badge-text,
+.modality-badge-image,
+.modality-badge-audio,
+.modality-badge-video,
+.modality-badge-pdf,
+.modality-badge-file {
 	background: color-mix(
 		in srgb,
-		var(--color-cyan) 14%,
+		var(--ns-modality-color) 14%,
 		var(--background-primary)
 	);
 	border-color: color-mix(
 		in srgb,
-		var(--color-cyan) 38%,
+		var(--ns-modality-color) 38%,
 		var(--background-modifier-border)
 	);
-	color: color-mix(in srgb, var(--color-cyan) 78%, var(--text-normal));
+	color: color-mix(
+		in srgb,
+		var(--ns-modality-color) var(--ns-modality-text-mix, 78%),
+		var(--text-normal)
+	);
 }
 
 /* Message density tokens; compact trades whitespace for visible content. */
