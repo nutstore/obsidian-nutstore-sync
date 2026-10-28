@@ -201,7 +201,6 @@ const adapter = {
 function fixture() {
 	Object.defineProperty(document, 'win', {
 		configurable: true,
-		// eslint-disable-next-line obsidianmd/prefer-create-el -- Supply Obsidian's document helper in jsdom.
 		value: { createDiv: () => document.createElement('div') },
 	})
 	const app = {

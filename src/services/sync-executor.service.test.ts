@@ -30,9 +30,6 @@ vi.mock('~/sync/log', () => ({
 	getSyncPolicyLabel: () => 'two-way',
 	getSyncTriggerLabel: () => 'auto',
 }))
-vi.mock('~/utils/config-dir-rules', () => ({
-	getConfigDirPruningRule: () => undefined,
-}))
 vi.mock('~/utils/logger', () => ({
 	default: { info: vi.fn(), error: vi.fn() },
 }))
@@ -42,7 +39,7 @@ beforeEach(() => {
 	start.mockResolvedValue({ ended: true, shouldReloadSettings: false })
 })
 
-function fixture() {
+function fixture(configDir = '.settings-设置-🌿') {
 	const runBlobGc = vi.fn(async () => ({ ok: true, deletedCount: 0 }))
 	const getToken = vi.fn(async () => 'test-only-token')
 	const plugin = {
@@ -55,7 +52,7 @@ function fixture() {
 		remoteBaseDir: 'Notes 中性🌱',
 		app: {
 			workspace: { layoutReady: true },
-			vault: { adapter: {}, configDir: '.obsidian' },
+			vault: { adapter: {}, configDir },
 		},
 		isAccountConfigured: () => true,
 		getToken,
@@ -123,6 +120,67 @@ describe('synchronization execution gate', () => {
 			expect(start).toHaveBeenCalledOnce()
 		},
 	)
+
+	it.each(['.settings-设置-🌿', '.preferences-偏好-🌱'])(
+		'uses the actual vault directory for pruning notices and synchronization (%s)',
+		async (configDir) => {
+			const f = fixture(configDir)
+			f.plugin.settings.configDirSyncMode = 'all'
+			f.plugin.settings.filterRules.rules = [
+				{ expr: configDir, options: { caseSensitive: true }, type: 'exclude' },
+			]
+			await f.plugin.sync.lifecycle.update(true)
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+			).toBe(true)
+			expect(notice).toHaveBeenCalledOnce()
+			expect(notice).toHaveBeenCalledWith(expect.stringContaining(configDir))
+			expect(construct).toHaveBeenLastCalledWith(
+				f.plugin,
+				expect.objectContaining({
+					vault: expect.objectContaining({ configDir }),
+				}),
+			)
+
+			// A later include cancels pruning; the earlier exclusion alone
+			// must not keep producing a warning on subsequent syncs.
+			f.plugin.settings.filterRules.rules.push({
+				expr: configDir,
+				options: { caseSensitive: true },
+				type: 'include',
+			})
+			notice.mockClear()
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+			).toBe(true)
+			expect(notice).not.toHaveBeenCalled()
+		},
+	)
+
+	it('reads the current directory again after the host configuration changes', async () => {
+		const f = fixture('.settings-旧-🌿')
+		f.plugin.settings.configDirSyncMode = 'all'
+		f.plugin.settings.filterRules.rules = [
+			{
+				expr: '.settings-旧-🌿',
+				options: { caseSensitive: true },
+				type: 'exclude',
+			},
+		]
+		await f.plugin.sync.lifecycle.update(true)
+		await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		expect(notice).toHaveBeenCalledOnce()
+		f.plugin.app.vault.configDir = '.settings-新-🌱'
+		notice.mockClear()
+		await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		expect(notice).not.toHaveBeenCalled()
+		expect(construct).toHaveBeenLastCalledWith(
+			f.plugin,
+			expect.objectContaining({
+				vault: expect.objectContaining({ configDir: '.settings-新-🌱' }),
+			}),
+		)
+	})
 
 	it('does not immediately restart an unsuccessful round from a queued request', async () => {
 		const f = fixture()

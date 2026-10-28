@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type NutstorePlugin from '~/index'
 import { ModuleLifecycle } from '~/modules/lifecycle'
@@ -7,13 +8,22 @@ import type SyncExecutorService from './sync-executor.service'
 
 vi.mock('~/sync', () => ({ SyncStartMode: { AUTO_SYNC: 'auto' } }))
 
+const activeLifecycles: ModuleLifecycle[] = []
+
 beforeEach(() => {
 	vi.useFakeTimers()
-	vi.stubGlobal('window', globalThis)
 })
-afterEach(() => {
-	vi.useRealTimers()
-	vi.unstubAllGlobals()
+afterEach(async () => {
+	try {
+		// Dispose through the same lifecycle as the host before resetting the
+		// clock: restoring real timers must not hide leaked service timers.
+		for (const lifecycle of activeLifecycles.splice(0)) {
+			await lifecycle.update(false)
+		}
+		expect(vi.getTimerCount()).toBe(0)
+	} finally {
+		vi.useRealTimers()
+	}
 })
 
 function fixture(delay: number, ready = true) {
@@ -62,6 +72,7 @@ function fixture(delay: number, ready = true) {
 			realtime.onunload()
 		},
 	)
+	activeLifecycles.push(sync.lifecycle)
 	return {
 		settings,
 		becomeReady,

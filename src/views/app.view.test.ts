@@ -15,7 +15,6 @@ const diagnostics = vi.hoisted(() => ({
 }))
 vi.mock('~/utils/logger', () => ({ default: { error: diagnostics.error } }))
 
-/* eslint-disable obsidianmd/prefer-create-el -- Host DOM extensions are supplied by this jsdom fixture. */
 function element(
 	tag = 'div',
 	options: { cls?: string; text?: string; attr?: Record<string, string> } = {},
@@ -35,7 +34,6 @@ function element(
 		addClass: (name: string) => el.classList.add(name),
 	})
 }
-/* eslint-enable obsidianmd/prefer-create-el -- Re-enable Obsidian DOM helper check after fixture setup. */
 vi.mock('obsidian', () => ({
 	ItemView: class {
 		contentEl = element()

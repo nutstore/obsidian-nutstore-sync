@@ -25,21 +25,24 @@ export function emitLocalPathChanged(path: string) {
 
 function isAdapterPathNormalized(vault: Vault, normalizedPath: string) {
 	const pathForCheck = normalizedPath.replace(/^\/+/, '').replace(/\/+$/, '')
+	// Hidden paths are outside the indexed Vault regardless of which directory
+	// the host uses for settings. Only ordinary paths need that host fact.
+	if (
+		pathForCheck
+			.split('/')
+			.some(
+				(segment) =>
+					segment !== '.' && segment !== '..' && segment.startsWith('.'),
+			)
+	)
+		return true
 	const configDir = normalizePath(vault.configDir)
 		.replace(/^\/+/, '')
 		.replace(/\/+$/, '')
-	if (
-		configDir &&
+	return (
+		!!configDir &&
 		(pathForCheck === configDir || pathForCheck.startsWith(`${configDir}/`))
-	) {
-		return true
-	}
-	return pathForCheck
-		.split('/')
-		.some(
-			(segment) =>
-				segment !== '.' && segment !== '..' && segment.startsWith('.'),
-		)
+	)
 }
 
 export function isAdapterPath(vault: Vault, path: string) {

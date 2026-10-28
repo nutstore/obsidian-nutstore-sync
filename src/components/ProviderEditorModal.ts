@@ -39,6 +39,9 @@ const API_FORMAT_OPTIONS = [
 	},
 ] as const
 
+/** Base URL hint shown verbatim in an empty field; a URL is not UI prose. */
+const API_BASE_URL_HINT = 'https://api.openai.com/v1'
+
 export default class ProviderEditorModal extends Modal {
 	private draft: AIProviderConfig
 	private cleanupModalMount?: () => void
@@ -116,8 +119,7 @@ export default class ProviderEditorModal extends Modal {
 			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text
-					// eslint-disable-next-line obsidianmd/ui/sentence-case -- URL examples are case-sensitive machine input, not prose.
-					.setPlaceholder('https://api.openai.com/v1')
+					.setPlaceholder(API_BASE_URL_HINT)
 					.setValue(this.draft.api || '')
 					.onChange((value) => {
 						this.draft.api = value.trim() || undefined

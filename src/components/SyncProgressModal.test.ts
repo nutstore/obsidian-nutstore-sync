@@ -11,7 +11,6 @@ import type { ProgressService } from '~/services/progress.service'
 import SyncProgressModal from './SyncProgressModal'
 
 vi.mock('obsidian', () => {
-	/* eslint-disable obsidianmd/prefer-create-el, obsidianmd/no-static-styles-assignment -- Implement host DOM helpers that are unavailable in jsdom. */
 	function element(
 		tag = 'div',
 		options: {
@@ -79,7 +78,6 @@ vi.mock('obsidian', () => {
 		TFile: class {},
 		normalizePath: (path: string) => path,
 	}
-	/* eslint-enable obsidianmd/prefer-create-el, obsidianmd/no-static-styles-assignment -- Restore production DOM rules after the host mock. */
 })
 
 const path = '/notes/示例🌿/chapter & <draft>'

@@ -31,9 +31,11 @@ export function MarkdownContent(props: {
 
 		// Keep the mounted version until its replacement is ready. Clearing it
 		// while awaiting Markdown can shrink scrollHeight and clamp scrollTop.
-		// eslint-disable-next-line obsidianmd/prefer-create-el -- Keep this optional-renderer component independent of host DOM extensions and in its owner document.
-		const target = el.ownerDocument.createElement('div')
-		target.className = 'ns-chatbox-markdown markdown-rendered'
+		// Use the mounted document's host factory so popout renders stay in
+		// their owning window, just like ChatboxView's Markdown renderer.
+		const target = el.ownerDocument.win.createDiv({
+			cls: 'ns-chatbox-markdown markdown-rendered',
+		})
 		// New rows can move into the process while their Markdown is rendering.
 		// Give those rows content immediately instead of an empty placeholder.
 		if (!el.hasChildNodes()) el.textContent = markdown

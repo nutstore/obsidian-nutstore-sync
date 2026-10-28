@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-/* eslint-disable obsidianmd/prefer-create-el, obsidianmd/no-static-styles-assignment -- The test fixture supplies theme tokens directly on a browser DOM node. */
 import { afterEach, describe, expect, it } from 'vitest'
 import { readAppTheme } from './theme'
 
@@ -42,4 +41,3 @@ describe('App theme projection', () => {
 		expect(readAppTheme(host).colorScheme).toBe('light')
 	})
 })
-/* eslint-enable obsidianmd/prefer-create-el, obsidianmd/no-static-styles-assignment -- Restore production lint rules after the theme fixture. */

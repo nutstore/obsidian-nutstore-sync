@@ -29,7 +29,6 @@ function installDocumentHelpers() {
 	Object.defineProperty(document, 'win', {
 		configurable: true,
 		value: {
-			// eslint-disable-next-line obsidianmd/prefer-create-el -- Mock Obsidian's DOM factory with the browser API.
 			createEl: (tag: string) => document.createElement(tag),
 		},
 	})
@@ -476,7 +475,7 @@ describe('App runtime and trusted SVG boundary', () => {
 		expect((await rejection) as Error).toMatchObject({ message: 'App closed' })
 	})
 
-	it('initializes without Object.fromEntries and executes Unicode source safely', async () => {
+	it('initializes without host DOM helpers or modern Object methods and executes Unicode source safely', async () => {
 		const messages: Record<string, unknown>[] = []
 		const runtimeContent: AppContent = {
 			html: '<button id="add" onclick="bad()">增加 Add 🌿</button><script>window.bad = 1</script>',
@@ -484,23 +483,36 @@ describe('App runtime and trusted SVG boundary', () => {
 			javascript:
 				'const marker = "</script>中文 Unicode 🌿"; document.querySelector("#add").addEventListener("click", () => app.kv.set("进度 Progress 🌿", marker));',
 		}
-		const dom = new JSDOM(runtimeDocument(runtimeContent, 'neutral'), {
-			runScripts: 'dangerously',
-			beforeParse(win) {
-				Reflect.deleteProperty(win.Object, 'fromEntries')
-				win.postMessage = (message: Record<string, unknown>) => {
-					messages.push(message)
-					if (message.id)
-						win.dispatchEvent(
-							new win.MessageEvent('message', {
-								source: win as unknown as Window,
-								data: { channel: 'neutral', id: message.id, value: null },
-							}),
-						)
-				}
+		const dom = new JSDOM(
+			runtimeDocument(runtimeContent, 'neutral', {
+				colorScheme: 'dark',
+				properties: { '--text-normal': '#123456' },
+			}),
+			{
+				runScripts: 'dangerously',
+				beforeParse(win) {
+					Reflect.deleteProperty(win.Object, 'fromEntries')
+					Reflect.deleteProperty(win.Object, 'entries')
+					Reflect.deleteProperty(win.Object, 'hasOwn')
+					win.postMessage = (message: Record<string, unknown>) => {
+						messages.push(message)
+						if (message.id)
+							win.dispatchEvent(
+								new win.MessageEvent('message', {
+									source: win as unknown as Window,
+									data: { channel: 'neutral', id: message.id, value: null },
+								}),
+							)
+					}
+				},
 			},
-		})
+		)
 		await timeout(20)
+		expect(
+			dom.window.document.documentElement.style.getPropertyValue(
+				'--text-normal',
+			),
+		).toBe('#123456')
 		expect(messages.some((message) => message.event === 'ready')).toBe(true)
 		expect(Object.keys((dom.window as unknown as { app: object }).app)).toEqual(
 			['fs', 'kv', 'ai'],
@@ -577,6 +589,44 @@ describe('App runtime and trusted SVG boundary', () => {
 		)
 		expect(body.querySelector('script')?.textContent).toContain('__appStarted')
 		dom.window.close()
+	})
+
+	it('applies the markup policy inside nested templates before they are activated', async () => {
+		const dom = new JSDOM(
+			runtimeDocument(
+				{
+					html: `<template id="outer"><template id="inner">
+				<button id="nested" onclick="window.bad = 1">中性 Neutral 🌿</button>
+				<script>window.bad = 1</script><iframe srcdoc="bad"></iframe>
+				<video poster="https://example.test/neutral.png"></video>
+				<img src="data:image/png;base64,AAAA" onerror="window.bad = 1">
+			</template></template>`,
+					css: '',
+					javascript: `const outer = document.querySelector('#outer');
+				document.body.append(outer.content.cloneNode(true));
+				const inner = document.querySelector('#inner');
+				document.body.append(inner.content.cloneNode(true));`,
+				},
+				'neutral',
+			),
+			{ runScripts: 'dangerously' },
+		)
+		try {
+			await timeout(10)
+			const body = dom.window.document.body
+			expect(body.querySelector('#nested')?.textContent).toBe('中性 Neutral 🌿')
+			expect(body.querySelector('#nested')?.hasAttribute('onclick')).toBe(false)
+			expect(body.querySelector('iframe')).toBeNull()
+			expect(body.querySelector('video')?.hasAttribute('poster')).toBe(false)
+			expect(body.querySelector('img')?.getAttribute('src')).toBe(
+				'data:image/png;base64,AAAA',
+			)
+			expect(body.querySelector('img')?.hasAttribute('onerror')).toBe(false)
+			expect(body.querySelectorAll('script')).toHaveLength(1)
+			expect((dom.window as unknown as { bad?: number }).bad).toBeUndefined()
+		} finally {
+			dom.window.close()
+		}
 	})
 
 	it('captures console entries and unhandled startup failures in the sandbox', async () => {
@@ -671,7 +721,6 @@ describe('App runtime and trusted SVG boundary', () => {
 
 	it('reads the host theme when mounting', () => {
 		document.body.className = 'theme-dark'
-		// eslint-disable-next-line obsidianmd/no-static-styles-assignment -- The fixture supplies a host theme token directly on the test DOM.
 		document.body.style.setProperty('--text-normal', '#abcdef')
 		const runtime = new AppRuntime(document.body, content, createHost())
 		expect(runtime.frame.srcdoc).toContain('"colorScheme":"dark"')

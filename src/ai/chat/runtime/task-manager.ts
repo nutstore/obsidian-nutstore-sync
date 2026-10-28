@@ -266,15 +266,14 @@ export class TaskManager implements AgentCommunication {
 			})
 		return new Promise((resolve) => {
 			const abort = () => this.wakeWaiter(session, agent.id, 'cancelled')
-			// eslint-disable-next-line obsidianmd/prefer-window-timers -- Session execution is independent of any popout window.
-			const timer = setTimeout(
+			// Agent waits belong to the plugin session, independent of the active view.
+			const timer = window.setTimeout(
 				() => this.wakeWaiter(session, agent.id, 'timeout'),
 				timeoutMs,
 			)
 			this.waiters.set(key, {
 				finish: (reason) => {
-					// eslint-disable-next-line obsidianmd/prefer-window-timers -- Matches the session-owned timer.
-					clearTimeout(timer)
+					window.clearTimeout(timer)
 					address.origin.signal.removeEventListener('abort', abort)
 					resolve({ reason })
 				},

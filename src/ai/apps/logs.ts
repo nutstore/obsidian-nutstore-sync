@@ -21,15 +21,6 @@ const MAX_EVENTS_PER_WINDOW = 200
 const MAX_MESSAGE_CHARS = 4_000
 const MAX_STACK_CHARS = 12_000
 const MAX_LOCATION_CHARS = 1_000
-type TimerHost = Pick<Window, 'setTimeout' | 'clearTimeout'>
-
-function timerHost(): TimerHost {
-	if (typeof window !== 'undefined') return window
-	// Timers are host-agnostic; Node-based tests do not define a Window.
-	// eslint-disable-next-line obsidianmd/no-global-this -- Use the platform timer outside Obsidian.
-	return globalThis
-}
-
 export type AppLogLevel = 'debug' | 'info' | 'log' | 'warn' | 'error'
 export type AppLogSource =
 	'console' | 'startup' | 'uncaught' | 'unhandled-rejection' | 'runtime'
@@ -188,7 +179,7 @@ export class AppLogStore {
 
 	private schedule(id: string) {
 		if (this.timers.has(id)) return
-		const timer = timerHost().setTimeout(() => {
+		const timer = window.setTimeout(() => {
 			this.timers.delete(id)
 			void this.flush(id).catch(() => {})
 		}, APP_LOG_FLUSH_DELAY_MS)
@@ -275,7 +266,7 @@ export class AppLogStore {
 	async flush(id: string) {
 		const timer = this.timers.get(id)
 		if (timer !== undefined) {
-			timerHost().clearTimeout(timer)
+			window.clearTimeout(timer)
 			this.timers.delete(id)
 		}
 		const lines = this.pending.get(id)?.splice(0) ?? []
@@ -318,7 +309,7 @@ export class AppLogStore {
 
 	async settle() {
 		for (const [id, timer] of this.timers) {
-			timerHost().clearTimeout(timer)
+			window.clearTimeout(timer)
 			this.timers.delete(id)
 		}
 		const ids = new Set([...this.pending.keys(), ...this.rates.keys()])

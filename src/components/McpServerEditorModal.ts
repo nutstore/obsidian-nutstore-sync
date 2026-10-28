@@ -16,6 +16,9 @@ interface HeaderRow {
 	value: string
 }
 
+/** Endpoint hint shown verbatim in an empty URL field; a URL is not UI prose. */
+const MCP_URL_HINT = 'https://example.com/mcp'
+
 export default class McpServerEditorModal extends Modal {
 	private draft: McpServerDraft
 	private headerRows: HeaderRow[]
@@ -62,8 +65,7 @@ export default class McpServerEditorModal extends Modal {
 			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
 			.addText((text) =>
 				text
-					// eslint-disable-next-line obsidianmd/ui/sentence-case -- URL examples are case-sensitive machine input, not prose.
-					.setPlaceholder('https://example.com/mcp')
+					.setPlaceholder(MCP_URL_HINT)
 					.setValue(this.draft.config.url)
 					.onChange((value) => {
 						this.draft.config.url = value.trim()
