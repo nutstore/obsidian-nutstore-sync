@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Platform } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import i18n from '~/i18n'
 import {
 	emitCancelSync,
+	emitPreparingSync,
+	emitSyncProgress,
+	emitSyncCancelled,
 	emitSyncUpdateMtimeProgress,
 	type SyncPreparationProgress,
 } from '~/events'
-import type { ProgressService } from '~/services/progress.service'
+import { ProgressService } from '~/services/progress.service'
 import SyncProgressModal from './SyncProgressModal'
+
+const { notice } = vi.hoisted(() => ({ notice: vi.fn() }))
 
 vi.mock('obsidian', () => {
 	function element(
@@ -49,6 +55,12 @@ vi.mock('obsidian', () => {
 		})
 	}
 	return {
+		Platform: { isMobile: false },
+		Notice: class {
+			constructor(message: string, duration: number) {
+				notice(message, duration)
+			}
+		},
 		Modal: class {
 			modalEl = element('div', { cls: 'modal' })
 			titleEl = this.modalEl
@@ -63,6 +75,10 @@ vi.mock('obsidian', () => {
 			}
 			setButtonText(text: string) {
 				this.buttonEl.textContent = text
+				return this
+			}
+			setDisabled(disabled: boolean) {
+				this.buttonEl.toggleAttribute('disabled', disabled)
 				return this
 			}
 			onClick(callback: () => void) {
@@ -94,7 +110,9 @@ const scanning = (processed = 2, queued = 3): SyncPreparationProgress => ({
 })
 const modals: SyncProgressModal[] = []
 afterEach(async () => {
+	notice.mockClear()
 	modals.splice(0).forEach((modal) => modal.onClose())
+	vi.mocked(Platform).isMobile = false
 	await i18n.changeLanguage('en')
 })
 
@@ -106,12 +124,14 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 		| 'syncFailedCount'
 		| 'syncFailed'
 		| 'syncEnd'
+		| 'cancellationState'
 	> = {
 		syncProgress: { total: 0, completed: [], current: null },
 		preparationProgress: preparation,
 		syncFailedCount: 0,
 		syncFailed: false,
 		syncEnd: false,
+		cancellationState: 'none',
 	}
 	const modal = new SyncProgressModal({
 		app: {},
@@ -133,6 +153,69 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 }
 
 describe('sync progress modal', () => {
+	it('retains the stop request across modal lifetimes and waits for cancellation acknowledgement', () => {
+		const plugin = {
+			sync: { executor: { isRunning: () => true } },
+		} as unknown as NutstorePlugin
+		const service = new ProgressService(plugin)
+		service.onload()
+		try {
+			emitCancelSync()
+			expect(service.cancellationState).toBe('requested')
+			emitCancelSync()
+			expect(notice).not.toHaveBeenCalled()
+			emitSyncCancelled()
+			expect(service.cancellationState).toBe('complete')
+			emitPreparingSync({ showNotice: false })
+			expect(service.cancellationState).toBe('none')
+		} finally {
+			service.onunload()
+		}
+	})
+
+	it('retains upload advice across task updates and clears it for the next sync', () => {
+		const service = new ProgressService({} as NutstorePlugin)
+		service.onload()
+		try {
+			emitSyncProgress(2, [], null, true)
+			expect(service.syncProgress.hasLargeUploads).toBe(true)
+			emitSyncProgress(2, [], null)
+			expect(service.syncProgress.hasLargeUploads).toBe(true)
+			emitPreparingSync({ showNotice: false })
+			expect(service.syncProgress.hasLargeUploads).toBeUndefined()
+			emitSyncProgress(1, [], null, false)
+			expect(service.syncProgress.hasLargeUploads).toBe(false)
+		} finally {
+			service.onunload()
+		}
+	})
+
+	it.each(['zh', 'en'])(
+		'shows mobile upload advice only for a sync with large uploads in %s',
+		async (language) => {
+			await i18n.changeLanguage(language)
+			const { modal, progress, find } = mount()
+			const hint = find('large-upload-hint')
+			expect(hint.style.display).toBe('none')
+			progress.syncProgress.hasLargeUploads = true
+			modal.update()
+			expect(hint.style.display).toBe('none')
+			vi.mocked(Platform).isMobile = true
+			modal.update()
+			expect(hint.style.display).toBe('')
+			expect(hint.textContent).toContain(i18n.t('settings.skipLargeFiles.name'))
+			expect(hint.textContent).toContain('20 MB')
+			expect(hint.textContent).toContain('40 MB')
+			progress.preparationProgress = null
+			progress.syncProgress.current = null
+			modal.update()
+			expect(hint.style.display).toBe('')
+			progress.syncProgress.hasLargeUploads = false
+			modal.update()
+			expect(hint.style.display).toBe('none')
+		},
+	)
+
 	it.each([
 		{
 			language: 'zh',
@@ -235,12 +318,42 @@ describe('sync progress modal', () => {
 		expect(find('files').style.display).toBe('none')
 	})
 
-	it('stops presenting scanning when cancellation is requested during preparation', () => {
-		const { modal } = mount()
-		emitCancelSync()
-		expect(modal.modalEl.dataset.state).toBe('cancelled')
-		expect(modal.titleEl.textContent).toBe('Sync cancelled')
-	})
+	it.each(['zh', 'en'])(
+		'keeps cancellation pending until the request settles in %s',
+		async (language) => {
+			await i18n.changeLanguage(language)
+			const { modal, progress, find } = mount()
+			progress.cancellationState = 'requested'
+			modal.update()
+			expect(modal.modalEl.dataset.state).toBe('cancelling')
+			expect(modal.titleEl.textContent).toBe(i18n.t('sync.syncingFiles'))
+			expect(modal.contentEl.querySelector('button')?.textContent).toBe(
+				i18n.t('sync.cancelling'),
+			)
+			expect(find('summary').style.display).toBe('none')
+			const stopButton = modal.contentEl.querySelector('button')!
+			expect(stopButton.disabled).toBe(false)
+			expect(notice).not.toHaveBeenCalled()
+			stopButton.click()
+			stopButton.click()
+			expect(notice).toHaveBeenCalledTimes(2)
+			expect(notice).toHaveBeenNthCalledWith(
+				1,
+				i18n.t('sync.cancellingHint'),
+				3000,
+			)
+			expect(notice).toHaveBeenNthCalledWith(
+				2,
+				i18n.t('sync.cancellingHint'),
+				3000,
+			)
+			progress.cancellationState = 'complete'
+			progress.preparationProgress = null
+			modal.update()
+			expect(modal.modalEl.dataset.state).toBe('cancelled')
+			expect(modal.titleEl.textContent).toBe(i18n.t('sync.cancelled'))
+		},
+	)
 
 	it('renders cache progress beside its label and clears it for preparation', () => {
 		const { modal, progress, find } = mount()

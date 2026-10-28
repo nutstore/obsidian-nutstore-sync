@@ -693,6 +693,11 @@
 	line-height: 1.5;
 }
 
+.nutstore-sync-progress__large-upload-hint {
+	color: var(--text-warning);
+	font-weight: 500;
+}
+
 .nutstore-sync-progress__stats {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));

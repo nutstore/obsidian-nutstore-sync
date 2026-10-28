@@ -1,10 +1,15 @@
 import type { ModuleScope } from '~/modules/lifecycle'
 import { guardVault } from '~/modules/guard-io'
-import { isAbortError } from '~/utils/abort'
+import { isAbortError, throwIfAborted } from '~/utils/abort'
 import { NutstoreSync, SyncStartMode } from '~/sync'
 import { Notice } from 'obsidian'
 import { IN_DEV } from '~/consts'
-import { emitStopGc, emitSyncError } from '~/events'
+import {
+	emitStopGc,
+	emitSyncError,
+	emitSyncCancelled,
+	onCancelSync,
+} from '~/events'
 import i18n from '~/i18n'
 import type { SyncStartResult } from '~/sync'
 import { getConfigDirPruningRule } from '~/utils/config-dir-rules'
@@ -53,6 +58,15 @@ export default class SyncExecutorService extends BaseService {
 
 	private async performSync(options: SyncOptions, scope: ModuleScope) {
 		this.inFlight = true
+		const cancellation = new AbortController()
+		const cancel = () => cancellation.abort()
+		const subscription = onCancelSync().subscribe(cancel)
+		scope.signal.addEventListener('abort', cancel, { once: true })
+		if (scope.signal.aborted) cancel()
+		const check = () => {
+			scope.check()
+			throwIfAborted(cancellation.signal)
+		}
 		this.pendingAutoSync = false
 		const syncPolicy =
 			options.syncPolicy ?? this.plugin.localSettings.syncPolicy
@@ -117,14 +131,20 @@ export default class SyncExecutorService extends BaseService {
 			)
 			scope.check()
 
+			const token = await scope.wait(this.plugin.getToken())
+			check()
+			const remoteAccountId = await scope.wait(this.plugin.getRemoteAccountId())
+			check()
+			const webdav = await this.plugin.sync.webdav.createWebDAVClient(check)
+			check()
 			const sync = new NutstoreSync(this.plugin, {
 				conflictStrategy,
-				vault: guardVault(this.plugin.app.vault, scope.check, scope.track),
-				signal: scope.signal,
-				token: await scope.wait(this.plugin.getToken()),
-				remoteAccountId: await scope.wait(this.plugin.getRemoteAccountId()),
+				vault: guardVault(this.plugin.app.vault, check, scope.track),
+				signal: cancellation.signal,
+				token,
+				remoteAccountId,
 				remoteBaseDir: this.plugin.remoteBaseDir,
-				webdav: await this.plugin.sync.webdav.createWebDAVClient(),
+				webdav,
 			})
 
 			result = await sync.start({
@@ -132,15 +152,27 @@ export default class SyncExecutorService extends BaseService {
 				syncPolicy,
 			})
 
-			return result.ended && !scope.signal.aborted
+			return (
+				result.ended && !scope.signal.aborted && !cancellation.signal.aborted
+			)
 		} catch (error) {
+			if (cancellation.signal.aborted) {
+				emitSyncCancelled()
+				return false
+			}
 			if (scope.signal.aborted || isAbortError(error)) return false
 			emitSyncError(error as Error)
 			logger.error('Sync error:', error)
 			return false
 		} finally {
+			subscription.unsubscribe()
+			scope.signal.removeEventListener('abort', cancel)
 			this.inFlight = false
-			if (result?.ended && !scope.signal.aborted) {
+			if (
+				result?.ended &&
+				!scope.signal.aborted &&
+				!cancellation.signal.aborted
+			) {
 				if (result.shouldReloadSettings) {
 					this.plugin.settingsService.scheduleReloadSettingsFromDisk()
 				}
@@ -152,6 +184,7 @@ export default class SyncExecutorService extends BaseService {
 			if (
 				result?.ended &&
 				!scope.signal.aborted &&
+				!cancellation.signal.aborted &&
 				this.pendingAutoSync &&
 				!this.plugin.isSyncing
 			) {

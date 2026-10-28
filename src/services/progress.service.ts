@@ -3,6 +3,7 @@ import { Notice } from 'obsidian'
 import SyncProgressModal from '../components/SyncProgressModal'
 import {
 	onEndSync,
+	onCancelSync,
 	onPreparingSync,
 	onStartSync,
 	onSyncCancelled,
@@ -26,6 +27,7 @@ export class ProgressService extends BaseService {
 	}
 	public preparationProgress: SyncPreparationProgress | null = null
 
+	cancellationState: 'none' | 'requested' | 'complete' = 'none'
 	syncEnd = false
 	syncFailed = false
 	syncFailedCount = 0
@@ -39,6 +41,15 @@ export class ProgressService extends BaseService {
 	override onload() {
 		this.onunload()
 		this.subscriptions = [
+			onCancelSync().subscribe(() => {
+				if (
+					!this.plugin.sync.executor.isRunning() ||
+					this.cancellationState !== 'none'
+				)
+					return
+				this.cancellationState = 'requested'
+				this.updateModal()
+			}),
 			onPreparingSync().subscribe(() => {
 				this.syncEnd = false
 				this.syncFailed = false
@@ -67,10 +78,15 @@ export class ProgressService extends BaseService {
 			}),
 			onSyncCancelled().subscribe(() => {
 				this.preparationProgress = null
-				this.closeProgressModal()
+				this.cancellationState = 'complete'
+				this.updateModal()
 			}),
 			onSyncProgress().subscribe((p) => {
-				this.syncProgress = p
+				this.syncProgress = {
+					...p,
+					hasLargeUploads:
+						p.hasLargeUploads ?? this.syncProgress.hasLargeUploads,
+				}
 				this.updateModal()
 			}),
 		]
@@ -83,6 +99,7 @@ export class ProgressService extends BaseService {
 	}, 200)
 
 	public resetProgress() {
+		this.cancellationState = 'none'
 		this.syncProgress = {
 			total: 0,
 			completed: [],

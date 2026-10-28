@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type NutstorePlugin from '~/index'
 import type { SyncSelection } from '~/settings'
 import { ModuleLifecycle } from '~/modules/lifecycle'
+import { emitCancelSync } from '~/events'
 import { SyncStartMode } from '~/sync'
 import SyncExecutorService from './sync-executor.service'
 
@@ -73,6 +74,58 @@ function fixture(configDir = '.settings-设置-🌿') {
 }
 
 describe('synchronization execution gate', () => {
+	it('stops preparation cancelled by the user before constructing a sync', async () => {
+		const f = fixture()
+		let finish!: (value: string) => void
+		f.getToken.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		await f.plugin.sync.lifecycle.update(true)
+		const work = f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		await vi.waitFor(() => expect(f.getToken).toHaveBeenCalledOnce())
+		emitCancelSync()
+		finish('neutral-token')
+		expect(await work).toBe(false)
+		expect(construct).not.toHaveBeenCalled()
+		expect(f.executor.isRunning()).toBe(false)
+		expect(
+			await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+		).toBe(true)
+	})
+
+	it('blocks further I/O after cancellation and releases the run only when current work settles', async () => {
+		const f = fixture()
+		let finish!: (value: { ended: boolean }) => void
+		start.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		await f.plugin.sync.lifecycle.update(true)
+		const work = f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		const options = construct.mock.calls[0][1] as { signal: AbortSignal }
+		emitCancelSync()
+		expect(options.signal.aborted).toBe(true)
+		expect(f.executor.isRunning()).toBe(true)
+		expect(
+			await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+		).toBe(false)
+		expect(start).toHaveBeenCalledOnce()
+		finish({ ended: false })
+		expect(await work).toBe(false)
+		expect(f.executor.isRunning()).toBe(false)
+		expect(f.runBlobGc).not.toHaveBeenCalled()
+		expect(
+			await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+		).toBe(true)
+		expect(start).toHaveBeenCalledTimes(2)
+	})
+
 	it('uses a manual selection without changing defaults or leaking into the next sync', async () => {
 		const f = fixture()
 		await f.plugin.sync.lifecycle.update(true)
