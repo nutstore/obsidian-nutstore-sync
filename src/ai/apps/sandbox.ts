@@ -31,6 +31,7 @@ export function bootstrap(
 	createAI: typeof createAppAI,
 ) {
 	const channel = payload.channel
+	const maxPendingRequests = 512
 	let nextId = 0
 	const pending = new Map<
 		number,
@@ -40,7 +41,7 @@ export function bootstrap(
 		parent.postMessage({ ...message, channel }, '*')
 	const rpc = (method: string, ...args: unknown[]): Promise<unknown> =>
 		new Promise((resolve, reject) => {
-			if (pending.size >= 100) {
+			if (pending.size >= maxPendingRequests) {
 				reject(new Error('Too many pending App requests'))
 				return
 			}

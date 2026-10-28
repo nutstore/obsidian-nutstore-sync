@@ -137,6 +137,20 @@ are absent and never clear or replace business data at startup. Save meaningful
 user actions, not animation frames. `data.json` is the stored form of this data;
 do not read or write it directly — use `app.kv`.
 
+### Request volume and responsiveness
+
+Each `app.fs`, `app.kv` and `app.ai` call crosses the iframe-to-host bridge.
+Keep request concurrency bounded: prefer sequential calls, and use `Promise.all`
+only for small, fixed groups. For collections, process a few items at a time,
+update progress between batches and let users cancel long-running work. Avoid
+unbounded `Promise.all(items.map(...))`, API calls in render/animation loops,
+and a request on every keystroke; debounce interactive searches. Use
+`app.kv.transact` for related KV changes. Filesystem calls are already queued by
+the host, so launching many at once only grows the queue; parallel `app.ai`
+calls can start multiple model runs. The bridge has a defensive cap on
+simultaneously pending calls, which is a last-resort guard, not a throughput
+target.
+
 Use `addEventListener` for events; inline `on*` handler attributes are removed.
 Browser storage and parent-window access are unavailable.
 

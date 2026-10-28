@@ -98,8 +98,6 @@ export class AppRuntime {
 	private settled = false
 	private theme: AppTheme
 	private errors = 0
-	private requestCount = 0
-	private requestWindow = Date.now()
 	private resolve!: () => void
 	private reject!: (error: Error) => void
 	private readonly channel = createId('runtime').replaceAll('-', '')
@@ -224,17 +222,7 @@ export class AppRuntime {
 		const parsed = requestSchema.safeParse(data)
 		if (!parsed.success) return
 		const request = parsed.data
-		if (Date.now() - this.requestWindow > 1000) {
-			this.requestWindow = Date.now()
-			this.requestCount = 0
-		}
 		const execute = async () => {
-			// Control replies settle existing bounded AI runs and must remain usable under load.
-			if (
-				!['ai.cancel', 'ai.toolResult'].includes(request.method) &&
-				++this.requestCount > 60
-			)
-				throw new Error('App request rate exceeded')
 			if (request.method.startsWith('ai.'))
 				return this.ai.dispatch(request.method.slice(3), request.args)
 			if (request.method.startsWith('fs.')) {
