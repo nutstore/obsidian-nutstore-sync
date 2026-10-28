@@ -133,8 +133,10 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 		syncEnd: false,
 		cancellationState: 'none',
 	}
+	const settings = { skipLargeFiles: { maxSize: '' } }
 	const modal = new SyncProgressModal({
 		app: {},
+		settings,
 		sync: { progress },
 	} as unknown as NutstorePlugin)
 	modals.push(modal)
@@ -144,6 +146,7 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 	return {
 		modal,
 		progress,
+		settings,
 		find,
 		bar: find('primary').querySelector<HTMLElement>(
 			'.nutstore-sync-progress__bar',
@@ -194,7 +197,7 @@ describe('sync progress modal', () => {
 		'shows mobile upload advice only for a sync with large uploads in %s',
 		async (language) => {
 			await i18n.changeLanguage(language)
-			const { modal, progress, find } = mount()
+			const { modal, progress, find, settings } = mount()
 			const hint = find('large-upload-hint')
 			expect(hint.style.display).toBe('none')
 			progress.syncProgress.hasLargeUploads = true
@@ -206,6 +209,14 @@ describe('sync progress modal', () => {
 			expect(hint.textContent).toContain(i18n.t('settings.skipLargeFiles.name'))
 			expect(hint.textContent).toContain('20 MB')
 			expect(hint.textContent).toContain('40 MB')
+			for (const maxSize of ['30 MB', '100 MB']) {
+				settings.skipLargeFiles.maxSize = maxSize
+				modal.update()
+				expect(hint.style.display).toBe('none')
+			}
+			settings.skipLargeFiles.maxSize = '  '
+			modal.update()
+			expect(hint.style.display).toBe('')
 			progress.preparationProgress = null
 			progress.syncProgress.current = null
 			modal.update()

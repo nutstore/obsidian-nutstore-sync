@@ -113,7 +113,11 @@ export default class SyncProgressModal extends Modal {
 							? 'preparing'
 							: 'syncing'
 
-		if (Platform.isMobile && progress.hasLargeUploads) {
+		if (
+			Platform.isMobile &&
+			progress.hasLargeUploads &&
+			this.plugin.settings.skipLargeFiles.maxSize.trim() === ''
+		) {
 			this.largeUploadHint.show()
 		} else {
 			this.largeUploadHint.hide()
