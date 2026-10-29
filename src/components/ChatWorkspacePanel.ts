@@ -1,4 +1,4 @@
-import { Menu, Modal, Notice, Platform, setIcon } from 'obsidian'
+import { Menu, Notice, Platform, setIcon } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import type { SavedApp } from '~/ai/apps/store'
 import { appError } from '~/ai/apps/error'
@@ -6,6 +6,7 @@ import { formatAppCreationPrompt } from '~/ai/apps/create-app-prompt'
 import i18n from '~/i18n'
 import { SessionAppOpenMode } from '~/settings'
 import AppCreationModal from './AppCreationModal'
+import AppManagerModal from './AppManagerModal'
 
 /**
  * The composer exposes the chat target. Apps are authored through conversation
@@ -89,9 +90,9 @@ export class ChatWorkspacePanel {
 					.onClick(() => this.selectWorkspace(app.id)),
 			)
 		}
+		menu.addSeparator()
 		const id = this.activeId
 		if (id) {
-			menu.addSeparator()
 			menu.addItem((item) =>
 				item
 					.setTitle(i18n.t('apps.openApp'))
@@ -103,15 +104,17 @@ export class ChatWorkspacePanel {
 							.catch((error) => new Notice(appError(error)))
 					}),
 			)
-			menu.addSeparator()
-			menu.addItem((item) =>
-				item
-					.setTitle(i18n.t('apps.deleteApp'))
-					.setIcon('trash-2')
-					.setDisabled(!this.saved)
-					.onClick(() => this.confirmDelete()),
-			)
 		}
+		menu.addItem((item) =>
+			item
+				.setTitle(i18n.t('apps.manageApps'))
+				.setIcon('settings-2')
+				.onClick(() =>
+					this.plugin.ai.lifecycle.scope
+						.ownModal(new AppManagerModal(this.plugin))
+						.open(),
+				),
+		)
 		const rect = this.picker.getBoundingClientRect()
 		menu.showAtPosition({ x: rect.left, y: rect.bottom })
 	}
@@ -213,30 +216,6 @@ export class ChatWorkspacePanel {
 		}
 	}
 
-	private confirmDelete() {
-		const id = this.activeId
-		if (!id) return
-		const modal = this.plugin.ai.lifecycle.scope.ownModal(
-			new Modal(this.plugin.app),
-		)
-		modal.setTitle(i18n.t('apps.deleteApp'))
-		modal.contentEl.createEl('p', { text: i18n.t('apps.deleteAppPrompt') })
-		const button = modal.contentEl.createEl('button', {
-			text: i18n.t('apps.deleteApp'),
-			cls: 'mod-warning',
-		})
-		button.addEventListener('click', () => {
-			button.disabled = true
-			void this.plugin.ai.apps
-				.remove(id)
-				.then(() => modal.close())
-				.catch((error) => {
-					new Notice(appError(error))
-					button.disabled = false
-				})
-		})
-		modal.open()
-	}
 	destroy() {
 		this.closed = true
 		this.epoch++

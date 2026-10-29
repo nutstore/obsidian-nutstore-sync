@@ -3256,3 +3256,48 @@
 	max-width: none;
 	line-height: 20px;
 }
+
+.ns-app-manager-modal .search-input-container {
+	width: 100%;
+	margin-bottom: 16px;
+}
+.ns-app-manager-modal .ns-app-manager-icon {
+	order: -1;
+	margin-right: 12px;
+	color: var(--text-accent);
+	flex-shrink: 0;
+}
+.ns-app-manager-modal .ns-app-manager-icon svg {
+	width: 24px;
+	height: 24px;
+}
+/* Keep native settings' reserved description space out of name-only App rows. */
+.ns-app-manager-modal .ns-app-manager-row {
+	flex-direction: row;
+	align-items: center;
+	padding: 10px 0;
+	gap: 8px;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-info {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-name {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-description {
+	display: none;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-control {
+	flex: 0 0 auto;
+	padding: 0;
+	gap: 8px;
+}
+.ns-app-manager-modal .ns-app-manager-row .ns-app-manager-icon {
+	display: flex;
+	align-items: center;
+	margin-right: 4px;
+}
