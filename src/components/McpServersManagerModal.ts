@@ -15,6 +15,7 @@ import McpServerEditorModal, {
 
 export default class McpServersManagerModal extends Modal {
 	private tab: 'installed' | 'discover' = 'installed'
+	private readonly scrollPositions = { installed: 0, discover: 0 }
 	private stopRuntimeUpdates?: () => void
 	private readonly updateDescriptions = new Set<() => void>()
 	private readonly moduleScope
@@ -27,7 +28,9 @@ export default class McpServersManagerModal extends Modal {
 		this.moduleScope = plugin.ai.lifecycle.scope
 		this.mcp = plugin.ai.mcp
 		this.moduleScope.ownModal(this)
-		addClassTokens(this.modalEl, ':uno: w-[760px] max-w-[95vw]')
+		addClassTokens(this.modalEl, 'mcp-manager-modal')
+		addClassTokens(this.contentEl, 'mcp-manager-modal__content')
+		this.setTitle(i18n.t('settings.ai.mcp.manager.title'))
 	}
 
 	onOpen() {
@@ -53,11 +56,9 @@ export default class McpServersManagerModal extends Modal {
 		const { contentEl } = this
 		this.updateDescriptions.clear()
 		contentEl.empty()
-		contentEl.createEl('h2', {
-			text: i18n.t('settings.ai.mcp.manager.title'),
+		const tabs = contentEl.createDiv({
+			cls: 'mcp-manager-modal__tabs',
 		})
-
-		const tabs = contentEl.createDiv({ cls: ':uno: flex gap-2 mb-5' })
 		tabs.setAttribute('role', 'group')
 		for (const tab of ['installed', 'discover'] as const) {
 			const button = new ButtonComponent(tabs)
@@ -65,15 +66,29 @@ export default class McpServersManagerModal extends Modal {
 				.onClick(() => {
 					this.tab = tab
 					this.render()
+					this.contentEl
+						.querySelector<HTMLButtonElement>('[aria-pressed="true"]')
+						?.focus()
 				})
 			button.buttonEl.setAttribute('aria-pressed', String(this.tab === tab))
-			if (this.tab === tab) button.setCta()
+			addClassTokens(button.buttonEl, 'mcp-manager-modal__tab')
 		}
-		if (this.tab === 'discover') {
-			this.renderDiscovery(contentEl)
-			return
-		}
+		// Only the body scrolls; the native title/close control and tabs stay visible.
+		const body = contentEl.createDiv({
+			cls: 'mcp-manager-modal__body',
+		})
+		const tab = this.tab
+		body.setAttribute('role', 'region')
+		body.setAttribute('aria-label', i18n.t(`settings.ai.mcp.discovery.${tab}`))
+		if (tab === 'discover') this.renderDiscovery(body)
+		else this.renderInstalled(body)
+		body.scrollTop = this.scrollPositions[tab]
+		body.addEventListener('scroll', () => {
+			this.scrollPositions[tab] = body.scrollTop
+		})
+	}
 
+	private renderInstalled(contentEl: HTMLElement) {
 		const parseError = this.mcp.getParseError()
 		if (parseError) {
 			contentEl.createDiv({
@@ -86,7 +101,9 @@ export default class McpServersManagerModal extends Modal {
 		}
 
 		new Setting(contentEl)
-			.setName(i18n.t('settings.ai.mcp.name'))
+			.then((setting) =>
+				addClassTokens(setting.settingEl, 'mcp-manager-modal__toolbar'),
+			)
 			.setDesc(
 				i18n.t('settings.ai.mcp.manager.configFileHint', {
 					path: MCP_CONFIG_VIRTUAL_PATH,

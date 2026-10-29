@@ -3107,3 +3107,72 @@
 	color: var(--text-muted);
 	overflow-wrap: anywhere;
 }
+
+/* Keep native Modal chrome outside the only scroll container. Auto height
+ * avoids empty space for short lists; the flex chain bounds longer lists. */
+.modal.mcp-manager-modal {
+	width: 760px;
+	max-width: 95vw;
+	max-height: 85vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.mcp-manager-modal > .modal-header {
+	flex-shrink: 0;
+}
+
+.modal-content.mcp-manager-modal__content {
+	display: flex;
+	flex-direction: column;
+	flex: 0 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.mcp-manager-modal__tabs {
+	display: flex;
+	flex-shrink: 0;
+	gap: 20px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.mcp-manager-modal__tabs button.mcp-manager-modal__tab {
+	height: auto;
+	padding: 10px 2px;
+	margin: 0 0 -1px;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-weight: var(--font-medium);
+}
+
+.mcp-manager-modal__tabs button.mcp-manager-modal__tab:hover {
+	color: var(--text-normal);
+}
+
+.mcp-manager-modal__tabs button.mcp-manager-modal__tab[aria-pressed='true'] {
+	color: var(--text-accent);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.mcp-manager-modal__body {
+	flex: 0 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding-top: 8px;
+}
+
+.mcp-manager-modal__body .mcp-manager-modal__toolbar {
+	padding: 16px 0;
+	border-top: 0;
+}
+
+.mcp-manager-modal__toolbar .setting-item-name:empty {
+	display: none;
+}
