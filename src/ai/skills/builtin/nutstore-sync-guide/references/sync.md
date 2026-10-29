@@ -105,21 +105,22 @@ known common state. The selected strategy applies to that file.
 | Local priority      | Replaces the cloud copy with the local file.                                                                                                                                      | The local file is unquestionably correct.                                     |
 | Server priority     | Replaces the local copy with the cloud file.                                                                                                                                      | The cloud file is unquestionably correct.                                     |
 
-Conflict-free merge runs a fallback chain on text files:
+Conflict-free merge uses these rules:
 
 1. If both copies are identical, nothing changes.
 2. For JSON files, fields are merged one by one: independent fields are
    combined, and a field changed on both sides keeps the local value.
-3. Otherwise a Git-style diff3 merge runs; if no hunks overlap, its clean
-   merge is used directly.
-4. If diff3 reports overlapping edits, a collaborative-editing merge (Yjs
-   CRDT) reconciles both branches against the common base snapshot.
-5. If that also fails, the merge is reported as failed rather than silently
+3. Otherwise DMP derives each branch's edits against the base snapshot, and
+   Yjs CRDT combines them. Edit boundaries preserve complete Unicode code points;
+   competing changes to the same identifiable base number keep the local value.
+4. If that fails, the merge is reported as failed rather than silently
    overwriting anything, leaving the file for manual handling.
 
 The three-way merge is based on the last common base blob recorded for the
-file, so repeated merges are deterministic. A successful merge is written to
-both the local note and the remote copy.
+file. Concurrent insertions can appear in either order; repeated merges are
+not guaranteed to produce identical results. A successful merge is written to
+both the local note and the remote copy. The independent Diff3 strategy still
+uses Git-style conflict markers.
 
 Automatic text merging is available only for recognized text formats, including
 Markdown, JSON, YAML, CSV, common source/configuration files, and plain text.
