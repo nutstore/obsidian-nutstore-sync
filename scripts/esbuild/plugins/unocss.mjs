@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import jiti from 'jiti'
 import path from 'node:path'
+import { transform } from 'esbuild'
 import postcss from 'postcss'
 import postcssMergeRules from 'postcss-merge-rules'
 import { createGenerator } from 'unocss'
@@ -86,9 +87,19 @@ export async function finalizeUnoCss({ js, css, prod, cssPath, scanSource }) {
 		css.replace('@unocss;', generatedCss),
 		{ from: cssPath },
 	)
+	// The generated CSS is assembled after esbuild's own minify pass.
+	const finalCss = prod
+		? (
+				await transform(transformedCss.css, {
+					loader: 'css',
+					minify: true,
+					legalComments: 'none',
+				})
+			).code
+		: transformedCss.css
 
 	return {
 		js: transformedJs,
-		css: transformedCss.css,
+		css: finalCss,
 	}
 }

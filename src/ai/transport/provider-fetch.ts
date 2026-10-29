@@ -21,8 +21,9 @@ function buildDisableCorsLink(providerId: string) {
 export function createProviderFetch(provider: AIProviderConfig): typeof fetch {
 	// This explicit user choice requires native streaming and browser CORS.
 	const baseFetch: typeof fetch = provider.allowBrowserCors
-		? // eslint-disable-next-line no-restricted-globals -- Explicit browser CORS mode requires native streaming fetch.
-			fetch
+		? // Native fetch needs the window receiver, and `window` is the host
+			// reference the Obsidian rules ask for instead of a bare global.
+			(input, init) => window.fetch(input, init)
 		: obsidianFetch
 
 	if (!provider.allowBrowserCors) {

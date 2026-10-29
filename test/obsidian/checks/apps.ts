@@ -74,21 +74,24 @@ async function rejection(promise: Promise<unknown>) {
 async function expectBlocked(
 	run: Promise<{ exitCode: number; stdout: string; stderr: string }>,
 	message: string,
+	expected = /read-only/,
 ) {
+	let result: Awaited<typeof run>
 	try {
-		const result = await run
-		assert(
-			result.exitCode !== 0 &&
-				/read-only/.test(`${result.stdout}${result.stderr}`),
-			message,
-		)
+		result = await run
 	} catch (error) {
 		assert(
-			/read-only/.test(error instanceof Error ? error.message : String(error)),
+			expected.test(error instanceof Error ? error.message : String(error)),
 			message,
 		)
+		return
 	}
+	assert(
+		result.exitCode !== 0 && expected.test(`${result.stdout}${result.stderr}`),
+		`${message}: exit=${result.exitCode}, stderr=${result.stderr}`,
+	)
 }
+
 function directoryPath() {
 	return appDirectoryPath(APP_ID)
 }
@@ -404,7 +407,8 @@ export async function createsIndependentApps(app: App) {
 			)
 			await expectBlocked(
 				runBash(app, plugin, `rm -r ${authoredDirectory}`),
-				'bash could delete an App directory',
+				'Bash must refuse App uninstall when no lifecycle is available',
+				/ENOTSUP: App lifecycle is unavailable/,
 			)
 			assert(
 				await store.exists(authoredId),

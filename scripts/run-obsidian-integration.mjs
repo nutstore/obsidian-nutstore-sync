@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import esbuild from 'esbuild'
+import { OBSIDIAN_E2E_RESULT_PATH } from '../test/obsidian/integration-protocol.mjs'
 import { compressedAssetsPlugin } from './esbuild/plugins/compressed-assets.mjs'
 import {
 	createObsidianSandbox,
@@ -21,7 +22,6 @@ import {
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const PLUGIN_ID = 'nutstore-sync'
 const HARNESS_ID = 'nutstore-sync-integration-harness'
-const RESULT_PATH = '.obsidian/nutstore-sync-e2e-result.json'
 const STARTUP_TIMEOUT_MS = Number.parseInt(
 	process.env.OBSIDIAN_E2E_STARTUP_TIMEOUT_MS ?? '60000',
 	10,
@@ -253,7 +253,7 @@ async function enableCommunityPlugins(sandbox) {
 
 async function waitForResult(sandbox) {
 	const fs = sandbox.fs()
-	const path = `/root/nutstore-vault/${RESULT_PATH}`
+	const path = `/root/nutstore-vault/${OBSIDIAN_E2E_RESULT_PATH}`
 	const deadline = Date.now() + STARTUP_TIMEOUT_MS
 	let activeCheck
 	let latestStep
@@ -293,10 +293,7 @@ async function retainGuestArtifacts(sandbox, artifactRoot) {
 			'/root/nutstore-vault/.obsidian/workspace-mobile.json',
 			'workspace-mobile.json',
 		],
-		[
-			'/root/nutstore-vault/.obsidian/nutstore-sync-e2e-result.json',
-			'result.json',
-		],
+		[`/root/nutstore-vault/${OBSIDIAN_E2E_RESULT_PATH}`, 'result.json'],
 		['/root/obsidian-profile/obsidian.json', 'obsidian.json'],
 		['/root/obsidian-profile/e2e0000000000001.json', 'vault-profile.json'],
 	]) {

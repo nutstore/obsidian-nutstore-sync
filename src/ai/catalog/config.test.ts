@@ -28,6 +28,19 @@ describe('ai config', () => {
 		}
 	})
 
+	it.each(['__proto__', 'constructor', 'prototype', '中性-neutral-🌿'])(
+		'preserves provider and model ids as own properties (%s)',
+		(id) => {
+			const providers = sanitizeProviders({
+				neutral: { id, name: '中性 Neutral 🌿', models: { neutral: { id } } },
+			})
+			expect(Object.keys(providers)).toEqual([id])
+			expect(Object.getPrototypeOf(providers)).toBe(Object.prototype)
+			expect(Object.keys(providers[id].models)).toEqual([id])
+			expect(Object.getPrototypeOf(providers[id].models)).toBe(Object.prototype)
+		},
+	)
+
 	it('creates an empty provider config', () => {
 		const draft = createProviderConfig()
 

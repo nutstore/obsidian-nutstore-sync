@@ -5,7 +5,6 @@ import type NutstorePlugin from '..'
 import ProviderSelectModelsModal from './ProviderSelectModelsModal'
 
 vi.mock('obsidian', () => {
-	/* eslint-disable obsidianmd/prefer-create-el -- Implement host DOM helpers that are unavailable in jsdom. */
 	function element(
 		tag = 'div',
 		options: {
@@ -35,7 +34,6 @@ vi.mock('obsidian', () => {
 			removeClass: (cls: string) => el.classList.remove(...cls.split(/\s+/)),
 		})
 	}
-	/* eslint-enable obsidianmd/prefer-create-el -- End of DOM helper mock */
 
 	class MockModal {
 		modalEl = element('div', { cls: 'modal' })

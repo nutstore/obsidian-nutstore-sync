@@ -7,10 +7,10 @@ import type {
 	jsonSchemaValidator,
 	JsonSchemaValidatorResult,
 } from '@modelcontextprotocol/sdk/validation/types.js'
-import { dynamicTool, jsonSchema, type ToolSet } from 'ai'
+import { Validator } from '@cfworker/json-schema'
+import { createMcpTools } from '~/ai/mcp/tools'
 import { dirname } from 'path-browserify'
 import {
-	getMcpToolName,
 	isMcpServerEnabled,
 	MCP_CONFIG_VAULT_PATH,
 	type McpServerConfig,
@@ -42,6 +42,7 @@ export interface McpServerRuntimeInfo {
 }
 
 interface ConnectedMcpServer {
+	description: string
 	client: Client
 	signature: string
 	tools: McpToolInfo[]
@@ -57,6 +58,14 @@ const noopJsonSchemaValidator: jsonSchemaValidator = {
 		}),
 }
 
+function describeMcpTool(info: McpToolInfo) {
+	return {
+		tool: info.name,
+		description: info.description,
+		inputSchema: info.inputSchema,
+	}
+}
+
 function toErrorMessage(error: unknown) {
 	return error instanceof Error ? error.message : String(error)
 }
@@ -69,7 +78,33 @@ export default class McpService extends BaseService {
 		return guardAppIO(this.plugin.app, this.scope.check, this.scope.track)
 	}
 	private readonly clients = new Map<string, ConnectedMcpServer>()
-	private reloadPromise?: Promise<void>
+	/** File operations serialize; remote discovery never holds this queue. */
+	private configQueue: Promise<void> = Promise.resolve()
+	private readonly connections = new Map<
+		string,
+		{ signature: string; promise: Promise<void> }
+	>()
+	private readonly runtimeListeners = new Set<() => void>()
+
+	onRuntimeChanged(listener: () => void) {
+		this.runtimeListeners.add(listener)
+		return () => {
+			this.runtimeListeners.delete(listener)
+		}
+	}
+
+	private notifyRuntimeChanged() {
+		for (const listener of this.runtimeListeners) listener()
+	}
+
+	private enqueueConfig(work: () => Promise<void>) {
+		const result = this.configQueue.then(() => {
+			this.scope.check()
+			return work()
+		})
+		this.configQueue = result.catch(() => {})
+		return result
+	}
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -80,7 +115,11 @@ export default class McpService extends BaseService {
 
 	async close() {
 		await this.closeAllClients()
-		await this.reloadPromise?.catch(() => {})
+		await this.configQueue
+		await Promise.allSettled(
+			[...this.connections.values()].map((attempt) => attempt.promise),
+		)
+		this.runtimeListeners.clear()
 		await this.closeAllClients()
 	}
 
@@ -99,7 +138,15 @@ export default class McpService extends BaseService {
 			return {
 				name,
 				enabled,
-				status: connected ? 'connected' : enabled ? 'error' : undefined,
+				status: connected
+					? 'connected'
+					: enabled
+						? this.connections.has(name)
+							? 'connecting'
+							: this.connectErrors.has(name)
+								? 'error'
+								: undefined
+						: undefined,
 				error: enabled && !connected ? this.getConnectError(name) : undefined,
 				tools: connected?.tools ?? [],
 			}
@@ -113,24 +160,12 @@ export default class McpService extends BaseService {
 	}
 
 	async reload() {
-		this.scope.check()
-		if (this.reloadPromise) {
-			return this.reloadPromise
-		}
-		const promise = this.reloadInternal()
-		this.reloadPromise = promise
-		try {
-			await promise
-		} finally {
-			if (this.reloadPromise === promise) {
-				this.reloadPromise = undefined
-			}
-		}
+		return this.enqueueConfig(() => this.reloadInternal())
 	}
 
 	/**
-	 * Re-reads the config file when its mtime changed. Called before each agent
-	 * turn so edits made by the model (via the bash tool) take effect without a
+	 * Re-reads the config file when its mtime changed. Called by MCP discovery and execution
+	 * so edits made by the model (via the bash tool) take effect without a
 	 * file watcher (dotfiles produce no vault events).
 	 */
 	async refreshIfChanged() {
@@ -178,37 +213,78 @@ export default class McpService extends BaseService {
 		this.servers = servers
 		this.parseError = parseError
 		this.configMtime = mtime
-		await this.reconcileClients()
+		this.reconcileClients()
 	}
 
-	private async reconcileClients() {
+	/** Each server discovers tools independently; stale attempts cannot publish. */
+	private reconcileClients() {
 		this.scope.check()
-		const desired = new Map(
-			Object.entries(this.servers).filter(([, config]) =>
-				isMcpServerEnabled(config),
-			),
-		)
-		for (const [name, connected] of [...this.clients]) {
-			const config = desired.get(name)
-			if (!config || JSON.stringify(config) !== connected.signature) {
-				await this.closeClient(name)
+		for (const [name, connected] of this.clients) {
+			const config = this.servers[name]
+			if (
+				!config ||
+				!isMcpServerEnabled(config) ||
+				JSON.stringify(config) !== connected.signature
+			) {
+				this.clients.delete(name)
+				void this.scope.background(
+					() => connected.client.close(),
+					(error) => logger.warn('Failed to close MCP client', error),
+				)
 			}
 		}
-		for (const [name, config] of desired) {
-			if (this.clients.has(name)) {
-				continue
-			}
-			try {
-				const connected = await this.connect(config)
-				this.scope.check()
-				this.clients.set(name, connected)
+		for (const name of this.connections.keys()) {
+			const config = this.servers[name]
+			if (!config || !isMcpServerEnabled(config)) this.connections.delete(name)
+		}
+		for (const name of this.connectErrors.keys()) {
+			if (!this.servers[name] || !isMcpServerEnabled(this.servers[name]))
 				this.connectErrors.delete(name)
-			} catch (error) {
-				if (this.scope.signal.aborted) return
-				logger.warn(`Failed to connect MCP server '${name}'`, error)
-				this.connectErrors.set(name, toErrorMessage(error))
-			}
 		}
+		for (const [name, config] of Object.entries(this.servers)) {
+			if (!isMcpServerEnabled(config) || this.clients.has(name)) continue
+			const signature = JSON.stringify(config)
+			if (this.connections.get(name)?.signature === signature) continue
+			this.connectErrors.delete(name)
+			const attempt = { signature, promise: Promise.resolve() }
+			this.connections.set(name, attempt)
+			attempt.promise = this.scope.background(
+				async () => {
+					try {
+						const connected = await this.connect(config)
+						const current = this.servers[name]
+						if (
+							this.scope.signal.aborted ||
+							this.connections.get(name) !== attempt ||
+							!current ||
+							!isMcpServerEnabled(current) ||
+							JSON.stringify(current) !== signature
+						) {
+							await connected.client.close().catch(() => {})
+							return
+						}
+						this.clients.set(name, connected)
+						this.connectErrors.delete(name)
+					} catch (error) {
+						if (
+							this.scope.signal.aborted ||
+							this.connections.get(name) !== attempt ||
+							JSON.stringify(this.servers[name]) !== signature
+						)
+							return
+						logger.warn(`Failed to connect MCP server '${name}'`, error)
+						this.connectErrors.set(name, toErrorMessage(error))
+					} finally {
+						if (this.connections.get(name) === attempt)
+							this.connections.delete(name)
+						if (!this.scope.signal.aborted) this.notifyRuntimeChanged()
+					}
+				},
+				(error) => logger.warn('Failed to reconcile MCP client', error),
+			)
+			this.scope.track(attempt.promise)
+		}
+		this.notifyRuntimeChanged()
 	}
 
 	private async connect(config: McpServerConfig): Promise<ConnectedMcpServer> {
@@ -217,6 +293,10 @@ export default class McpService extends BaseService {
 			const { tools } = await this.scope.wait(client.listTools())
 			return {
 				client,
+				description:
+					client.getServerVersion()?.description ??
+					client.getInstructions() ??
+					'',
 				signature: JSON.stringify(config),
 				tools: tools.map((tool) => ({
 					name: tool.name,
@@ -282,15 +362,21 @@ export default class McpService extends BaseService {
 		}
 	}
 
-	async saveServers(servers: McpServerConfigs) {
-		this.scope.check()
-		const vault = this.app.vault
-		await mkdirsVault(vault, dirname(MCP_CONFIG_VAULT_PATH))
-		await vault.adapter.write(
-			MCP_CONFIG_VAULT_PATH,
-			serializeMcpServersFile(servers),
-		)
-		await this.reload()
+	async saveServers(
+		update:
+			McpServerConfigs | ((current: McpServerConfigs) => McpServerConfigs),
+	) {
+		return this.enqueueConfig(async () => {
+			const servers =
+				typeof update === 'function' ? update(this.servers) : update
+			const vault = this.app.vault
+			await mkdirsVault(vault, dirname(MCP_CONFIG_VAULT_PATH))
+			await vault.adapter.write(
+				MCP_CONFIG_VAULT_PATH,
+				serializeMcpServersFile(servers),
+			)
+			await this.reloadInternal()
+		})
 	}
 
 	async testConnection(config: McpServerConfig) {
@@ -307,67 +393,111 @@ export default class McpService extends BaseService {
 		}
 	}
 
-	/**
-	 * Builds AI SDK tools for all connected servers, excluding servers disabled
-	 * for the given session. Tool names are namespaced as
-	 * `mcp__<serverName>__<toolName>`.
-	 */
+	/** Definitions never depend on connected servers or discovered tool schemas. */
 	getToolsForSession(
 		sessionId: string,
 		disabledServers: readonly string[] = [],
-	): ToolSet {
+	) {
 		this.scope.check()
-		const disabled = new Set(disabledServers)
-		const result: ToolSet = {}
-		for (const [name, connected] of this.clients) {
-			if (disabled.has(name)) {
-				continue
-			}
-			for (const toolInfo of connected.tools) {
-				result[getMcpToolName(name, toolInfo.name)] = this.createTool(
-					connected.client,
-					toolInfo,
-					name,
-					sessionId,
-				)
-			}
-		}
-		return result
+		return createMcpTools(this, sessionId, disabledServers)
 	}
 
-	private createTool(
-		client: Client,
-		toolInfo: McpToolInfo,
-		serverName: string,
+	/** The compact directory contains tool names only, never tool schemas or descriptions. */
+	async listMcpServers(disabledServers: readonly string[] = []) {
+		await this.refreshIfChanged()
+		this.scope.check()
+		if (this.parseError) throw new Error(this.parseError)
+		return this.getServerRuntimes()
+			.filter((runtime) => !disabledServers.includes(runtime.name))
+			.map((runtime) => ({
+				server: runtime.name,
+				description: this.clients.get(runtime.name)?.description ?? '',
+				tools: runtime.tools.map((info) => info.name),
+				status: runtime.enabled ? (runtime.status ?? 'connecting') : 'disabled',
+				error: runtime.error,
+			}))
+	}
+
+	/** One service name always yields the same detailed tool-definition shape. */
+	async listMcpTools(server: string, disabledServers: readonly string[] = []) {
+		const name = server.trim()
+		if (!name) throw new Error('MCP service name must not be empty.')
+		await this.refreshIfChanged()
+		this.scope.check()
+		if (this.parseError) throw new Error(this.parseError)
+		const runtime = this.getServerRuntimes().find(
+			(runtime) => runtime.name === name && !disabledServers.includes(name),
+		)
+		if (!runtime)
+			throw new Error(
+				`MCP service '${name}' is unavailable or disabled for this session.`,
+			)
+		return {
+			server: runtime.name,
+			status: runtime.enabled ? (runtime.status ?? 'connecting') : 'disabled',
+			error: runtime.error,
+			tools: runtime.tools.map(describeMcpTool),
+		}
+	}
+
+	/** Resolve against current state so removed, changed or disabled services cannot execute. */
+	async execMcp(
+		input: { server: string; tool: string; args: Record<string, unknown> },
 		sessionId: string,
+		disabledServers: readonly string[] = [],
+		abortSignal?: AbortSignal,
 	) {
-		return dynamicTool({
-			description: toolInfo.description ?? `MCP tool: ${toolInfo.name}`,
-			inputSchema: jsonSchema(toolInfo.inputSchema),
-			execute: async (input: unknown, { abortSignal }) => {
-				throwIfAborted(abortSignal)
-				this.scope.check()
-				const result = await this.scope.wait(
-					client.callTool(
-						{
-							name: toolInfo.name,
-							arguments: (input ?? {}) as Record<string, unknown>,
-						},
-						undefined,
-						{ signal: abortSignal ?? this.scope.signal },
-					),
-				)
-				this.scope.check()
-				return formatMcpToolResult(
-					guardAppIO(this.app, () => throwIfAborted(abortSignal)),
-					{
-						sessionId,
-						serverName,
-						toolName: toolInfo.name,
-						result,
-					},
-				)
-			},
-		})
+		throwIfAborted(abortSignal)
+		await this.refreshIfChanged()
+		this.scope.check()
+		throwIfAborted(abortSignal)
+		const server = input.server.trim()
+		const toolName = input.tool.trim()
+		if (!server || !toolName)
+			throw new Error('MCP service name and tool name must not be empty.')
+		const config = this.servers[server]
+		if (
+			!config ||
+			!isMcpServerEnabled(config) ||
+			disabledServers.includes(server)
+		) {
+			throw new Error(`MCP service '${server}' is unavailable or disabled.`)
+		}
+		const connected = this.clients.get(server)
+		if (!connected || connected.signature !== JSON.stringify(config)) {
+			throw new Error(
+				`MCP service '${server}' is not ready. Use mcp_list_servers to inspect its connection status.`,
+			)
+		}
+		const info = connected.tools.find((info) => info.name === toolName)
+		if (!info)
+			throw new Error(
+				`Unknown MCP tool '${toolName}'. Use mcp_list_tools with this service name to discover tools.`,
+			)
+		const validation = new Validator(info.inputSchema, '2020-12').validate(
+			input.args,
+		)
+		if (!validation.valid) {
+			throw new Error(
+				[
+					`Invalid MCP arguments: ${validation.errors.map((error) => `${error.instanceLocation || '/'}: ${error.error}`).join('; ')}`,
+					'No remote tool was executed. Correct all arguments using the complete definition below, then retry mcp_execute. Do not guess parameters from prior knowledge.',
+					JSON.stringify({ server, ...describeMcpTool(info) }),
+				].join('\n'),
+			)
+		}
+		const result = await this.scope.wait(
+			connected.client.callTool(
+				{ name: toolName, arguments: input.args },
+				undefined,
+				{ signal: abortSignal ?? this.scope.signal },
+			),
+		)
+		this.scope.check()
+		throwIfAborted(abortSignal)
+		return formatMcpToolResult(
+			guardAppIO(this.app, () => throwIfAborted(abortSignal)),
+			{ sessionId, serverName: server, toolName, result },
+		)
 	}
 }

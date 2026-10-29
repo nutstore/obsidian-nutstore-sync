@@ -453,6 +453,7 @@
 					"configFileHint": "Stored in {{path}}. You can also ask the AI in chat to edit this file.",
 					"parseError": "Failed to parse {{path}}: {{reason}}",
 					"statusDisabled": "disabled",
+					"statusConnecting": "Connecting and discovering tools…",
 					"statusConnected": "{{count}} tool(s)",
 					"statusError": "connection failed: {{reason}}",
 					"test": "Test",
@@ -480,6 +481,27 @@
 					"duplicateName": "A server with this name already exists",
 					"emptyUrl": "URL cannot be empty",
 					"invalidUrl": "Invalid URL"
+				},
+				"discovery": {
+					"installed": "Installed",
+					"discover": "Discover",
+					"intro": "Connect your notes to web research and technical knowledge. Keyless services can be added in one click. Services requiring authentication open their settings first. Public access may have usage limits; test on your current device before use.",
+					"website": "Official documentation ↗",
+					"remove": "Remove",
+					"testing": "Connecting…",
+					"noKey": "No API key required",
+					"optionalKey": "API key optional",
+					"exa": "Search the web, read pages and find research sources for your notes.",
+					"deepwiki": "Explore public GitHub repositories and turn project documentation into learning notes.",
+					"tavily": "Search and extract web content for research. Configure your API key using the official documentation. Browser sign-in is not supported here yet.",
+					"context7": "Find current library documentation and examples for technical notes. Add an Authorization header for your API key.",
+					"parallel": "Search the web and read pages for research notes. Add an Authorization: Bearer header for higher usage limits.",
+					"jina": "Read pages, search sources, and access embeddings and reranking. Some capabilities require an API key via an Authorization: Bearer header.",
+					"firecrawl": "Convert pages to Markdown, search and parse sources. Keyless access is limited and rate-limited; crawling and other tools need an API key in request headers. See the official documentation.",
+					"microsoft-learn": "Search and read official Microsoft Learn documentation and code samples for Azure, .NET and related technologies.",
+					"cloudflare-docs": "Search official Cloudflare documentation for notes on Workers, networking and cloud services.",
+					"kagi": "Search the web with Kagi for research sources. Requires a Kagi API key in the Authorization: Bearer header when adding the service.",
+					"requiresKey": "Requires authentication"
 				}
 			},
 			"yolo": {
@@ -764,11 +786,14 @@
 		"filePath": "{{path}}",
 		"progressTitle": "Sync progress",
 		"progressCompleteTitle": "Sync complete",
+		"mobileLargeUploadHint": "Uploading large files on mobile may cause the app to crash. If this happens, lower the size threshold for “{{setting}}” in settings, for example to 20 MB or 40 MB, depending on your device.",
 		"progressLabel": "Sync progress",
 		"cacheProgressLabel": "Cache update progress",
 		"syncingFiles": "Syncing files...",
 		"updatingCache": "Updating local cache...",
 		"failedStatus": "Sync failed",
+		"cancelling": "Stopping sync",
+		"cancellingHint": "Waiting for the current request to finish. Obsidian cannot abort an upload already sent. Sync will then stop and you can start again.",
 		"cancelled": "Sync cancelled",
 		"suggestUseClientForManyTasks": "Tip: When there are many sync tasks, we recommend using the Nutstore client for better performance and stability. The plugin is more suitable for mobile use!",
 		"fileOp": {
@@ -918,6 +943,9 @@
 				"deleteSession": "Delete",
 				"cancel": "Cancel",
 				"close": "Close",
+				"fileDescription": "Attach images or text files to this message",
+				"compactDescription": "Summarize this conversation to free up context",
+				"newDescription": "Start a new conversation",
 				"selectFile": "Select File",
 				"send": "Send",
 				"stopRun": "Stop",
@@ -934,6 +962,7 @@
 				"contextUsage": "Context: {{used}}% used (window {{total}} tokens · total {{usedTokens}})"
 			},
 			"labels": {
+				"messageInput": "Message",
 				"provider": "Provider",
 				"model": "Model",
 				"tool": "Tool",
@@ -982,7 +1011,16 @@
 				"agentWaiting": "Waiting for agent messages"
 			},
 			"placeholders": {
-				"input": "Type a message. Enter to send, Shift+Enter for newline"
+				"suggestions": {
+					"ask": "What would you like me to do?",
+					"idea": "Have an idea? Let’s explore it",
+					"summary": "Try asking me to summarize a note",
+					"outline": "Turn an idea into an outline",
+					"explain": "Need a concept explained? Ask me",
+					"polish": "Make a passage clearer",
+					"steps": "Break a goal into next steps",
+					"connections": "Explore connections between notes"
+				}
 			},
 			"dialogs": {
 				"subagentTimeline": {
@@ -1036,6 +1074,7 @@
 			"apiKeyRequired": "The selected provider is missing an API key",
 			"providerBaseUrlRequired": "The selected OpenAI-compatible provider is missing a base URL",
 			"noModel": "Select a model before sending",
+			"mentionFailed": "Could not add the referenced note.",
 			"unsupportedAttachmentType": "Unsupported file type: {{name}}",
 			"unknownTool": "Unknown tool: {{name}}",
 			"toolFieldRequired": "{{field}} is required",
@@ -1104,8 +1143,14 @@
 		"createAppDescriptionPlaceholder": "Describe the layout, features, and interactions.",
 		"create": "Create",
 		"cancel": "Cancel",
+		"manageApps": "Manage Apps",
+		"searchApps": "Search Apps…",
+		"noSearchResults": "No Apps found",
+		"noInstalledApps": "No Apps installed",
+		"open": "Open",
+		"delete": "Delete",
 		"deleteApp": "Delete App",
-		"deleteAppPrompt": "Delete this App and its data? Chat history will be kept.",
+		"deleteAppPrompt": "Delete “{{name}}”? This will delete all files and saved data belonging to this App.",
 		"workspace": "App workspace",
 		"noWorkspace": "General chat",
 		"missingApp": "App workspace is unavailable",

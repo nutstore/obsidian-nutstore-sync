@@ -4,8 +4,6 @@ import { NUTSTORE_SYNC_AGENTS_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 export const MCP_CONFIG_VAULT_PATH = '.agents/nutstore-sync/mcp.json'
 export const MCP_CONFIG_VIRTUAL_PATH = `${NUTSTORE_SYNC_AGENTS_MOUNT_POINT}/mcp.json`
 
-export const MCP_TOOL_NAME_PREFIX = 'mcp__'
-
 const MCP_SERVER_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i
 
 const httpMcpServerConfigSchema = z.object({
@@ -30,14 +28,6 @@ export type McpServerConfigs = Record<string, McpServerConfig>
 
 export function isValidMcpServerName(name: string) {
 	return MCP_SERVER_NAME_PATTERN.test(name)
-}
-
-export function getMcpToolName(serverName: string, toolName: string) {
-	return `${MCP_TOOL_NAME_PREFIX}${serverName}__${toolName}`
-}
-
-export function isMcpToolName(name: string) {
-	return name.startsWith(MCP_TOOL_NAME_PREFIX)
 }
 
 function formatSchemaIssues(error: z.core.$ZodError): string {

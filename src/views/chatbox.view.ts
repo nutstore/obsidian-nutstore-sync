@@ -457,6 +457,8 @@ export default class ChatboxView extends ItemView {
 				this.persistSelectionHighlight(true)
 				this.controller?.update(this.getChatboxProps())
 			},
+			onListMentionPaths: () =>
+				this.app.vault.getMarkdownFiles().map((file) => file.path),
 			onAddUserContext: (item) => {
 				this.chat.addUserContext(item)
 			},

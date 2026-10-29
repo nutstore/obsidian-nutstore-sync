@@ -1,4 +1,5 @@
 import { Plugin } from 'obsidian'
+import { OBSIDIAN_E2E_RESULT_PATH } from './integration-protocol.mjs'
 import { rendersSyncConfirmation } from './checks/sync-confirm'
 import { createsIndependentApps, runsAppAIThroughSandbox } from './checks/apps'
 import {
@@ -30,9 +31,6 @@ import {
 	roundTripsVaultAdapterContent,
 	skipsStaleVaultSkillEntries,
 } from './checks/vault'
-
-export const OBSIDIAN_E2E_RESULT_PATH =
-	'.obsidian/nutstore-sync-e2e-result.json'
 
 interface TestResult {
 	name: string

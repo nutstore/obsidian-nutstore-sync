@@ -39,7 +39,6 @@ function savedApp(
 
 function fixture() {
 	const saved = savedApp()
-	// eslint-disable-next-line obsidianmd/prefer-create-el -- Unit tests do not load Obsidian's DOM extensions.
 	const host = document.createElement('div')
 	document.body.append(host)
 	const commands = new Map<
@@ -53,7 +52,6 @@ function fixture() {
 		app: { workspace: { containerEl: host } },
 		ai: { openApp },
 		addRibbonIcon: vi.fn((_icon: string, label: string, run: () => void) => {
-			// eslint-disable-next-line obsidianmd/prefer-create-el -- Mock the host ribbon factory with the standard DOM API.
 			const el = document.createElement('button')
 			el.setAttribute('aria-label', label)
 			el.addEventListener('click', run)

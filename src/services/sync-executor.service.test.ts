@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type NutstorePlugin from '~/index'
 import type { SyncSelection } from '~/settings'
 import { ModuleLifecycle } from '~/modules/lifecycle'
+import { emitCancelSync } from '~/events'
 import { SyncStartMode } from '~/sync'
 import SyncExecutorService from './sync-executor.service'
 
@@ -30,9 +31,6 @@ vi.mock('~/sync/log', () => ({
 	getSyncPolicyLabel: () => 'two-way',
 	getSyncTriggerLabel: () => 'auto',
 }))
-vi.mock('~/utils/config-dir-rules', () => ({
-	getConfigDirPruningRule: () => undefined,
-}))
 vi.mock('~/utils/logger', () => ({
 	default: { info: vi.fn(), error: vi.fn() },
 }))
@@ -42,7 +40,7 @@ beforeEach(() => {
 	start.mockResolvedValue({ ended: true, shouldReloadSettings: false })
 })
 
-function fixture() {
+function fixture(configDir = '.settings-设置-🌿') {
 	const runBlobGc = vi.fn(async () => ({ ok: true, deletedCount: 0 }))
 	const getToken = vi.fn(async () => 'test-only-token')
 	const plugin = {
@@ -55,7 +53,7 @@ function fixture() {
 		remoteBaseDir: 'Notes 中性🌱',
 		app: {
 			workspace: { layoutReady: true },
-			vault: { adapter: {}, configDir: '.obsidian' },
+			vault: { adapter: {}, configDir },
 		},
 		isAccountConfigured: () => true,
 		getToken,
@@ -76,6 +74,58 @@ function fixture() {
 }
 
 describe('synchronization execution gate', () => {
+	it('stops preparation cancelled by the user before constructing a sync', async () => {
+		const f = fixture()
+		let finish!: (value: string) => void
+		f.getToken.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		await f.plugin.sync.lifecycle.update(true)
+		const work = f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		await vi.waitFor(() => expect(f.getToken).toHaveBeenCalledOnce())
+		emitCancelSync()
+		finish('neutral-token')
+		expect(await work).toBe(false)
+		expect(construct).not.toHaveBeenCalled()
+		expect(f.executor.isRunning()).toBe(false)
+		expect(
+			await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+		).toBe(true)
+	})
+
+	it('blocks further I/O after cancellation and releases the run only when current work settles', async () => {
+		const f = fixture()
+		let finish!: (value: { ended: boolean }) => void
+		start.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		await f.plugin.sync.lifecycle.update(true)
+		const work = f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		const options = construct.mock.calls[0][1] as { signal: AbortSignal }
+		emitCancelSync()
+		expect(options.signal.aborted).toBe(true)
+		expect(f.executor.isRunning()).toBe(true)
+		expect(
+			await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+		).toBe(false)
+		expect(start).toHaveBeenCalledOnce()
+		finish({ ended: false })
+		expect(await work).toBe(false)
+		expect(f.executor.isRunning()).toBe(false)
+		expect(f.runBlobGc).not.toHaveBeenCalled()
+		expect(
+			await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+		).toBe(true)
+		expect(start).toHaveBeenCalledTimes(2)
+	})
+
 	it('uses a manual selection without changing defaults or leaking into the next sync', async () => {
 		const f = fixture()
 		await f.plugin.sync.lifecycle.update(true)
@@ -123,6 +173,67 @@ describe('synchronization execution gate', () => {
 			expect(start).toHaveBeenCalledOnce()
 		},
 	)
+
+	it.each(['.settings-设置-🌿', '.preferences-偏好-🌱'])(
+		'uses the actual vault directory for pruning notices and synchronization (%s)',
+		async (configDir) => {
+			const f = fixture(configDir)
+			f.plugin.settings.configDirSyncMode = 'all'
+			f.plugin.settings.filterRules.rules = [
+				{ expr: configDir, options: { caseSensitive: true }, type: 'exclude' },
+			]
+			await f.plugin.sync.lifecycle.update(true)
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+			).toBe(true)
+			expect(notice).toHaveBeenCalledOnce()
+			expect(notice).toHaveBeenCalledWith(expect.stringContaining(configDir))
+			expect(construct).toHaveBeenLastCalledWith(
+				f.plugin,
+				expect.objectContaining({
+					vault: expect.objectContaining({ configDir }),
+				}),
+			)
+
+			// A later include cancels pruning; the earlier exclusion alone
+			// must not keep producing a warning on subsequent syncs.
+			f.plugin.settings.filterRules.rules.push({
+				expr: configDir,
+				options: { caseSensitive: true },
+				type: 'include',
+			})
+			notice.mockClear()
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+			).toBe(true)
+			expect(notice).not.toHaveBeenCalled()
+		},
+	)
+
+	it('reads the current directory again after the host configuration changes', async () => {
+		const f = fixture('.settings-旧-🌿')
+		f.plugin.settings.configDirSyncMode = 'all'
+		f.plugin.settings.filterRules.rules = [
+			{
+				expr: '.settings-旧-🌿',
+				options: { caseSensitive: true },
+				type: 'exclude',
+			},
+		]
+		await f.plugin.sync.lifecycle.update(true)
+		await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		expect(notice).toHaveBeenCalledOnce()
+		f.plugin.app.vault.configDir = '.settings-新-🌱'
+		notice.mockClear()
+		await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
+		expect(notice).not.toHaveBeenCalled()
+		expect(construct).toHaveBeenLastCalledWith(
+			f.plugin,
+			expect.objectContaining({
+				vault: expect.objectContaining({ configDir: '.settings-新-🌱' }),
+			}),
+		)
+	})
 
 	it('does not immediately restart an unsuccessful round from a queued request', async () => {
 		const f = fixture()

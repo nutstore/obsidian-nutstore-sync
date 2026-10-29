@@ -6,11 +6,10 @@
 	padding-top: 0;
 }
 
-/* Floating phone navigation overlays custom views. Reserve its full footprint
- * inside the view so Chatbox controls and App frames stay above it. Obsidian
- * supplies the theme/safe-area offsets and keyboard height; tablets and docked
- * navigation already allocate their own space. */
+/* Floating phone navigation overlays main-workspace views. Sidebars already
+ * allocate their own space, so reserve the navigation footprint only in mod-root. */
 .is-phone:is(.is-floating-nav, .auto-full-screen):not(.is-hidden-nav)
+	.workspace-split.mod-root
 	.workspace-leaf-content:is(
 		[data-type='nutstore-sync-chatbox'],
 		[data-type='nutstore-app']
@@ -691,6 +690,11 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	line-height: 1.5;
+}
+
+.nutstore-sync-progress__large-upload-hint {
+	color: var(--text-warning);
+	font-weight: 500;
 }
 
 .nutstore-sync-progress__stats {
@@ -1723,87 +1727,51 @@
 }
 
 .modality-badge-text {
-	background: color-mix(
-		in srgb,
-		var(--color-blue) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-blue) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-blue) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-blue);
 }
 
 .modality-badge-image {
-	background: color-mix(
-		in srgb,
-		var(--color-green) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-green) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-green) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-green);
 }
 
 .modality-badge-audio {
-	background: color-mix(
-		in srgb,
-		var(--color-orange) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-orange) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-orange) 82%, var(--text-normal));
+	--ns-modality-color: var(--color-orange);
+	--ns-modality-text-mix: 82%;
 }
 
 .modality-badge-video {
-	background: color-mix(
-		in srgb,
-		var(--color-red) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-red) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-red) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-red);
 }
 
 .modality-badge-pdf {
-	background: color-mix(
-		in srgb,
-		var(--color-purple) 14%,
-		var(--background-primary)
-	);
-	border-color: color-mix(
-		in srgb,
-		var(--color-purple) 38%,
-		var(--background-modifier-border)
-	);
-	color: color-mix(in srgb, var(--color-purple) 78%, var(--text-normal));
+	--ns-modality-color: var(--color-purple);
 }
 
 .modality-badge-file {
+	--ns-modality-color: var(--color-cyan);
+}
+
+.modality-badge-text,
+.modality-badge-image,
+.modality-badge-audio,
+.modality-badge-video,
+.modality-badge-pdf,
+.modality-badge-file {
 	background: color-mix(
 		in srgb,
-		var(--color-cyan) 14%,
+		var(--ns-modality-color) 14%,
 		var(--background-primary)
 	);
 	border-color: color-mix(
 		in srgb,
-		var(--color-cyan) 38%,
+		var(--ns-modality-color) 38%,
 		var(--background-modifier-border)
 	);
-	color: color-mix(in srgb, var(--color-cyan) 78%, var(--text-normal));
+	color: color-mix(
+		in srgb,
+		var(--ns-modality-color) var(--ns-modality-text-mix, 78%),
+		var(--text-normal)
+	);
 }
 
 /* Message density tokens; compact trades whitespace for visible content. */
@@ -2239,25 +2207,36 @@
 	line-height: 1.4;
 }
 
-.chatbox-input {
-	height: 6.25rem;
-	padding: 0.65rem 0.75rem;
+.chatbox-root .ns-chat-composer {
+	min-height: 0;
+	width: 100%;
+}
+.chatbox-root .ns-chat-composer .cm-editor {
+	height: 100%;
+	background: transparent;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+.chatbox-root .ns-chat-composer .cm-editor.cm-focused {
+	outline: none;
+}
+.chatbox-root .ns-chat-composer .cm-scroller {
+	overflow: auto;
+	font-family: inherit;
 	line-height: 1.5;
 }
-
-.chatbox-root textarea.ns-composer-textarea {
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	box-shadow: none;
-	color: var(--text-normal);
+.chatbox-root .ns-chat-composer .cm-content {
+	padding: 0.65rem 0.75rem;
+	min-height: 100%;
 }
-
-.chatbox-root textarea.ns-composer-textarea:focus,
-.chatbox-root textarea.ns-composer-textarea:focus-visible {
-	border: 0;
-	box-shadow: none;
-	outline: none;
+.chatbox-root .ns-chat-composer .cm-line {
+	padding: 0;
+}
+.chatbox-root .ns-chat-composer .cm-placeholder {
+	color: var(--text-faint);
+}
+.chatbox-root .ns-chat-composer .cm-cursor {
+	border-left-color: var(--text-normal);
 }
 
 .ns-composer-toolbar {
@@ -2407,13 +2386,6 @@
 	border-top-width: 0;
 }
 
-.chatbox-input-pane--resizable .chatbox-input {
-	flex: 0 0 auto;
-	min-height: 4rem;
-	min-width: 0;
-	resize: none;
-}
-
 /*
  * `.is-compact` is set by Chatbox from its own container width (same source as
  * the input-pane height math), so a narrow side pane and a phone share one
@@ -2422,12 +2394,6 @@
 .chatbox-root.is-compact .chatbox-resizer {
 	padding-bottom: 8px;
 	padding-top: 8px;
-}
-
-.chatbox-root.is-compact .chatbox-input {
-	height: 4rem;
-	padding: 0.625rem;
-	line-height: 1.4;
 }
 
 .chatbox-root.is-compact .chatbox-context-header {
@@ -2736,112 +2702,12 @@
 }
 /* App views and chat previews share one browser-only runtime. */
 .ns-app-view {
+	padding: 0;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	min-height: 0;
 	background: var(--background-primary);
-}
-.ns-app-toolbar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	padding: 8px 14px;
-	border-bottom: 1px solid var(--background-modifier-border);
-	background: color-mix(
-		in srgb,
-		var(--background-secondary) 55%,
-		var(--background-primary)
-	);
-	flex-shrink: 0;
-	flex-wrap: wrap;
-}
-.ns-app-brand {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	flex: 1;
-	min-width: 0;
-}
-.ns-app-badge {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex: 0 0 30px;
-	width: 30px;
-	height: 30px;
-	border: 1px solid
-		color-mix(
-			in srgb,
-			var(--interactive-accent) 26%,
-			var(--background-modifier-border)
-		);
-	border-radius: 9px;
-	background: color-mix(
-		in srgb,
-		var(--interactive-accent) 12%,
-		var(--background-primary)
-	);
-	color: var(--interactive-accent);
-}
-.ns-app-badge svg {
-	width: 16px;
-	height: 16px;
-}
-.ns-app-heading {
-	flex: 1;
-	min-width: 0;
-	overflow-wrap: anywhere;
-	font-size: var(--font-ui-medium);
-	font-weight: 600;
-	color: var(--text-normal);
-}
-.ns-app-actions {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	flex-shrink: 0;
-}
-.ns-app-button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 34px;
-	min-height: 34px;
-	padding: 6px;
-	border: 1px solid transparent;
-	border-radius: 8px;
-	background: transparent;
-	box-shadow: none;
-	color: var(--text-muted);
-	cursor: pointer;
-	transition:
-		background-color 140ms ease,
-		color 140ms ease,
-		border-color 140ms ease;
-}
-.ns-app-button:hover,
-.ns-app-button:focus-visible {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
-}
-.ns-app-button.is-active {
-	border-color: color-mix(
-		in srgb,
-		var(--interactive-accent) 30%,
-		var(--background-modifier-border)
-	);
-	background: color-mix(
-		in srgb,
-		var(--interactive-accent) 12%,
-		var(--background-primary)
-	);
-	color: var(--interactive-accent);
-}
-.ns-app-button svg {
-	width: 16px;
-	height: 16px;
 }
 .ns-app-output {
 	flex: 1;
@@ -3043,6 +2909,18 @@
 	justify-content: center;
 	width: 32px;
 }
+
+/* Selected apps keep their name until the chat container is very narrow. */
+@container (max-width: 320px) {
+	.chatbox-root .has-workspace .ns-workspace-title,
+	.chatbox-root .has-workspace .ns-workspace-chevron {
+		display: none;
+	}
+	.chatbox-root .has-workspace .ns-workspace-picker {
+		justify-content: center;
+		width: 32px;
+	}
+}
 .chatbox-root.is-compact button.ns-composer-send {
 	flex-shrink: 0;
 	gap: 4px;
@@ -3137,4 +3015,315 @@
 	padding: 24px;
 	color: var(--text-muted);
 	overflow-wrap: anywhere;
+}
+
+/* Keep native Modal chrome outside the only scroll container. Auto height
+ * avoids empty space for short lists; the flex chain bounds longer lists. */
+.modal.mcp-manager-modal {
+	width: 760px;
+	max-width: 95vw;
+	max-height: 85vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.mcp-manager-modal > .modal-header {
+	flex-shrink: 0;
+}
+
+.modal-content.mcp-manager-modal__content {
+	display: flex;
+	flex-direction: column;
+	flex: 0 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.mcp-manager-modal__tabs {
+	display: flex;
+	flex-shrink: 0;
+	gap: 20px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.mcp-manager-modal__tabs button.mcp-manager-modal__tab {
+	height: auto;
+	padding: 10px 2px;
+	margin: 0 0 -1px;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-weight: var(--font-medium);
+}
+
+.mcp-manager-modal__tabs button.mcp-manager-modal__tab:hover {
+	color: var(--text-normal);
+}
+
+.mcp-manager-modal__tabs button.mcp-manager-modal__tab[aria-pressed='true'] {
+	color: var(--text-accent);
+	border-bottom-color: var(--interactive-accent);
+}
+
+.mcp-manager-modal__body {
+	flex: 0 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding-top: 8px;
+}
+
+.mcp-manager-modal__body .mcp-manager-modal__toolbar {
+	padding: 16px 0;
+	border-top: 0;
+}
+
+.mcp-manager-modal__toolbar .setting-item-name:empty {
+	display: none;
+}
+
+/* Composer surfaces follow the active Obsidian theme, including third-party themes. */
+.chatbox-root .ns-chat-composer {
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small);
+}
+.chatbox-root .ns-chat-composer .cm-selectionBackground,
+.chatbox-root .ns-chat-composer .cm-focused .cm-selectionBackground {
+	background: var(--text-selection);
+}
+.chatbox-root .ns-chat-composer .cm-content {
+	caret-color: var(--caret-color, var(--text-normal));
+}
+.chatbox-root .ns-chat-composer .cm-content ::selection {
+	background: var(--text-selection);
+}
+
+/* A dedicated tooltip scope survives host-owned tooltip portals. */
+.cm-tooltip.ns-composer-completions {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+	padding: 4px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	box-shadow: var(--shadow-s);
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small, 13px);
+	line-height: 1.4;
+	overflow: hidden;
+}
+.ns-completion-layer {
+	width: 100%;
+	height: 0;
+}
+.cm-tooltip.ns-composer-completions.cm-tooltip-above {
+	transform: translate(
+		var(--ns-composer-completion-x, 0px),
+		calc(-1 * var(--ns-composer-completion-above-offset, 0px))
+	);
+}
+.cm-tooltip.ns-composer-completions.cm-tooltip-below {
+	transform: translate(
+		var(--ns-composer-completion-x, 0px),
+		calc(-100% - var(--ns-composer-completion-below-offset, 0px))
+	);
+}
+.cm-tooltip.ns-composer-completions > ul {
+	margin: 0;
+	padding: 0;
+	max-height: min(256px, 40vh);
+	font: inherit;
+	list-style: none;
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+.cm-tooltip.ns-composer-completions > ul > li {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	gap: 0;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+	overflow: hidden;
+	margin: 0;
+	padding: 0 8px;
+	border-radius: var(--radius-s, 4px);
+	font: inherit;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.cm-tooltip.ns-composer-completions > ul > li.ns-completion-file-option {
+	height: auto;
+	min-height: 44px;
+	max-height: none;
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+.cm-tooltip.ns-composer-completions > ul > li:hover,
+.cm-tooltip.ns-composer-completions > ul > li[aria-selected] {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.cm-tooltip.ns-composer-completions .cm-completionLabel,
+.cm-tooltip.ns-composer-completions .cm-completionDetail {
+	display: none;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	height: 100%;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 18px;
+	color: var(--text-muted);
+}
+.cm-tooltip.ns-composer-completions .ns-completion-icon svg {
+	width: 16px;
+	height: 16px;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-text {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-file .ns-completion-text {
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	gap: 1px;
+	white-space: normal;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-name {
+	display: block;
+	flex: 0 1 auto;
+	max-width: 100%;
+	white-space: nowrap;
+	word-break: normal;
+	overflow-wrap: normal;
+	min-width: 0;
+	font-size: var(--font-ui-small, 13px);
+	line-height: 20px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-file .ns-completion-name {
+	width: 100%;
+	max-width: 100%;
+	line-height: 18px;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-description {
+	display: block;
+	flex: 0 1 45%;
+	white-space: nowrap;
+	word-break: normal;
+	overflow-wrap: normal;
+	min-width: 0;
+	max-width: 45%;
+	font-size: var(--font-ui-smaller, 12px);
+	line-height: 18px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.cm-tooltip.ns-composer-completions
+	.ns-completion-file
+	.ns-completion-description {
+	flex: none;
+	width: 100%;
+	max-width: 100%;
+	font-size: 0.7rem;
+	line-height: 14px;
+	color: var(--text-muted);
+}
+
+.cm-tooltip.ns-composer-completions .ns-completion-command .ns-completion-name {
+	flex: 0 0 auto;
+}
+.cm-tooltip.ns-composer-completions
+	.ns-completion-command
+	.ns-completion-description {
+	flex: 1;
+	min-width: 0;
+	max-width: none;
+	line-height: 20px;
+}
+
+.ns-app-manager-modal .ns-app-manager-toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+.ns-app-manager-modal .ns-app-manager-toolbar .search-input-container {
+	flex: 1 1 180px;
+	min-width: 0;
+}
+.ns-app-manager-modal .ns-app-manager-toolbar .search-input-container input {
+	width: 100%;
+}
+.ns-app-manager-modal .ns-app-manager-toolbar > button {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+.ns-app-manager-modal .ns-app-manager-icon {
+	order: -1;
+	margin-right: 12px;
+	color: var(--text-accent);
+	flex-shrink: 0;
+}
+.ns-app-manager-modal .ns-app-manager-icon svg {
+	width: 24px;
+	height: 24px;
+}
+/* Keep native settings' reserved description space out of name-only App rows. */
+.ns-app-manager-modal .ns-app-manager-row {
+	flex-direction: row;
+	align-items: center;
+	padding: 10px 0;
+	gap: 8px;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-info {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-name {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-description {
+	display: none;
+}
+.ns-app-manager-modal .ns-app-manager-row .setting-item-control {
+	flex: 0 0 auto;
+	padding: 0;
+	gap: 8px;
+}
+.ns-app-manager-modal .ns-app-manager-row .ns-app-manager-icon {
+	display: flex;
+	align-items: center;
+	margin-right: 4px;
 }

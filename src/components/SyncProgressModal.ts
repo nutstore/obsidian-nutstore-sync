@@ -1,4 +1,5 @@
-import { ButtonComponent, Modal, setIcon } from 'obsidian'
+import createId from '~/utils/create-id'
+import { ButtonComponent, Modal, Notice, Platform, setIcon } from 'obsidian'
 import { Subscription } from 'rxjs'
 import CleanRecordTask from '~/sync/tasks/clean-record.task'
 import FilenameErrorTask from '~/sync/tasks/filename-error.task'
@@ -16,7 +17,6 @@ import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
 import {
 	emitCancelSync,
-	onCancelSync,
 	onSyncUpdateMtimeProgress,
 	type SyncPreparationProgress,
 } from '../events'
@@ -30,7 +30,13 @@ import RemoveLocalTask from '../sync/tasks/remove-local.task'
 import RemoveRemoteTask from '../sync/tasks/remove-remote.task'
 
 type SyncProgressModalState =
-	'preparing' | 'syncing' | 'complete' | 'warning' | 'error' | 'cancelled'
+	| 'preparing'
+	| 'syncing'
+	| 'cancelling'
+	| 'complete'
+	| 'warning'
+	| 'error'
+	| 'cancelled'
 
 export default class SyncProgressModal extends Modal {
 	private progressTitle!: HTMLElement
@@ -42,6 +48,7 @@ export default class SyncProgressModal extends Modal {
 	private progressLabel!: HTMLDivElement
 	private progressTrack!: HTMLDivElement
 	private progressHint!: HTMLDivElement
+	private largeUploadHint!: HTMLDivElement
 	private scanStats!: HTMLDivElement
 	private scannedCount!: HTMLDivElement
 	private queuedCount!: HTMLDivElement
@@ -49,8 +56,6 @@ export default class SyncProgressModal extends Modal {
 	private currentFile!: HTMLDivElement
 	private filesList!: HTMLDivElement
 	private filesSection!: HTMLDivElement
-	private syncCancelled = false
-	private cancelSubscription: Subscription
 	private updateMtimeSubscription: Subscription
 	private stopButtonComponent!: ButtonComponent
 	private hideButtonComponent!: ButtonComponent
@@ -65,10 +70,6 @@ export default class SyncProgressModal extends Modal {
 		private closeCallback?: () => void,
 	) {
 		super(plugin.app)
-		this.cancelSubscription = onCancelSync().subscribe(() => {
-			this.syncCancelled = true
-			this.update()
-		})
 		this.updateMtimeSubscription = onSyncUpdateMtimeProgress().subscribe(
 			(progress) => {
 				this.updateCacheProgress(progress.total, progress.completed)
@@ -103,13 +104,25 @@ export default class SyncProgressModal extends Modal {
 			? failedCount > 0
 				? 'warning'
 				: 'complete'
-			: this.syncCancelled
+			: this.plugin.sync.progress.cancellationState === 'complete'
 				? 'cancelled'
-				: this.plugin.sync.progress.syncFailed
-					? 'error'
-					: preparation
-						? 'preparing'
-						: 'syncing'
+				: this.plugin.sync.progress.cancellationState === 'requested'
+					? 'cancelling'
+					: this.plugin.sync.progress.syncFailed
+						? 'error'
+						: preparation
+							? 'preparing'
+							: 'syncing'
+
+		if (
+			Platform.isMobile &&
+			progress.hasLargeUploads &&
+			this.plugin.settings.skipLargeFiles.maxSize.trim() === ''
+		) {
+			this.largeUploadHint.show()
+		} else {
+			this.largeUploadHint.hide()
+		}
 
 		this.updateHeader(state, preparationText?.operation, failedCount)
 		this.updateControls(state)
@@ -122,7 +135,8 @@ export default class SyncProgressModal extends Modal {
 						(preparation?.traversal?.phase === 'incremental' &&
 							preparationText?.detail),
 					)
-				: state === 'syncing' && progress.current !== null
+				: (state === 'syncing' || state === 'cancelling') &&
+					progress.current !== null
 		if (hasStatusDetails) {
 			this.statusSection.show()
 		} else {
@@ -169,7 +183,6 @@ export default class SyncProgressModal extends Modal {
 		)
 
 		this.progressLabel.setText(i18n.t('sync.progressLabel'))
-		this.progressTrack.setAttribute('aria-label', i18n.t('sync.progressLabel'))
 		this.progressTrack.setAttribute('aria-valuenow', String(percent))
 		this.progressTrack.setAttribute(
 			'aria-valuetext',
@@ -177,7 +190,7 @@ export default class SyncProgressModal extends Modal {
 		)
 
 		this.statusMessage.hide()
-		if (state === 'syncing' && progress.current) {
+		if ((state === 'syncing' || state === 'cancelling') && progress.current) {
 			this.currentFile.setText(
 				i18n.t('sync.currentFile', {
 					path: progress.current.localPath,
@@ -218,7 +231,6 @@ export default class SyncProgressModal extends Modal {
 			? i18n.t('sync.preparation.progressLabel')
 			: operation
 		this.progressLabel.setText(label)
-		this.progressTrack.setAttribute('aria-label', label)
 		// New directories can be discovered at any time. This ratio describes
 		// known work, not a percentage of the entire remote tree or sync.
 		this.progressTrack.removeAttribute('aria-valuenow')
@@ -278,11 +290,11 @@ export default class SyncProgressModal extends Modal {
 		removeClassTokens(this.statusIcon, ...stateClasses)
 		addClassTokens(
 			this.statusIcon,
-			`nutstore-sync-progress__status-icon--${state}`,
+			`nutstore-sync-progress__status-icon--${state === 'cancelling' ? 'syncing' : state}`,
 		)
 
 		const icon =
-			state === 'preparing'
+			state === 'preparing' || state === 'cancelling'
 				? 'loader-circle'
 				: state === 'syncing'
 					? 'refresh-cw'
@@ -300,12 +312,12 @@ export default class SyncProgressModal extends Modal {
 		}
 		this.statusIcon.classList.toggle(
 			'nutstore-sync-spinning',
-			state === 'preparing' || state === 'syncing',
+			state === 'preparing' || state === 'syncing' || state === 'cancelling',
 		)
 
 		const title =
 			(state === 'preparing' ? preparationOperation : undefined) ||
-			(state === 'syncing'
+			(state === 'syncing' || state === 'cancelling'
 				? i18n.t('sync.syncingFiles')
 				: state === 'complete'
 					? i18n.t('sync.progressCompleteTitle')
@@ -330,6 +342,9 @@ export default class SyncProgressModal extends Modal {
 			this.stopButtonComponent.buttonEl,
 			':uno: hidden',
 			isTerminal,
+		)
+		this.stopButtonComponent.setButtonText(
+			i18n.t(state === 'cancelling' ? 'sync.cancelling' : 'sync.stopButton'),
 		)
 		this.hideButtonComponent.setButtonText(
 			i18n.t(isTerminal ? 'sync.closeButton' : 'sync.hideButton'),
@@ -446,6 +461,7 @@ export default class SyncProgressModal extends Modal {
 		const progressLabel = progressMeta.createDiv({
 			cls: 'nutstore-sync-progress__label',
 		})
+		progressLabel.id = createId('accessible-label')
 		progressLabel.setText(i18n.t('sync.progressLabel'))
 		const progressText = progressMeta.createDiv({
 			cls: 'nutstore-sync-progress__bar-label',
@@ -464,10 +480,18 @@ export default class SyncProgressModal extends Modal {
 			cls: 'nutstore-sync-progress__bar',
 		})
 
+		progressBarContainer.setAttribute('aria-labelledby', progressLabel.id)
 		this.progressTrack = progressBarContainer
 		this.progressHint = progressSection.createDiv({
 			cls: 'nutstore-sync-progress__hint',
 		})
+		this.largeUploadHint = progressSection.createDiv({
+			cls: 'nutstore-sync-progress__hint nutstore-sync-progress__large-upload-hint',
+			text: i18n.t('sync.mobileLargeUploadHint', {
+				setting: i18n.t('settings.skipLargeFiles.name'),
+			}),
+		})
+		this.largeUploadHint.hide()
 		this.scanStats = progressSection.createDiv({
 			cls: 'nutstore-sync-progress__stats',
 		})
@@ -546,7 +570,13 @@ export default class SyncProgressModal extends Modal {
 
 		const stopButton = new ButtonComponent(footerButtons)
 			.setButtonText(i18n.t('sync.stopButton'))
-			.onClick(() => emitCancelSync())
+			.onClick(() => {
+				if (this.plugin.sync.progress.cancellationState === 'requested') {
+					new Notice(i18n.t('sync.cancellingHint'), 3000)
+					return
+				}
+				emitCancelSync()
+			})
 		stopButton.buttonEl.addClass('mod-warning')
 		this.stopButtonComponent = stopButton
 
@@ -558,7 +588,6 @@ export default class SyncProgressModal extends Modal {
 	}
 
 	onClose(): void {
-		this.cancelSubscription.unsubscribe()
 		this.updateMtimeSubscription.unsubscribe()
 		const { contentEl } = this
 		contentEl.empty()

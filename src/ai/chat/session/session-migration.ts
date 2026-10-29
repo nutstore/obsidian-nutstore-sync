@@ -1,4 +1,8 @@
-import type { ChatAgentState, LegacyChatMessageRecord } from '~/ai/chat/types'
+import type {
+	AppUIMessage,
+	ChatAgentState,
+	LegacyChatMessageRecord,
+} from '~/ai/chat/types'
 import type {
 	ChatFragment,
 	ChatSession,
@@ -9,6 +13,7 @@ import {
 	getMessageText,
 	mergeLegacyToolRecord,
 	modelMessageToUIMessage,
+	selectContextTimeline,
 } from '~/ai/chat/messages/ui-message'
 import {
 	migrateDeprecatedImageParts,
@@ -193,11 +198,102 @@ export function migrateLegacySession(session: LegacyChatSession): ChatSession {
 	}
 }
 
+/**
+ * Early V2 checkpoints counted user turns. Resolve that relative count once,
+ * while loading the complete history, into the same message identities used by
+ * snapshot checkpoints. Process oldest first so nested checkpoints see the
+ * context established by their already migrated predecessors.
+ */
+function migrateAgentCheckpoints(agent: ChatAgentState): {
+	agent: ChatAgentState
+	changed: boolean
+} {
+	let changed = false
+	const timeline: AppUIMessage[] = []
+	for (const message of agent.timeline ?? []) {
+		const parts = message.parts.map((part) => {
+			if (part.type !== 'data-context-checkpoint') return part
+			if (!part.data || typeof part.data !== 'object') {
+				throw new Error('Invalid checkpoint data')
+			}
+			if (!('preservedTurnCount' in part.data)) return part
+			const { preservedTurnCount, ...data } = part.data
+			changed = true
+			// Reset and snapshot checkpoints already have unambiguous semantics.
+			if (
+				data.mode === 'reset' ||
+				data.summarizedThroughMessageId ||
+				data.retainedMessageIds ||
+				preservedTurnCount === undefined
+			) {
+				return { ...part, data }
+			}
+			if (
+				typeof preservedTurnCount !== 'number' ||
+				!Number.isSafeInteger(preservedTurnCount) ||
+				preservedTurnCount < 0
+			) {
+				throw new Error('Invalid legacy checkpoint turn count')
+			}
+			const priorContext = selectContextTimeline(timeline)
+			// Preserve the historical reader's zero-count behavior as well: it
+			// walked all available turns rather than stopping before the scan.
+			let remaining = preservedTurnCount
+			let start = priorContext.length
+			for (let index = priorContext.length - 1; index >= 0; index--) {
+				const previous = priorContext[index]
+				if (
+					previous.role !== 'user' ||
+					previous.parts.some(
+						(value) => value.type === 'data-context-checkpoint',
+					)
+				)
+					continue
+				start = index
+				remaining--
+				if (remaining === 0) break
+			}
+			return {
+				...part,
+				data: {
+					...data,
+					retainedMessageIds: priorContext
+						.slice(start)
+						.map((value) => value.id),
+				},
+			}
+		})
+		timeline.push(
+			parts.some((part, index) => part !== message.parts[index])
+				? { ...message, parts }
+				: message,
+		)
+	}
+	const subagents: ChatAgentState['subagents'] = {}
+	for (const id of Object.keys(agent.subagents ?? {})) {
+		const migrated = migrateAgentCheckpoints(agent.subagents[id])
+		changed = migrated.changed || changed
+		subagents[id] = migrated.agent
+	}
+	return { agent: changed ? { ...agent, timeline, subagents } : agent, changed }
+}
+
 export function migrateChatSession(value: unknown): {
 	session: ChatSession
 	changed: boolean
 } {
-	if (isV2Session(value)) return { session: value, changed: false }
+	if (isV2Session(value)) {
+		const migrated = migrateAgentCheckpoints(value.subagents.master)
+		return {
+			session: migrated.changed
+				? {
+						...value,
+						subagents: { ...value.subagents, master: migrated.agent },
+					}
+				: value,
+			changed: migrated.changed,
+		}
+	}
 	return {
 		session: migrateLegacySession(value as LegacyChatSession),
 		changed: true,

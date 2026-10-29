@@ -588,10 +588,30 @@ export class NutstoreSync {
 				(t) => !(t instanceof NoopTask || t instanceof CleanRecordTask),
 			)
 
+			// Use scan metadata without reading file contents into mobile memory.
+			const largeLocalPaths = new Set(
+				Platform.isMobile
+					? localStats
+							.filter(
+								({ stat }) =>
+									!stat.isDir && (stat.size ?? 0) > 20 * 1024 * 1024,
+							)
+							.map(({ stat }) => stat.path)
+					: [],
+			)
+
 			// Emit start sync event after all confirmations are done
 			emitStartSync({ showNotice })
 			if (totalDisplayableTasks.length > 0) {
-				emitSyncProgress(totalDisplayableTasks.length, [], null)
+				emitSyncProgress(
+					totalDisplayableTasks.length,
+					[],
+					null,
+					totalDisplayableTasks.some(
+						(task) =>
+							task instanceof PushTask && largeLocalPaths.has(task.localPath),
+					),
+				)
 			}
 			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)

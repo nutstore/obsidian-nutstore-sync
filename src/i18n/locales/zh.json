@@ -296,6 +296,7 @@
 					"configFileHint": "配置保存在 {{path}}，也可以在聊天中让 AI 帮你编辑该文件。",
 					"parseError": "解析 {{path}} 失败：{{reason}}",
 					"statusDisabled": "已停用",
+					"statusConnecting": "正在连接并获取工具…",
 					"statusConnected": "{{count}} 个工具",
 					"statusError": "连接失败：{{reason}}",
 					"test": "测试",
@@ -323,6 +324,27 @@
 					"duplicateName": "已存在同名服务",
 					"emptyUrl": "URL 不能为空",
 					"invalidUrl": "URL 格式不正确"
+				},
+				"discovery": {
+					"installed": "已添加",
+					"discover": "发现",
+					"intro": "为笔记连接联网研究与技术知识。免 Key 服务可一键添加，需要认证的服务会先打开配置窗口。公共服务可能限流，使用前请在当前设备测试连接。",
+					"website": "官方文档 ↗",
+					"remove": "移除",
+					"testing": "正在连接…",
+					"noKey": "无需 API Key",
+					"optionalKey": "API Key 可选",
+					"exa": "搜索网页、阅读正文、查找研究资料，为笔记补充来源。",
+					"deepwiki": "阅读和问答公开 GitHub 项目，将项目文档整理为学习笔记。",
+					"tavily": "搜索和提取网页内容，辅助专题研究。请参考官方文档配置 API Key，目前此处尚不支持浏览器授权登录。",
+					"context7": "查询最新的库文档和示例，辅助技术笔记。可在请求头中添加 Authorization 配置 API Key。",
+					"parallel": "搜索网页并读取正文，为研究笔记补充来源。可添加 Authorization: Bearer 请求头提高使用限额。",
+					"jina": "读取网页、搜索资料，并提供嵌入与重排序能力。部分能力需要 API Key，可添加 Authorization: Bearer 请求头。",
+					"firecrawl": "将网页转为 Markdown，搜索和解析资料。免 Key 功能有限且有速率限制；爬站等功能需在请求头中配置 API Key，详见官方文档。",
+					"microsoft-learn": "搜索和读取 Microsoft Learn 官方文档及代码示例，覆盖 Azure、.NET 等技术。",
+					"cloudflare-docs": "搜索 Cloudflare 官方文档，辅助 Workers、网络和云服务相关技术笔记。",
+					"kagi": "使用 Kagi 搜索网页并获取研究资料。需要 Kagi API Key，添加时填写 Authorization: Bearer 请求头。",
+					"requiresKey": "需要认证"
 				}
 			},
 			"yolo": {
@@ -764,11 +786,14 @@
 		"filePath": "{{path}}",
 		"progressTitle": "同步进度",
 		"progressCompleteTitle": "同步完成",
+		"mobileLargeUploadHint": "移动端上传大文件可能导致闪退。若遇到闪退，可在设置中调低“{{setting}}”的大小阈值，例如 20 MB 或 40 MB，具体根据设备情况调整。",
 		"progressLabel": "同步进度",
 		"cacheProgressLabel": "缓存更新进度",
 		"syncingFiles": "正在同步文件...",
 		"updatingCache": "正在更新本地缓存...",
 		"failedStatus": "同步失败",
+		"cancelling": "正在停止同步",
+		"cancellingHint": "正在等待当前请求结束。Obsidian 无法中止已发出的上传请求；结束后将停止同步，届时可重新开始。",
 		"cancelled": "同步已取消",
 		"suggestUseClientForManyTasks": "提示：当同步任务较多时，建议使用坚果云客户端同步，可获得更好的性能和稳定性，插件更适合在移动端使用！",
 		"fileOp": {
@@ -918,6 +943,9 @@
 				"deleteSession": "删除",
 				"cancel": "取消",
 				"close": "关闭",
+				"fileDescription": "为本条消息添加图片或文本文件",
+				"compactDescription": "总结当前会话，释放上下文空间",
+				"newDescription": "开始一段新的会话",
 				"selectFile": "选择文件",
 				"send": "发送",
 				"stopRun": "终止",
@@ -934,6 +962,7 @@
 				"contextUsage": "上下文：已用 {{used}}%（窗口 {{total}} tokens · 总计 {{usedTokens}}）"
 			},
 			"labels": {
+				"messageInput": "消息输入框",
 				"provider": "Provider",
 				"model": "Model",
 				"tool": "工具",
@@ -982,7 +1011,16 @@
 				"agentWaiting": "正在等待 Agent 消息"
 			},
 			"placeholders": {
-				"input": "输入消息，Enter 发送，Shift+Enter 换行"
+				"suggestions": {
+					"ask": "想让我做什么？",
+					"idea": "有个想法？一起聊聊",
+					"summary": "试试让我总结一篇笔记",
+					"outline": "把一个想法变成提纲",
+					"explain": "遇到不懂的概念？问问我",
+					"polish": "让这段文字更清晰",
+					"steps": "把目标拆成下一步行动",
+					"connections": "一起找找笔记之间的联系"
+				}
 			},
 			"dialogs": {
 				"subagentTimeline": {
@@ -1036,6 +1074,7 @@
 			"apiKeyRequired": "当前模型提供商缺少 API Key",
 			"providerBaseUrlRequired": "当前 OpenAI-compatible 模型提供商缺少 Base URL",
 			"noModel": "发送前请先选择模型",
+			"mentionFailed": "无法添加引用的笔记。",
 			"unsupportedAttachmentType": "暂不支持该文件类型：{{name}}",
 			"unknownTool": "未知工具：{{name}}",
 			"toolFieldRequired": "{{field}} 为必填项",
@@ -1104,8 +1143,14 @@
 		"createAppDescriptionPlaceholder": "描述界面、功能和操作方式。",
 		"create": "创建",
 		"cancel": "取消",
+		"manageApps": "管理 App",
+		"searchApps": "搜索 App…",
+		"noSearchResults": "没有找到 App",
+		"noInstalledApps": "尚未安装 App",
+		"open": "打开",
+		"delete": "删除",
 		"deleteApp": "删除 App",
-		"deleteAppPrompt": "删除此 App 及其数据？会话记录会保留。",
+		"deleteAppPrompt": "确定删除「{{name}}」吗？这将删除该 App 的全部文件和保存的数据。",
 		"workspace": "App 工作区",
 		"noWorkspace": "普通对话",
 		"missingApp": "App 工作区已不存在或无法读取",
