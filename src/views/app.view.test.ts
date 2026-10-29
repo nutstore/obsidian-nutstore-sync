@@ -37,6 +37,20 @@ function element(
 vi.mock('obsidian', () => ({
 	ItemView: class {
 		contentEl = element()
+		containerEl = element()
+		headerEl = this.containerEl.createDiv()
+		heading = this.headerEl.createDiv({
+			cls: 'view-header-title',
+			text: '打开 App',
+		})
+		addAction(icon: string, title: string, callback: EventListener) {
+			const action = this.headerEl.createEl('div', {
+				attr: { 'aria-label': title },
+			})
+			action.addEventListener('click', callback)
+			diagnostics.icon(action, icon)
+			return action
+		}
 		constructor(readonly leaf: WorkspaceLeaf) {}
 		async setState() {}
 		registerDomEvent(el: HTMLElement, name: string, handler: EventListener) {
@@ -175,8 +189,10 @@ function fixture() {
 	} as unknown as NutstorePlugin
 	const leaf = { detach: vi.fn() }
 	const view = new AppView(leaf as unknown as WorkspaceLeaf, plugin)
+	const header = view.containerEl.firstElementChild as HTMLElement
 	return {
 		view,
+		header,
 		leaf,
 		plugin,
 		workspaces,
@@ -238,21 +254,19 @@ describe('App view sandbox lifetime', () => {
 			'neutral-app',
 			expect.any(Function),
 		)
-		expect(f.view.contentEl.textContent).toContain('清单 Checklist 中文 🌿')
+		expect(f.view.getDisplayText()).toBe('清单 Checklist 中文 🌿')
+		expect(f.header.querySelector('.view-header-title')?.textContent).toBe(
+			f.loaded.manifest.title,
+		)
+		expect(f.view.contentEl.querySelector('.ns-app-toolbar')).toBeNull()
 		expect(
-			f.view.contentEl.querySelector(
-				`button[aria-label="${i18n.t('apps.modify')}"]`,
-			),
+			f.header.querySelector(`[aria-label="${i18n.t('apps.modify')}"]`),
 		).not.toBeNull()
 		expect(
-			f.view.contentEl.querySelector(
-				`button[aria-label="${i18n.t('apps.pin')}"]`,
-			),
+			f.header.querySelector(`[aria-label="${i18n.t('apps.pin')}"]`),
 		).not.toBeNull()
 		// Only the current model's actions are exposed; no revision affordances remain.
-		expect(
-			f.view.contentEl.querySelectorAll('.ns-app-actions button'),
-		).toHaveLength(2)
+		expect(f.header.querySelectorAll('[aria-label]')).toHaveLength(2)
 	})
 
 	it('renders the authoring placeholder instead of booting an empty App', async () => {
@@ -404,6 +418,9 @@ describe('App view sandbox lifetime', () => {
 		expect(runtimes[0].destroyed).toBe(true)
 		expect(runtimes[1].content).toEqual(validated.content)
 		expect(runtimes[1].title).toBe(validated.manifest.title)
+		expect(f.header.querySelector('.view-header-title')?.textContent).toBe(
+			validated.manifest.title,
+		)
 		await expect(runtimes[0].host.readKV()).rejects.toThrow(
 			'This App version is no longer active',
 		)
@@ -448,26 +465,32 @@ describe('App view sandbox lifetime', () => {
 		expect(runtimes).toHaveLength(1)
 		expect(f.view.contentEl.childElementCount).toBe(0)
 		expect(f.storeListeners.size).toBe(0)
+		expect(f.header.querySelectorAll('[aria-label]')).toHaveLength(0)
 		expect(f.themeListeners.size).toBe(0)
 	})
 
 	it('toggles the pin through the store and surfaces action failures', async () => {
 		const f = fixture()
 		await f.open()
-		await f.view.contentEl
-			.querySelector<HTMLButtonElement>(
-				`button[aria-label="${i18n.t('apps.pin')}"]`,
-			)!
+		await f.header
+			.querySelector<HTMLElement>(`[aria-label="${i18n.t('apps.pin')}"]`)!
 			.click()
 		await vi.waitFor(() =>
 			expect(f.apps.setPinned).toHaveBeenCalledWith('neutral-app', true),
 		)
 
 		f.setLoaded(loadedApp({ pinned: true }))
-		await f.view.contentEl
-			.querySelector<HTMLButtonElement>(
-				`button[aria-label="${i18n.t('apps.modify')}"]`,
-			)!
+		vi.useFakeTimers()
+		f.notifyStore('neutral-app')
+		await vi.advanceTimersByTimeAsync(120)
+		vi.useRealTimers()
+		const unpin = f.header.querySelector<HTMLElement>(
+			`[aria-label="${i18n.t('apps.unpin')}"]`,
+		)!
+		expect(unpin.getAttribute('aria-pressed')).toBe('true')
+		expect(f.header.querySelectorAll('[aria-label]')).toHaveLength(2)
+		await f.header
+			.querySelector<HTMLElement>(`[aria-label="${i18n.t('apps.modify')}"]`)!
 			.click()
 		await vi.waitFor(() =>
 			expect(f.editApp).toHaveBeenCalledWith('neutral-app'),
@@ -475,10 +498,8 @@ describe('App view sandbox lifetime', () => {
 
 		const failure = new Error('保存失败 Save failed 🌿')
 		f.apps.setPinned.mockRejectedValueOnce(failure)
-		await f.view.contentEl
-			.querySelector<HTMLButtonElement>(
-				`button[aria-label="${i18n.t('apps.pin')}"]`,
-			)!
+		await f.header
+			.querySelector<HTMLElement>(`[aria-label="${i18n.t('apps.unpin')}"]`)!
 			.click()
 		await vi.waitFor(() =>
 			expect(diagnostics.error).toHaveBeenCalledWith(
