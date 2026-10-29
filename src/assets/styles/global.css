@@ -3257,9 +3257,23 @@
 	line-height: 20px;
 }
 
-.ns-app-manager-modal .search-input-container {
-	width: 100%;
+.ns-app-manager-modal .ns-app-manager-toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
 	margin-bottom: 16px;
+}
+.ns-app-manager-modal .ns-app-manager-toolbar .search-input-container {
+	flex: 1 1 180px;
+	min-width: 0;
+}
+.ns-app-manager-modal .ns-app-manager-toolbar .search-input-container input {
+	width: 100%;
+}
+.ns-app-manager-modal .ns-app-manager-toolbar > button {
+	flex: 0 0 auto;
+	white-space: nowrap;
 }
 .ns-app-manager-modal .ns-app-manager-icon {
 	order: -1;

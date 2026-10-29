@@ -111,20 +111,25 @@ export class ChatWorkspacePanel {
 				.setIcon('settings-2')
 				.onClick(() =>
 					this.plugin.ai.lifecycle.scope
-						.ownModal(new AppManagerModal(this.plugin))
+						.ownModal(
+							new AppManagerModal(this.plugin, (onCreated) =>
+								this.openCreateApp(onCreated),
+							),
+						)
 						.open(),
 				),
 		)
 		const rect = this.picker.getBoundingClientRect()
 		menu.showAtPosition({ x: rect.left, y: rect.bottom })
 	}
-	private openCreateApp() {
+	private openCreateApp(onCreated?: () => void) {
 		const modal = this.plugin.ai.lifecycle.scope.ownModal(
 			new AppCreationModal(this.plugin.app, async ({ name, description }) => {
 				await this.plugin.ai.chat.createDraftSession(
 					formatAppCreationPrompt({ name, description }),
 				)
 				await this.plugin.ai.chat.selectWorkspace(undefined)
+				onCreated?.()
 			}),
 		)
 		modal.open()

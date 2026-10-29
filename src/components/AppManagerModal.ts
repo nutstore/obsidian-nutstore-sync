@@ -1,4 +1,11 @@
-import { Modal, Notice, SearchComponent, Setting, setIcon } from 'obsidian'
+import {
+	ButtonComponent,
+	Modal,
+	Notice,
+	SearchComponent,
+	Setting,
+	setIcon,
+} from 'obsidian'
 import type NutstorePlugin from '~/index'
 import type { SavedApp } from '~/ai/apps/store'
 import { appError } from '~/ai/apps/error'
@@ -13,18 +20,28 @@ export default class AppManagerModal extends Modal {
 	private unsubscribe?: () => void
 	private listEl?: HTMLElement
 
-	constructor(private readonly plugin: NutstorePlugin) {
+	constructor(
+		private readonly plugin: NutstorePlugin,
+		private readonly onCreate: (onCreated: () => void) => void,
+	) {
 		super(plugin.app)
 		this.setTitle(i18n.t('apps.manageApps'))
 		this.modalEl.addClass('ns-app-manager-modal')
 	}
 
 	onOpen() {
-		new SearchComponent(this.contentEl)
+		const toolbar = this.contentEl.createDiv({ cls: 'ns-app-manager-toolbar' })
+		new SearchComponent(toolbar)
 			.setPlaceholder(i18n.t('apps.searchApps'))
 			.onChange((value) => {
 				this.query = value
 				this.render()
+			})
+		new ButtonComponent(toolbar)
+			.setButtonText(i18n.t('apps.createApp'))
+			.setCta()
+			.onClick(() => {
+				this.onCreate(() => this.close())
 			})
 		this.listEl = this.contentEl.createDiv({ attr: { 'aria-live': 'polite' } })
 		this.unsubscribe = this.plugin.ai.apps.subscribe(() => void this.refresh())
