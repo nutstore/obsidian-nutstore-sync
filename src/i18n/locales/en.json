@@ -943,6 +943,9 @@
 				"deleteSession": "Delete",
 				"cancel": "Cancel",
 				"close": "Close",
+				"fileDescription": "Attach images or text files to this message",
+				"compactDescription": "Summarize this conversation to free up context",
+				"newDescription": "Start a new conversation",
 				"selectFile": "Select File",
 				"send": "Send",
 				"stopRun": "Stop",
@@ -959,6 +962,7 @@
 				"contextUsage": "Context: {{used}}% used (window {{total}} tokens · total {{usedTokens}})"
 			},
 			"labels": {
+				"messageInput": "Message",
 				"provider": "Provider",
 				"model": "Model",
 				"tool": "Tool",
@@ -1070,6 +1074,7 @@
 			"apiKeyRequired": "The selected provider is missing an API key",
 			"providerBaseUrlRequired": "The selected OpenAI-compatible provider is missing a base URL",
 			"noModel": "Select a model before sending",
+			"mentionFailed": "Could not add the referenced note.",
 			"unsupportedAttachmentType": "Unsupported file type: {{name}}",
 			"unknownTool": "Unknown tool: {{name}}",
 			"toolFieldRequired": "{{field}} is required",

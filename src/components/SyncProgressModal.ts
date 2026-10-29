@@ -1,3 +1,4 @@
+import createId from '~/utils/create-id'
 import { ButtonComponent, Modal, Notice, Platform, setIcon } from 'obsidian'
 import { Subscription } from 'rxjs'
 import CleanRecordTask from '~/sync/tasks/clean-record.task'
@@ -182,7 +183,6 @@ export default class SyncProgressModal extends Modal {
 		)
 
 		this.progressLabel.setText(i18n.t('sync.progressLabel'))
-		this.progressTrack.setAttribute('aria-label', i18n.t('sync.progressLabel'))
 		this.progressTrack.setAttribute('aria-valuenow', String(percent))
 		this.progressTrack.setAttribute(
 			'aria-valuetext',
@@ -231,7 +231,6 @@ export default class SyncProgressModal extends Modal {
 			? i18n.t('sync.preparation.progressLabel')
 			: operation
 		this.progressLabel.setText(label)
-		this.progressTrack.setAttribute('aria-label', label)
 		// New directories can be discovered at any time. This ratio describes
 		// known work, not a percentage of the entire remote tree or sync.
 		this.progressTrack.removeAttribute('aria-valuenow')
@@ -462,6 +461,7 @@ export default class SyncProgressModal extends Modal {
 		const progressLabel = progressMeta.createDiv({
 			cls: 'nutstore-sync-progress__label',
 		})
+		progressLabel.id = createId('accessible-label')
 		progressLabel.setText(i18n.t('sync.progressLabel'))
 		const progressText = progressMeta.createDiv({
 			cls: 'nutstore-sync-progress__bar-label',
@@ -480,6 +480,7 @@ export default class SyncProgressModal extends Modal {
 			cls: 'nutstore-sync-progress__bar',
 		})
 
+		progressBarContainer.setAttribute('aria-labelledby', progressLabel.id)
 		this.progressTrack = progressBarContainer
 		this.progressHint = progressSection.createDiv({
 			cls: 'nutstore-sync-progress__hint',

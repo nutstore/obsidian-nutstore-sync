@@ -111,6 +111,8 @@ export interface ChatboxProps extends ChatboxViewModel {
 		replacement: UserContextItem | null,
 	) => void
 	onDropContextItem: (path: string) => Promise<void> | void
+	/** Vault Markdown paths available to the composer; resolved through the existing context flow. */
+	onListMentionPaths?: () => string[]
 	onCaptureActiveContext?: () => void
 	/** Mounts the host-owned chat target selector beside composer context. */
 	onWorkspaceHostChange?: (host?: HTMLElement) => void

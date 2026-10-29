@@ -1,3 +1,4 @@
+import createId from '~/utils/create-id'
 import { ButtonComponent, Modal, Notice, Setting, setIcon } from 'obsidian'
 import {
 	isMcpServerEnabled,
@@ -60,6 +61,7 @@ export default class McpServersManagerModal extends Modal {
 			cls: 'mcp-manager-modal__tabs',
 		})
 		tabs.setAttribute('role', 'group')
+		const tabIdPrefix = createId('accessible-label')
 		for (const tab of ['installed', 'discover'] as const) {
 			const button = new ButtonComponent(tabs)
 				.setButtonText(i18n.t(`settings.ai.mcp.discovery.${tab}`))
@@ -70,6 +72,7 @@ export default class McpServersManagerModal extends Modal {
 						.querySelector<HTMLButtonElement>('[aria-pressed="true"]')
 						?.focus()
 				})
+			button.buttonEl.id = `${tabIdPrefix}-${tab}`
 			button.buttonEl.setAttribute('aria-pressed', String(this.tab === tab))
 			addClassTokens(button.buttonEl, 'mcp-manager-modal__tab')
 		}
@@ -79,7 +82,7 @@ export default class McpServersManagerModal extends Modal {
 		})
 		const tab = this.tab
 		body.setAttribute('role', 'region')
-		body.setAttribute('aria-label', i18n.t(`settings.ai.mcp.discovery.${tab}`))
+		body.setAttribute('aria-labelledby', `${tabIdPrefix}-${tab}`)
 		if (tab === 'discover') this.renderDiscovery(body)
 		else this.renderInstalled(body)
 		body.scrollTop = this.scrollPositions[tab]

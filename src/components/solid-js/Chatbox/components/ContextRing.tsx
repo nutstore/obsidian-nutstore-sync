@@ -1,4 +1,4 @@
-import { Show, createMemo } from 'solid-js'
+import { createMemo } from 'solid-js'
 
 export interface ContextRingProps {
 	/** Tokens already consumed in the current context window. */
@@ -9,8 +9,6 @@ export interface ContextRingProps {
 	size?: number
 	/** Stroke width in px. Defaults to 3. */
 	stroke?: number
-	/** Optional accessible title for the SVG. */
-	title?: string
 }
 
 function clampRatio(value: number) {
@@ -57,12 +55,8 @@ export function ContextRing(props: ContextRingProps) {
 			height={size()}
 			viewBox={`0 0 ${size()} ${size()}`}
 			class=":uno: context-ring shrink-0"
-			role="img"
-			aria-label={props.title}
+			aria-hidden="true"
 		>
-			<Show when={props.title}>
-				<title>{props.title}</title>
-			</Show>
 			<circle
 				cx={center()}
 				cy={center()}

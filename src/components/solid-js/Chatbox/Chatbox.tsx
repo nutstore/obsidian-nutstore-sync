@@ -5,6 +5,7 @@ import {
 	createEffect,
 	createMemo,
 	createSignal,
+	createUniqueId,
 	on,
 	onCleanup,
 	onMount,
@@ -33,7 +34,7 @@ import { RunStateCard } from './components/RunStateCard'
 import { SessionHistorySheet } from './components/SessionHistorySheet'
 import { SubagentTimelineDialog } from './components/SubagentTimelineDialog'
 import { decideDropRoute, hasDragItems } from './drop-utils'
-import { shouldSubmitChatInput } from './utils'
+import { ChatComposer } from './components/ChatComposer'
 
 const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.input-height'
 const LEGACY_INPUT_HEIGHT_STORAGE_KEY =
@@ -102,6 +103,7 @@ function MessageScrollContent(props: {
 }
 
 function Chatbox(props: ChatboxProps) {
+	const sendLabelId = createUniqueId()
 	let workspaceHostEl: HTMLDivElement | undefined
 	type RecallArmedMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
@@ -122,7 +124,6 @@ function Chatbox(props: ChatboxProps) {
 			] as const),
 		)
 	})
-	const [isComposing, setIsComposing] = createSignal(false)
 	const [historyOpen, setHistoryOpen] = createSignal(false)
 	const [selectedAgentId, setSelectedAgentId] = createSignal<string>()
 	const [modelPickerOpen, setModelPickerOpen] = createSignal(false)
@@ -147,7 +148,8 @@ function Chatbox(props: ChatboxProps) {
 	let splitLayoutEl: HTMLDivElement | undefined
 	let inputPaneEl: HTMLDivElement | undefined
 	let fileInputEl: HTMLInputElement | undefined
-	let inputTextareaEl: HTMLTextAreaElement | undefined
+	let composerCardEl: HTMLDivElement | undefined
+	let inputEditorEl: HTMLDivElement | undefined
 	let previousActiveSessionId: string | undefined
 	let defaultInputHeight = DEFAULT_INPUT_HEIGHT
 	let dragStartHeight = 0
@@ -235,7 +237,7 @@ function Chatbox(props: ChatboxProps) {
 		if (activeElement instanceof HTMLElement) {
 			activeElement.blur()
 		}
-		inputTextareaEl?.blur()
+		inputEditorEl?.blur()
 	}
 
 	function openCompressContextConfirm() {
@@ -372,11 +374,11 @@ function Chatbox(props: ChatboxProps) {
 	}
 
 	function getInputPaneChromeHeight() {
-		if (!inputPaneEl || !inputTextareaEl) {
+		if (!inputPaneEl || !inputEditorEl) {
 			return 0
 		}
 		const paneHeight = inputPaneEl.getBoundingClientRect().height
-		const textareaHeight = inputTextareaEl.getBoundingClientRect().height
+		const textareaHeight = inputEditorEl.getBoundingClientRect().height
 		return Math.max(0, Math.round(paneHeight - textareaHeight))
 	}
 
@@ -618,7 +620,7 @@ function Chatbox(props: ChatboxProps) {
 	)
 
 	createEffect(() => {
-		if (!inputTextareaEl) {
+		if (!inputEditorEl) {
 			return
 		}
 		defaultInputHeight =
@@ -694,7 +696,7 @@ function Chatbox(props: ChatboxProps) {
 	})
 
 	createEffect(() => {
-		if (!inputPaneEl || !inputTextareaEl) {
+		if (!inputPaneEl || !inputEditorEl) {
 			return
 		}
 		const observer = new ResizeObserver(() => {
@@ -708,7 +710,7 @@ function Chatbox(props: ChatboxProps) {
 			}
 		})
 		observer.observe(inputPaneEl)
-		observer.observe(inputTextareaEl)
+		observer.observe(inputEditorEl)
 		onCleanup(() => observer.disconnect())
 	})
 
@@ -1025,7 +1027,12 @@ function Chatbox(props: ChatboxProps) {
 						ref={inputPaneEl}
 						class={`:uno: chatbox-input-pane shrink-0 px-[var(--ns-chatbox-pad-x)] pb-2 ${'chatbox-input-pane--resizable'}`}
 					>
-						<div class="ns-composer-card">
+						<div
+							ref={(element) => {
+								composerCardEl = element
+							}}
+							class="ns-composer-card"
+						>
 							<Show
 								when={
 									props.activeContextItems.length > 0 ||
@@ -1046,41 +1053,56 @@ function Chatbox(props: ChatboxProps) {
 									</div>
 								</div>
 							</Show>
-							<textarea
-								ref={inputTextareaEl}
-								class=":uno: chatbox-input ns-composer-textarea flex-1 w-full text-sm outline-none"
-								style={(() => {
-									const height = getTextareaHeightStyle()
-									return height ? { height } : undefined
-								})()}
-								placeholder={inputPlaceholder()}
+							<ChatComposer
+								ref={(element) => {
+									inputEditorEl = element
+								}}
 								value={input()}
-								onInput={(event) => {
-									const nextInput = event.currentTarget.value
-									setInput(nextInput)
-									props.onUpdateInputDraft(nextInput)
+								sessionId={props.activeSessionId}
+								placeholder={inputPlaceholder()}
+								height={getTextareaHeightStyle()}
+								completionAnchor={() => composerCardEl}
+								onChange={(text) => {
+									setInput(text)
+									props.onUpdateInputDraft(text)
 								}}
-								onPaste={(event) => {
-									const imageFiles = Array.from(
-										event.clipboardData?.items ?? [],
+								mentionPaths={() => props.onListMentionPaths?.() ?? []}
+								onMention={(path) => {
+									void Promise.resolve(props.onDropContextItem(path)).catch(
+										() => new Notice(t('chatbox.errors.mentionFailed')),
 									)
-										.filter(
-											(item) =>
-												item.kind === 'file' && item.type.startsWith('image/'),
-										)
-										.map((item) => item.getAsFile())
-										.filter((file): file is File => !!file)
-									if (!imageFiles.length) return
-									event.preventDefault()
-									void addPickedFiles(imageFiles)
 								}}
-								onCompositionStart={() => setIsComposing(true)}
-								onCompositionEnd={() => setIsComposing(false)}
-								onKeyDown={(event) => {
-									if (shouldSubmitChatInput(event, isComposing())) {
-										event.preventDefault()
-										void submit()
-									}
+								commands={() => [
+									{
+										name: 'file',
+										description: t('chatbox.ui.actions.fileDescription'),
+										label: t('chatbox.ui.actions.selectFile'),
+										run: openFilePicker,
+									},
+									...(props.canCompress
+										? [
+												{
+													name: 'compact',
+													description: t(
+														'chatbox.ui.actions.compactDescription',
+													),
+													label: t('chatbox.ui.actions.compressContext'),
+													run: openCompressContextConfirm,
+												},
+											]
+										: []),
+									{
+										name: 'new',
+										description: t('chatbox.ui.actions.newDescription'),
+										label: t('chatbox.newChat'),
+										run: () => props.onNewSession(),
+									},
+								]}
+								onSubmit={() => {
+									void submit()
+								}}
+								onPasteImages={(files) => {
+									void addPickedFiles(files)
 								}}
 							/>
 
@@ -1127,6 +1149,7 @@ function Chatbox(props: ChatboxProps) {
 								<button
 									class=":uno: mod-cta ns-composer-send"
 									type="button"
+									aria-labelledby={sendLabelId}
 									disabled={
 										(!input().trim() &&
 											!props.draft.userContext.length &&
@@ -1135,7 +1158,6 @@ function Chatbox(props: ChatboxProps) {
 									}
 									onClick={() => void submit()}
 									title={contextUsageTitle()}
-									aria-label={t('chatbox.ui.actions.send')}
 								>
 									<Show when={props.contextWindow}>
 										<ContextRing
@@ -1143,10 +1165,10 @@ function Chatbox(props: ChatboxProps) {
 											total={props.contextWindow!}
 											size={15}
 											stroke={2.5}
-											title={contextUsageTitle()}
 										/>
 									</Show>
-									<span class="ns-composer-send-label">
+									{/* Explicit references preserve the name when compact CSS hides the text. */}
+									<span id={sendLabelId} class="ns-composer-send-label">
 										{t('chatbox.ui.actions.send')}
 									</span>
 									<span class=":uno: i-lucide-arrow-up size-3.5 shrink-0" />

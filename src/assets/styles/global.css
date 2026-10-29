@@ -6,11 +6,10 @@
 	padding-top: 0;
 }
 
-/* Floating phone navigation overlays custom views. Reserve its full footprint
- * inside the view so Chatbox controls and App frames stay above it. Obsidian
- * supplies the theme/safe-area offsets and keyboard height; tablets and docked
- * navigation already allocate their own space. */
+/* Floating phone navigation overlays main-workspace views. Sidebars already
+ * allocate their own space, so reserve the navigation footprint only in mod-root. */
 .is-phone:is(.is-floating-nav, .auto-full-screen):not(.is-hidden-nav)
+	.workspace-split.mod-root
 	.workspace-leaf-content:is(
 		[data-type='nutstore-sync-chatbox'],
 		[data-type='nutstore-app']
@@ -2208,25 +2207,36 @@
 	line-height: 1.4;
 }
 
-.chatbox-input {
-	height: 6.25rem;
-	padding: 0.65rem 0.75rem;
+.chatbox-root .ns-chat-composer {
+	min-height: 0;
+	width: 100%;
+}
+.chatbox-root .ns-chat-composer .cm-editor {
+	height: 100%;
+	background: transparent;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+.chatbox-root .ns-chat-composer .cm-editor.cm-focused {
+	outline: none;
+}
+.chatbox-root .ns-chat-composer .cm-scroller {
+	overflow: auto;
+	font-family: inherit;
 	line-height: 1.5;
 }
-
-.chatbox-root textarea.ns-composer-textarea {
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	box-shadow: none;
-	color: var(--text-normal);
+.chatbox-root .ns-chat-composer .cm-content {
+	padding: 0.65rem 0.75rem;
+	min-height: 100%;
 }
-
-.chatbox-root textarea.ns-composer-textarea:focus,
-.chatbox-root textarea.ns-composer-textarea:focus-visible {
-	border: 0;
-	box-shadow: none;
-	outline: none;
+.chatbox-root .ns-chat-composer .cm-line {
+	padding: 0;
+}
+.chatbox-root .ns-chat-composer .cm-placeholder {
+	color: var(--text-faint);
+}
+.chatbox-root .ns-chat-composer .cm-cursor {
+	border-left-color: var(--text-normal);
 }
 
 .ns-composer-toolbar {
@@ -2376,13 +2386,6 @@
 	border-top-width: 0;
 }
 
-.chatbox-input-pane--resizable .chatbox-input {
-	flex: 0 0 auto;
-	min-height: 4rem;
-	min-width: 0;
-	resize: none;
-}
-
 /*
  * `.is-compact` is set by Chatbox from its own container width (same source as
  * the input-pane height math), so a narrow side pane and a phone share one
@@ -2391,12 +2394,6 @@
 .chatbox-root.is-compact .chatbox-resizer {
 	padding-bottom: 8px;
 	padding-top: 8px;
-}
-
-.chatbox-root.is-compact .chatbox-input {
-	height: 4rem;
-	padding: 0.625rem;
-	line-height: 1.4;
 }
 
 .chatbox-root.is-compact .chatbox-context-header {
@@ -3075,4 +3072,187 @@
 
 .mcp-manager-modal__toolbar .setting-item-name:empty {
 	display: none;
+}
+
+/* Composer surfaces follow the active Obsidian theme, including third-party themes. */
+.chatbox-root .ns-chat-composer {
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small);
+}
+.chatbox-root .ns-chat-composer .cm-selectionBackground,
+.chatbox-root .ns-chat-composer .cm-focused .cm-selectionBackground {
+	background: var(--text-selection);
+}
+.chatbox-root .ns-chat-composer .cm-content {
+	caret-color: var(--caret-color, var(--text-normal));
+}
+.chatbox-root .ns-chat-composer .cm-content ::selection {
+	background: var(--text-selection);
+}
+
+/* A dedicated tooltip scope survives host-owned tooltip portals. */
+.cm-tooltip.ns-composer-completions {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+	padding: 4px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	box-shadow: var(--shadow-s);
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-small, 13px);
+	line-height: 1.4;
+	overflow: hidden;
+}
+.ns-completion-layer {
+	width: 100%;
+	height: 0;
+}
+.cm-tooltip.ns-composer-completions.cm-tooltip-above {
+	transform: translate(
+		var(--ns-composer-completion-x, 0px),
+		calc(-1 * var(--ns-composer-completion-above-offset, 0px))
+	);
+}
+.cm-tooltip.ns-composer-completions.cm-tooltip-below {
+	transform: translate(
+		var(--ns-composer-completion-x, 0px),
+		calc(-100% - var(--ns-composer-completion-below-offset, 0px))
+	);
+}
+.cm-tooltip.ns-composer-completions > ul {
+	margin: 0;
+	padding: 0;
+	max-height: min(256px, 40vh);
+	font: inherit;
+	list-style: none;
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+.cm-tooltip.ns-composer-completions > ul > li {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	gap: 0;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+	overflow: hidden;
+	margin: 0;
+	padding: 0 8px;
+	border-radius: var(--radius-s, 4px);
+	font: inherit;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.cm-tooltip.ns-composer-completions > ul > li.ns-completion-file-option {
+	height: auto;
+	min-height: 44px;
+	max-height: none;
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+.cm-tooltip.ns-composer-completions > ul > li:hover,
+.cm-tooltip.ns-composer-completions > ul > li[aria-selected] {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.cm-tooltip.ns-composer-completions .cm-completionLabel,
+.cm-tooltip.ns-composer-completions .cm-completionDetail {
+	display: none;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	height: 100%;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 18px;
+	color: var(--text-muted);
+}
+.cm-tooltip.ns-composer-completions .ns-completion-icon svg {
+	width: 16px;
+	height: 16px;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-text {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-file .ns-completion-text {
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	gap: 1px;
+	white-space: normal;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-name {
+	display: block;
+	flex: 0 1 auto;
+	max-width: 100%;
+	white-space: nowrap;
+	word-break: normal;
+	overflow-wrap: normal;
+	min-width: 0;
+	font-size: var(--font-ui-small, 13px);
+	line-height: 20px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-file .ns-completion-name {
+	width: 100%;
+	max-width: 100%;
+	line-height: 18px;
+}
+.cm-tooltip.ns-composer-completions .ns-completion-description {
+	display: block;
+	flex: 0 1 45%;
+	white-space: nowrap;
+	word-break: normal;
+	overflow-wrap: normal;
+	min-width: 0;
+	max-width: 45%;
+	font-size: var(--font-ui-smaller, 12px);
+	line-height: 18px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.cm-tooltip.ns-composer-completions
+	.ns-completion-file
+	.ns-completion-description {
+	flex: none;
+	width: 100%;
+	max-width: 100%;
+	font-size: 0.7rem;
+	line-height: 14px;
+	color: var(--text-muted);
+}
+
+.cm-tooltip.ns-composer-completions .ns-completion-command .ns-completion-name {
+	flex: 0 0 auto;
+}
+.cm-tooltip.ns-composer-completions
+	.ns-completion-command
+	.ns-completion-description {
+	flex: 1;
+	min-width: 0;
+	max-width: none;
+	line-height: 20px;
 }

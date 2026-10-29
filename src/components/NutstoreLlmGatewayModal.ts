@@ -1,3 +1,4 @@
+import createId from '~/utils/create-id'
 import { ButtonComponent, Modal } from 'obsidian'
 import { listModels } from '~/ai/catalog/config'
 import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
@@ -257,10 +258,8 @@ export default class NutstoreLlmGatewayModal extends Modal {
 			cls: 'nutstore-llm-gateway__tabs',
 		})
 		tabList.setAttribute('role', 'tablist')
-		tabList.setAttribute(
-			'aria-label',
-			i18n.t('settings.ai.nutstoreLlmGateway.usage.title'),
-		)
+		this.titleEl.id ||= createId('accessible-label')
+		tabList.setAttribute('aria-labelledby', this.titleEl.id)
 		this.renderTab(tabList, 'usage', 'usage')
 		this.renderTab(tabList, 'models', 'models')
 
@@ -686,12 +685,14 @@ export default class NutstoreLlmGatewayModal extends Modal {
 		bar.setAttribute('aria-valuemin', '0')
 		bar.setAttribute('aria-valuemax', '100')
 		bar.setAttribute('aria-valuenow', String(percent))
-		bar.setAttribute(
-			'aria-label',
+		const label = bar.createSpan({ attr: { hidden: '' } })
+		label.id = createId('accessible-label')
+		label.setText(
 			i18n.t('settings.ai.nutstoreLlmGateway.usage.usedPercent', {
 				percent,
 			}),
 		)
+		bar.setAttribute('aria-labelledby', label.id)
 		const fill = bar.createDiv({ cls: 'nutstore-llm-usage__bar-fill' })
 		fill.style.width = `${percent}%`
 	}

@@ -175,9 +175,12 @@ function ViewImageToolCallBlock(props: {
 					>
 						<div
 							class=":uno: h-40 animate-pulse rounded-2 bg-[var(--background-modifier-hover)]"
-							aria-label="Loading image preview"
 							role="status"
-						/>
+						>
+							<span class=":uno: sr-only">
+								{t('chatbox.ui.states.loadingContextItem')}
+							</span>
+						</div>
 					</Show>
 				}
 			>

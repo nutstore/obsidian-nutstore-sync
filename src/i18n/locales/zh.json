@@ -943,6 +943,9 @@
 				"deleteSession": "删除",
 				"cancel": "取消",
 				"close": "关闭",
+				"fileDescription": "为本条消息添加图片或文本文件",
+				"compactDescription": "总结当前会话，释放上下文空间",
+				"newDescription": "开始一段新的会话",
 				"selectFile": "选择文件",
 				"send": "发送",
 				"stopRun": "终止",
@@ -959,6 +962,7 @@
 				"contextUsage": "上下文：已用 {{used}}%（窗口 {{total}} tokens · 总计 {{usedTokens}}）"
 			},
 			"labels": {
+				"messageInput": "消息输入框",
 				"provider": "Provider",
 				"model": "Model",
 				"tool": "工具",
@@ -1070,6 +1074,7 @@
 			"apiKeyRequired": "当前模型提供商缺少 API Key",
 			"providerBaseUrlRequired": "当前 OpenAI-compatible 模型提供商缺少 Base URL",
 			"noModel": "发送前请先选择模型",
+			"mentionFailed": "无法添加引用的笔记。",
 			"unsupportedAttachmentType": "暂不支持该文件类型：{{name}}",
 			"unknownTool": "未知工具：{{name}}",
 			"toolFieldRequired": "{{field}} 为必填项",
