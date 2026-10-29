@@ -453,6 +453,7 @@
 					"configFileHint": "Stored in {{path}}. You can also ask the AI in chat to edit this file.",
 					"parseError": "Failed to parse {{path}}: {{reason}}",
 					"statusDisabled": "disabled",
+					"statusConnecting": "Connecting and discovering tools…",
 					"statusConnected": "{{count}} tool(s)",
 					"statusError": "connection failed: {{reason}}",
 					"test": "Test",
@@ -480,6 +481,21 @@
 					"duplicateName": "A server with this name already exists",
 					"emptyUrl": "URL cannot be empty",
 					"invalidUrl": "Invalid URL"
+				},
+				"discovery": {
+					"installed": "Installed",
+					"discover": "Discover",
+					"intro": "Connect your notes to web research and technical knowledge. Keyless services can be added in one click. Services requiring authentication open their settings first. Public access may have usage limits; test on your current device before use.",
+					"website": "Official documentation ↗",
+					"remove": "Remove",
+					"testing": "Connecting…",
+					"noKey": "No API key required",
+					"optionalKey": "API key optional",
+					"exa": "Search the web, read pages and find research sources for your notes.",
+					"deepwiki": "Explore public GitHub repositories and turn project documentation into learning notes.",
+					"tavily": "Search and extract web content for research. Configure your API key using the official documentation. Browser sign-in is not supported here yet.",
+					"context7": "Find current library documentation and examples for technical notes. Add an Authorization header for your API key.",
+					"requiresKey": "Requires authentication"
 				}
 			},
 			"yolo": {

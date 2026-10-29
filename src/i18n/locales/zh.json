@@ -296,6 +296,7 @@
 					"configFileHint": "配置保存在 {{path}}，也可以在聊天中让 AI 帮你编辑该文件。",
 					"parseError": "解析 {{path}} 失败：{{reason}}",
 					"statusDisabled": "已停用",
+					"statusConnecting": "正在连接并获取工具…",
 					"statusConnected": "{{count}} 个工具",
 					"statusError": "连接失败：{{reason}}",
 					"test": "测试",
@@ -323,6 +324,21 @@
 					"duplicateName": "已存在同名服务",
 					"emptyUrl": "URL 不能为空",
 					"invalidUrl": "URL 格式不正确"
+				},
+				"discovery": {
+					"installed": "已添加",
+					"discover": "发现",
+					"intro": "为笔记连接联网研究与技术知识。免 Key 服务可一键添加，需要认证的服务会先打开配置窗口。公共服务可能限流，使用前请在当前设备测试连接。",
+					"website": "官方文档 ↗",
+					"remove": "移除",
+					"testing": "正在连接…",
+					"noKey": "无需 API Key",
+					"optionalKey": "API Key 可选",
+					"exa": "搜索网页、阅读正文、查找研究资料，为笔记补充来源。",
+					"deepwiki": "阅读和问答公开 GitHub 项目，将项目文档整理为学习笔记。",
+					"tavily": "搜索和提取网页内容，辅助专题研究。请参考官方文档配置 API Key，目前此处尚不支持浏览器授权登录。",
+					"context7": "查询最新的库文档和示例，辅助技术笔记。可在请求头中添加 Authorization 配置 API Key。",
+					"requiresKey": "需要认证"
 				}
 			},
 			"yolo": {

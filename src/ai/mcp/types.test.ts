@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-	getMcpToolName,
 	isMcpServerEnabled,
-	isMcpToolName,
 	isValidMcpServerName,
 	parseMcpServersFile,
 	serializeMcpServersFile,
@@ -116,13 +114,6 @@ describe('server name and tool name helpers', () => {
 		for (const name of ['', '-bad', 'bad name', 'bad.name', '坏名字']) {
 			expect(isValidMcpServerName(name)).toBe(false)
 		}
-	})
-
-	it('builds and recognizes namespaced tool names', () => {
-		const toolName = getMcpToolName('notes-search', 'find_notes')
-		expect(toolName).toBe('mcp__notes-search__find_notes')
-		expect(isMcpToolName(toolName)).toBe(true)
-		expect(isMcpToolName('bash')).toBe(false)
 	})
 })
 

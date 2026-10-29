@@ -1,11 +1,11 @@
-import { Modal, Notice, Setting, setIcon } from 'obsidian'
+import { ButtonComponent, Modal, Notice, Setting, setIcon } from 'obsidian'
 import {
 	isMcpServerEnabled,
 	MCP_CONFIG_VIRTUAL_PATH,
 	type McpServerConfigs,
 } from '~/ai/mcp/types'
+import { MCP_DISCOVERY_SERVERS } from '~/ai/mcp/discovery'
 import i18n from '~/i18n'
-import type { McpServerRuntimeInfo } from '~/services/mcp.service'
 import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
@@ -14,6 +14,9 @@ import McpServerEditorModal, {
 } from './McpServerEditorModal'
 
 export default class McpServersManagerModal extends Modal {
+	private tab: 'installed' | 'discover' = 'installed'
+	private stopRuntimeUpdates?: () => void
+	private readonly updateDescriptions = new Set<() => void>()
 	private readonly moduleScope
 	private readonly mcp
 	constructor(
@@ -24,9 +27,13 @@ export default class McpServersManagerModal extends Modal {
 		this.moduleScope = plugin.ai.lifecycle.scope
 		this.mcp = plugin.ai.mcp
 		this.moduleScope.ownModal(this)
+		addClassTokens(this.modalEl, ':uno: w-[760px] max-w-[95vw]')
 	}
 
 	onOpen() {
+		this.stopRuntimeUpdates = this.mcp.onRuntimeChanged(() => {
+			for (const update of this.updateDescriptions) update()
+		})
 		void this.moduleScope.background(
 			async () => {
 				await this.mcp.reload()
@@ -44,10 +51,28 @@ export default class McpServersManagerModal extends Modal {
 	private render() {
 		if (this.moduleScope.signal.aborted) return
 		const { contentEl } = this
+		this.updateDescriptions.clear()
 		contentEl.empty()
 		contentEl.createEl('h2', {
 			text: i18n.t('settings.ai.mcp.manager.title'),
 		})
+
+		const tabs = contentEl.createDiv({ cls: ':uno: flex gap-2 mb-5' })
+		tabs.setAttribute('role', 'group')
+		for (const tab of ['installed', 'discover'] as const) {
+			const button = new ButtonComponent(tabs)
+				.setButtonText(i18n.t(`settings.ai.mcp.discovery.${tab}`))
+				.onClick(() => {
+					this.tab = tab
+					this.render()
+				})
+			button.buttonEl.setAttribute('aria-pressed', String(this.tab === tab))
+			if (this.tab === tab) button.setCta()
+		}
+		if (this.tab === 'discover') {
+			this.renderDiscovery(contentEl)
+			return
+		}
 
 		const parseError = this.mcp.getParseError()
 		if (parseError) {
@@ -98,11 +123,149 @@ export default class McpServersManagerModal extends Modal {
 			return
 		}
 
-		const runtimes = new Map(
-			this.mcp.getServerRuntimes().map((runtime) => [runtime.name, runtime]),
-		)
 		for (const [name, config] of entries) {
-			this.renderServer(contentEl, name, config, runtimes.get(name))
+			this.renderServer(contentEl, name, config)
+		}
+	}
+
+	private renderDiscovery(contentEl: HTMLElement) {
+		contentEl.createEl('p', {
+			cls: ':uno: text-[var(--text-muted)] text-sm mb-5',
+			text: i18n.t('settings.ai.mcp.discovery.intro'),
+		})
+		const grid = contentEl.createDiv({
+			cls: ':uno: grid grid-cols-1 sm:grid-cols-2 gap-3',
+		})
+		for (const server of MCP_DISCOVERY_SERVERS) {
+			const card = grid.createDiv({
+				cls: ':uno: flex flex-col gap-3 p-4 rounded-xl border border-solid border-[var(--background-modifier-border)] bg-[var(--background-secondary)]',
+			})
+			const heading = card.createDiv({ cls: ':uno: flex items-center gap-3' })
+			const icon = heading.createDiv({
+				cls: ':uno: flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--background-primary)] text-[var(--text-accent)] shrink-0',
+			})
+			setIcon(icon, server.icon)
+			heading.createEl('h3', { text: server.name, cls: ':uno: m-0 text-base' })
+			const badge = card.createSpan({
+				cls: ':uno: self-start inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
+				text: i18n.t(`settings.ai.mcp.discovery.${server.auth}`),
+			})
+			const badgeColors = {
+				noKey:
+					':uno: text-[var(--text-success)] bg-[rgba(var(--color-green-rgb),0.12)]',
+				optionalKey:
+					':uno: text-[var(--text-accent)] bg-[var(--background-modifier-active-hover)]',
+				requiresKey:
+					':uno: text-[var(--text-warning)] bg-[rgba(var(--color-orange-rgb),0.12)]',
+			} as const
+			addClassTokens(badge, badgeColors[server.auth])
+			card.createEl('p', {
+				cls: ':uno: m-0 text-sm text-[var(--text-muted)] grow',
+				text: i18n.t(`settings.ai.mcp.discovery.${server.id}`),
+			})
+			const link = card.createEl('a', {
+				text: i18n.t('settings.ai.mcp.discovery.website'),
+				href: server.website,
+				cls: ':uno: text-xs',
+			})
+			link.setAttribute('target', '_blank')
+			link.setAttribute('rel', 'noopener noreferrer')
+			const result = card.createDiv({
+				cls: ':uno: text-xs text-[var(--text-muted)] break-words',
+			})
+			result.setAttribute('role', 'status')
+			const actions = card.createDiv({
+				cls: ':uno: flex flex-wrap items-center gap-2 mt-1',
+			})
+			const installed = Object.entries(this.servers).find(
+				([, config]) =>
+					config.url.replace(/\/$/, '') === server.url.replace(/\/$/, ''),
+			)
+			let confirmRemove = false
+			const add = new ButtonComponent(actions)
+				.setButtonText(
+					i18n.t(
+						installed
+							? 'settings.ai.mcp.discovery.remove'
+							: 'settings.ai.mcp.manager.add',
+					),
+				)
+				.onClick(async () => {
+					if (installed) {
+						if (!confirmRemove) {
+							confirmRemove = true
+							add.setButtonText(i18n.t('settings.ai.modals.confirmDeleteLabel'))
+							addClassTokens(add.buttonEl, ':uno: mod-warning')
+							return
+						}
+						add.setDisabled(true)
+						if (
+							!(await this.saveServers((current) => {
+								const servers = { ...current }
+								delete servers[installed[0]]
+								return servers
+							}))
+						)
+							add.setDisabled(false)
+						return
+					}
+					let name: string = server.id
+					let suffix = 2
+					while (this.servers[name]) name = `${server.id}-${suffix++}`
+					const draft: McpServerDraft = {
+						name,
+						config: { type: 'http', url: server.url, enabled: true },
+					}
+					if (server.auth === 'requiresKey') {
+						new McpServerEditorModal(
+							this.plugin,
+							draft,
+							async (configured) => (await this.saveDraft(configured)) === true,
+							true,
+						).open()
+						return
+					}
+					add.setDisabled(true)
+					try {
+						const saved = await this.saveDraft(draft)
+						if (!saved) add.setDisabled(false)
+					} catch (error) {
+						add.setDisabled(false)
+						logger.error(error)
+					}
+				})
+			add.buttonEl.addEventListener('blur', () => {
+				if (!installed) return
+				confirmRemove = false
+				add.setButtonText(i18n.t('settings.ai.mcp.discovery.remove'))
+				removeClassTokens(add.buttonEl, ':uno: mod-warning')
+			})
+			const test = new ButtonComponent(actions)
+				.setButtonText(i18n.t('settings.ai.mcp.manager.test'))
+				.onClick(async () => {
+					test.setDisabled(true)
+					result.setText(i18n.t('settings.ai.mcp.discovery.testing'))
+					try {
+						const tools = await this.mcp.testConnection(
+							installed?.[1] ?? { type: 'http', url: server.url },
+						)
+						if (this.moduleScope.signal.aborted) return
+						result.setText(
+							i18n.t('settings.ai.mcp.manager.testSuccess', {
+								count: tools.length,
+							}),
+						)
+					} catch (error) {
+						if (this.moduleScope.signal.aborted) return
+						result.setText(
+							i18n.t('settings.ai.mcp.manager.testFailed', {
+								reason: error instanceof Error ? error.message : String(error),
+							}),
+						)
+					} finally {
+						test.setDisabled(false)
+					}
+				})
 		}
 	}
 
@@ -110,37 +273,54 @@ export default class McpServersManagerModal extends Modal {
 		contentEl: HTMLElement,
 		name: string,
 		config: McpServerConfigs[string],
-		runtime: McpServerRuntimeInfo | undefined,
 	) {
 		const enabled = isMcpServerEnabled(config)
-		const descParts: string[] = [config.url]
-		if (!enabled) {
-			descParts.push(i18n.t('settings.ai.mcp.manager.statusDisabled'))
-		} else if (runtime?.status === 'connected') {
-			descParts.push(
-				i18n.t('settings.ai.mcp.manager.statusConnected', {
-					count: runtime.tools.length,
-				}),
-			)
-		} else if (runtime?.error) {
-			descParts.push(
-				i18n.t('settings.ai.mcp.manager.statusError', {
-					reason: runtime.error,
-				}),
-			)
+		const description = () => {
+			const runtime = this.mcp
+				.getServerRuntimes()
+				.find((server) => server.name === name)
+			const descParts: string[] = [config.url]
+			if (!enabled) {
+				descParts.push(i18n.t('settings.ai.mcp.manager.statusDisabled'))
+			} else if (runtime?.status === 'connecting') {
+				descParts.push(i18n.t('settings.ai.mcp.manager.statusConnecting'))
+			} else if (runtime?.status === 'connected') {
+				descParts.push(
+					i18n.t('settings.ai.mcp.manager.statusConnected', {
+						count: runtime.tools.length,
+					}),
+				)
+			} else if (runtime?.error) {
+				descParts.push(
+					i18n.t('settings.ai.mcp.manager.statusError', {
+						reason: runtime.error,
+					}),
+				)
+			}
+
+			return descParts.join(' · ')
 		}
 
 		new Setting(contentEl)
 			.setName(name)
-			.setDesc(descParts.join(' · '))
+			.setDesc(description())
+			.then((setting) =>
+				this.updateDescriptions.add(() => {
+					setting.setDesc(description())
+				}),
+			)
 			.addToggle((toggle) =>
 				toggle
 					.setValue(enabled)
 					.setTooltip(i18n.t('settings.ai.mcp.editor.enabled'))
 					.onChange(async (value) => {
-						await this.saveServers({
-							...this.servers,
-							[name]: { ...config, enabled: value },
+						await this.saveServers((current) => {
+							const currentConfig = current[name]
+							if (!currentConfig) return current
+							return {
+								...current,
+								[name]: { ...currentConfig, enabled: value },
+							}
 						})
 					}),
 			)
@@ -208,28 +388,31 @@ export default class McpServersManagerModal extends Modal {
 						addClassTokens(button.buttonEl, ':uno: mod-warning')
 						return
 					}
-					const servers = { ...this.servers }
-					delete servers[name]
-					await this.saveServers(servers)
+					await this.saveServers((current) => {
+						const servers = { ...current }
+						delete servers[name]
+						return servers
+					})
 				})
 				button.buttonEl.addEventListener('blur', resetButton)
 			})
 	}
 
 	private async saveDraft(draft: McpServerDraft, currentName?: string) {
-		if (draft.name !== currentName && this.servers[draft.name]) {
-			new Notice(i18n.t('settings.ai.mcp.errors.duplicateName'))
-			return false
-		}
-		const servers = { ...this.servers }
-		if (currentName && currentName !== draft.name) {
-			delete servers[currentName]
-		}
-		servers[draft.name] = draft.config
-		return this.saveServers(servers)
+		return this.saveServers((current) => {
+			if (draft.name !== currentName && current[draft.name]) {
+				throw new Error(i18n.t('settings.ai.mcp.errors.duplicateName'))
+			}
+			const servers = { ...current }
+			if (currentName && currentName !== draft.name) delete servers[currentName]
+			servers[draft.name] = draft.config
+			return servers
+		})
 	}
 
-	private async saveServers(servers: McpServerConfigs) {
+	private async saveServers(
+		servers: (current: McpServerConfigs) => McpServerConfigs,
+	) {
 		try {
 			await this.mcp.saveServers(servers)
 			this.moduleScope.check()
@@ -250,6 +433,8 @@ export default class McpServersManagerModal extends Modal {
 	}
 
 	onClose() {
+		this.stopRuntimeUpdates?.()
+		this.updateDescriptions.clear()
 		this.contentEl.empty()
 	}
 }
