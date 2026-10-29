@@ -2909,6 +2909,18 @@
 	justify-content: center;
 	width: 32px;
 }
+
+/* Selected apps keep their name until the chat container is very narrow. */
+@container (max-width: 320px) {
+	.chatbox-root .has-workspace .ns-workspace-title,
+	.chatbox-root .has-workspace .ns-workspace-chevron {
+		display: none;
+	}
+	.chatbox-root .has-workspace .ns-workspace-picker {
+		justify-content: center;
+		width: 32px;
+	}
+}
 .chatbox-root.is-compact button.ns-composer-send {
 	flex-shrink: 0;
 	gap: 4px;
