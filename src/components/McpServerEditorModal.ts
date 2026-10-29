@@ -11,6 +11,12 @@ export interface McpServerDraft {
 	config: HttpMcpServerConfig
 }
 
+export interface McpServerEditorOptions {
+	isNew: boolean
+	/** Select an initial field without coupling the editor to a particular service. */
+	initialFocus?: 'name' | 'url' | { header: string; field: 'key' | 'value' }
+}
+
 interface HeaderRow {
 	key: string
 	value: string
@@ -27,7 +33,7 @@ export default class McpServerEditorModal extends Modal {
 		plugin: NutstorePlugin,
 		draft: McpServerDraft,
 		private onSave: (draft: McpServerDraft) => Promise<boolean> | boolean,
-		private isNew: boolean,
+		private options: McpServerEditorOptions,
 	) {
 		super(plugin.app)
 		plugin.ai.lifecycle.scope.ownModal(this)
@@ -39,9 +45,12 @@ export default class McpServerEditorModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this
+		const initialFocus =
+			this.options.initialFocus ?? (this.options.isNew ? 'name' : undefined)
+		let focusInput: HTMLInputElement | undefined
 		contentEl.empty()
 		contentEl.createEl('h2', {
-			text: this.isNew
+			text: this.options.isNew
 				? i18n.t('settings.ai.mcp.editor.createTitle')
 				: i18n.t('settings.ai.mcp.editor.editTitle'),
 		})
@@ -54,8 +63,8 @@ export default class McpServerEditorModal extends Modal {
 				text.setValue(this.draft.name).onChange((value) => {
 					this.draft.name = value.trim()
 				})
-				if (this.isNew) {
-					text.inputEl.focus()
+				if (initialFocus === 'name') {
+					focusInput = text.inputEl
 				}
 			})
 
@@ -63,14 +72,15 @@ export default class McpServerEditorModal extends Modal {
 			.setName(i18n.t('settings.ai.mcp.editor.url'))
 			.setDesc(i18n.t('settings.ai.mcp.editor.urlDesc'))
 			.then((s) => addClassTokens(s.settingEl, ':uno: setting-required'))
-			.addText((text) =>
+			.addText((text) => {
+				if (initialFocus === 'url') focusInput = text.inputEl
 				text
 					.setPlaceholder(MCP_URL_HINT)
 					.setValue(this.draft.config.url)
 					.onChange((value) => {
 						this.draft.config.url = value.trim()
-					}),
-			)
+					})
+			})
 
 		const headersSetting = new Setting(contentEl)
 			.setName(i18n.t('settings.ai.mcp.editor.headers'))
@@ -80,7 +90,13 @@ export default class McpServerEditorModal extends Modal {
 			headersContainer.empty()
 			for (const row of this.headerRows) {
 				new Setting(headersContainer)
-					.addText((text) =>
+					.addText((text) => {
+						if (
+							typeof initialFocus === 'object' &&
+							initialFocus.header === row.key &&
+							initialFocus.field === 'key'
+						)
+							focusInput = text.inputEl
 						text
 							.setPlaceholder(
 								i18n.t('settings.ai.mcp.editor.headerKeyPlaceholder'),
@@ -88,9 +104,15 @@ export default class McpServerEditorModal extends Modal {
 							.setValue(row.key)
 							.onChange((value) => {
 								row.key = value
-							}),
-					)
-					.addText((text) =>
+							})
+					})
+					.addText((text) => {
+						if (
+							typeof initialFocus === 'object' &&
+							initialFocus.header === row.key &&
+							initialFocus.field === 'value'
+						)
+							focusInput = text.inputEl
 						text
 							.setPlaceholder(
 								i18n.t('settings.ai.mcp.editor.headerValuePlaceholder'),
@@ -98,8 +120,8 @@ export default class McpServerEditorModal extends Modal {
 							.setValue(row.value)
 							.onChange((value) => {
 								row.value = value
-							}),
-					)
+							})
+					})
 					.addButton((button) =>
 						button
 							.setIcon('trash')
@@ -167,6 +189,16 @@ export default class McpServerEditorModal extends Modal {
 					}
 				}),
 		)
+
+		const input = focusInput
+		if (input) {
+			// Modal.open() applies Obsidian's default focus after onOpen returns.
+			queueMicrotask(() => {
+				if (!input.isConnected) return
+				input.focus()
+				input.setSelectionRange(input.value.length, input.value.length)
+			})
+		}
 	}
 
 	private validate() {

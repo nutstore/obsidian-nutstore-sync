@@ -109,7 +109,7 @@ export default class McpServersManagerModal extends Modal {
 								}
 								return true
 							},
-							true,
+							{ isNew: true },
 						).open()
 					}),
 			)
@@ -217,11 +217,20 @@ export default class McpServersManagerModal extends Modal {
 						config: { type: 'http', url: server.url, enabled: true },
 					}
 					if (server.auth === 'requiresKey') {
+						draft.config.headers = {
+							[server.credentialHeader.name]: server.credentialHeader.value,
+						}
 						new McpServerEditorModal(
 							this.plugin,
 							draft,
 							async (configured) => (await this.saveDraft(configured)) === true,
-							true,
+							{
+								isNew: true,
+								initialFocus: {
+									header: server.credentialHeader.name,
+									field: 'value',
+								},
+							},
 						).open()
 						return
 					}
@@ -364,7 +373,7 @@ export default class McpServersManagerModal extends Modal {
 								}
 								return true
 							},
-							false,
+							{ isNew: false },
 						).open()
 					}),
 			)

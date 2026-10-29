@@ -338,6 +338,12 @@
 					"deepwiki": "阅读和问答公开 GitHub 项目，将项目文档整理为学习笔记。",
 					"tavily": "搜索和提取网页内容，辅助专题研究。请参考官方文档配置 API Key，目前此处尚不支持浏览器授权登录。",
 					"context7": "查询最新的库文档和示例，辅助技术笔记。可在请求头中添加 Authorization 配置 API Key。",
+					"parallel": "搜索网页并读取正文，为研究笔记补充来源。可添加 Authorization: Bearer 请求头提高使用限额。",
+					"jina": "读取网页、搜索资料，并提供嵌入与重排序能力。部分能力需要 API Key，可添加 Authorization: Bearer 请求头。",
+					"firecrawl": "将网页转为 Markdown，搜索和解析资料。免 Key 功能有限且有速率限制；爬站等功能需在请求头中配置 API Key，详见官方文档。",
+					"microsoft-learn": "搜索和读取 Microsoft Learn 官方文档及代码示例，覆盖 Azure、.NET 等技术。",
+					"cloudflare-docs": "搜索 Cloudflare 官方文档，辅助 Workers、网络和云服务相关技术笔记。",
+					"kagi": "使用 Kagi 搜索网页并获取研究资料。需要 Kagi API Key，添加时填写 Authorization: Bearer 请求头。",
 					"requiresKey": "需要认证"
 				}
 			},

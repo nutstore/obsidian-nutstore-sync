@@ -495,6 +495,12 @@
 					"deepwiki": "Explore public GitHub repositories and turn project documentation into learning notes.",
 					"tavily": "Search and extract web content for research. Configure your API key using the official documentation. Browser sign-in is not supported here yet.",
 					"context7": "Find current library documentation and examples for technical notes. Add an Authorization header for your API key.",
+					"parallel": "Search the web and read pages for research notes. Add an Authorization: Bearer header for higher usage limits.",
+					"jina": "Read pages, search sources, and access embeddings and reranking. Some capabilities require an API key via an Authorization: Bearer header.",
+					"firecrawl": "Convert pages to Markdown, search and parse sources. Keyless access is limited and rate-limited; crawling and other tools need an API key in request headers. See the official documentation.",
+					"microsoft-learn": "Search and read official Microsoft Learn documentation and code samples for Azure, .NET and related technologies.",
+					"cloudflare-docs": "Search official Cloudflare documentation for notes on Workers, networking and cloud services.",
+					"kagi": "Search the web with Kagi for research sources. Requires a Kagi API key in the Authorization: Bearer header when adding the service.",
 					"requiresKey": "Requires authentication"
 				}
 			},
