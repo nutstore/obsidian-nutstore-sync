@@ -138,16 +138,22 @@ export default class McpServersManagerModal extends Modal {
 		})
 		for (const server of MCP_DISCOVERY_SERVERS) {
 			const card = grid.createDiv({
-				cls: ':uno: flex flex-col gap-3 p-4 rounded-xl border border-solid border-[var(--background-modifier-border)] bg-[var(--background-secondary)]',
+				cls: ':uno: flex flex-col gap-2 p-4 min-w-0 rounded-xl border border-solid border-[var(--background-modifier-border)] bg-[var(--background-secondary)]',
 			})
-			const heading = card.createDiv({ cls: ':uno: flex items-center gap-3' })
+			const heading = card.createDiv({ cls: ':uno: flex items-center gap-2' })
 			const icon = heading.createDiv({
-				cls: ':uno: flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--background-primary)] text-[var(--text-accent)] shrink-0',
+				cls: ':uno: flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--background-primary)] text-[var(--text-accent)] shrink-0 [&_svg]:w-5 [&_svg]:h-5',
 			})
 			setIcon(icon, server.icon)
-			heading.createEl('h3', { text: server.name, cls: ':uno: m-0 text-base' })
-			const badge = card.createSpan({
-				cls: ':uno: self-start inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
+			const identity = heading.createDiv({
+				cls: ':uno: flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0',
+			})
+			identity.createEl('h3', {
+				text: server.name,
+				cls: ':uno: m-0 text-base break-words min-w-0',
+			})
+			const badge = identity.createSpan({
+				cls: ':uno: inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap',
 				text: i18n.t(`settings.ai.mcp.discovery.${server.auth}`),
 			})
 			const badgeColors = {
@@ -163,19 +169,24 @@ export default class McpServersManagerModal extends Modal {
 				cls: ':uno: m-0 text-sm text-[var(--text-muted)] grow',
 				text: i18n.t(`settings.ai.mcp.discovery.${server.id}`),
 			})
-			const link = card.createEl('a', {
-				text: i18n.t('settings.ai.mcp.discovery.website'),
+			const link = heading.createEl('a', {
 				href: server.website,
-				cls: ':uno: text-xs',
+				cls: ':uno: ml-auto flex items-center justify-center shrink-0 w-7 h-7 text-[var(--text-muted)] [&_svg]:w-4 [&_svg]:h-4',
 			})
+			link.setAttribute(
+				'aria-label',
+				i18n.t('settings.ai.mcp.discovery.website'),
+			)
+			link.setAttribute('title', i18n.t('settings.ai.mcp.discovery.website'))
+			setIcon(link, 'external-link')
 			link.setAttribute('target', '_blank')
 			link.setAttribute('rel', 'noopener noreferrer')
 			const result = card.createDiv({
-				cls: ':uno: text-xs text-[var(--text-muted)] break-words',
+				cls: ':uno: text-xs text-[var(--text-muted)] break-words empty:hidden',
 			})
 			result.setAttribute('role', 'status')
 			const actions = card.createDiv({
-				cls: ':uno: flex flex-wrap items-center gap-2 mt-1',
+				cls: ':uno: flex flex-wrap items-center justify-end gap-2',
 			})
 			const installed = Object.entries(this.servers).find(
 				([, config]) =>
@@ -243,6 +254,8 @@ export default class McpServersManagerModal extends Modal {
 						logger.error(error)
 					}
 				})
+			if (!installed) add.setCta()
+			addClassTokens(add.buttonEl, ':uno: text-xs')
 			add.buttonEl.addEventListener('blur', () => {
 				if (!installed) return
 				confirmRemove = false
@@ -275,6 +288,8 @@ export default class McpServersManagerModal extends Modal {
 						test.setDisabled(false)
 					}
 				})
+			addClassTokens(test.buttonEl, ':uno: text-xs')
+			actions.prepend(test.buttonEl)
 		}
 	}
 
