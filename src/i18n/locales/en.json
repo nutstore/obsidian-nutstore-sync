@@ -1007,7 +1007,16 @@
 				"agentWaiting": "Waiting for agent messages"
 			},
 			"placeholders": {
-				"input": "Type a message. Enter to send, Shift+Enter for newline"
+				"suggestions": {
+					"ask": "What would you like me to do?",
+					"idea": "Have an idea? Let’s explore it",
+					"summary": "Try asking me to summarize a note",
+					"outline": "Turn an idea into an outline",
+					"explain": "Need a concept explained? Ask me",
+					"polish": "Make a passage clearer",
+					"steps": "Break a goal into next steps",
+					"connections": "Explore connections between notes"
+				}
 			},
 			"dialogs": {
 				"subagentTimeline": {

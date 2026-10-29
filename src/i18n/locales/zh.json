@@ -1007,7 +1007,16 @@
 				"agentWaiting": "正在等待 Agent 消息"
 			},
 			"placeholders": {
-				"input": "输入消息，Enter 发送，Shift+Enter 换行"
+				"suggestions": {
+					"ask": "想让我做什么？",
+					"idea": "有个想法？一起聊聊",
+					"summary": "试试让我总结一篇笔记",
+					"outline": "把一个想法变成提纲",
+					"explain": "遇到不懂的概念？问问我",
+					"polish": "让这段文字更清晰",
+					"steps": "把目标拆成下一步行动",
+					"connections": "一起找找笔记之间的联系"
+				}
 			},
 			"dialogs": {
 				"subagentTimeline": {

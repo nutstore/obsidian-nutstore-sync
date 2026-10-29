@@ -1,3 +1,4 @@
+import { sample } from 'es-toolkit'
 import { Notice } from 'obsidian'
 import {
 	Show,
@@ -104,6 +105,23 @@ function Chatbox(props: ChatboxProps) {
 	let workspaceHostEl: HTMLDivElement | undefined
 	type RecallArmedMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
+	const isInputEmpty = createMemo(() => input().length === 0)
+	// Pick once per empty-input period, including after sending or clearing a draft.
+	const inputPlaceholder = createMemo(() => {
+		if (!isInputEmpty()) return ''
+		return t(
+			sample([
+				'chatbox.ui.placeholders.suggestions.ask',
+				'chatbox.ui.placeholders.suggestions.idea',
+				'chatbox.ui.placeholders.suggestions.summary',
+				'chatbox.ui.placeholders.suggestions.outline',
+				'chatbox.ui.placeholders.suggestions.explain',
+				'chatbox.ui.placeholders.suggestions.polish',
+				'chatbox.ui.placeholders.suggestions.steps',
+				'chatbox.ui.placeholders.suggestions.connections',
+			] as const),
+		)
+	})
 	const [isComposing, setIsComposing] = createSignal(false)
 	const [historyOpen, setHistoryOpen] = createSignal(false)
 	const [selectedAgentId, setSelectedAgentId] = createSignal<string>()
@@ -1035,7 +1053,7 @@ function Chatbox(props: ChatboxProps) {
 									const height = getTextareaHeightStyle()
 									return height ? { height } : undefined
 								})()}
-								placeholder={t('chatbox.ui.placeholders.input')}
+								placeholder={inputPlaceholder()}
 								value={input()}
 								onInput={(event) => {
 									const nextInput = event.currentTarget.value
