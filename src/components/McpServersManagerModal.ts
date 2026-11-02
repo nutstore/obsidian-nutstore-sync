@@ -225,7 +225,9 @@ export default class McpServersManagerModal extends Modal {
 					if (installed) {
 						if (!confirmRemove) {
 							confirmRemove = true
-							add.setButtonText(i18n.t('settings.ai.modals.confirmDeleteLabel'))
+							add.setButtonText(
+								i18n.t('settings.ai.mcp.discovery.confirmRemove'),
+							)
 							addClassTokens(add.buttonEl, ':uno: mod-warning')
 							return
 						}
