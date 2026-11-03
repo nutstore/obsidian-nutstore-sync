@@ -82,6 +82,27 @@ export default class AppManagerModal extends Modal {
 				row.settingEl.createSpan({ cls: 'ns-app-manager-icon' }),
 				this.plugin.ai.appIcon(id, app?.manifest.iconSvg),
 			)
+			row.addButton((button) => {
+				const pinned = app?.state.pinned ?? false
+				const label = i18n.t(pinned ? 'apps.unpin' : 'apps.pin')
+				button
+					.setIcon(pinned ? 'pin-off' : 'pin')
+					.setTooltip(label)
+					.setDisabled(!app)
+				button.buttonEl.setAttribute('aria-label', label)
+				button.buttonEl.setAttribute('aria-pressed', String(pinned))
+				button.onClick(async () => {
+					button.setDisabled(true)
+					try {
+						const current = await this.plugin.ai.apps.read(id)
+						await this.plugin.ai.apps.setPinned(id, !current.state.pinned)
+						await this.refresh()
+					} catch (error) {
+						new Notice(appError(error))
+						button.setDisabled(false)
+					}
+				})
+			})
 			row.addButton((button) =>
 				button
 					.setButtonText(i18n.t('apps.open'))
