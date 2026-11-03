@@ -4,6 +4,7 @@ import {
 	getFirstModel,
 	getModelById,
 	getProviderById,
+	listProviders,
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
 import { assertProviderUsable } from '~/ai/core/runtime'
@@ -146,7 +147,14 @@ export class Selection {
 			session.model?.providerId,
 		)
 		if (!provider) {
-			session.model = undefined
+			const fallbackProvider = listProviders(this.getSettings().providers).find(
+				(candidate) => getFirstModel(candidate),
+			)
+			const fallbackModel = getFirstModel(fallbackProvider)
+			session.model =
+				fallbackProvider && fallbackModel
+					? { providerId: fallbackProvider.id, modelId: fallbackModel.id }
+					: undefined
 			return true
 		}
 

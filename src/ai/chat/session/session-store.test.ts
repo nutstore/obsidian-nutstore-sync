@@ -16,6 +16,31 @@ vi.mock('obsidian', () => ({
 vi.mock('~/i18n', () => ({ default: { t: (key: string) => key } }))
 
 describe('session loading failures', () => {
+	it('checks the model selection when migrating a legacy session', () => {
+		const sanitizeSessionSelection = vi.fn(() => true)
+		const store = new SessionStore(
+			new ChatState(),
+			{ sanitizeSessionSelection } as unknown as Selection,
+			{} as SessionsFileBackend,
+			{
+				listSessionKeys: async () => [],
+				getSession: async () => undefined,
+				unsetSession: async () => {},
+				getMeta: async () => ({ meta: null, index: [] }),
+			},
+		)
+		const result = store.rehydrateSession({
+			id: 'legacy-旧对话-🌿',
+			createdAt: 1,
+			updatedAt: 1,
+			model: { providerId: 'missing-失效-🌿', modelId: 'model-模型-🌿' },
+			fragments: [],
+			activeFragmentId: 'fragment-片段-🌿',
+		})
+		expect(result.changed).toBe(true)
+		expect(sanitizeSessionSelection).toHaveBeenCalledWith(result.session)
+	})
+
 	it('preserves prototype-named agent, operation and timing ids during normalization', () => {
 		const master = createEmptyMasterAgent(1)
 		master.subagents = Object.fromEntries([

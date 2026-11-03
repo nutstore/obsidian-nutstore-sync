@@ -411,10 +411,8 @@ export class SessionStore {
 		)
 		const { session: rehydrated, changed: opsRewritten } =
 			this.normalizeSession(migrated.session)
-		let changed =
-			migrated.changed ||
-			this.selection.sanitizeSessionSelection(rehydrated) ||
-			opsRewritten
+		const selectionChanged = this.selection.sanitizeSessionSelection(rehydrated)
+		let changed = migrated.changed || selectionChanged || opsRewritten
 
 		changed = normalizeRehydratedExecution(rehydrated) || changed
 
