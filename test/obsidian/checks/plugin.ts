@@ -1,10 +1,12 @@
 import { ModuleState } from '~/modules/lifecycle'
 import { ChatboxLocation, SessionAppOpenMode } from '~/settings'
+import ScanIssuesModal from '~/components/ScanIssuesModal'
 import { ChatWorkspacePanel } from '~/components/ChatWorkspacePanel'
 import { APP_VIEW_TYPE } from '~/views/app.view'
 import { createModelConfig, createProviderConfig } from '~/ai/catalog/config'
 import { requireApiVersion, type App } from 'obsidian'
 import type NutstorePlugin from '~/index'
+import type { SyncRunSnapshot } from '~/services/progress.service'
 import en from '~/i18n/locales/en.json'
 import zh from '~/i18n/locales/zh.json'
 import { CHATBOX_VIEW_TYPE } from '~/views/chatbox.view'
@@ -556,23 +558,31 @@ export async function detachesChatboxWhenProductionPluginIsDisabled(
 export async function rendersSyncProgress(app: App) {
 	const plugin = getProductionPlugin(app)
 	const progress = plugin.sync.progress
-	plugin.isSyncing = true
-	progress.syncProgress = { total: 0, completed: [], current: null }
-	progress.preparationProgress = null
-	progress.syncEnd = false
-	progress.syncFailed = false
-	progress.syncFailedCount = 0
+	const language = plugin.settings.language
+	const previousRun = progress.run
+	const syncing: SyncRunSnapshot = {
+		status: 'syncing',
+		startedAt: Date.now(),
+		preparation: null,
+		total: 0,
+		completed: [],
+		current: null,
+		currentInFlight: false,
+		failedCount: 0,
+		scanIssues: [],
+	}
+	progress.run = syncing
 
 	try {
 		progress.showProgressModal()
 		const modal = document.querySelector('.modal.nutstore-sync-progress-modal')
-		assert(modal, 'Sync progress modal did not open')
+		assert(modal instanceof HTMLElement, 'Sync progress modal did not open')
 		assert(
 			modal.querySelector('.nutstore-sync-progress__status-icon--syncing'),
 			'Sync progress modal did not render syncing state',
 		)
 
-		progress.syncEnd = true
+		progress.run = { ...syncing, status: 'complete', endedAt: Date.now() }
 		progress.updateModal()
 		progress.updateModal.flush?.()
 
@@ -595,9 +605,299 @@ export async function rendersSyncProgress(app: App) {
 				window.getComputedStyle(stopButton).display === 'none',
 			`Sync progress modal kept its stop control after completion: ${stopButton?.outerHTML ?? 'missing'}`,
 		)
-	} finally {
+		for (const locale of ['zh', 'en'] as const) {
+			plugin.settings.language = locale
+			await plugin.i18nService.update()
+			const path = 'Notes 笔记🌱/Section & <draft>📘'
+			progress.run = {
+				...syncing,
+				status: 'warning',
+				endedAt: Date.now(),
+				scanIssues: [
+					{
+						path,
+						operation: 'list',
+						cause: new Error('Unavailable 暂不可用🌿'),
+					},
+				],
+			}
+			progress.updateModal()
+			progress.updateModal.flush?.()
+			assert(
+				modal.querySelector('.nutstore-sync-progress__status-icon--warning'),
+				'Production progress did not warn about the partial scan',
+			)
+			const title = modal.querySelector('.nutstore-sync-progress__title-text')
+			const titleCopy = (locale === 'zh' ? zh : en).sync.partialScanTitle
+			assert(
+				title?.textContent === titleCopy,
+				`Production progress title should stay short: ${title?.textContent}`,
+			)
+			assert(
+				!title.textContent?.includes(path),
+				'Production progress title duplicated the path list owned by the scan issues dialog',
+			)
+			const summary = modal.querySelector(
+				'.nutstore-sync-progress__scan-issues',
+			)
+			assert(
+				summary instanceof HTMLElement && summary.textContent?.includes('1'),
+				'Production progress lost the unavailable path count from its body',
+			)
+			const viewButton = summary.querySelector('button')
+			assert(
+				viewButton instanceof HTMLButtonElement &&
+					viewButton.textContent ===
+						(locale === 'zh' ? zh : en).scanIssues.view,
+				`Production progress has no button for the scan issues list: ${summary.outerHTML}`,
+			)
+			assert(
+				!document.querySelector('.scan-issues-modal'),
+				'Scan issues dialog opened over the visible progress dialog',
+			)
+			viewButton.click()
+			const issuesModal = document.querySelector('.scan-issues-modal')
+			assert(issuesModal, 'The progress dialog button did not open the list')
+			assert(
+				issuesModal.textContent?.includes(path),
+				'The opened list lost the unavailable path',
+			)
+			;[...issuesModal.querySelectorAll('button')].at(-1)?.click()
+			assert(
+				!document.querySelector('.scan-issues-modal'),
+				'Scan issues dialog did not close from its close button',
+			)
+			document.body.classList.add('is-phone')
+			modal.style.setProperty('--dialog-width', '390px')
+			modal.style.setProperty('--dialog-max-width', '390px')
+			progress.updateModal.flush?.()
+			assert(
+				(title as HTMLElement).scrollWidth <=
+					(title as HTMLElement).clientWidth + 1,
+				`Production progress title is truncated on a phone: ${(title as HTMLElement).scrollWidth}/${(title as HTMLElement).clientWidth}`,
+			)
+			const summaryBox = summary.getBoundingClientRect()
+			const modalBox = modal.getBoundingClientRect()
+			assert(
+				summaryBox.left >= modalBox.left - 1 &&
+					summaryBox.right <= modalBox.right + 1 &&
+					(viewButton.getBoundingClientRect().right ?? 0) <= modalBox.right + 1,
+				'Production progress scan summary overflows a phone dialog',
+			)
+			document.body.classList.remove('is-phone')
+			modal.removeAttribute('style')
+			assert(
+				!modal.querySelector('.nutstore-sync-progress__status-icon--complete'),
+				'Production progress reported partial scanning as fully complete',
+			)
+			progress.run = { ...syncing, status: 'complete', endedAt: Date.now() }
+			progress.updateModal()
+			progress.updateModal.flush?.()
+			assert(
+				modal.querySelector('.nutstore-sync-progress__status-icon--complete'),
+				'Production progress kept a stale scan warning after recovery',
+			)
+		}
+
+		// The outcome of a finished run stays reachable after the dialog closes.
 		progress.closeProgressModal()
-		plugin.isSyncing = false
+		assert(
+			!document.querySelector('.modal.nutstore-sync-progress-modal'),
+			'Sync progress modal did not close',
+		)
+		progress.showProgressModal()
+		assert(
+			document.querySelector(
+				'.modal.nutstore-sync-progress-modal .nutstore-sync-progress__status-icon--complete',
+			),
+			'Reopened sync progress did not show the finished run',
+		)
+	} finally {
+		plugin.settings.language = language
+		await plugin.i18nService.update()
+		progress.closeProgressModal()
+		progress.run = previousRun
+	}
+}
+
+export async function listsUnscannedPathsInLargeModal(app: App) {
+	const paths = ['Notes 笔记🌱/Section & <draft>📘', 'Archive/資料 🌿.md']
+	const modal = new ScanIssuesModal(app, [
+		{
+			path: paths[0],
+			operation: 'list',
+			cause: new Error('Unavailable 暂不可用🌿'),
+		},
+		{ path: paths[1], operation: 'stat', cause: 'plain failure 失败' },
+	])
+	modal.open()
+	try {
+		assert(
+			modal.modalEl.classList.contains('mod-lg'),
+			'Scan issues dialog did not use the large modal size',
+		)
+		const rows = [...modal.contentEl.querySelectorAll('.scan-issues-item')]
+		assert(
+			rows.length === 2,
+			`Expected two scan issue rows, got ${rows.length}`,
+		)
+		// Rows are ordered by path.
+		;[...paths]
+			.sort()
+			.forEach((path, index) =>
+				assert(
+					rows[index].querySelector('.scan-issues-path')?.textContent === path,
+					`Scan issue row ${index} lost its Unicode path`,
+				),
+			)
+		assert(
+			!modal.contentEl.querySelector('draft'),
+			'Scan issues dialog interpreted a path as HTML',
+		)
+		assert(
+			modal.modalEl.isConnected && modal.contentEl.querySelector('button'),
+			'Scan issues dialog is not mounted with a close button',
+		)
+	} finally {
+		modal.close()
+	}
+	assert(
+		!modal.modalEl.isConnected,
+		'Scan issues dialog stayed open after close',
+	)
+}
+
+export async function opensTenThousandUnscannedPathsWithoutFreezing(app: App) {
+	const issues = Array.from({ length: 10_000 }, (_, index) => ({
+		path: `目录 Folder ${String(index).padStart(5, '0')}🌱/子目录 Sub 📘`,
+		operation: 'list' as const,
+		cause: new Error(
+			`EACCES: permission denied, scandir '/vault 库/目录 Folder ${String(index).padStart(5, '0')}🌱/子目录 Sub 📘'`,
+		),
+	}))
+	const modal = new ScanIssuesModal(app, issues)
+	const started = performance.now()
+	modal.open()
+	try {
+		await new Promise<void>((resolve) =>
+			window.requestAnimationFrame(() =>
+				window.requestAnimationFrame(() => resolve()),
+			),
+		)
+		const untilPainted = performance.now() - started
+		const items = () => modal.contentEl.querySelectorAll('.scan-issues-item')
+		assert(
+			untilPainted < 1500,
+			`10000 unscanned paths froze the UI for ${Math.round(untilPainted)}ms`,
+		)
+		const list =
+			modal.contentEl.querySelector<HTMLElement>('.scan-issues-list')!
+		const spacer = modal.contentEl.querySelector<HTMLElement>(
+			'.scan-issues-spacer',
+		)!
+		assert(
+			items().length > 0 && items().length < 200,
+			`Expected a window of rows, got ${items().length} of 10000`,
+		)
+		assert(
+			spacer.offsetHeight >= 10_000 * 40 &&
+				list.scrollHeight >= spacer.offsetHeight,
+			`Scroll area does not cover all rows: ${spacer.offsetHeight}/${list.scrollHeight}`,
+		)
+		list.scrollTop = list.scrollHeight
+		await new Promise<void>((resolve) =>
+			window.requestAnimationFrame(() =>
+				window.requestAnimationFrame(() => resolve()),
+			),
+		)
+		const last = issues.at(-1)!.path
+		assert(
+			[...modal.contentEl.querySelectorAll('.scan-issues-path')].some(
+				(el) => el.textContent === last,
+			),
+			'Scrolling to the end did not reveal the last unscanned path',
+		)
+		assert(
+			items().length < 200,
+			`Scrolling left ${items().length} rows mounted`,
+		)
+		const close = [...modal.contentEl.querySelectorAll('button')].at(-1)!
+		const box = modal.modalEl.getBoundingClientRect()
+		assert(
+			close.getBoundingClientRect().bottom <= box.bottom + 1,
+			'Close button was pushed out of the dialog by a long list',
+		)
+	} finally {
+		modal.close()
+	}
+}
+
+export async function keepsUnscannedPathsDialogUsableOnPhone(app: App) {
+	const issues = Array.from({ length: 14 }, (_, index) => ({
+		path: `Notes 笔记🌱/很长的章节名称 Section ${index}/${'UnbrokenSegment'.repeat(8)}🌿无空格/${'嵌套 Nested '.repeat(3)}`,
+		operation: 'list' as const,
+		cause: new Error('Unavailable 暂不可用🌿'),
+	}))
+	const modal = new ScanIssuesModal(app, issues)
+	document.body.classList.add('is-phone')
+	modal.open()
+	// The host defines the dialog box variables on the modal itself; give it
+	// phone dimensions there, as a real phone does with its screen size.
+	modal.modalEl.style.setProperty('--dialog-width', '390px')
+	modal.modalEl.style.setProperty('--dialog-max-width', '390px')
+	modal.modalEl.style.setProperty('--dialog-max-height', '600px')
+	try {
+		await new Promise<void>((resolve) =>
+			window.requestAnimationFrame(() =>
+				window.requestAnimationFrame(() => resolve()),
+			),
+		)
+		const box = modal.modalEl.getBoundingClientRect()
+		assert(
+			box.width <= 391 && box.height <= 601,
+			`Scan issues dialog exceeded the phone dialog box: ${box.width}x${box.height}`,
+		)
+		const list =
+			modal.contentEl.querySelector<HTMLElement>('.scan-issues-list')!
+		assert(
+			list.scrollHeight > list.clientHeight &&
+				getComputedStyle(list).overflowY === 'auto',
+			'Scan issues list did not scroll inside the phone dialog',
+		)
+		const buttons = [
+			...modal.contentEl.querySelectorAll<HTMLElement>(
+				'.scan-issues-actions button',
+			),
+		]
+		assert(
+			buttons.length === 2,
+			`Expected two action buttons, got ${buttons.length}`,
+		)
+		for (const button of buttons) {
+			const buttonBox = button.getBoundingClientRect()
+			assert(
+				buttonBox.height >= 30 &&
+					buttonBox.bottom <= box.bottom &&
+					buttonBox.left >= box.left &&
+					buttonBox.right <= box.right,
+				`Action button does not fit the phone dialog: button ${JSON.stringify(buttonBox)} dialog ${JSON.stringify(box)}`,
+			)
+		}
+		assert(
+			list.clientHeight >= box.height * 0.4,
+			`Scan issues list wasted the phone dialog height: ${list.clientHeight}/${box.height}`,
+		)
+		const overflow = Math.max(
+			modal.contentEl.scrollWidth - modal.contentEl.clientWidth,
+			list.scrollWidth - list.clientWidth,
+		)
+		assert(
+			overflow <= 1,
+			`Scan issues dialog scrolled sideways by ${overflow}px`,
+		)
+	} finally {
+		modal.close()
+		document.body.classList.remove('is-phone')
 	}
 }
 

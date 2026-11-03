@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import esbuild from 'esbuild'
+import solid from 'unplugin-solid/esbuild'
 import { OBSIDIAN_E2E_RESULT_PATH } from '../test/obsidian/integration-protocol.mjs'
 import { compressedAssetsPlugin } from './esbuild/plugins/compressed-assets.mjs'
 import {
@@ -166,7 +167,7 @@ async function buildHarness(outfile) {
 			'~': join(ROOT, 'src'),
 			'node:zlib': join(ROOT, 'src/shims/node-zlib.ts'),
 		},
-		plugins: [compressedAssetsPlugin({ prod: false })],
+		plugins: [compressedAssetsPlugin({ prod: false }), solid()],
 	})
 }
 
