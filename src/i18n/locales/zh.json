@@ -1262,5 +1262,19 @@
 		"describeApp": "在聊天中描述你想制作的内容，App 会在这里呈现。",
 		"createPrompt": "写一个App，这是他的描述：",
 		"createPromptName": "App 名称：{{name}}"
+	},
+	"scanIssues": {
+		"title": "部分目录未参与同步",
+		"instruction": "有 {{count}} 个本应同步的路径扫描失败，本次已跳过。两端对应内容均保持不变，将在下次同步时重新扫描。若反复出现，请检查这些路径是否可读（权限、文件名、存储空间）。",
+		"operations": {
+			"list": "读取目录内容",
+			"stat": "读取文件信息"
+		},
+		"copy": "复制全部",
+		"copied": "已复制 {{count}} 个路径",
+		"copyFailed": "无法复制到剪贴板",
+		"close": "关闭",
+		"view": "查看详情",
+		"summary": "{{count}} 个路径扫描失败，本次已跳过，两端对应内容均保持不变。"
 	}
 }

@@ -1262,5 +1262,19 @@
 		"describeApp": "Describe what you want to build in chat. Your App will appear here.",
 		"createPrompt": "Write an App. Here is its description:",
 		"createPromptName": "App name: {{name}}"
+	},
+	"scanIssues": {
+		"title": "Some folders were not synced",
+		"instruction": "{{count}} paths that should sync could not be scanned and were skipped this time. Their content on both devices is unchanged, and they will be scanned again on the next sync. If this keeps happening, check that they are readable (permissions, file name, storage).",
+		"operations": {
+			"list": "Reading folder contents",
+			"stat": "Reading file info"
+		},
+		"copy": "Copy all",
+		"copied": "Copied {{count}} paths",
+		"copyFailed": "Could not copy to the clipboard",
+		"close": "Close",
+		"view": "View details",
+		"summary": "{{count}} paths could not be scanned and were skipped. Their content on both devices is unchanged."
 	}
 }

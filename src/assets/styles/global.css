@@ -5052,3 +5052,98 @@
 	align-items: center;
 	margin-right: 4px;
 }
+
+/* Scan issues dialog: one card per unreadable in-scope path. The list is
+ * windowed; rows are positioned inside a spacer sized to the whole list. */
+.scan-issues-modal .scan-issues-intro {
+	margin: 0 0 var(--size-4-3);
+	color: var(--text-muted);
+	line-height: var(--line-height-normal);
+}
+
+.scan-issues-modal .modal-content {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.scan-issues-modal .scan-issues-mount {
+	display: flex;
+	flex-direction: column;
+	flex: 0 1 auto;
+	min-height: 0;
+}
+
+.scan-issues-modal .scan-issues-list {
+	/* Base size is already capped, so the list can still shrink when the
+	 * dialog is shorter than 50vh (phones); a max-height cap would freeze it. */
+	flex: 0 1 auto;
+	min-height: 0;
+	height: min(var(--scan-issues-content-height, 50vh), 50vh);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.scan-issues-modal .scan-issues-spacer {
+	position: relative;
+	width: 100%;
+}
+
+.scan-issues-modal .scan-issues-row {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	padding-bottom: var(--size-4-2);
+}
+
+.scan-issues-modal .scan-issues-item {
+	padding: var(--size-4-2) var(--size-4-3);
+	border: 1px solid var(--background-modifier-border);
+	border-left: 3px solid var(--text-warning);
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+}
+
+.scan-issues-modal .scan-issues-path {
+	color: var(--text-normal);
+	font-weight: var(--font-medium);
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+
+.scan-issues-modal .scan-issues-detail {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-1) var(--size-4-2);
+	margin-top: var(--size-4-1);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+
+.scan-issues-modal .scan-issues-step {
+	padding: 0 var(--size-4-2);
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.scan-issues-modal .scan-issues-actions {
+	margin-top: var(--size-4-4);
+	padding: 0;
+	border: 0;
+}
+
+.scan-issues-modal .scan-issues-actions .setting-item-info {
+	display: none;
+}
+
+.scan-issues-modal .scan-issues-actions .setting-item-control {
+	flex: 1 1 auto;
+	min-width: 0;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: var(--size-4-2);
+}
