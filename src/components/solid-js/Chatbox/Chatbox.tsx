@@ -967,6 +967,7 @@ function Chatbox(props: ChatboxProps) {
 					<div
 						ref={messagesEl}
 						class=":uno: ns-chatbox-messages min-h-0 flex-1 overflow-y-auto px-[var(--ns-chatbox-pad-x)] pt-[var(--ns-chatbox-gap)] pb-[var(--ns-chatbox-gap)] scrollbar-default"
+						classList={{ 'is-provider-setup': !!props.providerSetup }}
 						style={{ 'overflow-anchor': stickToBottom() ? 'none' : 'auto' }}
 					>
 						<Show
@@ -1040,17 +1041,19 @@ function Chatbox(props: ChatboxProps) {
 						>
 							{(setup) => (
 								<ProviderSetup
-									state={setup()}
 									initialDraft={props.providerSetupDraft}
-									nutstore={props.nutstoreSetup}
-									onStartNutstoreSetup={props.onStartNutstoreSetup}
-									onOpenNutstoreAuthorization={
-										props.onOpenNutstoreAuthorization
-									}
-									onCancelNutstoreSetup={props.onCancelNutstoreSetup}
+									onboarding={{
+										state: setup(),
+										nutstore: props.nutstoreSetup,
+										onStartNutstoreSetup: props.onStartNutstoreSetup,
+										onOpenNutstoreAuthorization:
+											props.onOpenNutstoreAuthorization,
+										onCancelNutstoreSetup: props.onCancelNutstoreSetup,
+									}}
 									onFetchProviderSetupModels={props.onFetchProviderSetupModels}
 									onCreateProviderSetupModel={props.onCreateProviderSetupModel}
 									onSaveProviderSetup={props.onSaveProviderSetup}
+									onEditModel={props.onEditProviderSetupModel}
 								/>
 							)}
 						</Show>

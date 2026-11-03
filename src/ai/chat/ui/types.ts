@@ -32,6 +32,8 @@ export interface ChatNutstoreSetupState {
 
 export interface ChatProviderSetupDraft {
 	existingProviderId?: string
+	env?: string[]
+	doc?: string
 	name: string
 	npm: string
 	api?: string
@@ -131,6 +133,10 @@ export interface ChatboxProps extends ChatboxViewModel {
 		providerApi?: string,
 	) => AIModelConfig
 	onSaveProviderSetup: (draft: ChatProviderSetupDraft) => Promise<void>
+	onEditProviderSetupModel: (
+		model: AIModelConfig,
+		save: (model: AIModelConfig) => boolean,
+	) => void
 	onSelectProvider: (providerId: string) => void
 	onSelectModel: (modelId: string) => void
 	onSendMessage: (

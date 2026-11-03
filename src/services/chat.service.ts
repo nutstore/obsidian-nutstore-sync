@@ -5,15 +5,16 @@ import type { LanguageModelUsage } from 'ai'
 import { Notice } from 'obsidian'
 import {
 	createModelConfig,
-	createProviderConfig,
 	getFirstModel,
 	getModelById,
 	getProviderById,
 	listModels,
 	resolveInitialSelection,
-	sanitizeDefaultSelections,
-	slugifyProviderId,
 } from '~/ai/catalog/config'
+import {
+	providerFromEditorDraft,
+	providerToEditorDraft,
+} from '~/ai/catalog/provider-editor'
 import {
 	fetchProviderModels,
 	resolvePresetModel,
@@ -83,6 +84,7 @@ import { BUILTIN_SKILLS } from '~/ai/skills/builtin'
 import { SkillRepository } from '~/ai/skills/repository'
 import { createAbortError, isAbortError } from '~/utils/abort'
 import SessionExportModal from '~/components/SessionExportModal'
+import { openProviderSetupModelEditor } from '~/components/ModelEditorModal'
 import i18n from '~/i18n'
 import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
 import { createUniqueWordId } from '~/utils/create-id'
@@ -103,6 +105,7 @@ type ChatboxActionHandlers = Pick<
 	| 'onFetchProviderSetupModels'
 	| 'onCreateProviderSetupModel'
 	| 'onSaveProviderSetup'
+	| 'onEditProviderSetupModel'
 	| 'onSelectProvider'
 	| 'onSelectModel'
 	| 'onSendMessage'
@@ -154,7 +157,7 @@ export default class ChatService extends BaseService {
 			plugin.settings.ai.disabledSkills.includes(name),
 		)
 		this.selection = new Selection(
-			() => plugin.settings.ai,
+			() => this.getUsableAiSettings(),
 			this.state,
 			() => this.notify(),
 			(session) => this.store.persistSession(session),
@@ -581,6 +584,19 @@ export default class ChatService extends BaseService {
 		)
 	}
 
+	/**
+	 * Selection must resolve against the same provider set the chatbox shows.
+	 * Unauthorized managed providers stay in settings but are not configured.
+	 */
+	private getUsableAiSettings() {
+		const providers = Object.fromEntries(
+			this.plugin.ai.gateway
+				.listConfiguredProviders()
+				.map((provider) => [provider.id, provider]),
+		)
+		return { ...this.plugin.settings.ai, providers }
+	}
+
 	private buildProviderSetupDraft(
 		providerId: string,
 	): ChatProviderSetupDraft | undefined {
@@ -589,20 +605,7 @@ export default class ChatService extends BaseService {
 			providerId,
 		)
 		if (!provider) return undefined
-		return {
-			existingProviderId: provider.id,
-			name: provider.name,
-			npm: provider.npm,
-			api: provider.api,
-			apiKey: provider.apiKey,
-			allowBrowserCors: !!provider.allowBrowserCors,
-			models: Object.fromEntries(
-				Object.entries(provider.models).map(([id, model]) => [
-					id,
-					{ ...model },
-				]),
-			),
-		}
+		return providerToEditorDraft(provider)
 	}
 
 	private bindViewActions(): ChatboxActionHandlers {
@@ -623,6 +626,13 @@ export default class ChatService extends BaseService {
 			onCreateProviderSetupModel: (modelId, providerApi) =>
 				this.createProviderSetupModel(modelId, providerApi),
 			onSaveProviderSetup: (draft) => this.saveProviderSetup(draft),
+			onEditProviderSetupModel: (model, save) =>
+				openProviderSetupModelEditor(
+					this.plugin,
+					model,
+					save,
+					this.getChatModalMountTarget(),
+				),
 			onSelectProvider: (providerId: string) => this.selectProvider(providerId),
 			onSelectModel: (modelId: string) => this.selectModel(modelId),
 			onSendMessage: (text: string) => this.sendMessage(text),
@@ -992,10 +1002,8 @@ export default class ChatService extends BaseService {
 			[provider.id]: provider,
 		}
 		this.plugin.settings.ai.providers = providers
-		this.plugin.settings.ai.defaultModel = sanitizeDefaultSelections(
-			providers,
-			this.plugin.settings.ai.defaultModel,
-		) ?? {
+		// Onboarding configures the first usable provider, so its first model becomes the default.
+		this.plugin.settings.ai.defaultModel = {
 			providerId: provider.id,
 			modelId: firstModel.id,
 		}
@@ -1005,16 +1013,11 @@ export default class ChatService extends BaseService {
 	}
 
 	private createProviderFromSetupDraft(draft: ChatProviderSetupDraft) {
-		const providerId =
-			draft.existingProviderId?.trim() || slugifyProviderId(draft.name)
-		return createProviderConfig(
-			{
-				...draft,
-				id: providerId,
-				env: [],
-				doc: '',
-			},
-			providerId,
+		return providerFromEditorDraft(
+			draft,
+			draft.existingProviderId
+				? this.plugin.settings.ai.providers[draft.existingProviderId]
+				: undefined,
 		)
 	}
 

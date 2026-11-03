@@ -1,9 +1,19 @@
-import { For, Show, createMemo, createSignal, createUniqueId } from 'solid-js'
+import { setIcon } from 'obsidian'
+import {
+	For,
+	Show,
+	createMemo,
+	createSignal,
+	createUniqueId,
+	onMount,
+	untrack,
+} from 'solid-js'
 import type {
 	ChatNutstoreSetupState,
 	ChatProviderSetupDraft,
 	ProviderSetupState,
 } from '~/ai/chat/ui/types'
+import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
 import {
 	createProviderFromPreset,
 	listPresetProviders,
@@ -13,18 +23,21 @@ import { getProviderDefaultBaseURL } from '~/ai/providers/defaults'
 import { PROVIDER_API_FORMAT_OPTIONS } from '~/components/provider-api-formats'
 import { isFuzzySubsequenceMatch } from '~/utils/fuzzy-match'
 import { t } from '../../i18n'
+import { DiscoveredModelsDialog, modelName } from './DiscoveredModelsDialog'
 
 type SetupRoute = 'choice' | 'nutstore' | 'custom'
 type CustomStep = 'provider' | 'connection' | 'models' | 'review'
 type BusyAction = 'authorizing' | 'fetching' | 'saving'
 
 interface ProviderSetupProps {
-	state: ProviderSetupState
 	initialDraft?: ChatProviderSetupDraft
-	nutstore: ChatNutstoreSetupState
-	onStartNutstoreSetup: () => Promise<void>
-	onOpenNutstoreAuthorization: () => Promise<void>
-	onCancelNutstoreSetup: () => Promise<void>
+	onboarding?: {
+		state: ProviderSetupState
+		nutstore: ChatNutstoreSetupState
+		onStartNutstoreSetup: () => Promise<void>
+		onOpenNutstoreAuthorization: () => Promise<void>
+		onCancelNutstoreSetup: () => Promise<void>
+	}
 	onFetchProviderSetupModels: (
 		draft: ChatProviderSetupDraft,
 	) => Promise<AIModelConfig[]>
@@ -33,6 +46,15 @@ interface ProviderSetupProps {
 		providerApi?: string,
 	) => AIModelConfig
 	onSaveProviderSetup: (draft: ChatProviderSetupDraft) => Promise<void>
+	editor?: {
+		onCancel: () => void
+		onConfirmCors: () => Promise<boolean>
+	}
+	// Present on every surface that can edit a discovered/added model.
+	onEditModel?: (
+		model: AIModelConfig,
+		save: (model: AIModelConfig) => boolean,
+	) => void
 }
 
 function errorMessage(
@@ -44,15 +66,27 @@ function errorMessage(
 		: (t(fallbackKey) as string)
 }
 
-function modelName(model: AIModelConfig) {
-	return model.name || model.id
-}
-
 function providerInitial(name: string) {
 	return Array.from(name.trim())[0]?.toLocaleUpperCase() || '?'
 }
 
+function NutstoreAiLogo() {
+	let logoEl: HTMLSpanElement | undefined
+	onMount(() => {
+		if (logoEl) setIcon(logoEl, CHATBOX_AI_ICON_ID)
+	})
+	return (
+		<span
+			ref={logoEl}
+			class="ns-provider-stepper__nutstore-logo"
+			aria-hidden="true"
+		/>
+	)
+}
+
 export function ProviderSetup(props: ProviderSetupProps) {
+	const editor = untrack(() => props.editor)
+	let rootEl: HTMLElement | undefined
 	const titleId = createUniqueId()
 	const descriptionId = createUniqueId()
 	const presetProviders = listPresetProviders()
@@ -62,16 +96,25 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		existingDraft.apiKey.trim() &&
 		(existingDraft.api?.trim() || getProviderDefaultBaseURL(existingDraft.npm))
 	)
-	const initialCustomStep: CustomStep = existingConnectionReady
-		? 'models'
-		: 'connection'
+	const initialCustomStep: CustomStep = editor
+		? existingDraft
+			? 'connection'
+			: 'provider'
+		: existingConnectionReady
+			? 'models'
+			: 'connection'
+
+	// Editing an existing provider skips the choice step, so it must not be counted.
+	const customStartsFromChoice = !(existingDraft || editor)
 
 	const [route, setRoute] = createSignal<SetupRoute>(
-		existingDraft ? 'custom' : 'choice',
+		existingDraft || editor ? 'custom' : 'choice',
 	)
 	const [customStep, setCustomStep] =
 		createSignal<CustomStep>(initialCustomStep)
 	const [name, setName] = createSignal(existingDraft?.name ?? '')
+	const [env, setEnv] = createSignal(existingDraft?.env ?? [])
+	const [doc, setDoc] = createSignal(existingDraft?.doc ?? '')
 	const [npm, setNpm] = createSignal(
 		existingDraft?.npm ?? PROVIDER_API_FORMAT_OPTIONS[0].value,
 	)
@@ -86,10 +129,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 	const [discoveredModels, setDiscoveredModels] = createSignal<AIModelConfig[]>(
 		[],
 	)
-	const [selectedDiscoveredIds, setSelectedDiscoveredIds] = createSignal(
-		new Set<string>(),
-	)
-	const [modelSearch, setModelSearch] = createSignal('')
+	const [pickerOpen, setPickerOpen] = createSignal(false)
 	const [providerSearch, setProviderSearch] = createSignal('')
 	const [manualModelId, setManualModelId] = createSignal('')
 	const [busyAction, setBusyAction] = createSignal<BusyAction>()
@@ -109,15 +149,6 @@ export function ProviderSetup(props: ProviderSetupProps) {
 			(provider) =>
 				isFuzzySubsequenceMatch(query, provider.name) ||
 				isFuzzySubsequenceMatch(query, provider.id),
-		)
-	})
-	const filteredDiscoveredModels = createMemo(() => {
-		const query = modelSearch()
-		if (!query.trim()) return discoveredModels()
-		return discoveredModels().filter(
-			(model) =>
-				isFuzzySubsequenceMatch(query, model.id) ||
-				isFuzzySubsequenceMatch(query, modelName(model)),
 		)
 	})
 	const apiFormatOptions = createMemo(() => {
@@ -150,6 +181,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 			]
 		}
 		return [
+			...(customStartsFromChoice ? [t('chatbox.setup.steps.choose')] : []),
 			t('chatbox.setup.steps.provider'),
 			t('chatbox.setup.steps.connection'),
 			t('chatbox.setup.steps.models'),
@@ -159,10 +191,12 @@ export function ProviderSetup(props: ProviderSetupProps) {
 	const currentStep = createMemo(() => {
 		if (route() === 'choice') return 0
 		if (route() === 'nutstore') return 1
-		if (customStep() === 'provider') return 0
-		if (customStep() === 'connection') return 1
-		if (customStep() === 'models') return 2
-		return 3
+		// Custom steps are offset by the completed "choose" step when reached from choice.
+		const offset = customStartsFromChoice ? 1 : 0
+		if (customStep() === 'provider') return offset
+		if (customStep() === 'connection') return offset + 1
+		if (customStep() === 'models') return offset + 2
+		return offset + 3
 	})
 	const title = createMemo(() => {
 		if (route() === 'choice') return t('chatbox.setup.choice.title')
@@ -176,24 +210,16 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		if (customStep() === 'models') {
 			return t('chatbox.setup.custom.modelsTitle')
 		}
-		return t('chatbox.setup.custom.reviewTitle')
+		return t(
+			props.editor
+				? 'chatbox.setup.custom.editorReviewTitle'
+				: 'chatbox.setup.custom.reviewTitle',
+		)
 	})
-	const description = createMemo(() => {
-		if (route() === 'choice') return t('chatbox.setup.choice.description')
-		if (route() === 'nutstore') {
-			return t('chatbox.setup.nutstore.description')
-		}
-		if (customStep() === 'provider') {
-			return t('chatbox.setup.custom.providerDescription')
-		}
-		if (customStep() === 'connection') {
-			return t('chatbox.setup.custom.connectionDescription')
-		}
-		if (customStep() === 'models') {
-			return t('chatbox.setup.custom.modelsDescription')
-		}
-		return t('chatbox.setup.custom.reviewDescription')
-	})
+	const continuedProviderName = () => {
+		const state = props.onboarding?.state
+		return state?.kind === 'no-model' ? state.providerName : undefined
+	}
 
 	function clearError() {
 		setError(undefined)
@@ -212,6 +238,8 @@ export function ProviderSetup(props: ProviderSetupProps) {
 	}
 
 	function applyCustomDraft(draft: ChatProviderSetupDraft) {
+		setEnv(draft.env ?? [])
+		setDoc(draft.doc ?? '')
 		setName(draft.name)
 		setNpm(draft.npm)
 		setApi(draft.api ?? '')
@@ -219,8 +247,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		setAllowBrowserCors(draft.allowBrowserCors)
 		setModels(draft.models)
 		setDiscoveredModels([])
-		setSelectedDiscoveredIds(new Set<string>())
-		setModelSearch('')
+		setPickerOpen(false)
 		setManualModelId('')
 		setCustomStep('connection')
 	}
@@ -231,6 +258,8 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		clearError()
 		const provider = createProviderFromPreset(preset, '')
 		applyCustomDraft({
+			env: provider.env,
+			doc: provider.doc,
 			name: provider.name,
 			npm: provider.npm,
 			api: provider.api,
@@ -254,6 +283,8 @@ export function ProviderSetup(props: ProviderSetupProps) {
 	function snapshotDraft(): ChatProviderSetupDraft {
 		return {
 			existingProviderId: existingDraft?.existingProviderId,
+			env: env(),
+			doc: doc(),
 			name: name().trim(),
 			npm: npm(),
 			api: api().trim() || undefined,
@@ -264,15 +295,15 @@ export function ProviderSetup(props: ProviderSetupProps) {
 	}
 
 	function validateConnection() {
-		if (!name().trim()) {
+		if (!name().trim() && (!props.editor || !isExistingProvider())) {
 			setError(String(t('chatbox.setup.errors.nameRequired')))
 			return false
 		}
-		if (!apiKey().trim()) {
+		if (!props.editor && !apiKey().trim()) {
 			setError(String(t('chatbox.errors.apiKeyRequired')))
 			return false
 		}
-		if (!api().trim() && !getProviderDefaultBaseURL(npm())) {
+		if (!props.editor && !api().trim() && !getProviderDefaultBaseURL(npm())) {
 			setError(String(t('chatbox.errors.providerBaseUrlRequired')))
 			return false
 		}
@@ -292,10 +323,11 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		try {
 			const discovered = await props.onFetchProviderSetupModels(snapshotDraft())
 			setDiscoveredModels(discovered)
-			setSelectedDiscoveredIds(new Set<string>())
-			setModelSearch('')
 			if (discovered.length === 0) {
+				setPickerOpen(false)
 				setError(String(t('chatbox.setup.custom.noModelsFound')))
+			} else {
+				setPickerOpen(true)
 			}
 		} catch (cause) {
 			setError(errorMessage(cause, 'chatbox.setup.errors.fetchFailed'))
@@ -304,29 +336,12 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		}
 	}
 
-	function toggleDiscoveredModel(modelId: string) {
-		if (models()[modelId]) return
-		setSelectedDiscoveredIds((current) => {
-			const next = new Set(current)
-			if (next.has(modelId)) next.delete(modelId)
-			else next.add(modelId)
-			return next
-		})
-	}
-
-	function addSelectedDiscoveredModels() {
-		const selected = discoveredModels().filter((model) =>
-			selectedDiscoveredIds().has(model.id),
-		)
-		if (selected.length === 0) {
-			setError(String(t('chatbox.setup.custom.noModelsSelected')))
-			return
-		}
+	function addDiscoveredModels(selected: AIModelConfig[]) {
 		setModels((current) => ({
 			...current,
 			...Object.fromEntries(selected.map((model) => [model.id, model])),
 		}))
-		setSelectedDiscoveredIds(new Set<string>())
+		setPickerOpen(false)
 		clearError()
 	}
 
@@ -354,7 +369,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 	}
 
 	function continueToReview() {
-		if (selectedModelList().length === 0) {
+		if (!props.editor && selectedModelList().length === 0) {
 			setError(String(t('chatbox.setup.errors.modelRequired')))
 			return
 		}
@@ -380,7 +395,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		setBusyAction('authorizing')
 		clearError()
 		try {
-			await props.onStartNutstoreSetup()
+			await props.onboarding?.onStartNutstoreSetup()
 		} catch (cause) {
 			setError(errorMessage(cause, 'chatbox.setup.errors.authorizationFailed'))
 		} finally {
@@ -392,7 +407,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 		if (isBusy()) return
 		clearError()
 		try {
-			await props.onOpenNutstoreAuthorization()
+			await props.onboarding?.onOpenNutstoreAuthorization()
 		} catch (cause) {
 			setError(errorMessage(cause, 'chatbox.setup.errors.authorizationFailed'))
 		}
@@ -400,10 +415,10 @@ export function ProviderSetup(props: ProviderSetupProps) {
 
 	async function returnFromNutstore() {
 		if (isBusy()) return
-		if (props.nutstore.status === 'authorizing') {
+		if (props.onboarding?.nutstore.status === 'authorizing') {
 			setBusyAction('authorizing')
 			try {
-				await props.onCancelNutstoreSetup()
+				await props.onboarding.onCancelNutstoreSetup()
 			} catch (cause) {
 				setError(
 					errorMessage(cause, 'chatbox.setup.errors.cancelAuthorizationFailed'),
@@ -431,30 +446,59 @@ export function ProviderSetup(props: ProviderSetupProps) {
 			setCustomStep('provider')
 			return
 		}
-		setRoute('choice')
+		if (props.editor) props.editor.onCancel()
+		else setRoute('choice')
+	}
+
+	async function changeCors(input: HTMLInputElement) {
+		const enabled = input.checked
+		if (enabled && props.editor && !(await props.editor.onConfirmCors())) {
+			input.checked = false
+			return
+		}
+		setAllowBrowserCors(enabled)
+	}
+
+	function editModel(model: AIModelConfig) {
+		props.onEditModel?.(model, (saved) => {
+			if (saved.id !== model.id && untrack(() => models()[saved.id])) {
+				setError(String(t('settings.ai.errors.duplicateModelId')))
+				return false
+			}
+			setModels((current) => {
+				const { [model.id]: _previous, ...remaining } = current
+				return { ...remaining, [saved.id]: saved }
+			})
+			clearError()
+			return true
+		})
 	}
 
 	return (
 		<section
+			ref={rootEl}
 			class="ns-provider-stepper"
+			classList={{
+				'is-provider-picker':
+					route() === 'custom' && customStep() === 'provider',
+			}}
 			aria-labelledby={titleId}
-			aria-describedby={descriptionId}
+			aria-describedby={continuedProviderName() ? descriptionId : undefined}
 		>
 			<div class="ns-provider-stepper__shell">
 				<header class="ns-provider-stepper__heading">
-					<div class="ns-provider-stepper__eyebrow">
-						{props.state.kind === 'no-model'
-							? t('chatbox.setup.continueEyebrow', {
-									provider: props.state.providerName,
-								})
-							: t('chatbox.setup.eyebrow')}
-					</div>
 					<h1 id={titleId} class="ns-provider-stepper__title">
 						{title()}
 					</h1>
-					<p id={descriptionId} class="ns-provider-stepper__description">
-						{description()}
-					</p>
+					<Show when={continuedProviderName()}>
+						{(providerName) => (
+							<p id={descriptionId} class="ns-provider-stepper__description">
+								{t('chatbox.setup.continueEyebrow', {
+									provider: providerName(),
+								})}
+							</p>
+						)}
+					</Show>
 				</header>
 
 				<ol
@@ -492,12 +536,12 @@ export function ProviderSetup(props: ProviderSetupProps) {
 						<div class="ns-provider-stepper__choices">
 							<button
 								type="button"
-								class="ns-provider-stepper__choice is-featured"
+								class="ns-provider-stepper__choice"
 								data-provider-setup-choice="nutstore"
 								onClick={chooseNutstore}
 							>
 								<span class="ns-provider-stepper__choice-icon">
-									<span class=":uno: i-lucide-cloud-cog size-5" />
+									<NutstoreAiLogo />
 								</span>
 								<span class="ns-provider-stepper__choice-copy">
 									<span class="ns-provider-stepper__choice-title">
@@ -506,9 +550,6 @@ export function ProviderSetup(props: ProviderSetupProps) {
 									<span class="ns-provider-stepper__choice-description">
 										{t('chatbox.setup.choice.nutstoreDescription')}
 									</span>
-								</span>
-								<span class="ns-provider-stepper__choice-badge">
-									{t('chatbox.setup.choice.nutstoreBadge')}
 								</span>
 							</button>
 							<button
@@ -536,10 +577,10 @@ export function ProviderSetup(props: ProviderSetupProps) {
 					<Show when={route() === 'nutstore'}>
 						<div class="ns-provider-stepper__nutstore">
 							<div class="ns-provider-stepper__hero-icon">
-								<span class=":uno: i-lucide-cloud-cog size-7" />
+								<NutstoreAiLogo />
 							</div>
 							<Show
-								when={props.nutstore.status === 'authorizing'}
+								when={props.onboarding?.nutstore.status === 'authorizing'}
 								fallback={
 									<>
 										<div class="ns-provider-stepper__body-copy">
@@ -581,7 +622,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 									<p>{t('chatbox.setup.nutstore.waitingDescription')}</p>
 									<div class="ns-provider-stepper__code" aria-live="polite">
 										<span>{t('chatbox.setup.nutstore.codeLabel')}</span>
-										<strong>{props.nutstore.userCode}</strong>
+										<strong>{props.onboarding?.nutstore.userCode}</strong>
 									</div>
 									<div class="ns-provider-stepper__actions">
 										<button
@@ -628,6 +669,24 @@ export function ProviderSetup(props: ProviderSetupProps) {
 							</label>
 
 							<div class="ns-provider-stepper__provider-options">
+								<button
+									type="button"
+									class="ns-provider-stepper__provider-option"
+									data-provider-preset="custom"
+									onClick={chooseManualProvider}
+								>
+									<span
+										class="ns-provider-stepper__provider-avatar"
+										aria-hidden="true"
+									>
+										<span class=":uno: i-lucide-sliders-horizontal size-4" />
+									</span>
+									<span class="ns-provider-stepper__provider-copy">
+										<strong>{t('chatbox.setup.custom.manualTitle')}</strong>
+										<span>{t('chatbox.setup.custom.manualDescription')}</span>
+									</span>
+									<span class=":uno: i-lucide-arrow-right size-4" />
+								</button>
 								<For each={filteredPresetProviders()}>
 									{(preset) => (
 										<button
@@ -654,29 +713,12 @@ export function ProviderSetup(props: ProviderSetupProps) {
 										</button>
 									)}
 								</For>
+								<Show when={filteredPresetProviders().length === 0}>
+									<p class="ns-provider-stepper__provider-empty">
+										{t('chatbox.setup.custom.noProviderResults')}
+									</p>
+								</Show>
 							</div>
-
-							<Show when={filteredPresetProviders().length === 0}>
-								<p class="ns-provider-stepper__provider-empty">
-									{t('chatbox.setup.custom.noProviderResults')}
-								</p>
-							</Show>
-
-							<button
-								type="button"
-								class="ns-provider-stepper__provider-manual"
-								data-provider-preset="custom"
-								onClick={chooseManualProvider}
-							>
-								<span class="ns-provider-stepper__choice-icon">
-									<span class=":uno: i-lucide-sliders-horizontal size-5" />
-								</span>
-								<span class="ns-provider-stepper__provider-copy">
-									<strong>{t('chatbox.setup.custom.manualTitle')}</strong>
-									<span>{t('chatbox.setup.custom.manualDescription')}</span>
-								</span>
-								<span class=":uno: i-lucide-arrow-right size-4" />
-							</button>
 
 							<div class="ns-provider-stepper__actions">
 								<button
@@ -773,9 +815,7 @@ export function ProviderSetup(props: ProviderSetupProps) {
 								<input
 									type="checkbox"
 									checked={allowBrowserCors()}
-									onChange={(event) =>
-										setAllowBrowserCors(event.currentTarget.checked)
-									}
+									onChange={(event) => void changeCors(event.currentTarget)}
 								/>
 								<span>
 									<strong>{t('chatbox.setup.custom.corsLabel')}</strong>
@@ -824,53 +864,14 @@ export function ProviderSetup(props: ProviderSetupProps) {
 								</button>
 							</div>
 
-							<Show when={discoveredModels().length > 0}>
-								<div class="ns-provider-stepper__model-picker">
-									<input
-										type="search"
-										value={modelSearch()}
-										placeholder={t('chatbox.setup.custom.searchModels')}
-										onInput={(event) =>
-											setModelSearch(event.currentTarget.value)
-										}
-									/>
-									<div class="ns-provider-stepper__model-options">
-										<For each={filteredDiscoveredModels()}>
-											{(model) => {
-												const added = () => !!models()[model.id]
-												return (
-													<label
-														class="ns-provider-stepper__model-option"
-														classList={{ 'is-added': added() }}
-													>
-														<input
-															type="checkbox"
-															disabled={added()}
-															checked={
-																added() || selectedDiscoveredIds().has(model.id)
-															}
-															onChange={() => toggleDiscoveredModel(model.id)}
-														/>
-														<span>
-															<strong>{modelName(model)}</strong>
-															<span>{model.id}</span>
-														</span>
-														<Show when={added()}>
-															<em>{t('chatbox.setup.custom.added')}</em>
-														</Show>
-													</label>
-												)
-											}}
-										</For>
-									</div>
-									<button
-										type="button"
-										class="ns-provider-stepper__button is-secondary"
-										onClick={addSelectedDiscoveredModels}
-									>
-										{t('chatbox.setup.custom.addSelected')}
-									</button>
-								</div>
+							<Show when={pickerOpen() && rootEl}>
+								<DiscoveredModelsDialog
+									models={discoveredModels()}
+									isAdded={(modelId) => !!models()[modelId]}
+									mountEl={rootEl!}
+									onAdd={addDiscoveredModels}
+									onClose={() => setPickerOpen(false)}
+								/>
 							</Show>
 
 							<div class="ns-provider-stepper__manual-model">
@@ -927,6 +928,14 @@ export function ProviderSetup(props: ProviderSetupProps) {
 														<strong>{modelName(model)}</strong>
 														<span>{model.id}</span>
 													</span>
+													<Show when={props.onEditModel}>
+														<button
+															type="button"
+															onClick={() => editModel(model)}
+														>
+															{t('settings.ai.modals.model.edit')}
+														</button>
+													</Show>
 													<button
 														type="button"
 														aria-label={t('chatbox.setup.custom.removeModel', {
@@ -994,10 +1003,12 @@ export function ProviderSetup(props: ProviderSetupProps) {
 									</dd>
 								</div>
 							</dl>
-							<div class="ns-provider-stepper__review-note">
-								<span class=":uno: i-lucide-circle-check-big size-4" />
-								<span>{t('chatbox.setup.custom.reviewHint')}</span>
-							</div>
+							<Show when={!props.editor}>
+								<div class="ns-provider-stepper__review-note">
+									<span class=":uno: i-lucide-circle-check-big size-4" />
+									<span>{t('chatbox.setup.custom.reviewHint')}</span>
+								</div>
+							</Show>
 						</div>
 
 						<div class="ns-provider-stepper__actions">
@@ -1018,7 +1029,9 @@ export function ProviderSetup(props: ProviderSetupProps) {
 								<span class=":uno: i-lucide-sparkles size-4" />
 								{busyAction() === 'saving'
 									? t('chatbox.setup.actions.saving')
-									: t('chatbox.setup.actions.finish')}
+									: props.editor
+										? t('settings.filters.save')
+										: t('chatbox.setup.actions.finish')}
 							</button>
 						</div>
 					</Show>

@@ -253,3 +253,23 @@ export default class ModelEditorModal extends Modal {
 		this.updateInputModalityTags?.()
 	}
 }
+
+// Shared by every provider setup surface so duplicate-ID handling stays in one place.
+export function openProviderSetupModelEditor(
+	plugin: NutstorePlugin,
+	model: AIModelConfig,
+	save: (model: AIModelConfig) => boolean,
+	modalMountTarget?: ChatModalMountTarget,
+) {
+	new ModelEditorModal(
+		plugin,
+		model,
+		(saved) => {
+			const ok = save(saved)
+			if (!ok) new Notice(i18n.t('settings.ai.errors.duplicateModelId'))
+			return ok
+		},
+		false,
+		{ modalMountTarget },
+	).open()
+}

@@ -1,5 +1,5 @@
 import { Notice } from 'obsidian'
-import { getProviderById } from '~/ai/catalog/config'
+import { getProviderById, sanitizeDefaultSelections } from '~/ai/catalog/config'
 import ProviderEditorModal from '~/components/ProviderEditorModal'
 import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import { emitSsoReceive } from '~/events/sso-receive'
@@ -73,6 +73,10 @@ export default class ProtocolService extends BaseService {
 					...this.plugin.settings.ai.providers,
 					[providerId]: savedProvider,
 				}
+				this.plugin.settings.ai.defaultModel = sanitizeDefaultSelections(
+					this.plugin.settings.ai.providers,
+					this.plugin.settings.ai.defaultModel,
+				)
 				await this.plugin.settingsService.saveSettings()
 				return true
 			},

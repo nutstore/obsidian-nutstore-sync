@@ -276,9 +276,13 @@
 			"none": "Not set",
 			"unnamedProvider": "Unnamed provider",
 			"unnamedModel": "Unnamed model",
+			"defaultProvider": {
+				"name": "Default provider",
+				"desc": "Model provider preferred for new chat sessions"
+			},
 			"defaultModel": {
 				"name": "Default model",
-				"desc": "Optional model selected for new chat sessions"
+				"desc": "Default model selected for new chat sessions from this provider"
 			},
 			"nutstoreLlmGateway": {
 				"name": "Nutstore AI",
@@ -345,19 +349,20 @@
 			"providers": {
 				"name": "Providers",
 				"desc": "Manage available AI providers",
+				"services": "Available services",
+				"servicesHint": "Connect a service to select its models in chat",
+				"builtIn": "Built-in",
+				"delete": "Delete",
 				"summary": "{{count}} provider(s) configured",
-				"emptyHint": "No providers configured yet. Click “Manage providers” to add one.",
-				"manage": "Manage providers",
+				"emptyHint": "Connect a provider to choose a model and start chatting.",
+				"manage": "Manage",
 				"add": "Add provider",
-				"refreshPresetName": "Get latest model list",
-				"refreshPresetDesc": "Get the latest model list.",
-				"refreshPresetModels": "Get model list",
+				"refreshShort": "Refresh list",
 				"refreshPresetModelsLoading": "Fetching...",
 				"refreshPresetModelsSuccess": "Fetched ✓ providers {{providers}} models {{models}}",
 				"refreshPresetModelsFailure": "Failed ×",
 				"presetModelsRefreshFailed": "Update failed. Continuing with local/built-in model list.",
 				"presetModelsRefreshFailedWithReason": "Update failed. Continuing with local/built-in model list: {{reason}}",
-				"empty": "No provider configured yet.",
 				"defaultEndpoint": "Default endpoint",
 				"presetCustom": "Custom",
 				"updateModels": "Update models",
@@ -445,7 +450,7 @@
 			"mcp": {
 				"name": "MCP servers",
 				"summary": "{{count}} server(s) configured",
-				"manage": "Manage MCP servers",
+				"manage": "Manage",
 				"manager": {
 					"title": "MCP servers",
 					"add": "Add server",
@@ -507,7 +512,7 @@
 			},
 			"yolo": {
 				"name": "Full access",
-				"desc": "⚠️ When on, the AI can edit files and change plugin settings without asking for confirmation each time."
+				"desc": "When on, the AI can edit files and change plugin settings without asking for confirmation each time."
 			},
 			"memory": {
 				"heading": "Memory",
@@ -890,7 +895,6 @@
 		"addToContext": "Add to AI context",
 		"newChat": "New chat",
 		"setup": {
-			"eyebrow": "AI Provider",
 			"continueEyebrow": "Continue setting up {{provider}}",
 			"progressLabel": "Provider setup progress",
 			"steps": {
@@ -903,16 +907,13 @@
 			},
 			"choice": {
 				"title": "Choose where your models come from",
-				"description": "Use the official Nutstore API or connect an existing model service. Chatbox opens automatically when setup is complete.",
 				"nutstoreTitle": "Official Nutstore API",
 				"nutstoreDescription": "Authorize with your Nutstore account and load available models without entering an API key.",
-				"nutstoreBadge": "Recommended",
 				"customTitle": "Custom provider",
 				"customDescription": "Connect OpenAI, Anthropic, or another compatible model API."
 			},
 			"nutstore": {
 				"title": "Authorize Nutstore AI",
-				"description": "Complete a one-time device authorization in your browser. Models sync automatically afterward.",
 				"idleDescription": "Authorization happens outside this Obsidian view. We will open the Nutstore authorization page, then continue automatically when it finishes.",
 				"benefitAccount": "Secure authorization with your Nutstore account",
 				"benefitModels": "Automatic access to available official models",
@@ -927,14 +928,12 @@
 			},
 			"custom": {
 				"providerTitle": "Choose a model provider",
-				"providerDescription": "Start with a preset to fill in the API format, endpoint, and models automatically, or configure any compatible API manually.",
 				"searchProviders": "Search provider name or ID",
 				"noProviderResults": "No matching preset provider. You can continue with a manual setup.",
 				"presetModelCount": "{{count}} preset models",
 				"manualTitle": "Configure manually",
 				"manualDescription": "For self-hosted services, proxies, or compatible APIs that are not listed.",
 				"connectionTitle": "Connect a model provider",
-				"connectionDescription": "Enter the endpoint and credentials. The key is stored only in this device's plugin data.",
 				"nameLabel": "Provider name",
 				"namePlaceholder": "For example: Northwind AI",
 				"nameHint": "Identifies this service in the Chatbox model picker.",
@@ -948,7 +947,6 @@
 				"corsLabel": "Allow browser cross-origin requests",
 				"corsHint": "Can improve streaming on supported providers. Leave disabled if the connection behaves unexpectedly.",
 				"modelsTitle": "Choose available models",
-				"modelsDescription": "Load the model list automatically or add a known model ID manually. Select at least one model.",
 				"availableModelsTitle": "Load from provider",
 				"availableModelsHint": "Read the models exposed by this endpoint, then choose the ones you want.",
 				"fetchModels": "Fetch models",
@@ -957,7 +955,12 @@
 				"added": "Added",
 				"addSelected": "Add selected models",
 				"noModelsFound": "No models were returned. Check the endpoint and key, or add a model ID manually.",
-				"noModelsSelected": "Select at least one model to add.",
+				"pickModelsTitle": "Choose models to add",
+				"pickModelsDescription": "Check the models you want to enable, then add them to this provider.",
+				"selectAll": "Select all",
+				"deselectAll": "Clear selection",
+				"noMatchingModels": "No matching models",
+				"cancel": "Cancel",
 				"manualModelTitle": "Add manually",
 				"manualModelHint": "If you know the model ID, enter it directly instead of waiting for discovery.",
 				"manualModelPlaceholder": "For example: model-neutral",
@@ -966,7 +969,7 @@
 				"selectedModelsEmpty": "No models selected yet. Add one to continue.",
 				"removeModel": "Remove model {{model}}",
 				"reviewTitle": "Review and start",
-				"reviewDescription": "Check the connection and models. Chatbox will select the first model automatically after saving.",
+				"editorReviewTitle": "Review provider",
 				"reviewProvider": "Provider",
 				"reviewApiFormat": "API format",
 				"reviewEndpoint": "Endpoint",

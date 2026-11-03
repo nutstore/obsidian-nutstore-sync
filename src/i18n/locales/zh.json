@@ -119,9 +119,13 @@
 			"none": "未设置",
 			"unnamedProvider": "未命名模型提供商",
 			"unnamedModel": "未命名模型",
+			"defaultProvider": {
+				"name": "默认提供商",
+				"desc": "新建对话时优先使用的模型提供商"
+			},
 			"defaultModel": {
 				"name": "默认模型",
-				"desc": "新建对话时可选的默认模型"
+				"desc": "新建对话时可选该提供商下的默认模型"
 			},
 			"nutstoreLlmGateway": {
 				"name": "坚果云 AI",
@@ -188,19 +192,20 @@
 			"providers": {
 				"name": "模型提供商",
 				"desc": "管理可用的 AI 模型提供商",
+				"services": "可用服务",
+				"servicesHint": "连接后即可在对话中选择模型",
+				"builtIn": "内置",
+				"delete": "删除",
 				"summary": "已配置 {{count}} 个模型提供商",
-				"emptyHint": "尚未配置模型提供商。点击“管理模型提供商”添加一个后再开始对话。",
-				"manage": "管理模型提供商",
-				"add": "新增模型提供商",
-				"refreshPresetName": "获取最新模型列表",
-				"refreshPresetDesc": "可以获取最新的模型列表。",
-				"refreshPresetModels": "获取模型列表",
+				"emptyHint": "连接模型提供商后，即可选择模型并开始对话。",
+				"manage": "管理",
+				"add": "添加提供商",
+				"refreshShort": "刷新列表",
 				"refreshPresetModelsLoading": "获取中...",
 				"refreshPresetModelsSuccess": "提供商 {{providers}}，模型 {{models}}",
 				"refreshPresetModelsFailure": "获取失败 ×",
 				"presetModelsRefreshFailed": "更新失败，继续使用本地/内置模型列表",
 				"presetModelsRefreshFailedWithReason": "更新失败，继续使用本地/内置模型列表：{{reason}}",
-				"empty": "当前还没有配置模型提供商。",
 				"defaultEndpoint": "默认端点",
 				"presetCustom": "自定义",
 				"updateModels": "更新",
@@ -288,7 +293,7 @@
 			"mcp": {
 				"name": "MCP 服务",
 				"summary": "已配置 {{count}} 个服务",
-				"manage": "管理 MCP 服务",
+				"manage": "管理",
 				"manager": {
 					"title": "MCP 服务",
 					"add": "添加服务",
@@ -350,7 +355,7 @@
 			},
 			"yolo": {
 				"name": "完全访问权限",
-				"desc": "⚠️ 开启后，AI 可自动修改文件和插件设置，不再逐次询问确认"
+				"desc": "开启后，AI 可自动修改文件和插件设置，不再逐次询问确认"
 			},
 			"memory": {
 				"heading": "记忆",
@@ -890,7 +895,6 @@
 		"addToContext": "添加到 AI 上下文",
 		"newChat": "新对话",
 		"setup": {
-			"eyebrow": "AI Provider",
 			"continueEyebrow": "继续配置 {{provider}}",
 			"progressLabel": "模型提供商配置进度",
 			"steps": {
@@ -903,16 +907,13 @@
 			},
 			"choice": {
 				"title": "先选择模型从哪里来",
-				"description": "可以直接使用坚果云官方 API，也可以接入你已有的模型服务。完成后会自动进入 Chatbox。",
 				"nutstoreTitle": "坚果云官方 API",
 				"nutstoreDescription": "通过坚果云账号授权，自动获取可用模型，无需填写 API Key。",
-				"nutstoreBadge": "推荐",
 				"customTitle": "自定义提供商",
 				"customDescription": "连接 OpenAI、Anthropic 或其他兼容 API 的模型服务。"
 			},
 			"nutstore": {
 				"title": "授权坚果云 AI",
-				"description": "在浏览器中完成一次设备授权，模型列表会在授权后自动同步。",
 				"idleDescription": "授权过程不会离开 Obsidian 当前页面。我们会在浏览器中打开坚果云授权页，并在完成后自动继续。",
 				"benefitAccount": "使用坚果云账号安全授权",
 				"benefitModels": "自动同步官方可用模型",
@@ -927,14 +928,12 @@
 			},
 			"custom": {
 				"providerTitle": "选择模型提供商",
-				"providerDescription": "从预设服务中快速接入，自动带入 API 格式、端点和模型；也可以手动配置兼容 API。",
 				"searchProviders": "搜索提供商名称或 ID",
 				"noProviderResults": "没有匹配的预设提供商，可以继续手动配置。",
 				"presetModelCount": "{{count}} 个预设模型",
 				"manualTitle": "手动配置提供商",
 				"manualDescription": "适用于自托管服务、代理或未列出的兼容 API。",
 				"connectionTitle": "连接模型提供商",
-				"connectionDescription": "填写服务端点和凭据。密钥仅保存在当前设备的插件数据中。",
 				"nameLabel": "提供商名称",
 				"namePlaceholder": "例如：Northwind AI",
 				"nameHint": "用于在 Chatbox 的模型选择器中识别这个服务。",
@@ -948,7 +947,6 @@
 				"corsLabel": "允许浏览器跨域请求",
 				"corsHint": "可改善支持的提供商上的流式输出；若连接异常可保持关闭。",
 				"modelsTitle": "选择可用模型",
-				"modelsDescription": "自动获取模型列表，或手动添加已知的模型 ID。至少选择一个模型。",
 				"availableModelsTitle": "从提供商获取",
 				"availableModelsHint": "读取该端点公开的模型列表，再选择需要启用的模型。",
 				"fetchModels": "获取模型",
@@ -957,7 +955,12 @@
 				"added": "已添加",
 				"addSelected": "添加所选模型",
 				"noModelsFound": "没有获取到模型，请检查端点与密钥，或手动添加模型 ID。",
-				"noModelsSelected": "请至少选择一个要添加的模型。",
+				"pickModelsTitle": "选择要添加的模型",
+				"pickModelsDescription": "勾选需要启用的模型，确认后加入该提供商。",
+				"selectAll": "全选",
+				"deselectAll": "取消全选",
+				"noMatchingModels": "没有匹配的模型",
+				"cancel": "取消",
 				"manualModelTitle": "手动添加",
 				"manualModelHint": "已知模型 ID 时可以直接填写，不必等待列表获取成功。",
 				"manualModelPlaceholder": "例如：model-neutral",
@@ -966,7 +969,7 @@
 				"selectedModelsEmpty": "还没有选择模型。完成这一步后才能继续。",
 				"removeModel": "移除模型 {{model}}",
 				"reviewTitle": "确认并开始",
-				"reviewDescription": "检查连接信息与模型。保存后 Chatbox 会自动选用第一个模型。",
+				"editorReviewTitle": "确认提供商配置",
 				"reviewProvider": "提供商",
 				"reviewApiFormat": "API 格式",
 				"reviewEndpoint": "端点",
