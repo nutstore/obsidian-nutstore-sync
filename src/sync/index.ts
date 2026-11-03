@@ -231,7 +231,9 @@ export class NutstoreSync {
 				const records = await syncRecord.getRecords()
 				await syncRecord.setRecords(
 					new Map(
-						[...records].filter(([path]) => !this.scope.allows(path, true)),
+						[...records].filter(
+							([path, record]) => !this.scope.allowsRecord(path, record),
+						),
 					),
 				)
 			}

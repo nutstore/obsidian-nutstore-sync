@@ -115,7 +115,9 @@ export default abstract class BaseSyncDecider {
 			localStats: scope.apply(this.localStats),
 			remoteStats: scope.apply(remoteStats),
 			syncRecords: new Map(
-				[...syncRecords].filter(([path]) => scope.allows(path, true)),
+				[...syncRecords].filter(([path, record]) =>
+					scope.allowsRecord(path, record),
+				),
 			),
 			remoteBaseDir: this.remoteBaseDir,
 			getBaseContent,

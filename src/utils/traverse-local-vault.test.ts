@@ -132,3 +132,41 @@ describe.each([
 		})
 	})
 })
+
+describe('scanning with thousands of unreadable folders', () => {
+	it('isolates every one of them without quadratic slowdown', async () => {
+		const count = 10_000
+		const folders = Array.from(
+			{ length: count },
+			(_, i) => `目录 Folder ${i}🌱`,
+		)
+		const files = Array.from({ length: count }, (_, i) => `笔记 Note ${i}📘.md`)
+		const vault = {
+			configDir: '.obsidian',
+			getAbstractFileByPath: () => null,
+			adapter: {
+				list: async (path: string) => {
+					if (path === '/') return { files, folders }
+					throw new Error('Unavailable 暂不可用🌿')
+				},
+				stat: async (path: string): Promise<Stat> => ({
+					type: path.endsWith('.md') ? 'file' : 'folder',
+					mtime: 1,
+					ctime: 1,
+					size: 8,
+				}),
+			},
+		} as unknown as Vault
+		const scope = new SyncScope()
+		const started = performance.now()
+		const snapshot = await traverseLocalVault(vault, '/', scope)
+
+		expect(snapshot.issues).toHaveLength(count)
+		expect(scope.issues).toHaveLength(count)
+		// Healthy siblings stay in scope; every failed folder is protected.
+		expect(files.every((f) => scope.allows(f, { subtree: true }))).toBe(true)
+		expect(folders.some((f) => scope.allows(f, { subtree: true }))).toBe(false)
+		// Linear scope lookups took several seconds at this size.
+		expect(performance.now() - started).toBeLessThan(2000)
+	})
+})

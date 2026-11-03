@@ -10,7 +10,9 @@ import CleanRecordTask from './tasks/clean-record.task'
 /** All writes may replace a directory; only non-destructive operations are exempt. */
 export function taskAllowedByScope(task: BaseTask, scope: SyncScope): boolean {
 	if (task instanceof MkdirsRemoteTask) {
-		return task.getAllPaths().every(({ localPath }) => scope.allows(localPath))
+		return task
+			.getAllPaths()
+			.every(({ localPath }) => scope.allows(localPath, { isDir: true }))
 	}
 	const subtree = !(
 		task instanceof MkdirLocalTask ||
@@ -19,5 +21,8 @@ export function taskAllowedByScope(task: BaseTask, scope: SyncScope): boolean {
 		task instanceof SkippedTask ||
 		task instanceof CleanRecordTask
 	)
-	return scope.allows(task.localPath, subtree)
+	return scope.allows(task.localPath, {
+		subtree,
+		isDir: task instanceof MkdirLocalTask || task instanceof MkdirRemoteTask,
+	})
 }
