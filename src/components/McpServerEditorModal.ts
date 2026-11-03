@@ -2,7 +2,7 @@ import { cloneDeep } from 'es-toolkit/compat'
 import { Modal, Notice, Setting } from 'obsidian'
 import { type HttpMcpServerConfig, isValidMcpServerName } from '~/ai/mcp/types'
 import i18n from '~/i18n'
-import { addClassTokens } from '~/utils/class-tokens'
+import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
 import logger from '~/utils/logger'
 import type NutstorePlugin from '..'
 
@@ -44,16 +44,19 @@ export default class McpServerEditorModal extends Modal {
 	}
 
 	onOpen() {
+		this.setTitle(
+			i18n.t(
+				this.options.isNew
+					? 'settings.ai.mcp.editor.createTitle'
+					: 'settings.ai.mcp.editor.editTitle',
+			),
+		)
+		addClassTokens(this.modalEl, 'mcp-server-editor-modal', 'mod-lg')
 		const { contentEl } = this
 		const initialFocus =
 			this.options.initialFocus ?? (this.options.isNew ? 'name' : undefined)
 		let focusInput: HTMLInputElement | undefined
 		contentEl.empty()
-		contentEl.createEl('h2', {
-			text: this.options.isNew
-				? i18n.t('settings.ai.mcp.editor.createTitle')
-				: i18n.t('settings.ai.mcp.editor.editTitle'),
-		})
 
 		new Setting(contentEl)
 			.setName(i18n.t('settings.ai.mcp.editor.serverName'))
@@ -225,5 +228,6 @@ export default class McpServerEditorModal extends Modal {
 
 	onClose() {
 		this.contentEl.empty()
+		removeClassTokens(this.modalEl, 'mcp-server-editor-modal', 'mod-lg')
 	}
 }

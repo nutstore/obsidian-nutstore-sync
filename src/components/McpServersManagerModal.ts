@@ -29,7 +29,7 @@ export default class McpServersManagerModal extends Modal {
 		this.moduleScope = plugin.ai.lifecycle.scope
 		this.mcp = plugin.ai.mcp
 		this.moduleScope.ownModal(this)
-		addClassTokens(this.modalEl, 'mcp-manager-modal')
+		addClassTokens(this.modalEl, 'mcp-manager-modal', 'mod-lg')
 		addClassTokens(this.contentEl, 'mcp-manager-modal__content')
 		this.setTitle(i18n.t('settings.ai.mcp.manager.title'))
 	}
@@ -482,6 +482,8 @@ export default class McpServersManagerModal extends Modal {
 		this.stopRuntimeUpdates?.()
 		this.updateDescriptions.clear()
 		this.contentEl.empty()
+		removeClassTokens(this.contentEl, 'mcp-manager-modal__content')
+		removeClassTokens(this.modalEl, 'mcp-manager-modal', 'mod-lg')
 	}
 }
 

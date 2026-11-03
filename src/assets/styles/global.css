@@ -4049,6 +4049,13 @@
 	overflow: hidden;
 }
 
+.is-phone .modal.mcp-manager-modal {
+	width: var(--dialog-width);
+	max-width: var(--dialog-max-width);
+	height: 100%;
+	max-height: var(--dialog-max-height);
+}
+
 .mcp-manager-modal > .modal-header {
 	flex-shrink: 0;
 }
@@ -4059,6 +4066,11 @@
 	flex: 0 1 auto;
 	min-height: 0;
 	overflow: hidden;
+}
+
+.is-phone .modal-content.mcp-manager-modal__content,
+.is-phone .mcp-manager-modal__body {
+	flex: 1 1 auto;
 }
 
 .mcp-manager-modal__tabs {
