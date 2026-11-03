@@ -1,3 +1,4 @@
+import type { ScanIssue } from '~/sync/scope'
 import { throttle } from 'es-toolkit/compat'
 import { Notice } from 'obsidian'
 import SyncProgressModal from '../components/SyncProgressModal'
@@ -31,6 +32,7 @@ export class ProgressService extends BaseService {
 	syncEnd = false
 	syncFailed = false
 	syncFailedCount = 0
+	scanIssues: readonly ScanIssue[] = []
 
 	private subscriptions: { unsubscribe: () => void }[] = []
 
@@ -54,6 +56,7 @@ export class ProgressService extends BaseService {
 				this.syncEnd = false
 				this.syncFailed = false
 				this.syncFailedCount = 0
+				this.scanIssues = []
 				this.resetProgress()
 				this.preparationProgress = { phase: 'checkingRemote' }
 				this.updateModal()
@@ -65,9 +68,10 @@ export class ProgressService extends BaseService {
 			onStartSync().subscribe(() => {
 				this.preparationProgress = null
 			}),
-			onEndSync().subscribe(({ failedCount }) => {
+			onEndSync().subscribe(({ failedCount, scanIssues = [] }) => {
 				this.syncEnd = true
 				this.syncFailedCount = failedCount
+				this.scanIssues = scanIssues
 				this.preparationProgress = null
 				this.updateModal()
 			}),

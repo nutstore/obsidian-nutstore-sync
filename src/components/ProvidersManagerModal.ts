@@ -214,12 +214,11 @@ export default class ProvidersManagerModal extends Modal {
 		const providers = listProviders(this.plugin.settings.ai.providers).filter(
 			(provider) => !this.gateway.isManagedProvider(provider),
 		)
-		if (providers.length === 0) {
+		if (this.gateway.listConfiguredProviders().length === 0) {
 			contentEl.createDiv({
 				cls: ':uno: setting-item-description',
 				text: i18n.t('settings.ai.providers.empty'),
 			})
-			return
 		}
 
 		for (const provider of providers) {
@@ -480,6 +479,7 @@ export default class ProvidersManagerModal extends Modal {
 						return
 					}
 					await this.gateway.disconnect()
+					await this.onChanged()
 					this.render()
 				})
 

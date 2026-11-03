@@ -83,6 +83,64 @@ describe('deepStringify', () => {
 			expect(parsed[0].message).toBe('first')
 			expect(parsed[1].name).toBe('RangeError')
 		})
+
+		it('retains Error diagnostics and nested causes', () => {
+			const cause = Object.assign(
+				new Error('目标暂不可用 Target unavailable 🌿'),
+				{ code: 'ENOENT' },
+			)
+			const error = Object.assign(
+				new Error('读取失败 Read failed 🧭', { cause }),
+				{ path: '资料/中性条目🌱' },
+			)
+
+			const parsed = JSON.parse(deepStringify(error)!)
+
+			expect(parsed.path).toBe('资料/中性条目🌱')
+			expect(parsed.cause.message).toBe('目标暂不可用 Target unavailable 🌿')
+			expect(parsed.cause.code).toBe('ENOENT')
+			expect(parsed.cause.stack).toContain('目标暂不可用 Target unavailable 🌿')
+		})
+
+		it('retains non-enumerable custom Error properties', () => {
+			const error = new Error('状态异常 State failure 🌧️')
+			Object.defineProperty(error, 'statusCode', {
+				value: 503,
+				enumerable: false,
+				configurable: true,
+			})
+
+			const parsed = JSON.parse(deepStringify(error)!)
+
+			expect(parsed.statusCode).toBe(503)
+		})
+
+		it('serializes AggregateError members', () => {
+			const error = new AggregateError(
+				[
+					new Error('来源暂不可用 Source unavailable 📘'),
+					new TypeError('结构无效 Invalid shape 🧩'),
+				],
+				'组合操作失败 Combined operation failed 🌿',
+			)
+
+			const parsed = JSON.parse(deepStringify(error)!)
+
+			expect(parsed.errors[0].message).toBe(
+				'来源暂不可用 Source unavailable 📘',
+			)
+			expect(parsed.errors[1].name).toBe('TypeError')
+		})
+
+		it('replaces circular Error causes with a stable placeholder', () => {
+			const error = new Error('循环原因 Circular cause 🌱')
+			error.cause = error
+
+			const parsed = JSON.parse(deepStringify(error)!)
+
+			expect(parsed.message).toBe('循环原因 Circular cause 🌱')
+			expect(parsed.cause).toBe('[Circular]')
+		})
 	})
 
 	describe('circular references', () => {
@@ -207,7 +265,7 @@ describe('deepStringify', () => {
 			})
 			const result = deepStringify(obj)!
 			const parsed = JSON.parse(result)
-			expect(parsed.bad).toBe('Error accessing property')
+			expect(parsed.bad).toBe('Error accessing property: Unknown error')
 		})
 
 		it('captures proxy array access errors instead of throwing', () => {

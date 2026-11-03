@@ -44,20 +44,20 @@ const runtimeLogSchema = z.object({
 		'unhandled-rejection',
 		'runtime',
 	]),
-	message: z.string().check(z.minLength(1), z.maxLength(16_000)),
-	stack: z.optional(z.string().check(z.maxLength(16_000))),
-	filename: z.optional(z.string().check(z.maxLength(2_000))),
+	message: z.string().check(z.minLength(1)),
+	stack: z.optional(z.string()),
+	filename: z.optional(z.string()),
 	line: z.optional(z.number().check(z.int(), z.minimum(0))),
 	column: z.optional(z.number().check(z.int(), z.minimum(0))),
 })
 const runtimeFailureSchema = z.object({
-	message: z.string().check(z.minLength(1), z.maxLength(16_000)),
-	name: z.optional(z.string().check(z.maxLength(200))),
+	message: z.string().check(z.minLength(1)),
+	name: z.optional(z.string()),
 	source: z.optional(
 		z.enum(['startup', 'uncaught', 'unhandled-rejection', 'runtime']),
 	),
-	stack: z.optional(z.string().check(z.maxLength(16_000))),
-	filename: z.optional(z.string().check(z.maxLength(2_000))),
+	stack: z.optional(z.string()),
+	filename: z.optional(z.string()),
 	line: z.optional(z.number().check(z.int(), z.minimum(0))),
 	column: z.optional(z.number().check(z.int(), z.minimum(0))),
 })

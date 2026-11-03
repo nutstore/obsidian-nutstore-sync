@@ -101,7 +101,7 @@ export default class SyncProgressModal extends Modal {
 			? getSyncPreparationText(preparation)
 			: null
 		const state: SyncProgressModalState = this.plugin.sync.progress.syncEnd
-			? failedCount > 0
+			? failedCount > 0 || this.plugin.sync.progress.scanIssues.length > 0
 				? 'warning'
 				: 'complete'
 			: this.plugin.sync.progress.cancellationState === 'complete'
@@ -322,7 +322,14 @@ export default class SyncProgressModal extends Modal {
 				: state === 'complete'
 					? i18n.t('sync.progressCompleteTitle')
 					: state === 'warning'
-						? i18n.t('sync.completeWithFailed', { failedCount })
+						? this.plugin.sync.progress.scanIssues.length > 0
+							? i18n.t('sync.partialScan', {
+									count: this.plugin.sync.progress.scanIssues.length,
+									paths: this.plugin.sync.progress.scanIssues
+										.map((issue) => issue.path)
+										.join('\n'),
+								})
+							: i18n.t('sync.completeWithFailed', { failedCount })
 						: state === 'cancelled'
 							? i18n.t('sync.cancelled')
 							: state === 'error'

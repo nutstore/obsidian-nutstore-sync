@@ -131,9 +131,11 @@ export function resolveInitialSelection(
 export function slugifyProviderId(name: string): string {
 	return name
 		.trim()
+		.normalize('NFKC')
 		.toLowerCase()
 		.replace(/\s+/g, '-')
-		.replace(/[^a-z0-9-_]/g, '')
+		.replace(/[^\p{Letter}\p{Number}\p{Mark}_-]/gu, '')
+		.replace(/^-+|-+$/g, '')
 }
 
 export function getProviderById(

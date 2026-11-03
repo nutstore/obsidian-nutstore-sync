@@ -125,6 +125,7 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 		| 'syncFailed'
 		| 'syncEnd'
 		| 'cancellationState'
+		| 'scanIssues'
 	> = {
 		syncProgress: { total: 0, completed: [], current: null },
 		preparationProgress: preparation,
@@ -132,6 +133,7 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 		syncFailed: false,
 		syncEnd: false,
 		cancellationState: 'none',
+		scanIssues: [],
 	}
 	const settings = { skipLargeFiles: { maxSize: '' } }
 	const modal = new SyncProgressModal({

@@ -13,6 +13,7 @@ import {
 	hotTogglesFeatureModules,
 	loadsProductionPlugin,
 	opensChatboxInChosenLocation,
+	opensProviderSetupInEditorThenMovesChatboxToChosenLocation,
 	keepsChatboxAboveMobileNavigation,
 	respectsSessionAppOpenMode,
 	reloadsProductionPlugin,
@@ -104,6 +105,11 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		await run(
 			'opens Chatbox in the chosen area while preserving its session and Unicode draft',
 			() => opensChatboxInChosenLocation(this.app),
+		)
+		await run(
+			'moves Chatbox to the chosen area when a provider is configured',
+			() =>
+				opensProviderSetupInEditorThenMovesChatboxToChosenLocation(this.app),
 		)
 		await run('reloads the production plugin through the real lifecycle', () =>
 			reloadsProductionPlugin(this.app),

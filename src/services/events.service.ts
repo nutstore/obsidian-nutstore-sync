@@ -65,11 +65,25 @@ export default class EventsService extends BaseService {
 				})
 			}),
 
-			onEndSync().subscribe(({ failedCount, showNotice }) => {
+			onEndSync().subscribe(({ failedCount, showNotice, scanIssues = [] }) => {
 				this.plugin.toggleSyncUI(false)
 				const now = Date.now()
-				this.plugin.sync.status.setLastSyncTime(now, failedCount)
-				if (showNotice && !this.plugin.sync.progress.hasVisibleSyncModal()) {
+				this.plugin.sync.status.setLastSyncTime(
+					now,
+					failedCount + scanIssues.length,
+				)
+				if (scanIssues.length > 0) {
+					new Notice(
+						i18n.t('sync.partialScan', {
+							count: scanIssues.length,
+							paths: scanIssues.map((issue) => issue.path).join('\n'),
+						}),
+						10_000,
+					)
+				} else if (
+					showNotice &&
+					!this.plugin.sync.progress.hasVisibleSyncModal()
+				) {
 					const text =
 						failedCount > 0
 							? i18n.t('sync.completeWithFailed', { failedCount })

@@ -1,3 +1,4 @@
+import { SyncScope } from '../scope'
 import { describe, expect, it, vi } from 'vitest'
 import type { SyncRecord } from '~/storage/sync-record'
 import type { NutstoreSync } from '..'
@@ -33,6 +34,7 @@ describe('per-run conflict selection', () => {
 				mobileAppDownloadFileChunkSize: '',
 			}
 			const sync = {
+				scope: new SyncScope(),
 				settings: saved,
 				conflictStrategy: strategy,
 				remoteFs: { walk: async () => [{ stat, ignored: false }] },

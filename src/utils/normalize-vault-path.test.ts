@@ -9,5 +9,8 @@ describe('normalizeVaultPath', () => {
 
 	it('maps an empty path to the Vault root', () => {
 		expect(normalizeVaultPath('')).toBe('')
+		expect(normalizeVaultPath(undefined)).toBe('')
+		expect(normalizeVaultPath('///')).toBe('')
+		expect(normalizeVaultPath('\\\\笔记\\\\中性🌱.md\\')).toBe('笔记/中性🌱.md')
 	})
 })

@@ -5,6 +5,8 @@ import { Notice } from 'obsidian'
 import { Subscription, timer } from 'rxjs'
 import {
 	createModelConfig,
+	getFirstModel,
+	listProviders,
 	sanitizeDefaultSelections,
 } from '~/ai/catalog/config'
 import { obsidianFetch } from '~/ai/transport/obsidian-fetch'
@@ -201,6 +203,12 @@ export default class NutstoreLlmGatewayService extends BaseService {
 		return !!this.settings.accessToken && !!this.settings.refreshToken
 	}
 
+	listConfiguredProviders() {
+		return listProviders(this.plugin.settings.ai.providers).filter(
+			(provider) => !this.isManagedProvider(provider) || this.isAuthorized(),
+		)
+	}
+
 	isAuthorizing() {
 		return !!this.settings.pendingAuthorization
 	}
@@ -269,6 +277,18 @@ export default class NutstoreLlmGatewayService extends BaseService {
 		document.body.removeChild(anchor)
 	}
 
+	/** Stop device authorization without disconnecting an existing account. */
+	async cancelAuthorization() {
+		this.scope.check()
+		const pending = this.settings.pendingAuthorization
+		this.settings.pendingAuthorization = undefined
+		this.stopAuthorizationPolling()
+		this.emitAuthState()
+		await this.cancelPendingAuthorization(pending)
+		this.scope.check()
+		await this.plugin.settingsService.saveSettings()
+	}
+
 	async refreshModels(options: { removeOnAuthError?: boolean } = {}) {
 		this.scope.check()
 		const token = await this.ensureAccessToken(options)
@@ -310,14 +330,18 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			)
 		}
 
+		const provider = this.createProvider(token, models)
 		this.plugin.settings.ai.providers = {
 			...this.plugin.settings.ai.providers,
-			[NUTSTORE_LLM_GATEWAY_PROVIDER_ID]: this.createProvider(token, models),
+			[NUTSTORE_LLM_GATEWAY_PROVIDER_ID]: provider,
 		}
 		this.plugin.settings.ai.defaultModel = sanitizeDefaultSelections(
 			this.plugin.settings.ai.providers,
 			this.plugin.settings.ai.defaultModel,
-		)
+		) ?? {
+			providerId: provider.id,
+			modelId: getFirstModel(provider).id,
+		}
 		return true
 	}
 
@@ -379,8 +403,15 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			return
 		}
 		const previousAccessToken = this.settings.accessToken
-		const token = await this.ensureAccessToken({ removeOnAuthError: true })
+		let token: string | undefined
+		try {
+			token = await this.ensureAccessToken({ removeOnAuthError: true })
+		} catch (error) {
+			if (!this.isAuthorized()) await this.plugin.settingsService.saveSettings()
+			throw error
+		}
 		if (!token) {
+			await this.plugin.settingsService.saveSettings()
 			throw new Error(
 				i18n.t('settings.ai.nutstoreLlmGateway.errors.authorizationRequired'),
 			)
@@ -621,8 +652,6 @@ export default class NutstoreLlmGatewayService extends BaseService {
 
 			const currentPending = this.settings.pendingAuthorization
 			if (!currentPending || currentPending.deviceCode !== pending.deviceCode) {
-				this.stopAuthorizationPolling()
-				this.emitAuthState()
 				return
 			}
 
@@ -630,6 +659,8 @@ export default class NutstoreLlmGatewayService extends BaseService {
 				deviceCode: pending.deviceCode,
 				userCode: pending.userCode,
 			})
+			if (this.settings.pendingAuthorization?.deviceCode !== pending.deviceCode)
+				return
 
 			if (!result.ok) {
 				if (result.error.code === 'authorization_pending') {
@@ -656,6 +687,8 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			this.emitAuthState()
 		} catch (error) {
 			this.scope.check()
+			if (this.settings.pendingAuthorization?.deviceCode !== pending.deviceCode)
+				return
 			this.stopAuthorizationPolling()
 			this.settings.pendingAuthorization = undefined
 			await this.plugin.settingsService.saveSettings()
@@ -677,8 +710,9 @@ export default class NutstoreLlmGatewayService extends BaseService {
 		}
 	}
 
-	private async cancelPendingAuthorization() {
-		const pending = this.settings.pendingAuthorization
+	private async cancelPendingAuthorization(
+		pending = this.settings.pendingAuthorization,
+	) {
 		if (!pending) {
 			return
 		}

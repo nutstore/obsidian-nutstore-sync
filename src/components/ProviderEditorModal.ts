@@ -23,21 +23,7 @@ import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
 import ProviderCorsConfirmModal from './ProviderCorsConfirmModal'
 import ProviderSelectModelsModal from './ProviderSelectModelsModal'
-
-const API_FORMAT_OPTIONS = [
-	{
-		value: '@ai-sdk/openai-compatible',
-		labelKey: 'settings.ai.provider.apiFormat.openaiChatCompletions',
-	},
-	{
-		value: '@ai-sdk/openai',
-		labelKey: 'settings.ai.provider.apiFormat.openaiResponses',
-	},
-	{
-		value: '@ai-sdk/anthropic',
-		labelKey: 'settings.ai.provider.apiFormat.anthropic',
-	},
-] as const
+import { PROVIDER_API_FORMAT_OPTIONS } from './provider-api-formats'
 
 /** Base URL hint shown verbatim in an empty field; a URL is not UI prose. */
 const API_BASE_URL_HINT = 'https://api.openai.com/v1'
@@ -95,8 +81,8 @@ export default class ProviderEditorModal extends Modal {
 			.setName(i18n.t('settings.ai.provider.apiFormat.name'))
 			.setDesc(i18n.t('settings.ai.provider.apiFormat.desc'))
 			.addDropdown((dropdown) => {
-				const knownValues = API_FORMAT_OPTIONS.map((o) => o.value)
-				for (const opt of API_FORMAT_OPTIONS) {
+				const knownValues = PROVIDER_API_FORMAT_OPTIONS.map((o) => o.value)
+				for (const opt of PROVIDER_API_FORMAT_OPTIONS) {
 					dropdown.addOption(opt.value, i18n.t(opt.labelKey))
 				}
 				if (!knownValues.includes(this.draft.npm as never)) {

@@ -1,8 +1,10 @@
+import type { ScanIssue } from '~/sync/scope'
 import { Subject } from 'rxjs'
 
 interface SyncEndProps {
 	showNotice: boolean
 	failedCount: number
+	scanIssues?: readonly ScanIssue[]
 }
 
 const endSync = new Subject<SyncEndProps>()

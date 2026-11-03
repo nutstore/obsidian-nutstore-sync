@@ -1,3 +1,5 @@
+import { SyncScope } from './scope'
+import { taskAllowedByScope } from './task-scope'
 import { closeModalOnAbort } from '~/modules/modal-lifetime'
 import { isAbortError } from '~/utils/abort'
 import { chunk } from 'es-toolkit/compat'
@@ -94,6 +96,7 @@ export interface SyncStartResult {
 export class NutstoreSync {
 	remoteFs: IFileSystem
 	localFS: IFileSystem
+	scope = new SyncScope()
 	private cancelled = false
 	get isCancelled() {
 		return this.cancelled || this.options.signal?.aborted === true
@@ -208,12 +211,29 @@ export class NutstoreSync {
 
 			// Validate the entire local snapshot before creating directories or resetting records.
 			const localStats = await this.localFS.walk()
+			if (this.localFS instanceof LocalVaultFileSystem)
+				this.scope = this.localFS.scope
+			this.scope.observe(localStats)
+			for (const issue of this.scope.issues) {
+				this.logger.warn(
+					'Subtree unavailable:',
+					issue.path,
+					issue.operation,
+					issue.cause,
+				)
+			}
 			this.throwIfCancelled()
 			this.emitPreparationProgress({ phase: 'checkingRemote' })
 			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 
 			if (!remoteBaseDirExits) {
-				await syncRecord.drop()
+				// Preserve unknown/excluded history while retaining fresh-remote semantics.
+				const records = await syncRecord.getRecords()
+				await syncRecord.setRecords(
+					new Map(
+						[...records].filter(([path]) => !this.scope.allows(path, true)),
+					),
+				)
 			}
 
 			while (!remoteBaseDirExits) {
@@ -274,7 +294,9 @@ export class NutstoreSync {
 				}
 			})()
 			this.emitPreparationProgress({ phase: 'analyzing' })
-			const tasks = await decider.decide()
+			const tasks = (await decider.decide()).filter((task) =>
+				taskAllowedByScope(task, this.scope),
+			)
 			if (!this.isCancelled) {
 				this.emitPreparationProgress({ phase: 'savingCache' })
 				await cacheService.saveRemoteTraversalCache(
@@ -299,14 +321,22 @@ export class NutstoreSync {
 
 			if (tasks.length === 0) {
 				if (preparingEmitted) {
-					emitEndSync({ showNotice, failedCount: 0 })
+					emitEndSync({
+						showNotice,
+						failedCount: 0,
+						scanIssues: this.scope.issues,
+					})
 					return {
 						ended: true,
 						ranTasks: false,
 						shouldReloadSettings: false,
 					}
 				}
-				emitEndSync({ showNotice: false, failedCount: 0 })
+				emitEndSync({
+					showNotice: this.scope.issues.length > 0,
+					failedCount: 0,
+					scanIssues: this.scope.issues,
+				})
 				return {
 					ended: false,
 					ranTasks: false,
@@ -578,7 +608,7 @@ export class NutstoreSync {
 				...mergedRemoveRemoteTasks,
 				...mergedMkdirTasks,
 				...otherTasks,
-			]
+			].filter((task) => taskAllowedByScope(task, this.scope))
 
 			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
@@ -680,7 +710,7 @@ export class NutstoreSync {
 				).open()
 			}
 
-			emitEndSync({ failedCount, showNotice })
+			emitEndSync({ failedCount, showNotice, scanIssues: this.scope.issues })
 			return { ended: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
 			if (
@@ -851,6 +881,7 @@ export class NutstoreSync {
 			10,
 			this.logger,
 			progress,
+			this.scope,
 		)
 	}
 

@@ -10,13 +10,19 @@ import {
 	isSymbol,
 	isUndefined,
 } from 'es-toolkit/compat'
+import {
+	describeThrownValue,
+	inspectError,
+	isErrorLike,
+} from './error-inspection'
 // No need to import Set, use built-in TS Set type
 
 /**
  * Deeply stringifies a JavaScript value into a JSON string, similar to JSON.stringify,
  * using compatibility helpers for cross-realm values.
- * - Handles circular references by throwing an error.
+ * - Handles circular references with a stable placeholder.
  * - Handles getter errors by stringifying the error message as the property's value.
+ * - Retains Error causes, aggregate members, and own diagnostic properties.
  * - Uses native JSON.stringify for robust string escaping.
  * - Handles Date objects by calling toISOString(), mimicking native behavior.
  *
@@ -71,8 +77,8 @@ export default function deepStringify(
 		}
 		return 'null' // Invalid date becomes null
 	}
-	if (value instanceof Error) {
-		return stringifyErrorObject(value)
+	if (isErrorLike(value)) {
+		return stringifyErrorObject(value, visited)
 	}
 
 	// --- Value should be an Array or an Object-like entity ---
@@ -152,7 +158,7 @@ export default function deepStringify(
 					stringifiedValue = deepStringify(currentValue, visited) // Recurse
 				} catch (error: unknown) {
 					stringifiedValue = JSON.stringify(
-						formatInspectionError(error, 'Error accessing property'),
+						`Error accessing property: ${describeThrownValue(error)}`,
 					)
 				}
 
@@ -178,75 +184,74 @@ export default function deepStringify(
 	return result
 }
 
-function stringifyErrorObject(error: Error): string {
-	const serialized: Record<string, string> = {}
+function stringifyErrorObject(error: object, visited: Set<object>): string {
+	if (visited.has(error)) return JSON.stringify('[Circular]')
+	visited.add(error)
 
-	serialized.name = safeStringProperty(error, 'name', error.name, 'Error')
-	serialized.message = safeStringProperty(error, 'message', error.message, '')
+	try {
+		const inspection = inspectError(error)
+		const serialized: string[] = [
+			`"name":${JSON.stringify(inspection.name)}`,
+			`"message":${JSON.stringify(inspection.message)}`,
+		]
 
-	const stack = safeOptionalStringProperty(error, 'stack')
-	if (stack !== undefined) {
-		serialized.stack = stack
+		if (inspection.stack !== undefined) {
+			serialized.push(`"stack":${JSON.stringify(inspection.stack)}`)
+		}
+		if (inspection.propertiesReadError !== undefined) {
+			serialized.push(
+				`"propertiesError":${deepStringify(
+					`[Could not inspect error properties: ${describeThrownValue(
+						inspection.propertiesReadError,
+					)}]`,
+					visited,
+				)}`,
+			)
+		}
+
+		for (const property of inspection.properties) {
+			const value =
+				property.readError === undefined
+					? property.value
+					: `[Thrown while reading property: ${describeThrownValue(
+							property.readError,
+						)}]`
+			const stringifiedValue =
+				deepStringify(value, visited) ?? stringifyUnsupportedValue(value)
+			serialized.push(`${JSON.stringify(property.key)}:${stringifiedValue}`)
+		}
+
+		if (inspection.hasCause) {
+			const cause =
+				inspection.causeReadError === undefined
+					? inspection.cause
+					: `[Thrown while reading cause: ${describeThrownValue(
+							inspection.causeReadError,
+						)}]`
+			serialized.push(
+				`"cause":${
+					deepStringify(cause, visited) ??
+					JSON.stringify(`[Unsupported cause: ${typeof cause}]`)
+				}`,
+			)
+		}
+
+		return `{${serialized.join(',')}}`
+	} finally {
+		visited.delete(error)
 	}
-
-	return JSON.stringify(serialized)
 }
 
-function safeStringProperty(
-	target: object,
-	key: 'name' | 'message',
-	fallback: string,
-	defaultValue: string,
-): string {
-	try {
-		const value = (target as Record<string, unknown>)[key]
-		return typeof value === 'string' ? value : fallback
-	} catch (error) {
-		return `[Thrown while reading ${key}: ${formatInspectionError(error, defaultValue)}]`
-	}
-}
-
-function safeOptionalStringProperty(
-	target: object,
-	key: 'stack',
-): string | undefined {
-	try {
-		const value = (target as Record<string, unknown>)[key]
-		if (value === undefined) return undefined
-		return typeof value === 'string' ? value : undefined
-	} catch (error) {
-		return `[Thrown while reading ${key}: ${formatInspectionError(error)}]`
-	}
+function stringifyUnsupportedValue(value: unknown): string {
+	return JSON.stringify(
+		value === undefined ? 'undefined' : `[Unsupported value: ${typeof value}]`,
+	)
 }
 
 function stringifyInspectionError(error: unknown, label: string): string {
 	return JSON.stringify(
-		`[Unserializable ${label}: ${formatInspectionError(error)}]`,
+		`[Unserializable ${label}: ${describeThrownValue(error)}]`,
 	)
-}
-
-function formatInspectionError(
-	error: unknown,
-	fallback = 'Unknown error',
-): string {
-	if (error instanceof Error) {
-		return error.message
-	}
-	if (typeof error === 'object' && error !== null) {
-		try {
-			const message = (error as Record<string, unknown>).message
-			if (typeof message === 'string') {
-				return message
-			}
-		} catch {
-			return fallback
-		}
-	}
-	try {
-		return String(error)
-	} catch {
-		return fallback
-	}
 }
 
 function tryCallToJSON(

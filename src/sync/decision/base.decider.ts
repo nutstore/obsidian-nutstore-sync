@@ -45,6 +45,10 @@ export default abstract class BaseSyncDecider {
 			this.sync.remoteFs.walk(),
 		])
 
+		const scope = this.sync.scope
+		scope.observe(this.localStats)
+		scope.observe(remoteStats)
+
 		const commonTaskOptions = {
 			webdav: this.webdav,
 			vault: this.vault,
@@ -108,9 +112,11 @@ export default abstract class BaseSyncDecider {
 				syncMode: this.settings.syncMode,
 				configDir: this.vault.configDir,
 			},
-			localStats: this.localStats,
-			remoteStats,
-			syncRecords,
+			localStats: scope.apply(this.localStats),
+			remoteStats: scope.apply(remoteStats),
+			syncRecords: new Map(
+				[...syncRecords].filter(([path]) => scope.allows(path, true)),
+			),
 			remoteBaseDir: this.remoteBaseDir,
 			getBaseContent,
 			compareFileContent,

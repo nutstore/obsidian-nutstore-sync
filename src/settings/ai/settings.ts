@@ -4,7 +4,6 @@ import {
 	getModelById,
 	getProviderById,
 	listModels,
-	listProviders,
 	sanitizeDefaultSelections,
 	sanitizeProviders,
 } from '~/ai/catalog/config'
@@ -32,11 +31,12 @@ export default class AISettings extends BaseSettings {
 	async display() {
 		this.containerEl.empty()
 
+		const providers = this.plugin.ai.gateway.listConfiguredProviders()
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.ai.providers.name'))
 			.setDesc(
 				i18n.t('settings.ai.providers.summary', {
-					count: this.listUserManagedProviders().length,
+					count: providers.length,
 				}),
 			)
 			.addButton((button) =>
@@ -50,7 +50,7 @@ export default class AISettings extends BaseSettings {
 					}),
 			)
 
-		if (this.listUserManagedProviders().length === 0) {
+		if (providers.length === 0) {
 			this.containerEl.createEl('p', {
 				cls: ':uno: -mt-1 mb-5 opacity-75',
 				text: i18n.t('settings.ai.providers.emptyHint'),
@@ -62,9 +62,7 @@ export default class AISettings extends BaseSettings {
 			.setDesc(i18n.t('settings.ai.defaultModel.desc'))
 			.addDropdown((dropdown) => {
 				dropdown.addOption('', i18n.t('settings.ai.none'))
-				for (const provider of listProviders(
-					this.plugin.settings.ai.providers,
-				)) {
+				for (const provider of providers) {
 					dropdown.addOption(
 						provider.id,
 						provider.name || i18n.t('settings.ai.unnamedProvider'),
@@ -94,9 +92,9 @@ export default class AISettings extends BaseSettings {
 					})
 			})
 			.addDropdown((dropdown) => {
-				const provider = getProviderById(
-					this.plugin.settings.ai.providers,
-					this.plugin.settings.ai.defaultModel?.providerId,
+				const provider = providers.find(
+					(item) =>
+						item.id === this.plugin.settings.ai.defaultModel?.providerId,
 				)
 				dropdown.addOption('', i18n.t('settings.ai.none'))
 				for (const model of listModels(provider)) {
@@ -148,12 +146,6 @@ export default class AISettings extends BaseSettings {
 						await this.persist(false)
 					}),
 			)
-	}
-
-	private listUserManagedProviders() {
-		return listProviders(this.plugin.settings.ai.providers).filter(
-			(provider) => !this.plugin.ai.gateway.isManagedProvider(provider),
-		)
 	}
 
 	private async persist(showNotice: boolean = true) {

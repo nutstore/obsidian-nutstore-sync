@@ -11,6 +11,7 @@ import {
 	findPresetModelById,
 	listModels,
 	sanitizeProviders,
+	slugifyProviderId,
 } from './config'
 
 describe('ai config', () => {
@@ -40,6 +41,14 @@ describe('ai config', () => {
 			expect(Object.getPrototypeOf(providers[id].models)).toBe(Object.prototype)
 		},
 	)
+
+	it.each([
+		['Northwind Cloud', 'northwind-cloud'],
+		['示例 服务 🌱', '示例-服务'],
+		['Café 模型 e\u0301 🌱', 'café-模型-é'],
+	])('creates stable Unicode provider ids from %s', (name, expected) => {
+		expect(slugifyProviderId(name)).toBe(expected)
+	})
 
 	it('creates an empty provider config', () => {
 		const draft = createProviderConfig()

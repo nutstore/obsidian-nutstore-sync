@@ -2,6 +2,7 @@ import { ModuleState } from '~/modules/lifecycle'
 import { ChatboxLocation, SessionAppOpenMode } from '~/settings'
 import { ChatWorkspacePanel } from '~/components/ChatWorkspacePanel'
 import { APP_VIEW_TYPE } from '~/views/app.view'
+import { createModelConfig, createProviderConfig } from '~/ai/catalog/config'
 import { requireApiVersion, type App } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import en from '~/i18n/locales/en.json'
@@ -29,11 +30,34 @@ export async function loadsProductionPlugin(app: App) {
 export async function opensChatboxInChosenLocation(app: App) {
 	const plugin = getProductionPlugin(app)
 	const original = plugin.localSettings.ai.chatboxLocation
+	const originalProviders = plugin.settings.ai.providers
+	const originalDefaultModel = plugin.settings.ai.defaultModel
+	const provider = createProviderConfig({
+		id: 'chosen-location-provider',
+		name: 'Location provider / 位置服务 🌱',
+		api: 'https://example.test/v1',
+		apiKey: 'neutral-key',
+		models: {
+			'neutral-model': createModelConfig({
+				id: 'neutral-model',
+				name: 'Neutral model / 中性模型 🌱',
+			}),
+		},
+	})
+	plugin.settings.ai.providers = {
+		...originalProviders,
+		[provider.id]: provider,
+	}
+	plugin.settings.ai.defaultModel = {
+		providerId: provider.id,
+		modelId: 'neutral-model',
+	}
 	await plugin.ai.chat.ensureSession()
 	const draft = 'Neutral draft / 中性草稿 🌱'
 	const sessionId = plugin.ai.chat.getViewProps().activeSessionId
 	plugin.ai.chat.updateInputDraft(draft)
 	try {
+		await plugin.settingsService.saveSettings()
 		for (const location of [
 			ChatboxLocation.Sidebar,
 			ChatboxLocation.Editor,
@@ -68,6 +92,85 @@ export async function opensChatboxInChosenLocation(app: App) {
 		}
 	} finally {
 		plugin.localSettings.ai.chatboxLocation = original
+		plugin.settings.ai.providers = originalProviders
+		plugin.settings.ai.defaultModel = originalDefaultModel
+		await plugin.settingsService.saveSettings()
+		app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
+	}
+}
+
+export async function opensProviderSetupInEditorThenMovesChatboxToChosenLocation(
+	app: App,
+) {
+	const plugin = getProductionPlugin(app)
+	const originalLocation = plugin.localSettings.ai.chatboxLocation
+	const originalProviders = plugin.settings.ai.providers
+	const originalDefaultModel = plugin.settings.ai.defaultModel
+	const provider = createProviderConfig({
+		id: 'setup-location-provider',
+		name: 'Setup provider / 配置服务 🌱',
+		api: 'https://example.test/v1',
+		apiKey: 'neutral-key',
+		models: {
+			'neutral-model': createModelConfig({
+				id: 'neutral-model',
+				name: 'Neutral model / 中性模型 🌱',
+			}),
+		},
+	})
+
+	try {
+		plugin.localSettings.ai.chatboxLocation = ChatboxLocation.Sidebar
+		plugin.settings.ai.providers = {}
+		plugin.settings.ai.defaultModel = undefined
+		await plugin.settingsService.saveSettings()
+		await plugin.ai.chat.ensureSession()
+		app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
+
+		await plugin.ai.openChatbox()
+		const setupLeaf = app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]
+		assert(setupLeaf, 'Provider setup did not open the Chatbox')
+		assert(
+			setupLeaf.getRoot() === app.workspace.rootSplit,
+			'Provider setup ignored its dedicated editor location',
+		)
+
+		plugin.settings.ai.providers = {
+			...originalProviders,
+			[provider.id]: provider,
+		}
+		plugin.settings.ai.defaultModel = {
+			providerId: provider.id,
+			modelId: 'neutral-model',
+		}
+		await plugin.settingsService.saveSettings()
+
+		const deadline = performance.now() + 2_000
+		while (performance.now() < deadline) {
+			const leaves = app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)
+			if (
+				leaves.length === 1 &&
+				leaves[0]?.getRoot() === app.workspace.rightSplit
+			) {
+				break
+			}
+			await new Promise<void>((resolve) => window.setTimeout(resolve, 25))
+		}
+
+		const configuredLeaves = app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)
+		assert(
+			configuredLeaves.length === 1,
+			'Completing provider setup duplicated the Chatbox',
+		)
+		assert(
+			configuredLeaves[0]?.getRoot() === app.workspace.rightSplit,
+			'Completing provider setup ignored the chosen Chatbox location',
+		)
+	} finally {
+		plugin.localSettings.ai.chatboxLocation = originalLocation
+		plugin.settings.ai.providers = originalProviders
+		plugin.settings.ai.defaultModel = originalDefaultModel
+		await plugin.settingsService.saveSettings()
 		app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
 	}
 }
@@ -76,9 +179,32 @@ export async function opensChatboxInChosenLocation(app: App) {
 export async function keepsChatboxAboveMobileNavigation(app: App) {
 	const plugin = getProductionPlugin(app)
 	const originalLocation = plugin.localSettings.ai.chatboxLocation
-	await plugin.ai.chat.ensureSession()
-	plugin.ai.chat.updateInputDraft('Neutral message / 中性消息 🌱')
+	const originalProviders = plugin.settings.ai.providers
+	const originalDefaultModel = plugin.settings.ai.defaultModel
+	const provider = createProviderConfig({
+		id: 'neutral-provider',
+		name: 'Neutral provider / 中性服务 🌱',
+		api: 'https://example.test/v1',
+		apiKey: 'neutral-key',
+		models: {
+			'neutral-model': createModelConfig({
+				id: 'neutral-model',
+				name: 'Neutral model / 中性模型 🌱',
+			}),
+		},
+	})
+	plugin.settings.ai.providers = {
+		...originalProviders,
+		[provider.id]: provider,
+	}
+	plugin.settings.ai.defaultModel = {
+		providerId: provider.id,
+		modelId: 'neutral-model',
+	}
 	try {
+		await plugin.settingsService.saveSettings()
+		await plugin.ai.chat.ensureSession()
+		plugin.ai.chat.updateInputDraft('Neutral message / 中性消息 🌱')
 		for (const location of [ChatboxLocation.Editor, ChatboxLocation.Sidebar]) {
 			plugin.localSettings.ai.chatboxLocation = location
 			await plugin.ai.openChatbox()
@@ -91,6 +217,9 @@ export async function keepsChatboxAboveMobileNavigation(app: App) {
 		}
 	} finally {
 		plugin.localSettings.ai.chatboxLocation = originalLocation
+		plugin.settings.ai.providers = originalProviders
+		plugin.settings.ai.defaultModel = originalDefaultModel
+		await plugin.settingsService.saveSettings()
 	}
 }
 

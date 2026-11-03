@@ -468,6 +468,41 @@ describe('App runtime and trusted SVG boundary', () => {
 		runtime.destroy()
 	})
 
+	it('forwards long multilingual logs without schema truncation', async () => {
+		const host = createHost()
+		const runtime = new AppRuntime(document.body, content, host)
+		const channel = runtime.frame.srcdoc.match(/"channel":"([^"]+)"/)![1]
+		const message = `开始 Begin 🌿\n${'完整记录 Full record 📘 '.repeat(1_000)}结束 End 🧭`
+		const stack = `堆栈 Stack 🧭\n${'at 中性位置 Neutral location 🌐:1:1\n'.repeat(500)}结束 End 🌿`
+		const filename = `目录/中性文件-${'文件名 File name 🌱'.repeat(200)}.js`
+
+		window.dispatchEvent(
+			new MessageEvent('message', {
+				source: runtime.frame.contentWindow,
+				data: {
+					channel,
+					event: 'log',
+					log: {
+						level: 'error',
+						source: 'runtime',
+						message,
+						stack,
+						filename,
+					},
+				},
+			}),
+		)
+
+		expect(host.log).toHaveBeenCalledWith({
+			level: 'error',
+			source: 'runtime',
+			message,
+			stack,
+			filename,
+		})
+		runtime.destroy()
+	})
+
 	it('rejects a pending mount when the runtime is closed', async () => {
 		const runtime = new AppRuntime(document.body, content, createHost())
 		const rejection = runtime.ready.catch((error: unknown) => error)

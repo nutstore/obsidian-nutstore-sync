@@ -1,13 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { AIProviderConfig } from '~/ai/core/types'
 import type NutstorePlugin from '~/index'
+import { createProviderConfig } from '~/ai/catalog/config'
 import { ModuleScope } from '~/modules/lifecycle'
-import NutstoreLlmGatewayService from './nutstore-llm-gateway.service'
+import NutstoreLlmGatewayService, {
+	type NutstoreLlmGatewayAuthSettings,
+} from './nutstore-llm-gateway.service'
 
-const { createAuthorization, poll, fetchMock } = vi.hoisted(() => ({
-	createAuthorization: vi.fn(),
-	poll: vi.fn(),
-	fetchMock: vi.fn(),
-}))
+const { createAuthorization, poll, cancelDevice, fetchMock } = vi.hoisted(
+	() => ({
+		createAuthorization: vi.fn(),
+		poll: vi.fn(),
+		cancelDevice: vi.fn(),
+		fetchMock: vi.fn(),
+	}),
+)
 vi.mock('obsidian', () => ({ Notice: class {} }))
 vi.mock('~/consts', () => ({
 	LLM_GATEWAY_CLIENT_ID: 'neutral-client',
@@ -17,6 +24,7 @@ vi.mock('@nutstore/sso-js', () => ({
 	LlmGatewayClient: class {
 		createDeviceAuthorization = createAuthorization
 		pollDeviceToken = poll
+		cancelDeviceAuthorization = cancelDevice
 		createVerificationUrl() {
 			return 'https://example.invalid/authorization'
 		}
@@ -34,7 +42,14 @@ afterEach(() => {
 })
 
 function fixture() {
-	const settings = { ai: { nutstoreLlmGateway: {}, providers: {} } }
+	const settings = {
+		ai: {
+			nutstoreLlmGateway: {} as NutstoreLlmGatewayAuthSettings,
+			providers: {} as Record<string, AIProviderConfig>,
+			defaultModel: undefined as
+				{ providerId: string; modelId: string } | undefined,
+		},
+	}
 	const save = vi.fn(async () => {})
 	const plugin = {
 		settings,
@@ -46,6 +61,103 @@ function fixture() {
 }
 
 describe('gateway lifetime', () => {
+	it('lists configured providers consistently with gateway authorization', () => {
+		const f = fixture()
+		const gateway = createProviderConfig({
+			id: 'gateway',
+			name: '中性 Gateway 🌱',
+		})
+		const other = createProviderConfig({
+			id: 'other',
+			name: '其他 Provider 🌿',
+		})
+		f.plugin.settings.ai.providers = { gateway, other }
+
+		expect(f.service.listConfiguredProviders()).toEqual([other])
+		Object.assign(f.settings.ai.nutstoreLlmGateway, {
+			accessToken: 'neutral-token',
+			refreshToken: 'neutral-refresh',
+		})
+		expect(f.service.listConfiguredProviders()).toEqual([gateway, other])
+		expect(f.plugin.settings.ai.providers).toEqual({ gateway, other })
+	})
+
+	it('cancels only the pending authorization and keeps the existing account', async () => {
+		const f = fixture()
+		Object.assign(f.settings.ai.nutstoreLlmGateway, {
+			accessToken: '{{SECRET_existing_access}}',
+			refreshToken: '{{SECRET_existing_refresh}}',
+			pendingAuthorization: {
+				clientId: 'neutral-client',
+				deviceCode: 'neutral-device',
+				userCode: 'neutral-code',
+				verificationUri: 'https://example.invalid/',
+				verificationUrl: 'https://example.invalid/',
+				intervalMs: 1000,
+				expiresAt: Date.now() + 60_000,
+			},
+		})
+
+		await f.service.cancelAuthorization()
+
+		expect(cancelDevice).toHaveBeenCalledWith({
+			deviceCode: 'neutral-device',
+		})
+		expect(
+			f.settings.ai.nutstoreLlmGateway.pendingAuthorization,
+		).toBeUndefined()
+		expect(f.settings.ai.nutstoreLlmGateway.accessToken).toBe(
+			'{{SECRET_existing_access}}',
+		)
+		expect(f.settings.ai.nutstoreLlmGateway.refreshToken).toBe(
+			'{{SECRET_existing_refresh}}',
+		)
+	})
+
+	it('selects the first fetched model when no valid default exists', async () => {
+		const f = fixture()
+		Object.assign(f.settings.ai.nutstoreLlmGateway, {
+			accessToken: '{{SECRET_current_access}}',
+			refreshToken: '{{SECRET_current_refresh}}',
+			accessTokenExpiresAt: Date.now() + 120_000,
+		})
+		fetchMock.mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					data: [
+						{
+							id: 'model-neutral-zh',
+							name: '中性模型 🌱',
+							description: '',
+							api: 'openai-completions',
+							reasoning: false,
+							input: ['text'],
+							cost: {
+								input: 0,
+								output: 0,
+								cacheRead: 0,
+								cacheWrite: 0,
+							},
+							contextWindow: 0,
+							maxTokens: 0,
+							compat: {
+								thinkingFormat: 'openai',
+								supportsReasoningEffort: false,
+							},
+						},
+					],
+				}),
+			),
+		)
+
+		await expect(f.service.refreshModels()).resolves.toBe(true)
+
+		expect(f.settings.ai.defaultModel).toEqual({
+			providerId: 'gateway',
+			modelId: 'model-neutral-zh',
+		})
+	})
+
 	it('cannot install a pending authorization or polling after a late authorization response', async () => {
 		const f = fixture()
 		let respond!: (value: unknown) => void

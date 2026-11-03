@@ -113,8 +113,6 @@ export function bootstrap(
 			)
 		else reply.resolve(data.value)
 	})
-	const truncate = (value: string, maximum: number) =>
-		value.length > maximum ? `${value.slice(0, maximum)}...` : value
 	const stringifyValue = (value: unknown) => {
 		if (typeof value === 'string') return value
 		if (typeof value === 'undefined') return 'undefined'
@@ -150,30 +148,18 @@ export function bootstrap(
 				? record.message
 				: stringifyValue(value)
 		return {
-			message: truncate(message || 'App runtime error', 4_000),
+			message: message || 'App runtime error',
 			...(typeof record?.name === 'string' && record.name
-				? { name: truncate(record.name, 200) }
+				? { name: record.name }
 				: {}),
 			...(typeof record?.stack === 'string' && record.stack
-				? { stack: truncate(record.stack, 12_000) }
+				? { stack: record.stack }
 				: {}),
 			source,
-			...(location?.filename
-				? { filename: truncate(location.filename, 1_000) }
-				: {}),
+			...(location?.filename ? { filename: location.filename } : {}),
 			...(location?.line !== undefined ? { line: location.line } : {}),
 			...(location?.column !== undefined ? { column: location.column } : {}),
 		}
-	}
-	let logWindow = Date.now()
-	let logCount = 0
-	const canEmitLog = () => {
-		const now = Date.now()
-		if (now - logWindow >= 1_000) {
-			logWindow = now
-			logCount = 0
-		}
-		return ++logCount <= 100
 	}
 	const consoleTarget = console as unknown as Record<
 		string,
@@ -183,7 +169,6 @@ export function bootstrap(
 		const original = consoleTarget[level].bind(console)
 		consoleTarget[level] = (...args: unknown[]) => {
 			original(...args)
-			if (!canEmitLog()) return
 			const error = args.find(
 				(value) =>
 					value &&
@@ -195,11 +180,8 @@ export function bootstrap(
 				log: {
 					level,
 					source: 'console',
-					message: truncate(
-						args.map(stringifyValue).join(' ') || '(empty log entry)',
-						4_000,
-					),
-					...(error?.stack ? { stack: truncate(error.stack, 12_000) } : {}),
+					message: args.map(stringifyValue).join(' ') || '(empty log entry)',
+					...(error?.stack ? { stack: error.stack } : {}),
 				},
 			})
 		}

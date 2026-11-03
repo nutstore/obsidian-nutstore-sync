@@ -1,3 +1,4 @@
+import type { SyncScope } from '../scope'
 import { chunk, debounce, isNil } from 'es-toolkit/compat'
 import { Vault } from 'obsidian'
 import { emitSyncUpdateMtimeProgress } from '~/events'
@@ -44,6 +45,7 @@ export async function updateMtimeInRecord(
 	batch_size: number,
 	logger: SyncLogger,
 	progress: UpdateMtimeProgress,
+	scope?: SyncScope,
 ): Promise<void> {
 	if (tasks.length === 0) {
 		return
@@ -51,7 +53,11 @@ export async function updateMtimeInRecord(
 	const operationCount = countRecordUpdateOperations(tasks)
 	// Filter out tasks that don't need record updates
 	const tasksNeedingUpdate = tasks.filter((_task, idx) => {
-		return results[idx]?.success && !results[idx]?.skipRecord
+		return (
+			results[idx]?.success &&
+			!results[idx]?.skipRecord &&
+			(!scope || scope.allows(_task.localPath))
+		)
 	})
 
 	if (tasksNeedingUpdate.length === 0) {
@@ -110,12 +116,13 @@ export async function updateMtimeInRecord(
 	for (const taskChunk of taskChunks) {
 		const batch = taskChunk.map(async ({ task, localPath }) => {
 			try {
+				if (scope && !scope.allows(localPath)) return
 				const remote = remoteEntityMap.get(localPath)
 				const local = await statVaultItem(vault, localPath)
 
 				if (task instanceof RemoveRemoteRecursivelyTask) {
 					for (const k of records.keys()) {
-						if (isSub(localPath, k)) {
+						if (isSub(localPath, k) && (!scope || scope.allows(k))) {
 							records.delete(k)
 						}
 					}
