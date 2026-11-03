@@ -1,4 +1,4 @@
-import { Menu, Notice, Platform, setIcon } from 'obsidian'
+import { getIcon, Menu, Notice, Platform, setIcon } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import type { SavedApp } from '~/ai/apps/store'
 import { appError } from '~/ai/apps/error'
@@ -63,7 +63,7 @@ export class ChatWorkspacePanel {
 	}
 	private showPicker() {
 		if (this.plugin.ai.chat.workspaceState.busy) return
-		const menu = new Menu()
+		const menu = new Menu().setUseNativeMenu(false)
 		menu.addItem((item) =>
 			item
 				.setTitle(i18n.t('apps.noWorkspace'))
@@ -79,13 +79,16 @@ export class ChatWorkspacePanel {
 		)
 		if (this.items.length) menu.addSeparator()
 		for (const app of this.items) {
+			const icon = app.app
+				? this.plugin.ai.appIcon(app.id, app.app.manifest.iconSvg)
+				: 'blocks'
 			menu.addItem((item) =>
 				item
 					.setTitle(
 						app.app?.manifest.title ??
 							`${app.id} · ${i18n.t('apps.missingApp')}`,
 					)
-					.setIcon('blocks')
+					.setIcon(getIcon(icon) ? icon : 'blocks')
 					.setChecked(app.id === this.activeId)
 					.onClick(() => this.selectWorkspace(app.id)),
 			)
