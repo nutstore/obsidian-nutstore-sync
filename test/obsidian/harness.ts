@@ -15,6 +15,7 @@ import {
 	opensChatboxInChosenLocation,
 	opensProviderSetupInEditorThenMovesChatboxToChosenLocation,
 	keepsChatboxAboveMobileNavigation,
+	keepsWorkspacePickerAcrossPointerDown,
 	respectsSessionAppOpenMode,
 	reloadsProductionPlugin,
 	rendersSearchableSettings,
@@ -97,6 +98,9 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		await run(
 			'keeps the Chatbox composer above phone navigation across keyboard and layout changes',
 			() => keepsChatboxAboveMobileNavigation(this.app),
+		)
+		await run('keeps the workspace picker alive across pointer down', () =>
+			keepsWorkspacePickerAcrossPointerDown(this.app),
 		)
 		await run(
 			'respects automatic and manual session App opening independently of Chatbox location',

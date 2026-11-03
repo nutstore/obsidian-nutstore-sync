@@ -566,8 +566,12 @@ function Chatbox(props: ChatboxProps) {
 
 	createEffect(() => {
 		if (!providerReady()) return
-		props.onWorkspaceHostChange?.(workspaceHostEl)
-		onCleanup(() => props.onWorkspaceHostChange?.(undefined))
+		// The host owns the workspace panel's lifetime. Props are replaced with
+		// fresh callbacks on every view update (e.g. each pointerdown), so the
+		// callback must not be tracked or the panel is rebuilt under the cursor.
+		const notify = untrack(() => props.onWorkspaceHostChange)
+		notify?.(workspaceHostEl)
+		onCleanup(() => notify?.(undefined))
 	})
 
 	createEffect(

@@ -175,9 +175,11 @@ export async function opensProviderSetupInEditorThenMovesChatboxToChosenLocation
 	}
 }
 
-/** Exercise the actual composer against Obsidian's phone navigation CSS. */
-export async function keepsChatboxAboveMobileNavigation(app: App) {
-	const plugin = getProductionPlugin(app)
+/** Run with a ready (neutral) provider so the real composer renders its workspace controls. */
+async function withNeutralProvider(
+	plugin: ReturnType<typeof getProductionPlugin>,
+	run: () => Promise<void>,
+) {
 	const originalLocation = plugin.localSettings.ai.chatboxLocation
 	const originalProviders = plugin.settings.ai.providers
 	const originalDefaultModel = plugin.settings.ai.defaultModel
@@ -204,6 +206,19 @@ export async function keepsChatboxAboveMobileNavigation(app: App) {
 	try {
 		await plugin.settingsService.saveSettings()
 		await plugin.ai.chat.ensureSession()
+		await run()
+	} finally {
+		plugin.localSettings.ai.chatboxLocation = originalLocation
+		plugin.settings.ai.providers = originalProviders
+		plugin.settings.ai.defaultModel = originalDefaultModel
+		await plugin.settingsService.saveSettings()
+	}
+}
+
+/** Exercise the actual composer against Obsidian's phone navigation CSS. */
+export async function keepsChatboxAboveMobileNavigation(app: App) {
+	const plugin = getProductionPlugin(app)
+	await withNeutralProvider(plugin, async () => {
 		plugin.ai.chat.updateInputDraft('Neutral message / 中性消息 🌱')
 		for (const location of [ChatboxLocation.Editor, ChatboxLocation.Sidebar]) {
 			plugin.localSettings.ai.chatboxLocation = location
@@ -215,12 +230,35 @@ export async function keepsChatboxAboveMobileNavigation(app: App) {
 				app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
 			}
 		}
-	} finally {
-		plugin.localSettings.ai.chatboxLocation = originalLocation
-		plugin.settings.ai.providers = originalProviders
-		plugin.settings.ai.defaultModel = originalDefaultModel
-		await plugin.settingsService.saveSettings()
-	}
+	})
+}
+
+/** A press on the composer refreshes view props; it must not rebuild the workspace picker under the pointer. */
+export async function keepsWorkspacePickerAcrossPointerDown(app: App) {
+	const plugin = getProductionPlugin(app)
+	await withNeutralProvider(plugin, async () => {
+		plugin.localSettings.ai.chatboxLocation = ChatboxLocation.Sidebar
+		await plugin.ai.openChatbox()
+		try {
+			const root =
+				app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)[0]!.view.containerEl
+			const picker = root.querySelector<HTMLButtonElement>(
+				'.ns-workspace-picker',
+			)
+			assert(picker, 'Workspace picker is unavailable')
+			picker.dispatchEvent(
+				new PointerEvent('pointerdown', { bubbles: true, composed: true }),
+			)
+			await new Promise((resolve) => window.setTimeout(resolve, 50))
+			assert(
+				picker.isConnected &&
+					root.querySelector('.ns-workspace-picker') === picker,
+				'Workspace picker was rebuilt by pointer down',
+			)
+		} finally {
+			app.workspace.detachLeavesOfType(CHATBOX_VIEW_TYPE)
+		}
+	})
 }
 
 export async function respectsSessionAppOpenMode(app: App) {
