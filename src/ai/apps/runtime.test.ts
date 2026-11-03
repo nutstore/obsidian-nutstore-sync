@@ -626,6 +626,29 @@ describe('App runtime and trusted SVG boundary', () => {
 		dom.window.close()
 	})
 
+	it('preserves closing script text in App code without adding markup', async () => {
+		const dom = new JSDOM(
+			runtimeDocument(
+				{
+					html: '<p id="result"></p>',
+					css: '',
+					javascript: `document.querySelector('#result').textContent = '</script><p>中文 English 🌿</p>';`,
+				},
+				'neutral',
+			),
+			{ runScripts: 'dangerously' },
+		)
+		try {
+			await timeout(10)
+			expect(dom.window.document.querySelector('#result')?.textContent).toBe(
+				'</script><p>中文 English 🌿</p>',
+			)
+			expect(dom.window.document.querySelectorAll('p')).toHaveLength(1)
+		} finally {
+			dom.window.close()
+		}
+	})
+
 	it('applies the markup policy inside nested templates before they are activated', async () => {
 		const dom = new JSDOM(
 			runtimeDocument(

@@ -19,10 +19,8 @@ export interface AppRuntimeAPI {
 export function bootstrap(
 	payload: {
 		channel: string
-		nonce: string
 		html: string
 		css: string
-		javascript: string
 		theme: AppTheme
 		fsMethods: string[]
 	},
@@ -230,7 +228,7 @@ export function bootstrap(
 	if (!style) throw new Error('App document is missing its stylesheet slot')
 	style.textContent = payload.css
 	// Parse an inert document before adopting any nodes into the live frame.
-	// The authored body is data; only the separately nonce-bearing script below
+	// The authored body is data; only the separately nonce-bearing script
 	// may start the App. Template contents form separate trees and must follow
 	// exactly the same markup policy before an App clones them into the body.
 	const parsed = new DOMParser().parseFromString(
@@ -281,8 +279,4 @@ export function bootstrap(
 	}
 	sanitize(parsed)
 	document.body.replaceChildren(...Array.from(parsed.body.childNodes))
-	const script = document.createElement('script')
-	script.nonce = payload.nonce
-	script.textContent = `(async () => {\n${payload.javascript}\n})().then(window.__appStarted).catch(window.__appFailed);\n//# sourceURL=nutstore-app.js`
-	document.body.append(script)
 }
