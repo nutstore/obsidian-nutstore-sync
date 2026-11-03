@@ -1,18 +1,13 @@
 import createId from '~/utils/create-id'
 import { ButtonComponent, Modal, Notice, Platform, setIcon } from 'obsidian'
 import { Subscription } from 'rxjs'
-import CleanRecordTask from '~/sync/tasks/clean-record.task'
-import FilenameErrorTask from '~/sync/tasks/filename-error.task'
-import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
-import RemoveRemoteRecursivelyTask from '~/sync/tasks/remove-remote-recursively.task'
-import SkippedTask from '~/sync/tasks/skipped.task'
-import { BaseTask } from '~/sync/tasks/task.interface'
 import {
 	addClassTokens,
 	removeClassTokens,
 	toggleClassTokens,
 } from '~/utils/class-tokens'
-import getTaskName from '~/utils/get-task-name'
+import { describeSyncError } from '~/utils/describe-sync-error'
+import { getTaskLabel, type TaskKind } from '~/utils/get-task-name'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
 import {
@@ -21,28 +16,38 @@ import {
 	type SyncPreparationProgress,
 } from '../events'
 import i18n from '../i18n'
-import ConflictResolveTask from '../sync/tasks/conflict-resolve.task'
-import MkdirLocalTask from '../sync/tasks/mkdir-local.task'
-import MkdirRemoteTask from '../sync/tasks/mkdir-remote.task'
-import PullTask from '../sync/tasks/pull.task'
-import PushTask from '../sync/tasks/push.task'
-import RemoveLocalTask from '../sync/tasks/remove-local.task'
-import RemoveRemoteTask from '../sync/tasks/remove-remote.task'
+import {
+	isSyncRunActive,
+	type SyncRunSnapshot,
+	type SyncRunStatus,
+	type SyncTaskRecord,
+	type SyncTaskRef,
+} from '../services/progress.service'
 
-type SyncProgressModalState =
-	| 'preparing'
-	| 'syncing'
-	| 'cancelling'
-	| 'complete'
-	| 'warning'
-	| 'error'
-	| 'cancelled'
+const TASK_ICONS: Record<TaskKind, string> = {
+	cleanRecord: 'archive-x',
+	merge: 'git-merge',
+	filenameError: 'refresh-cw-off',
+	createLocalDir: 'folder-plus',
+	createRemoteDir: 'folder-plus',
+	createRemoteDirs: 'folder-plus',
+	download: 'arrow-down-narrow-wide',
+	upload: 'arrow-up-narrow-wide',
+	removeLocal: 'trash',
+	removeRemote: 'trash',
+	removeRemoteRecursively: 'trash',
+	skip: 'chevron-last',
+	noop: 'arrow-left-right',
+	sync: 'arrow-left-right',
+}
 
 export default class SyncProgressModal extends Modal {
 	private progressTitle!: HTMLElement
 	private statusIcon!: HTMLDivElement
 	private statusSection!: HTMLDivElement
 	private statusMessage!: HTMLDivElement
+	private scanIssuesSummary!: HTMLDivElement
+	private scanIssuesText!: HTMLSpanElement
 	private progressBar!: HTMLDivElement
 	private progressText!: HTMLDivElement
 	private progressLabel!: HTMLDivElement
@@ -94,29 +99,18 @@ export default class SyncProgressModal extends Modal {
 			return
 		}
 
-		const progress = this.plugin.sync.progress.syncProgress
-		const preparation = this.plugin.sync.progress.preparationProgress
-		const failedCount = this.plugin.sync.progress.syncFailedCount
+		// The modal is only opened once a run exists; a late tick after the
+		// service dropped it has nothing left to show.
+		const run = this.plugin.sync.progress.run
+		if (!run) return
+		const { preparation, status: state } = run
 		const preparationText = preparation
 			? getSyncPreparationText(preparation)
 			: null
-		const state: SyncProgressModalState = this.plugin.sync.progress.syncEnd
-			? failedCount > 0 || this.plugin.sync.progress.scanIssues.length > 0
-				? 'warning'
-				: 'complete'
-			: this.plugin.sync.progress.cancellationState === 'complete'
-				? 'cancelled'
-				: this.plugin.sync.progress.cancellationState === 'requested'
-					? 'cancelling'
-					: this.plugin.sync.progress.syncFailed
-						? 'error'
-						: preparation
-							? 'preparing'
-							: 'syncing'
 
 		if (
 			Platform.isMobile &&
-			progress.hasLargeUploads &&
+			run.hasLargeUploads &&
 			this.plugin.settings.skipLargeFiles.maxSize.trim() === ''
 		) {
 			this.largeUploadHint.show()
@@ -124,7 +118,16 @@ export default class SyncProgressModal extends Modal {
 			this.largeUploadHint.hide()
 		}
 
-		this.updateHeader(state, preparationText?.operation, failedCount)
+		// Only a finished run carries scan issues; a new run starts with none.
+		const scanIssueCount = run.scanIssues.length
+		this.scanIssuesSummary.toggle(scanIssueCount > 0)
+		if (scanIssueCount > 0) {
+			this.scanIssuesText.setText(
+				i18n.t('scanIssues.summary', { count: scanIssueCount }),
+			)
+		}
+
+		this.updateHeader(run, preparationText?.operation)
 		this.updateControls(state)
 		this.modalEl.dataset.state = state
 		this.modalEl.dataset.preparationPhase = preparation?.traversal?.phase ?? ''
@@ -135,8 +138,9 @@ export default class SyncProgressModal extends Modal {
 						(preparation?.traversal?.phase === 'incremental' &&
 							preparationText?.detail),
 					)
-				: (state === 'syncing' || state === 'cancelling') &&
-					progress.current !== null
+				: ((state === 'syncing' || state === 'cancelling') &&
+						run.current !== null) ||
+					(state === 'error' && run.error !== undefined)
 		if (hasStatusDetails) {
 			this.statusSection.show()
 		} else {
@@ -164,16 +168,16 @@ export default class SyncProgressModal extends Modal {
 		this.progressBar.removeClass('nutstore-sync-progress-indeterminate')
 		this.scanStats.hide()
 		this.progressHint.hide()
-		if (progress.total === 0) {
+		if (run.total === 0) {
 			this.filesSection.hide()
 		} else {
 			this.filesSection.show()
 		}
 
 		const percent =
-			state === 'complete' && progress.total === 0
+			state === 'complete' && run.total === 0
 				? 100
-				: Math.round((progress.completed.length / progress.total) * 100) || 0
+				: Math.round((run.completed.length / run.total) * 100) || 0
 
 		this.progressBar.setCssProps({ width: `${percent}%` })
 		this.progressText.setText(
@@ -189,14 +193,20 @@ export default class SyncProgressModal extends Modal {
 			this.progressText.textContent ?? '',
 		)
 
-		this.statusMessage.hide()
-		if ((state === 'syncing' || state === 'cancelling') && progress.current) {
+		if (state === 'error' && run.error) {
+			this.statusMessage.setText(describeSyncError(run.error))
+			this.statusMessage.show()
+		} else {
+			this.statusMessage.hide()
+		}
+
+		if ((state === 'syncing' || state === 'cancelling') && run.current) {
 			this.currentFile.setText(
 				i18n.t('sync.currentFile', {
-					path: progress.current.localPath,
+					path: run.current.localPath,
 				}),
 			)
-			this.currentFile.title = progress.current.localPath
+			this.currentFile.title = run.current.localPath
 		} else {
 			this.currentFile.setText('')
 			this.currentFile.title = ''
@@ -204,18 +214,15 @@ export default class SyncProgressModal extends Modal {
 
 		this.filesList.empty()
 
-		const isCurrentInFlight =
-			progress.current !== null &&
-			!progress.completed.some((c) => c.task === progress.current)
-		if (isCurrentInFlight) {
-			this.renderTaskRow(progress.current!, 'in-progress')
+		// An ended run has no task in flight, even if one was the last to start.
+		if (run.current && run.currentInFlight) {
+			this.renderTaskRow(run.current, 'in-progress')
 		}
 
-		const recentFiles = progress.completed.slice().reverse()
-
-		recentFiles.forEach(({ task, success }) => {
-			this.renderTaskRow(task, success ? 'success' : 'failed')
-		})
+		for (let i = run.completed.length - 1; i >= 0; i--) {
+			const record = run.completed[i]
+			this.renderTaskRow(record, record.success ? 'success' : 'failed')
+		}
 	}
 
 	private updatePreparationProgress(
@@ -275,9 +282,8 @@ export default class SyncProgressModal extends Modal {
 	}
 
 	private updateHeader(
-		state: SyncProgressModalState,
+		{ status: state, failedCount, scanIssues }: SyncRunSnapshot,
 		preparationOperation?: string,
-		failedCount = 0,
 	): void {
 		const stateClasses = [
 			'nutstore-sync-progress__status-icon--preparing',
@@ -312,7 +318,7 @@ export default class SyncProgressModal extends Modal {
 		}
 		this.statusIcon.classList.toggle(
 			'nutstore-sync-spinning',
-			state === 'preparing' || state === 'syncing' || state === 'cancelling',
+			isSyncRunActive(state),
 		)
 
 		const title =
@@ -322,13 +328,8 @@ export default class SyncProgressModal extends Modal {
 				: state === 'complete'
 					? i18n.t('sync.progressCompleteTitle')
 					: state === 'warning'
-						? this.plugin.sync.progress.scanIssues.length > 0
-							? i18n.t('sync.partialScan', {
-									count: this.plugin.sync.progress.scanIssues.length,
-									paths: this.plugin.sync.progress.scanIssues
-										.map((issue) => issue.path)
-										.join('\n'),
-								})
+						? scanIssues.length > 0
+							? i18n.t('sync.partialScanTitle')
 							: i18n.t('sync.completeWithFailed', { failedCount })
 						: state === 'cancelled'
 							? i18n.t('sync.cancelled')
@@ -338,12 +339,8 @@ export default class SyncProgressModal extends Modal {
 		this.progressTitle.setText(title)
 	}
 
-	private updateControls(state: SyncProgressModalState): void {
-		const isTerminal =
-			state === 'complete' ||
-			state === 'warning' ||
-			state === 'error' ||
-			state === 'cancelled'
+	private updateControls(state: SyncRunStatus): void {
+		const isTerminal = !isSyncRunActive(state)
 
 		toggleClassTokens(
 			this.stopButtonComponent.buttonEl,
@@ -359,7 +356,7 @@ export default class SyncProgressModal extends Modal {
 	}
 
 	private renderTaskRow(
-		file: BaseTask,
+		file: SyncTaskRef | SyncTaskRecord,
 		status: 'in-progress' | 'success' | 'failed',
 	): void {
 		const iconCls =
@@ -378,42 +375,25 @@ export default class SyncProgressModal extends Modal {
 		})
 
 		const icon = item.createSpan({ cls: iconCls })
-
-		if (file instanceof CleanRecordTask) {
-			setIcon(icon, 'archive-x')
-		} else if (file instanceof ConflictResolveTask) {
-			setIcon(icon, 'git-merge')
-		} else if (file instanceof FilenameErrorTask) {
-			setIcon(icon, 'refresh-cw-off')
-		} else if (
-			file instanceof MkdirLocalTask ||
-			file instanceof MkdirRemoteTask ||
-			file instanceof MkdirsRemoteTask
-		) {
-			setIcon(icon, 'folder-plus')
-		} else if (file instanceof PullTask) {
-			setIcon(icon, 'arrow-down-narrow-wide')
-		} else if (file instanceof PushTask) {
-			setIcon(icon, 'arrow-up-narrow-wide')
-		} else if (
-			file instanceof RemoveLocalTask ||
-			file instanceof RemoveRemoteTask ||
-			file instanceof RemoveRemoteRecursivelyTask
-		) {
-			setIcon(icon, 'trash')
-		} else if (file instanceof SkippedTask) {
-			setIcon(icon, 'chevron-last')
-		} else {
-			setIcon(icon, 'arrow-left-right')
-		}
+		setIcon(icon, TASK_ICONS[file.kind])
 
 		const typeLabel = item.createSpan({
 			cls: `:uno: flex-none w-17 md:w-24 font-500 ${labelCls}`,
 		})
-		typeLabel.setText(getTaskName(file))
+		typeLabel.setText(getTaskLabel(file))
 
-		const filePath = item.createSpan({ cls: ':uno: flex-1 break-all' })
-		filePath.setText(i18n.t('sync.filePath', { path: file.localPath }))
+		const detail = item.createDiv({ cls: ':uno: flex-1 min-w-0' })
+		detail
+			.createDiv({ cls: ':uno: break-all' })
+			.setText(i18n.t('sync.filePath', { path: file.localPath }))
+		const error = 'error' in file ? file.error : undefined
+		if (status === 'failed' && error) {
+			detail
+				.createDiv({
+					cls: ':uno: break-all text-[var(--text-muted)]',
+				})
+				.setText(error)
+		}
 	}
 
 	onOpen() {
@@ -454,6 +434,23 @@ export default class SyncProgressModal extends Modal {
 			cls: 'nutstore-sync-progress__summary',
 		})
 		statusMessage.hide()
+
+		// The warning title stays short for narrow screens; this explanation owns
+		// the count and the consequence for both devices.
+		const scanIssuesSummary = container.createDiv({
+			cls: 'nutstore-sync-progress__scan-issues',
+		})
+		scanIssuesSummary.hide()
+		this.scanIssuesText = scanIssuesSummary.createSpan()
+		// The list is opened on demand while this modal is up, so it never stacks
+		// on top of the progress the user is watching.
+		new ButtonComponent(scanIssuesSummary)
+			.setButtonText(i18n.t('scanIssues.view'))
+			.onClick(() =>
+				this.plugin.sync.events.showScanIssues(
+					this.plugin.sync.progress.run?.scanIssues ?? [],
+				),
+			)
 
 		const progressCard = container.createDiv({
 			cls: 'nutstore-sync-progress__card',
@@ -564,6 +561,7 @@ export default class SyncProgressModal extends Modal {
 		this.statusIcon = statusIcon
 		this.statusSection = statusSection
 		this.statusMessage = statusMessage
+		this.scanIssuesSummary = scanIssuesSummary
 		this.progressBar = progressBar
 		this.progressText = progressText
 		this.progressLabel = progressLabel
@@ -578,7 +576,7 @@ export default class SyncProgressModal extends Modal {
 		const stopButton = new ButtonComponent(footerButtons)
 			.setButtonText(i18n.t('sync.stopButton'))
 			.onClick(() => {
-				if (this.plugin.sync.progress.cancellationState === 'requested') {
+				if (this.plugin.sync.progress.run?.status === 'cancelling') {
 					new Notice(i18n.t('sync.cancellingHint'), 3000)
 					return
 				}

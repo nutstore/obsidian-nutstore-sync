@@ -37,6 +37,7 @@ import {
 } from '~/sync/log'
 import breakableSleep from '~/utils/breakable-sleep'
 import { computeEffectiveFilterRules } from '~/utils/config-dir-rules'
+import { describeSyncError } from '~/utils/describe-sync-error'
 import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
@@ -702,7 +703,7 @@ export class NutstoreSync {
 						failedTasksInfo.push({
 							taskName: getTaskName(task),
 							localPath: task.options.localPath,
-							errorMessage: result.error.message,
+							errorMessage: describeSyncError(result.error),
 						})
 					}
 				}
@@ -822,7 +823,13 @@ export class NutstoreSync {
 
 			res[i] = taskResult
 			if (isDisplayable) {
-				allCompletedTasks.push({ task, success: taskResult.success })
+				allCompletedTasks.push({
+					task,
+					success: taskResult.success,
+					error: taskResult.success
+						? undefined
+						: describeSyncError(taskResult.error),
+				})
 				// Keep current=task so the header doesn't flicker between tasks
 				emitSyncProgress(totalDisplayableTasks.length, allCompletedTasks, task)
 			}

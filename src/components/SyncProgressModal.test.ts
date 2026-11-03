@@ -4,14 +4,10 @@ import { Platform } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import i18n from '~/i18n'
 import {
-	emitCancelSync,
-	emitPreparingSync,
-	emitSyncProgress,
-	emitSyncCancelled,
 	emitSyncUpdateMtimeProgress,
 	type SyncPreparationProgress,
 } from '~/events'
-import { ProgressService } from '~/services/progress.service'
+import type { SyncRunSnapshot } from '~/services/progress.service'
 import SyncProgressModal from './SyncProgressModal'
 
 const { notice } = vi.hoisted(() => ({ notice: vi.fn() }))
@@ -47,6 +43,9 @@ vi.mock('obsidian', () => {
 			},
 			hide: () => {
 				el.style.setProperty('display', 'none')
+			},
+			toggle: (show: boolean) => {
+				el.style.setProperty('display', show ? '' : 'none')
 			},
 			setCssProps: (props: Record<string, string>) =>
 				Object.entries(props).forEach(([key, value]) =>
@@ -116,30 +115,33 @@ afterEach(async () => {
 	await i18n.changeLanguage('en')
 })
 
+const runOf = (patch: Partial<SyncRunSnapshot> = {}): SyncRunSnapshot => ({
+	status: 'syncing',
+	startedAt: 0,
+	preparation: null,
+	total: 0,
+	completed: [],
+	current: null,
+	currentInFlight: false,
+	failedCount: 0,
+	scanIssues: [],
+	...patch,
+})
+
 function mount(preparation: SyncPreparationProgress = scanning()) {
-	const progress: Pick<
-		ProgressService,
-		| 'syncProgress'
-		| 'preparationProgress'
-		| 'syncFailedCount'
-		| 'syncFailed'
-		| 'syncEnd'
-		| 'cancellationState'
-		| 'scanIssues'
-	> = {
-		syncProgress: { total: 0, completed: [], current: null },
-		preparationProgress: preparation,
-		syncFailedCount: 0,
-		syncFailed: false,
-		syncEnd: false,
-		cancellationState: 'none',
-		scanIssues: [],
+	const progress: { run: SyncRunSnapshot } = {
+		run: runOf({ status: 'preparing', preparation }),
+	}
+	/** The service replaces the snapshot on every change; do the same here. */
+	const set = (patch: Partial<SyncRunSnapshot>) => {
+		progress.run = { ...progress.run, ...patch }
 	}
 	const settings = { skipLargeFiles: { maxSize: '' } }
+	const showScanIssues = vi.fn()
 	const modal = new SyncProgressModal({
 		app: {},
 		settings,
-		sync: { progress },
+		sync: { progress, events: { showScanIssues } },
 	} as unknown as NutstorePlugin)
 	modals.push(modal)
 	modal.onOpen()
@@ -148,7 +150,9 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 	return {
 		modal,
 		progress,
+		set,
 		settings,
+		showScanIssues,
 		find,
 		bar: find('primary').querySelector<HTMLElement>(
 			'.nutstore-sync-progress__bar',
@@ -158,51 +162,14 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 }
 
 describe('sync progress modal', () => {
-	it('retains the stop request across modal lifetimes and waits for cancellation acknowledgement', () => {
-		const plugin = {
-			sync: { executor: { isRunning: () => true } },
-		} as unknown as NutstorePlugin
-		const service = new ProgressService(plugin)
-		service.onload()
-		try {
-			emitCancelSync()
-			expect(service.cancellationState).toBe('requested')
-			emitCancelSync()
-			expect(notice).not.toHaveBeenCalled()
-			emitSyncCancelled()
-			expect(service.cancellationState).toBe('complete')
-			emitPreparingSync({ showNotice: false })
-			expect(service.cancellationState).toBe('none')
-		} finally {
-			service.onunload()
-		}
-	})
-
-	it('retains upload advice across task updates and clears it for the next sync', () => {
-		const service = new ProgressService({} as NutstorePlugin)
-		service.onload()
-		try {
-			emitSyncProgress(2, [], null, true)
-			expect(service.syncProgress.hasLargeUploads).toBe(true)
-			emitSyncProgress(2, [], null)
-			expect(service.syncProgress.hasLargeUploads).toBe(true)
-			emitPreparingSync({ showNotice: false })
-			expect(service.syncProgress.hasLargeUploads).toBeUndefined()
-			emitSyncProgress(1, [], null, false)
-			expect(service.syncProgress.hasLargeUploads).toBe(false)
-		} finally {
-			service.onunload()
-		}
-	})
-
 	it.each(['zh', 'en'])(
 		'shows mobile upload advice only for a sync with large uploads in %s',
 		async (language) => {
 			await i18n.changeLanguage(language)
-			const { modal, progress, find, settings } = mount()
+			const { modal, set, find, settings } = mount()
 			const hint = find('large-upload-hint')
 			expect(hint.style.display).toBe('none')
-			progress.syncProgress.hasLargeUploads = true
+			set({ status: 'syncing', preparation: null, hasLargeUploads: true })
 			modal.update()
 			expect(hint.style.display).toBe('none')
 			vi.mocked(Platform).isMobile = true
@@ -219,11 +186,10 @@ describe('sync progress modal', () => {
 			settings.skipLargeFiles.maxSize = '  '
 			modal.update()
 			expect(hint.style.display).toBe('')
-			progress.preparationProgress = null
-			progress.syncProgress.current = null
+			set({ current: null })
 			modal.update()
 			expect(hint.style.display).toBe('')
-			progress.syncProgress.hasLargeUploads = false
+			set({ hasLargeUploads: false })
 			modal.update()
 			expect(hint.style.display).toBe('none')
 		},
@@ -266,10 +232,10 @@ describe('sync progress modal', () => {
 	)
 
 	it('recalculates known work when scanning discovers more directories without restarting the icon', () => {
-		const { modal, progress, find, bar } = mount(scanning(2, 2))
+		const { modal, set, find, bar } = mount(scanning(2, 2))
 		const icon = modal.titleEl.querySelector('svg')
 		expect(bar.style.width).toBe('50%')
-		progress.preparationProgress = scanning(3, 9)
+		set({ preparation: scanning(3, 9) })
 		modal.update()
 		expect(bar.style.width).toBe('25%')
 		expect(find('bar-label').textContent).toBe('3 / 12')
@@ -287,13 +253,18 @@ describe('sync progress modal', () => {
 	})
 
 	it('retains scan counts while waiting for a retry and restores scanning afterward', () => {
-		const { modal, progress, bar, find } = mount()
-		progress.preparationProgress!.traversal!.phase = 'retrying'
+		const { modal, set, bar, find } = mount()
+		set({
+			preparation: {
+				...scanning(),
+				traversal: { ...scanning().traversal!, phase: 'retrying' },
+			},
+		})
 		modal.update()
 		expect(modal.modalEl.dataset.preparationPhase).toBe('retrying')
 		expect(find('bar-label').textContent).toBe('2 / 5')
 		expect(bar.style.width).toBe('40%')
-		progress.preparationProgress = scanning(3, 2)
+		set({ preparation: scanning(3, 2) })
 		modal.update()
 		expect(modal.modalEl.dataset.preparationPhase).toBe('scanning')
 		expect(bar.style.width).toBe('60%')
@@ -314,8 +285,8 @@ describe('sync progress modal', () => {
 	})
 
 	it('switches from scanning to task progress and shows an empty successful sync as complete', () => {
-		const { modal, progress, find, track, bar } = mount()
-		progress.preparationProgress = null
+		const { modal, set, find, track, bar } = mount()
+		set({ status: 'syncing', preparation: null })
 		modal.update()
 		expect(find('label').textContent).toBe('Sync progress')
 		expect(find('stats').style.display).toBe('none')
@@ -324,7 +295,7 @@ describe('sync progress modal', () => {
 		expect(bar.classList.contains('nutstore-sync-progress-indeterminate')).toBe(
 			false,
 		)
-		progress.syncEnd = true
+		set({ status: 'complete' })
 		modal.update()
 		expect(modal.modalEl.dataset.state).toBe('complete')
 		expect(bar.style.width).toBe('100%')
@@ -332,19 +303,123 @@ describe('sync progress modal', () => {
 	})
 
 	it.each(['zh', 'en'])(
+		'shows unavailable Unicode paths as a warning and clears them on the next run in %s',
+		async (language) => {
+			await i18n.changeLanguage(language)
+			const { modal, progress, set, find, showScanIssues } = mount()
+			const scanIssues = [
+				{
+					path: 'Notes 笔记🌱/Section & <draft>📘',
+					operation: 'list' as const,
+					cause: new Error('Unavailable 暂不可用🌿'),
+				},
+			]
+			set({ status: 'warning', preparation: null, scanIssues })
+			modal.update()
+			expect(modal.modalEl.dataset.state).toBe('warning')
+			expect(modal.titleEl.textContent).toBe(i18n.t('sync.partialScanTitle'))
+			expect(modal.titleEl.textContent).not.toContain('1')
+			expect(modal.contentEl.textContent).toContain(
+				i18n.t('scanIssues.summary', { count: 1 }),
+			)
+			expect(modal.titleEl.querySelector('draft')).toBeNull()
+			const view = find('scan-issues').querySelector('button')!
+			expect(view.textContent).toBe(i18n.t('scanIssues.view'))
+			view.click()
+			expect(showScanIssues).toHaveBeenCalledWith(progress.run.scanIssues)
+			expect(find('scan-issues').style.display).not.toBe('none')
+			expect(
+				find('footer').querySelector('button')?.classList.contains('hidden'),
+			).toBe(true)
+			set({ status: 'preparing', scanIssues: [], preparation: scanning() })
+			modal.update()
+			expect(modal.modalEl.dataset.state).toBe('preparing')
+			expect(find('scan-issues').style.display).toBe('none')
+			expect(modal.titleEl.textContent).not.toContain('Section & <draft>📘')
+		},
+	)
+
+	it.each(['zh', 'en'])(
+		'lists each finished task with its failure reason and no task in flight in %s',
+		async (language) => {
+			await i18n.changeLanguage(language)
+			const { modal, set, find } = mount()
+			const ref = (localPath: string) => ({
+				kind: 'upload' as const,
+				localPath,
+			})
+			set({
+				status: 'warning',
+				preparation: null,
+				total: 2,
+				failedCount: 1,
+				completed: [
+					{ ...ref('笔记🌱/<a> & b.md'), success: true },
+					{
+						...ref('Notes/章节 📘.md'),
+						success: false,
+						error: '无法连接 <offline>',
+					},
+				],
+				current: ref('Notes/章节 📘.md'),
+				currentInFlight: false,
+			})
+			modal.update()
+			const rows = Array.from(
+				find('files-list').querySelectorAll<HTMLElement>(':scope > div'),
+			)
+			expect(rows).toHaveLength(2)
+			expect(rows[0].textContent).toContain('Notes/章节 📘.md')
+			expect(rows[0].textContent).toContain('无法连接 <offline>')
+			expect(rows[0].querySelector('offline')).toBeNull()
+			expect(rows[1].textContent).toContain('笔记🌱/<a> & b.md')
+			expect(rows[1].textContent).not.toContain('无法连接')
+			expect(find('current-file').textContent).toBe('')
+			expect(modal.titleEl.textContent).toBe(
+				i18n.t('sync.completeWithFailed', { failedCount: 1 }),
+			)
+		},
+	)
+
+	it.each(['zh', 'en'])(
+		'explains why a run failed and offers only closing in %s',
+		async (language) => {
+			await i18n.changeLanguage(language)
+			const { modal, set, find } = mount()
+			set({
+				status: 'error',
+				preparation: null,
+				error: new Error('远端不可用 🌿 <503>'),
+			})
+			modal.update()
+			expect(modal.modalEl.dataset.state).toBe('error')
+			expect(modal.titleEl.textContent).toBe(i18n.t('sync.failedStatus'))
+			expect(find('summary').textContent).toBe('远端不可用 🌿 <503>')
+			expect(find('summary').style.display).not.toBe('none')
+			expect(find('status').style.display).not.toBe('none')
+			expect(
+				find('footer').querySelector('button')?.classList.contains('hidden'),
+			).toBe(true)
+			set({ status: 'syncing', error: undefined })
+			modal.update()
+			expect(find('summary').style.display).toBe('none')
+		},
+	)
+
+	it.each(['zh', 'en'])(
 		'keeps cancellation pending until the request settles in %s',
 		async (language) => {
 			await i18n.changeLanguage(language)
-			const { modal, progress, find } = mount()
-			progress.cancellationState = 'requested'
+			const { modal, set, find } = mount()
+			set({ status: 'cancelling' })
 			modal.update()
 			expect(modal.modalEl.dataset.state).toBe('cancelling')
 			expect(modal.titleEl.textContent).toBe(i18n.t('sync.syncingFiles'))
-			expect(modal.contentEl.querySelector('button')?.textContent).toBe(
+			expect(find('footer').querySelector('button')?.textContent).toBe(
 				i18n.t('sync.cancelling'),
 			)
 			expect(find('summary').style.display).toBe('none')
-			const stopButton = modal.contentEl.querySelector('button')!
+			const stopButton = find('footer').querySelector('button')!
 			expect(stopButton.disabled).toBe(false)
 			expect(notice).not.toHaveBeenCalled()
 			stopButton.click()
@@ -360,8 +435,7 @@ describe('sync progress modal', () => {
 				i18n.t('sync.cancellingHint'),
 				3000,
 			)
-			progress.cancellationState = 'complete'
-			progress.preparationProgress = null
+			set({ status: 'cancelled', preparation: null })
 			modal.update()
 			expect(modal.modalEl.dataset.state).toBe('cancelled')
 			expect(modal.titleEl.textContent).toBe(i18n.t('sync.cancelled'))
@@ -369,14 +443,14 @@ describe('sync progress modal', () => {
 	)
 
 	it('renders cache progress beside its label and clears it for preparation', () => {
-		const { modal, progress, find } = mount()
-		progress.preparationProgress = null
+		const { modal, set, find } = mount()
+		set({ status: 'syncing', preparation: null })
 		modal.update()
 		emitSyncUpdateMtimeProgress(4, 2)
 		expect(
 			find('cache').querySelector('.nutstore-sync-progress__meta')?.textContent,
 		).toBe('Cache update progress50%')
-		progress.preparationProgress = scanning()
+		set({ status: 'preparing', preparation: scanning() })
 		modal.update()
 		expect(find('cache').style.display).toBe('none')
 	})

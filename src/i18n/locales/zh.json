@@ -776,7 +776,6 @@
 		"complete": "✅ 同步完成",
 		"completeWithFailed": "❌ 同步完成，但有 {{failedCount}} 个任务失败",
 		"failedWithError": "同步失败，错误信息: {{error}}",
-		"partialScan": "同步部分完成：{{count}} 个路径无法扫描，两端对应内容均已保留，将在下次同步时重新扫描。\n{{paths}}",
 		"incompleteScanAutoRetry": "本次文件扫描未能完整完成，同步已安全停止，未执行任何文件更改。插件将在下次自动同步时重新尝试，你也可以稍后手动同步。",
 		"incompleteScanManualRetry": "本次文件扫描未能完整完成，同步已安全停止，未执行任何文件更改。请稍后手动重试。",
 		"progress": "同步进度: {{percent}}%",
@@ -787,7 +786,7 @@
 		"hideButton": "隐藏",
 		"closeButton": "关闭",
 		"showProgressButton": "显示同步进度",
-		"notSyncing": "尚未开始同步",
+		"noRunYet": "尚未开始同步",
 		"percentComplete": "{{percent}}%",
 		"currentFile": "{{path}}",
 		"filePath": "{{path}}",
@@ -852,7 +851,8 @@
 				"receiveOnly": "确认接收",
 				"receiveOnlyRevertLocalChanges": "还原本地并接收"
 			}
-		}
+		},
+		"partialScanTitle": "部分完成"
 	},
 	"taskList": {
 		"title": "同步任务列表",

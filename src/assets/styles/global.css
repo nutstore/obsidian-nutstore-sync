@@ -580,6 +580,33 @@
 	line-height: 1.5;
 }
 
+.nutstore-sync-progress__scan-issues {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin: 0 1.5rem 1rem;
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 0.75rem;
+	background: color-mix(in srgb, var(--color-orange) 10%, transparent);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+}
+
+.nutstore-sync-progress__scan-issues > span {
+	flex: 1 1 14rem;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.nutstore-sync-progress__scan-issues > button {
+	flex: 0 0 auto;
+	border-radius: 0.625rem;
+}
+
 .nutstore-sync-progress__card {
 	display: flex;
 	flex-direction: column;
@@ -794,6 +821,7 @@
 	}
 
 	.nutstore-sync-progress__status,
+	.nutstore-sync-progress__scan-issues,
 	.nutstore-sync-progress__card,
 	.nutstore-sync-progress__files {
 		margin-inline: 1rem;

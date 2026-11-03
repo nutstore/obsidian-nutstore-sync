@@ -9,18 +9,31 @@ import {
 	onSyncError,
 	onSyncProgress,
 } from '~/events'
+import ScanIssuesModal from '~/components/ScanIssuesModal'
 import i18n from '~/i18n'
+import type { ScanIssue } from '~/sync/scope'
 import { LocalScanError } from '~/utils/local-scan-error'
-import { is503Error } from '~/utils/is-503-error'
+import { describeSyncError } from '~/utils/describe-sync-error'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 
 export default class EventsService extends BaseService {
 	subscriptions: Subscription[] = []
+	private scanIssuesModal?: ScanIssuesModal
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
+	}
+
+	/** One modal at a time: a later sync refreshes the open list instead of stacking. */
+	showScanIssues(issues: readonly ScanIssue[]) {
+		if (this.scanIssuesModal?.modalEl.isConnected) {
+			this.scanIssuesModal.update(issues)
+			return
+		}
+		this.scanIssuesModal = new ScanIssuesModal(this.plugin.app, issues)
+		this.scanIssuesModal.open()
 	}
 
 	override onload() {
@@ -32,9 +45,6 @@ export default class EventsService extends BaseService {
 					text: i18n.t('sync.preparing'),
 					showNotice,
 				})
-				if (showNotice) {
-					this.plugin.sync.progress.showProgressModal()
-				}
 			}),
 
 			onSyncPreparationProgress().subscribe((progress) => {
@@ -72,18 +82,12 @@ export default class EventsService extends BaseService {
 					now,
 					failedCount + scanIssues.length,
 				)
+				const progressVisible = this.plugin.sync.progress.hasVisibleSyncModal()
 				if (scanIssues.length > 0) {
-					new Notice(
-						i18n.t('sync.partialScan', {
-							count: scanIssues.length,
-							paths: scanIssues.map((issue) => issue.path).join('\n'),
-						}),
-						10_000,
-					)
-				} else if (
-					showNotice &&
-					!this.plugin.sync.progress.hasVisibleSyncModal()
-				) {
+					// A visible progress modal already summarizes the skipped paths and
+					// offers a button for the list; only interrupt when it is hidden.
+					if (!progressVisible) this.showScanIssues(scanIssues)
+				} else if (showNotice && !progressVisible) {
 					const text =
 						failedCount > 0
 							? i18n.t('sync.completeWithFailed', { failedCount })
@@ -113,9 +117,7 @@ export default class EventsService extends BaseService {
 				} else {
 					new Notice(
 						i18n.t('sync.failedWithError', {
-							error: is503Error(error)
-								? i18n.t('sync.error.requestsTooFrequent')
-								: error.message,
+							error: describeSyncError(error),
 						}),
 					)
 				}
@@ -124,6 +126,8 @@ export default class EventsService extends BaseService {
 	}
 
 	override onunload() {
+		this.scanIssuesModal?.close()
+		this.scanIssuesModal = undefined
 		this.subscriptions.forEach((subscription) => subscription.unsubscribe())
 		this.subscriptions = []
 	}

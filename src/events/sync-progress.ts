@@ -4,6 +4,8 @@ import { BaseTask } from '~/sync/tasks/task.interface'
 export interface CompletedTask {
 	task: BaseTask
 	success: boolean
+	/** Why the task failed; absent for successful tasks. */
+	error?: string
 }
 
 export interface UpdateSyncProgress {

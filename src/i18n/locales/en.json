@@ -776,7 +776,6 @@
 		"complete": "✅ Sync completed",
 		"completeWithFailed": "❌ Sync completed with {{failedCount}} failed tasks",
 		"failedWithError": "Sync failed with error: {{error}}",
-		"partialScan": "Sync partially completed: {{count}} paths were unavailable and left unchanged on both devices. They will be scanned again on the next sync.\n{{paths}}",
 		"incompleteScanAutoRetry": "The file scan could not finish completely. Sync stopped safely without changing any files. The plugin will try again at the next scheduled sync, or you can sync manually later.",
 		"incompleteScanManualRetry": "The file scan could not finish completely. Sync stopped safely without changing any files. Please try syncing manually later.",
 		"progress": "Sync progress: {{percent}}%",
@@ -787,7 +786,7 @@
 		"hideButton": "Hide",
 		"closeButton": "Close",
 		"showProgressButton": "Show sync progress",
-		"notSyncing": "No sync currently in progress",
+		"noRunYet": "No sync has run yet",
 		"percentComplete": "{{percent}}%",
 		"currentFile": "{{path}}",
 		"filePath": "{{path}}",
@@ -852,7 +851,8 @@
 				"receiveOnly": "Confirm receive",
 				"receiveOnlyRevertLocalChanges": "Restore local and receive"
 			}
-		}
+		},
+		"partialScanTitle": "Partially synced"
 	},
 	"taskList": {
 		"title": "Sync task list",
