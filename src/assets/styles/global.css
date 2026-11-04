@@ -4456,6 +4456,13 @@
 	font-size: 0.6875rem;
 }
 
+.chatbox-root .chatbox-process-flow .chatbox-collapsible[open] > summary {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--background-primary);
+}
+
 .chatbox-collapsible-plain > summary .chatbox-collapsible-title {
 	color: var(--text-muted);
 }

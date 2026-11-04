@@ -21,6 +21,7 @@ import { resolveUsedContextTokens } from '~/ai/chat/domain'
 import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/ai/chat/ui/modal-mount'
 import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
 import { t } from '../i18n'
+import { observeBottomFollow } from './bottom-follow'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { ContextRing } from './components/ContextRing'
@@ -152,6 +153,7 @@ function Chatbox(props: ChatboxProps) {
 	let composerCardEl: HTMLDivElement | undefined
 	let inputEditorEl: HTMLDivElement | undefined
 	let previousActiveSessionId: string | undefined
+	let previousMessagesScrollTop = 0
 	let defaultInputHeight = DEFAULT_INPUT_HEIGHT
 	let dragStartHeight = 0
 
@@ -609,12 +611,24 @@ function Chatbox(props: ChatboxProps) {
 		if (!messagesEl) {
 			return
 		}
+		const element = messagesEl
+		previousMessagesScrollTop = element.scrollTop
+		setStickToBottom(isMessagesNearBottom())
 		const onScroll = () => {
-			setStickToBottom(isMessagesNearBottom())
+			const scrollTop = element.scrollTop
+			setStickToBottom(
+				observeBottomFollow({
+					following: stickToBottom(),
+					previousScrollTop: previousMessagesScrollTop,
+					currentScrollTop: scrollTop,
+					distanceFromBottom:
+						element.scrollHeight - scrollTop - element.clientHeight,
+				}),
+			)
+			previousMessagesScrollTop = scrollTop
 		}
-		onScroll()
-		messagesEl.addEventListener('scroll', onScroll, { passive: true })
-		onCleanup(() => messagesEl?.removeEventListener('scroll', onScroll))
+		element.addEventListener('scroll', onScroll, { passive: true })
+		onCleanup(() => element.removeEventListener('scroll', onScroll))
 	})
 
 	createEffect(() => {
@@ -966,7 +980,7 @@ function Chatbox(props: ChatboxProps) {
 					    follow-bottom owns scrolling while pinned to the end. */}
 					<div
 						ref={messagesEl}
-						class=":uno: ns-chatbox-messages min-h-0 flex-1 overflow-y-auto px-[var(--ns-chatbox-pad-x)] pt-[var(--ns-chatbox-gap)] pb-[var(--ns-chatbox-gap)] scrollbar-default"
+						class=":uno: ns-chatbox-messages min-h-0 flex-1 overflow-y-auto scrollbar-default"
 						classList={{ 'is-provider-setup': !!props.providerSetup }}
 						style={{ 'overflow-anchor': stickToBottom() ? 'none' : 'auto' }}
 					>
@@ -1000,7 +1014,7 @@ function Chatbox(props: ChatboxProps) {
 									}
 								>
 									<MessageScrollContent
-										class=":uno: ns-chatbox-message-content flex flex-col gap-[var(--ns-chatbox-gap)]"
+										class=":uno: ns-chatbox-message-content flex flex-col gap-[var(--ns-chatbox-gap)] px-[var(--ns-chatbox-pad-x)] pt-[var(--ns-chatbox-gap)] pb-[var(--ns-chatbox-gap)]"
 										onResize={onMessageContentResize}
 									>
 										<TurnTimeline
