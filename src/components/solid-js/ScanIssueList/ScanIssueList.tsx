@@ -43,7 +43,8 @@ export default function ScanIssueList(props: ScanIssueListProps) {
 								role="listitem"
 								aria-posinset={row.index + 1}
 								aria-setsize={props.items.length}
-								ref={(el) => measure(row.index, el)}
+								data-index={row.index}
+								ref={measure}
 								style={{ transform: `translateY(${row.start}px)` }}
 							>
 								<div class="scan-issues-item">

@@ -216,19 +216,12 @@ export default function TaskSelectionVirtualList(
 								{(vr) => {
 									// The same row index shows different tasks as filters change.
 									const scored = createMemo(() => filteredItems()[vr.index])
-									let rowEl: HTMLElement | undefined
-									// Height follows which task is shown, not its checked state.
-									const shown = createMemo(() => scored()?.originalIndex)
-									createEffect(() => {
-										if (shown() !== undefined && rowEl) measure(vr.index, rowEl)
-									})
 									return (
 										<Show when={scored()}>
 											{(current) => (
 												<div
-													ref={(el) => {
-														rowEl = el
-													}}
+													data-index={vr.index}
+													ref={measure}
 													class=":uno: grid grid-cols-[2rem_4rem_1fr_1fr] items-start text-sm hover:bg-[var(--background-modifier-hover)] cursor-pointer border-b border-[var(--background-modifier-border)]"
 													style={{
 														position: 'absolute',

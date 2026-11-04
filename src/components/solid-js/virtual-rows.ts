@@ -1,5 +1,5 @@
 import { createVirtualizer, type VirtualItem } from '@tanstack/solid-virtual'
-import { onCleanup, type Accessor } from 'solid-js'
+import type { Accessor } from 'solid-js'
 
 export interface VirtualRowsOptions {
 	/** Total number of rows, tracked reactively. */
@@ -15,8 +15,12 @@ export interface VirtualRows {
 	rows: Accessor<VirtualItem[]>
 	/** Height of the full list, so the scrollbar reflects every row. */
 	totalSize: Accessor<number>
-	/** Report a mounted row's real height; later offsets follow measured heights. */
-	measure: (index: number, node: HTMLElement) => void
+	/**
+	 * Ref for a row element carrying `data-index={row.index}`. Its height stays
+	 * tracked while mounted, so wrapping, rotation or a different item at the
+	 * same index re-flow later rows without the caller re-measuring.
+	 */
+	measure: (node: HTMLElement) => void
 	scrollToTop: () => void
 }
 
@@ -32,31 +36,17 @@ export function createVirtualRows(options: VirtualRowsOptions): VirtualRows {
 		getScrollElement: () => options.scrollElement() ?? null,
 		estimateSize: () => options.estimateSize,
 		overscan: 8,
-	})
-
-	// A row is not attached when its ref runs, so measure once layout exists.
-	const pending = new Map<number, HTMLElement>()
-	let timer: number | undefined
-	const measure = (index: number, node: HTMLElement) => {
-		pending.set(index, node)
-		timer ??= window.setTimeout(() => {
-			timer = undefined
-			for (const [row, element] of pending) {
-				if (element.isConnected)
-					virtualizer.resizeItem(row, element.offsetHeight)
-			}
-			pending.clear()
-		}, 8)
-	}
-	onCleanup(() => {
-		window.clearTimeout(timer)
-		pending.clear()
+		measureElement: (element) => element.offsetHeight,
 	})
 
 	return {
 		rows: () => virtualizer.getVirtualItems(),
 		totalSize: () => virtualizer.getTotalSize(),
-		measure,
+		// A ref runs before the row is attached; observe it once it is in the DOM.
+		measure: (node) =>
+			queueMicrotask(() => {
+				if (node.isConnected) virtualizer.measureElement(node)
+			}),
 		scrollToTop: () => virtualizer.scrollToOffset(0),
 	}
 }

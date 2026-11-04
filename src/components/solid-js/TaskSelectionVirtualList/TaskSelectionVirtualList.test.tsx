@@ -22,12 +22,25 @@ beforeAll(() => {
 	vi.stubGlobal(
 		'ResizeObserver',
 		class {
+			constructor(callback: ResizeObserverCallback) {
+				resizeCallbacks.push(callback)
+			}
 			observe() {}
 			unobserve() {}
 			disconnect() {}
 		},
 	)
 })
+
+/** jsdom never resizes anything; replay what a real observer would report. */
+const resizeCallbacks: ResizeObserverCallback[] = []
+const reportResize = (target: HTMLElement) => {
+	for (const callback of resizeCallbacks)
+		callback(
+			[{ target } as unknown as ResizeObserverEntry],
+			{} as ResizeObserver,
+		)
+}
 
 const items = (count: number): TaskSelectionItem[] =>
 	Array.from({ length: count }, (_, index) => ({
@@ -82,6 +95,22 @@ describe('TaskSelectionVirtualList windowing', () => {
 			'[style*="position: relative"]',
 		)!
 		expect(Number.parseFloat(spacer.style.height)).toBe(10_000 * ROW_HEIGHT)
+	})
+
+	it('re-flows later rows when a mounted row grows after its first measure', async () => {
+		const { host } = mount(100)
+		await flush()
+		const [first] = rows(host)
+		const spacer = host.querySelector<HTMLElement>(
+			'[style*="position: relative"]',
+		)!
+		Object.defineProperty(first, 'offsetHeight', { value: 2 * ROW_HEIGHT })
+		reportResize(first)
+		await flush()
+		expect(Number.parseFloat(spacer.style.height)).toBe(101 * ROW_HEIGHT)
+		expect(rows(host)[1].style.transform).toBe(
+			`translateY(${2 * ROW_HEIGHT}px)`,
+		)
 	})
 
 	it('reveals the last task after scrolling to the end', async () => {
