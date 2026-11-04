@@ -1,5 +1,6 @@
 import type { FsWalkResult } from '~/fs/fs.interface'
 import type { SyncRecordModel } from '~/model/sync-record.model'
+import type { BaseTask } from './tasks/task.interface'
 import {
 	compileFilterRules,
 	isPathIncluded,
@@ -95,6 +96,11 @@ export class SyncScope {
 			this.includes(normalized, isDir) &&
 			(!subtree || !this.contains(normalized))
 		)
+	}
+
+	/** A task runs only if every path it may change is in scope. */
+	allowsTask(task: BaseTask): boolean {
+		return task.scopeTargets.every((target) => this.allows(target.path, target))
 	}
 
 	/** A sync record may be rewritten or dropped as a whole subtree. */

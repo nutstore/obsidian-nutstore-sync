@@ -1,5 +1,4 @@
 import { SyncScope } from './scope'
-import { taskAllowedByScope } from './task-scope'
 import { closeModalOnAbort } from '~/modules/modal-lifetime'
 import { isAbortError } from '~/utils/abort'
 import { chunk } from 'es-toolkit/compat'
@@ -298,7 +297,7 @@ export class NutstoreSync {
 			})()
 			this.emitPreparationProgress({ phase: 'analyzing' })
 			const tasks = (await decider.decide()).filter((task) =>
-				taskAllowedByScope(task, this.scope),
+				this.scope.allowsTask(task),
 			)
 			if (!this.isCancelled) {
 				this.emitPreparationProgress({ phase: 'savingCache' })
@@ -611,7 +610,7 @@ export class NutstoreSync {
 				...mergedRemoveRemoteTasks,
 				...mergedMkdirTasks,
 				...otherTasks,
-			].filter((task) => taskAllowedByScope(task, this.scope))
+			].filter((task) => this.scope.allowsTask(task))
 
 			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)

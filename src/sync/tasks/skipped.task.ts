@@ -1,4 +1,4 @@
-import { BaseTask, BaseTaskOptions } from './task.interface'
+import { BaseTask, BaseTaskOptions, type ScopeTarget } from './task.interface'
 
 export enum SkipReason {
 	FileTooLarge = 'file-too-large',
@@ -48,6 +48,11 @@ export type SkippedTaskReasonOptions =
 export type SkippedTaskOptions = BaseTaskOptions & SkippedTaskReasonOptions
 
 export default class SkippedTask extends BaseTask {
+	/** Touches only the record or nothing at all, never the subtree. */
+	override get scopeTargets(): ScopeTarget[] {
+		return [{ path: this.localPath, subtree: false, isDir: false }]
+	}
+
 	constructor(readonly options: SkippedTaskOptions) {
 		super(options)
 	}

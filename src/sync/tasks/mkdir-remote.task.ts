@@ -1,8 +1,12 @@
 import i18n from '~/i18n'
 import { statVaultItem } from '~/utils/stat-vault-item'
-import { BaseTask, toTaskError } from './task.interface'
+import { BaseTask, toTaskError, type ScopeTarget } from './task.interface'
 
 export default class MkdirRemoteTask extends BaseTask {
+	override get scopeTargets(): ScopeTarget[] {
+		return [{ path: this.localPath, subtree: false, isDir: true }]
+	}
+
 	async exec() {
 		try {
 			const localStat = await statVaultItem(this.vault, this.localPath)

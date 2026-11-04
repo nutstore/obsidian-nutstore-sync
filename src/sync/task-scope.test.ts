@@ -3,7 +3,6 @@ import type { Vault, FileManager } from 'obsidian'
 import type { WebDAVClient } from 'webdav'
 import type { SyncRecord } from '~/storage/sync-record'
 import { SyncScope } from './scope'
-import { taskAllowedByScope } from './task-scope'
 import type { BaseTaskOptions } from './tasks/task.interface'
 import RemoveLocalTask from './tasks/remove-local.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
@@ -14,6 +13,10 @@ import ConflictResolveTask, {
 } from './tasks/conflict-resolve.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import MkdirsRemoteTask from './tasks/mkdirs-remote.task'
+import MkdirLocalTask from './tasks/mkdir-local.task'
+import NoopTask from './tasks/noop.task'
+import CleanRecordTask from './tasks/clean-record.task'
+import SkippedTask, { SkipReason } from './tasks/skipped.task'
 import { mergeRemoveRemoteTasks } from './utils/merge-remove-remote-tasks'
 
 vi.mock('obsidian', () => ({
@@ -64,9 +67,32 @@ describe.each(['Notes/Section', '笔记/小节', 'Notes 笔记🌱/Section 小�
 				]
 				for (const task of tasks)
 					expect(
-						taskAllowedByScope(task, scope),
+						scope.allowsTask(task),
 						`${task.constructor.name}: ${path}`,
 					).toBe(path === sibling)
+			}
+		})
+
+		it('lets non-destructive tasks touch an ancestor of the protected root, never the root itself', () => {
+			const scope = new SyncScope()
+			scope.protect(root)
+			for (const path of [parent, root]) {
+				const base = { ...options, localPath: path, remotePath: path }
+				const tasks = [
+					new MkdirLocalTask(base),
+					new MkdirRemoteTask(base),
+					new NoopTask(base),
+					new CleanRecordTask(base),
+					new SkippedTask({
+						...base,
+						reason: SkipReason.DeletedRemotelyButChangedLocally,
+					}),
+				]
+				for (const task of tasks)
+					expect(
+						scope.allowsTask(task),
+						`${task.constructor.name}: ${path}`,
+					).toBe(path === parent)
 			}
 		})
 
@@ -74,13 +100,13 @@ describe.each(['Notes/Section', '笔记/小节', 'Notes 笔记🌱/Section 小�
 			const scope = new SyncScope()
 			scope.protect(root)
 			const base = { ...options, localPath: parent, remotePath: parent }
-			expect(taskAllowedByScope(new MkdirRemoteTask(base), scope)).toBe(true)
+			expect(scope.allowsTask(new MkdirRemoteTask(base))).toBe(true)
 			for (const path of [root, sibling]) {
 				const task = new MkdirsRemoteTask({
 					...base,
 					additionalPaths: [{ localPath: path, remotePath: path }],
 				})
-				expect(taskAllowedByScope(task, scope)).toBe(path === sibling)
+				expect(scope.allowsTask(task)).toBe(path === sibling)
 			}
 		})
 	},

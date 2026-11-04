@@ -1,6 +1,11 @@
 import i18n from '~/i18n'
 import { statVaultItem } from '~/utils/stat-vault-item'
-import { BaseTask, BaseTaskOptions, toTaskError } from './task.interface'
+import {
+	BaseTask,
+	BaseTaskOptions,
+	toTaskError,
+	type ScopeTarget,
+} from './task.interface'
 
 interface MkdirsRemoteTaskOptions extends BaseTaskOptions {
 	// Additional paths that will be created along with the main path
@@ -40,6 +45,15 @@ export default class MkdirsRemoteTask extends BaseTask {
 			this.logger.error(this, e)
 			return { success: false, error: toTaskError(e, this) }
 		}
+	}
+
+	/** Creating directories never touches what is already beneath them. */
+	override get scopeTargets(): ScopeTarget[] {
+		return this.getAllPaths().map(({ localPath }) => ({
+			path: localPath,
+			subtree: false,
+			isDir: true,
+		}))
 	}
 
 	/**

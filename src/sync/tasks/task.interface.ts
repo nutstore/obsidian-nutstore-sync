@@ -29,6 +29,15 @@ interface TaskFailureResult {
 
 export type TaskResult = TaskSuccessResult | TaskFailureResult
 
+/** A path a task may change, and how far that change reaches. */
+export interface ScopeTarget {
+	path: string
+	/** The change may replace or remove everything beneath `path`. */
+	subtree: boolean
+	/** `path` names a directory, which decides how filter rules match it. */
+	isDir: boolean
+}
+
 export abstract class BaseTask {
 	constructor(readonly options: BaseTaskOptions) {}
 
@@ -60,6 +69,14 @@ export abstract class BaseTask {
 
 	get logger() {
 		return this.options.logger
+	}
+
+	/**
+	 * What this task may change. Any write may replace a directory, so by default
+	 * it claims the whole subtree; only non-destructive tasks narrow this.
+	 */
+	get scopeTargets(): ScopeTarget[] {
+		return [{ path: this.localPath, subtree: true, isDir: false }]
 	}
 
 	abstract exec(): MaybePromise<TaskResult>
