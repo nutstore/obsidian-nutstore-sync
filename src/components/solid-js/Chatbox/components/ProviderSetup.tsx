@@ -932,7 +932,16 @@ export function ProviderSetup(props: ProviderSetupProps) {
 												{(model) => (
 													<li>
 														<span>
-															<strong>{modelName(model)}</strong>
+															<div class="ns-provider-stepper__model-heading">
+																<strong>{modelName(model)}</strong>
+																<For each={model.modalities.input}>
+																	{(modality) => (
+																		<span class="ns-provider-stepper__modality-chip">
+																			{modality}
+																		</span>
+																	)}
+																</For>
+															</div>
 															<span>{model.id}</span>
 														</span>
 														<Show when={props.onEditModel}>

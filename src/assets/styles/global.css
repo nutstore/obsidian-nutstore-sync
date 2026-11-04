@@ -1670,8 +1670,7 @@
 	white-space: nowrap;
 }
 
-.modal.provider-editor-modal .ns-provider-stepper,
-.modal.provider-editor-modal .ns-provider-stepper.is-provider-picker {
+.modal.provider-editor-modal .ns-provider-stepper {
 	padding-top: 0;
 }
 
@@ -1720,9 +1719,6 @@
 	);
 	display: flex;
 	flex-direction: column;
-	width: min(560px, calc(100vw - 2rem));
-	max-width: 560px;
-	max-height: calc(100% - 2rem);
 }
 
 .modal-content.providers-manager-modal__content {
@@ -1734,6 +1730,10 @@
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
+}
+
+.is-phone .providers-manager-modal__body {
+	padding-inline: 16px;
 }
 
 .providers-manager-modal__body {
@@ -2084,10 +2084,9 @@
 
 @container providers-manager (max-width: 520px) {
 	.providers-manager-modal__toolbar {
-		align-items: stretch;
-		flex-direction: column;
-		gap: 9px;
-		margin-bottom: 10px;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 8px;
 	}
 
 	.providers-manager-modal__section-hint {
@@ -2095,20 +2094,25 @@
 	}
 
 	.providers-manager-modal__toolbar-actions {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
+		flex-wrap: wrap;
 		gap: 7px;
-		width: 100%;
+		max-width: 100%;
+	}
+
+	.modal.providers-manager-modal
+		.providers-manager-modal__toolbar-actions
+		.providers-manager-modal__button {
+		max-width: 100%;
 	}
 
 	.modal.providers-manager-modal .providers-manager-modal__button {
-		height: 44px;
-		font-size: 12px;
+		height: 40px;
+		font-size: 11.5px;
 	}
 
 	.providers-manager-modal__provider-card {
-		gap: 9px;
-		padding: 12px;
+		gap: 8px;
+		padding: 9px;
 	}
 
 	.providers-manager-modal__provider-description,
@@ -2118,16 +2122,33 @@
 
 	.providers-manager-modal__provider-actions {
 		flex-wrap: wrap;
+		max-width: 190px;
 	}
 
 	.modal.providers-manager-modal
 		.providers-manager-modal__provider-actions
 		.providers-manager-modal__button {
-		height: 44px;
+		max-width: 100%;
 	}
 
 	.modal.providers-manager-modal .providers-manager-modal__button.is-icon-only {
-		width: 44px;
+		width: 40px;
+	}
+
+	.providers-manager-modal__provider-icon {
+		width: 32px;
+		height: 32px;
+	}
+}
+
+@container providers-manager (max-width: 360px) {
+	.providers-manager-modal__toolbar {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.providers-manager-modal__toolbar-actions {
+		justify-content: flex-start;
 	}
 
 	.providers-manager-modal__provider-card--multi-action {
@@ -2137,13 +2158,8 @@
 	.providers-manager-modal__provider-card--multi-action
 		.providers-manager-modal__provider-actions {
 		grid-column: 1 / -1;
-		margin-top: 3px;
-	}
-}
-
-@container providers-manager (max-width: 360px) {
-	.providers-manager-modal__provider-card {
-		padding: 11px;
+		justify-content: flex-start;
+		max-width: 100%;
 	}
 }
 
@@ -2489,7 +2505,7 @@
 	height: 100%;
 	min-height: 0;
 	overflow-y: auto;
-	padding: 16px 20px;
+	padding: 16px 20px 8px;
 	background: var(--background-primary);
 }
 
@@ -2700,7 +2716,6 @@
 	.ns-provider-stepper.is-provider-picker {
 	container-type: size;
 	overflow: hidden;
-	padding-block: 16px 0;
 }
 
 :is(.chatbox-root, .provider-editor-modal)
@@ -2741,6 +2756,58 @@
 	.ns-provider-stepper__provider-search,
 :is(.chatbox-root, .provider-editor-modal)
 	.is-provider-picker
+	.ns-provider-stepper__actions {
+	flex-shrink: 0;
+}
+
+:is(.chatbox-root, .provider-editor-modal)
+	.ns-provider-stepper.is-custom-detail {
+	overflow: hidden;
+}
+
+:is(.chatbox-root, .provider-editor-modal)
+	.is-custom-detail
+	.ns-provider-stepper__shell,
+:is(.chatbox-root, .provider-editor-modal)
+	.is-custom-detail
+	.ns-provider-stepper__panel,
+:is(.chatbox-root, .provider-editor-modal)
+	.is-custom-detail
+	:is(.ns-provider-stepper__form, .ns-provider-stepper__models) {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+:is(.chatbox-root, .provider-editor-modal)
+	.is-custom-detail
+	.ns-provider-stepper__shell {
+	height: 100%;
+}
+
+:is(.chatbox-root, .provider-editor-modal)
+	.is-custom-detail
+	:is(
+		.ns-provider-stepper__panel,
+		.ns-provider-stepper__form,
+		.ns-provider-stepper__models
+	) {
+	flex: 1 1 0;
+}
+
+:is(.chatbox-root, .provider-editor-modal)
+	:is(.ns-provider-stepper__detail-content, .ns-provider-stepper__review) {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	gap: 0.9rem;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+:is(.chatbox-root, .provider-editor-modal)
+	.is-custom-detail
 	.ns-provider-stepper__actions {
 	flex-shrink: 0;
 }
@@ -3340,8 +3407,9 @@
 	span,
 :is(.chatbox-root, .provider-editor-modal)
 	.ns-provider-stepper__selected-models
-	span
-	span {
+	li
+	> span
+	> span {
 	color: var(--text-faint);
 	font-family: var(--font-monospace);
 	font-size: 10px;
@@ -3409,6 +3477,23 @@
 	gap: 0.08rem;
 	min-width: 0;
 	flex: 1 1 auto;
+}
+
+:is(.chatbox-root, .provider-editor-modal) .ns-provider-stepper__model-heading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.3rem;
+	min-width: 0;
+}
+
+:is(.chatbox-root, .provider-editor-modal) .ns-provider-stepper__modality-chip {
+	padding: 0.05rem 0.4rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	color: var(--text-muted);
+	font-size: 0.6rem;
+	line-height: 1.4;
 }
 
 :is(.chatbox-root, .provider-editor-modal)
@@ -3554,7 +3639,7 @@
 	}
 
 	:is(.chatbox-root, .provider-editor-modal) .ns-provider-stepper__panel {
-		padding: 16px 0;
+		padding: 16px 0 0;
 	}
 
 	:is(.chatbox-root, .provider-editor-modal) .ns-provider-stepper__choices,
@@ -3617,12 +3702,6 @@
 
 	:is(.chatbox-root, .provider-editor-modal)
 		.is-provider-picker
-		.ns-provider-stepper__panel {
-		padding: 8px 0;
-	}
-
-	:is(.chatbox-root, .provider-editor-modal)
-		.is-provider-picker
 		.ns-provider-stepper__provider-picker {
 		gap: 0.4rem;
 	}
@@ -3649,7 +3728,7 @@
 
 @media (max-height: 600px) {
 	:is(.chatbox-root, .provider-editor-modal) .ns-provider-stepper {
-		padding: 12px 16px;
+		padding: 12px 16px 8px;
 	}
 
 	:is(.chatbox-root, .provider-editor-modal) .ns-provider-stepper__heading {
@@ -3670,13 +3749,13 @@
 	}
 
 	:is(.chatbox-root, .provider-editor-modal) .ns-provider-stepper__panel {
-		padding: 8px 0;
+		padding: 8px 0 0;
 	}
 }
 
 @media (max-width: 600px) {
 	.modal.provider-editor-modal .ns-provider-stepper {
-		padding: 12px 16px max(16px, var(--safe-area-inset-bottom));
+		padding: 0 16px max(8px, var(--safe-area-inset-bottom));
 	}
 
 	.modal.provider-editor-modal .ns-provider-stepper__heading {

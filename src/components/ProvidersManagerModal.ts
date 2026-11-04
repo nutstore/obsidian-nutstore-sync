@@ -81,6 +81,7 @@ export default class ProvidersManagerModal extends Modal {
 
 	onOpen() {
 		this.modalEl.addClass(MODAL_CLASS)
+		this.modalEl.addClass('mod-lg')
 		this.contentEl.addClass(CONTENT_CLASS)
 		this.renderNativeTitle(i18n.t('settings.ai.providers.name'))
 		this.authSubscription = onNutstoreLlmGatewayAuth().subscribe(() => {
@@ -96,6 +97,7 @@ export default class ProvidersManagerModal extends Modal {
 		this.contentEl.removeClass(CONTENT_CLASS)
 		this.titleEl.empty()
 		this.modalEl.removeClass(MODAL_CLASS)
+		this.modalEl.removeClass('mod-lg')
 		this.modalEl.removeAttribute('aria-labelledby')
 	}
 
