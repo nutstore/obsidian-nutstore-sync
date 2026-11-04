@@ -7,7 +7,10 @@ import {
 	emitSyncUpdateMtimeProgress,
 	type SyncPreparationProgress,
 } from '~/events'
-import type { SyncRunSnapshot } from '~/services/progress.service'
+import type {
+	SyncRunSnapshot,
+	SyncTaskRecord,
+} from '~/services/progress.service'
 import SyncProgressModal from './SyncProgressModal'
 
 const { notice } = vi.hoisted(() => ({ notice: vi.fn() }))
@@ -141,7 +144,7 @@ function mount(preparation: SyncPreparationProgress = scanning()) {
 	const modal = new SyncProgressModal({
 		app: {},
 		settings,
-		sync: { progress, events: { showScanIssues } },
+		sync: { progress: Object.assign(progress, { showScanIssues }) },
 	} as unknown as NutstorePlugin)
 	modals.push(modal)
 	modal.onOpen()
@@ -306,7 +309,7 @@ describe('sync progress modal', () => {
 		'shows unavailable Unicode paths as a warning and clears them on the next run in %s',
 		async (language) => {
 			await i18n.changeLanguage(language)
-			const { modal, progress, set, find, showScanIssues } = mount()
+			const { modal, set, find, showScanIssues } = mount()
 			const scanIssues = [
 				{
 					path: 'Notes 笔记🌱/Section & <draft>📘',
@@ -314,9 +317,9 @@ describe('sync progress modal', () => {
 					cause: new Error('Unavailable 暂不可用🌿'),
 				},
 			]
-			set({ status: 'warning', preparation: null, scanIssues })
+			set({ status: 'partialScan', preparation: null, scanIssues })
 			modal.update()
-			expect(modal.modalEl.dataset.state).toBe('warning')
+			expect(modal.modalEl.dataset.state).toBe('partialScan')
 			expect(modal.titleEl.textContent).toBe(i18n.t('sync.partialScanTitle'))
 			expect(modal.titleEl.textContent).not.toContain('1')
 			expect(modal.contentEl.textContent).toContain(
@@ -326,7 +329,7 @@ describe('sync progress modal', () => {
 			const view = find('scan-issues').querySelector('button')!
 			expect(view.textContent).toBe(i18n.t('scanIssues.view'))
 			view.click()
-			expect(showScanIssues).toHaveBeenCalledWith(progress.run.scanIssues)
+			expect(showScanIssues).toHaveBeenCalledOnce()
 			expect(find('scan-issues').style.display).not.toBe('none')
 			expect(
 				find('footer').querySelector('button')?.classList.contains('hidden'),
@@ -349,7 +352,7 @@ describe('sync progress modal', () => {
 				localPath,
 			})
 			set({
-				status: 'warning',
+				status: 'failedTasks',
 				preparation: null,
 				total: 2,
 				failedCount: 1,
@@ -380,6 +383,35 @@ describe('sync progress modal', () => {
 			)
 		},
 	)
+
+	it('adds only new rows per update and starts over for the next run', () => {
+		const { modal, set, find } = mount()
+		const ref = (localPath: string) => ({ kind: 'upload' as const, localPath })
+		const rows = () =>
+			Array.from(
+				find('files-list').querySelectorAll<HTMLElement>(':scope > div'),
+			)
+		// The service appends to one array for the whole run.
+		const completed: SyncTaskRecord[] = []
+		set({ status: 'syncing', preparation: null, total: 3, completed })
+		completed.push({ ...ref('笔记🌱/a.md'), success: true })
+		set({ current: ref('Notes/b 📘.md'), currentInFlight: true })
+		modal.update()
+		const [inFlight, first] = rows()
+		expect(inFlight.textContent).toContain('Notes/b 📘.md')
+
+		completed.push({ ...ref('Notes/b 📘.md'), success: true })
+		set({ currentInFlight: false })
+		modal.update()
+		expect(rows()).toHaveLength(2)
+		expect(rows()[1]).toBe(first)
+		expect(inFlight.isConnected).toBe(false)
+
+		set({ completed: [{ ...ref('Next 下一次🌿.md'), success: true }] })
+		modal.update()
+		expect(rows()).toHaveLength(1)
+		expect(rows()[0].textContent).toContain('Next 下一次🌿.md')
+	})
 
 	it.each(['zh', 'en'])(
 		'explains why a run failed and offers only closing in %s',

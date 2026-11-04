@@ -17,10 +17,41 @@ import SkippedTask, { SkipReason } from '~/sync/tasks/skipped.task'
 import type { BaseTask, BaseTaskOptions } from '~/sync/tasks/task.interface'
 import { ProgressService } from './progress.service'
 
-const { notice, modals } = vi.hoisted(() => ({
-	notice: vi.fn(),
-	modals: [] as { update: () => void; onClose: () => void }[],
-}))
+const { notice, modals, outcomes, outcomeModal } = vi.hoisted(() => {
+	/** End-of-run detail popups, in the order they were created. */
+	const outcomes: {
+		kind: 'scanIssues' | 'failedTasks'
+		items: readonly unknown[]
+		modalEl: { isConnected: boolean }
+		open: () => void
+		update: (items: readonly unknown[]) => void
+		close: () => void
+	}[] = []
+	const outcomeModal = (kind: 'scanIssues' | 'failedTasks') =>
+		class {
+			kind = kind
+			modalEl = { isConnected: false }
+			open = vi.fn(() => {
+				this.modalEl.isConnected = true
+			})
+			update = vi.fn()
+			close = vi.fn(() => {
+				this.modalEl.isConnected = false
+			})
+			constructor(
+				_app: unknown,
+				public items: readonly unknown[],
+			) {
+				outcomes.push(this as never)
+			}
+		}
+	return {
+		notice: vi.fn(),
+		modals: [] as { update: () => void; onClose: () => void }[],
+		outcomes,
+		outcomeModal,
+	}
+})
 
 vi.mock('obsidian', () => ({
 	Notice: class {
@@ -28,6 +59,13 @@ vi.mock('obsidian', () => ({
 			notice(message)
 		}
 	},
+}))
+
+vi.mock('~/components/ScanIssuesModal', () => ({
+	default: outcomeModal('scanIssues'),
+}))
+vi.mock('~/components/FailedTasksModal', () => ({
+	default: outcomeModal('failedTasks'),
 }))
 
 vi.mock('~/components/SyncProgressModal', () => ({
@@ -60,6 +98,16 @@ const done = (
 	success = true,
 	error?: string,
 ): CompletedTask => ({ task, success, error })
+const planned = (total: number, hasLargeUploads?: boolean) =>
+	emitSyncProgress({ total, completedCount: 0, running: null, hasLargeUploads })
+const started = (total: number, completedCount: number, task: BaseTask) =>
+	emitSyncProgress({ total, completedCount, running: task })
+const finished = (
+	total: number,
+	completedCount: number,
+	result: CompletedTask,
+) =>
+	emitSyncProgress({ total, completedCount, running: null, finished: result })
 
 let running = true
 let active = true
@@ -68,7 +116,9 @@ beforeEach(() => {
 	running = true
 	active = true
 	modals.length = 0
+	outcomes.length = 0
 	service = new ProgressService({
+		app: {},
 		sync: {
 			executor: { isRunning: () => running },
 			lifecycle: {
@@ -103,21 +153,25 @@ describe('progress service run snapshot', () => {
 		}
 		emitPreparingSync({ showNotice: false })
 		emitStartSync({ showNotice: false })
-		emitSyncProgress(2, [], null, true)
-		emitSyncProgress(2, [], a)
+		planned(2, true)
+		started(2, 0, a)
 		expect(service.run).toMatchObject({
 			status: 'syncing',
 			currentInFlight: true,
 			current: { kind: 'upload', localPath: '笔记🌱/<a> & b.md' },
 		})
-		emitSyncProgress(2, [done(a)], a)
-		expect(service.run?.currentInFlight).toBe(false)
-		emitSyncProgress(2, [done(a)], b)
-		emitSyncProgress(2, [done(a), done(b, false, '无法连接 <offline>')], b)
+		finished(2, 1, done(a))
+		// Between tasks the last one stays on screen, but nothing is in flight.
+		expect(service.run).toMatchObject({
+			currentInFlight: false,
+			current: { localPath: '笔记🌱/<a> & b.md' },
+		})
+		started(2, 1, b)
+		finished(2, 2, done(b, false, '无法连接 <offline>'))
 		emitEndSync({ showNotice: false, failedCount: 1, scanIssues: [scanIssue] })
 
 		expect(service.run).toMatchObject({
-			status: 'warning',
+			status: 'partialScan',
 			total: 2,
 			failedCount: 1,
 			scanIssues: [scanIssue],
@@ -146,7 +200,7 @@ describe('progress service run snapshot', () => {
 	it('retains only descriptors, never the tasks themselves', () => {
 		const task = skipped('Notes/Large 大文件.bin')
 		emitPreparingSync({ showNotice: false })
-		emitSyncProgress(1, [done(task)], task)
+		finished(1, 1, done(task))
 		const record = service.run!.completed[0]
 		expect(record).toEqual({
 			kind: 'skip',
@@ -158,15 +212,13 @@ describe('progress service run snapshot', () => {
 		expect(JSON.stringify(service.run)).not.toContain('remoteBaseDir')
 	})
 
-	it('appends only new completions as the shared list grows', () => {
+	it('records each finished task once, in completion order', () => {
 		const tasks = ['a', 'b', 'c'].map((name) => push(`${name} 🌿.md`))
-		const completed: CompletedTask[] = []
 		emitPreparingSync({ showNotice: false })
-		for (const task of tasks) {
-			emitSyncProgress(3, completed, task)
-			completed.push(done(task))
-			emitSyncProgress(3, completed, task)
-		}
+		tasks.forEach((task, index) => {
+			started(3, index, task)
+			finished(3, index + 1, done(task))
+		})
 		expect(service.run?.completed.map((r) => r.localPath)).toEqual([
 			'a 🌿.md',
 			'b 🌿.md',
@@ -176,7 +228,8 @@ describe('progress service run snapshot', () => {
 
 	it('replaces the previous run when the next one starts, including its upload advice', () => {
 		emitPreparingSync({ showNotice: false })
-		emitSyncProgress(1, [done(push('a.md'))], null, true)
+		planned(1, true)
+		finished(1, 1, done(push('a.md')))
 		emitEndSync({ showNotice: false, failedCount: 0 })
 		const previous = service.run
 		expect(previous?.status).toBe('complete')
@@ -192,7 +245,7 @@ describe('progress service run snapshot', () => {
 		expect(service.run?.hasLargeUploads).toBeUndefined()
 		expect(service.run?.endedAt).toBeUndefined()
 		expect(previous?.completed).toHaveLength(1)
-		emitSyncProgress(1, [], null, false)
+		planned(1, false)
 		expect(service.run?.hasLargeUploads).toBe(false)
 	})
 
@@ -205,8 +258,8 @@ describe('progress service run snapshot', () => {
 		})
 		emitStartSync({ showNotice: false })
 		expect(service.run).toMatchObject({ status: 'syncing', preparation: null })
-		emitSyncProgress(2, [], null, true)
-		emitSyncProgress(2, [], null)
+		planned(2, true)
+		started(2, 0, push('a.md'))
 		expect(service.run?.hasLargeUploads).toBe(true)
 	})
 
@@ -259,26 +312,23 @@ describe('progress service run snapshot', () => {
 		expect(service.run?.preparation).toBeNull()
 		// Late progress from the stopped run cannot revive it.
 		emitSyncPreparationProgress({ phase: 'analyzing' })
-		emitSyncProgress(1, [], push('a.md'))
+		started(1, 0, push('a.md'))
+		finished(1, 1, done(push('a.md')))
 		expect(service.run).toMatchObject({ status: 'error', completed: [] })
 	})
 
-	it('records a run that ended without a preparing step as the latest run', () => {
+	it('ignores an outcome that arrives without a started run', () => {
 		emitPreparingSync({ showNotice: false })
-		emitSyncProgress(1, [done(push('a.md'), false, 'x')], null)
+		finished(1, 1, done(push('a.md'), false, 'x'))
 		emitEndSync({ showNotice: false, failedCount: 1 })
-		expect(service.run?.status).toBe('warning')
+		const last = service.run
+		expect(last?.status).toBe('failedTasks')
 
+		// A repeated end, or a failure before the next run began, keeps the last run.
 		emitEndSync({ showNotice: false, failedCount: 0 })
-		expect(service.run).toMatchObject({
-			status: 'complete',
-			completed: [],
-			failedCount: 0,
-		})
-
-		const error = new Error('Unavailable 暂不可用')
-		emitSyncError(error)
-		expect(service.run).toMatchObject({ status: 'error', error })
+		emitSyncError(new Error('Unavailable 暂不可用'))
+		emitSyncCancelled()
+		expect(service.run).toBe(last)
 	})
 
 	it('refreshes an open view on every change and drops it when closed', () => {
@@ -293,5 +343,95 @@ describe('progress service run snapshot', () => {
 		expect(service.hasVisibleSyncModal()).toBe(false)
 		service.showProgressModal()
 		expect(modals).toHaveLength(2)
+	})
+})
+
+describe('progress service end-of-run outcome', () => {
+	const scanIssue = (path: string) => ({
+		path,
+		operation: 'list' as const,
+		cause: new Error('Unavailable 暂不可用🌿'),
+	})
+	const endWith = (
+		showNotice: boolean,
+		results: CompletedTask[],
+		scanIssues: ReturnType<typeof scanIssue>[] = [],
+	) => {
+		emitPreparingSync({ showNotice })
+		// The user hid the progress view while the run went on.
+		if (showNotice) service.closeProgressModal()
+		results.forEach((result, index) =>
+			finished(results.length, index + 1, result),
+		)
+		const failedCount = results.filter((result) => !result.success).length
+		emitEndSync({ showNotice, failedCount, scanIssues })
+	}
+
+	it('lists unreadable paths even after a silent run, refreshing one list', () => {
+		endWith(false, [], [scanIssue('Notes 笔记🌱/Section')])
+		expect(outcomes).toHaveLength(1)
+		expect(outcomes[0]).toMatchObject({ kind: 'scanIssues' })
+		expect(outcomes[0].items).toEqual([scanIssue('Notes 笔记🌱/Section')])
+
+		endWith(false, [], [scanIssue('Archive/資料📘')])
+		expect(outcomes).toHaveLength(1)
+		expect(outcomes[0].update).toHaveBeenCalledWith([
+			scanIssue('Archive/資料📘'),
+		])
+
+		outcomes[0].close()
+		service.showScanIssues()
+		expect(outcomes).toHaveLength(2)
+	})
+
+	it('shows the failed tasks of a manual run with their reasons', () => {
+		endWith(true, [
+			done(push('笔记🌱/a.md')),
+			done(pull('Notes/章节 📘.md'), false, '无法连接 <offline>'),
+		])
+		expect(outcomes).toHaveLength(1)
+		expect(outcomes[0]).toMatchObject({
+			kind: 'failedTasks',
+			items: [
+				{
+					kind: 'download',
+					localPath: 'Notes/章节 📘.md',
+					success: false,
+					error: '无法连接 <offline>',
+				},
+			],
+		})
+		expect(notice).not.toHaveBeenCalled()
+	})
+
+	it('keeps silent runs quiet unless paths were left unread', () => {
+		endWith(false, [done(push('a 🌿.md'), false, 'x')])
+		endWith(false, [])
+		expect(outcomes).toHaveLength(0)
+		expect(notice).not.toHaveBeenCalled()
+	})
+
+	it('confirms a clean manual run with a notice', () => {
+		endWith(true, [done(push('a 🌿.md'))])
+		expect(outcomes).toHaveLength(0)
+		expect(notice).toHaveBeenCalledOnce()
+	})
+
+	it('leaves the outcome to an open progress view', () => {
+		emitPreparingSync({ showNotice: true })
+		finished(1, 1, done(push('a 🌿.md'), false, 'x'))
+		emitEndSync({
+			showNotice: true,
+			failedCount: 1,
+			scanIssues: [scanIssue('Notes 笔记🌱')],
+		})
+		expect(outcomes).toHaveLength(0)
+		expect(notice).not.toHaveBeenCalled()
+	})
+
+	it('closes its popups when the module stops', () => {
+		endWith(false, [], [scanIssue('Notes 笔记🌱')])
+		service.onunload()
+		expect(outcomes[0].close).toHaveBeenCalled()
 	})
 })

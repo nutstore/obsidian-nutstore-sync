@@ -9,7 +9,12 @@ import { NutstoreFileSystem } from '~/fs/nutstore'
 import { syncRecordKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import { SyncPolicy } from '~/settings'
-import { onEndSync, onSyncError, onSyncCancelled } from '~/events'
+import {
+	onEndSync,
+	onPreparingSync,
+	onSyncError,
+	onSyncCancelled,
+} from '~/events'
 import { getDBKey } from '~/utils/get-db-key'
 import { normalizeVaultPath } from '~/utils/normalize-vault-path'
 import { NutstoreSync, SyncStartMode } from '.'
@@ -266,10 +271,22 @@ async function fixture(policy: SyncPolicy) {
 	}[] = []
 	const errors: Error[] = []
 	const cancelled = vi.fn()
+	/** Run boundaries in order, to check every outcome closes a started run. */
+	const lifecycle: string[] = []
 	subscriptions.push(
-		onEndSync().subscribe((event) => ends.push(event)),
-		onSyncError().subscribe((error) => errors.push(error)),
-		onSyncCancelled().subscribe(cancelled),
+		onPreparingSync().subscribe(() => lifecycle.push('preparing')),
+		onEndSync().subscribe((event) => {
+			lifecycle.push('end')
+			ends.push(event)
+		}),
+		onSyncError().subscribe((error) => {
+			lifecycle.push('error')
+			errors.push(error)
+		}),
+		onSyncCancelled().subscribe(() => {
+			lifecycle.push('cancelled')
+			cancelled()
+		}),
 	)
 	const run = async (mode = SyncStartMode.AUTO_SYNC, signal?: AbortSignal) => {
 		const sync = new NutstoreSync(plugin, {
@@ -283,6 +300,7 @@ async function fixture(policy: SyncPolicy) {
 		return await sync.start({ mode, syncPolicy: policy })
 	}
 	return {
+		lifecycle,
 		local,
 		remote,
 		parent,
@@ -328,7 +346,10 @@ describe.each(Object.values(SyncPolicy))(
 				const beforeLocal = f.local.snapshot(f.blocked)
 				const beforeRemote = f.remote.snapshot(f.blocked)
 				const beforeRecords = await f.storage.getRecords()
-				expect(await f.run()).toMatchObject({ ended: true, ranTasks: true })
+				expect(await f.run()).toMatchObject({
+					completed: true,
+					ranTasks: true,
+				})
 				expect(f.errors).toEqual([])
 				expect(f.ends.at(-1)).toMatchObject({
 					failedCount: 0,
@@ -354,7 +375,7 @@ describe.each(Object.values(SyncPolicy))(
 				f.list.mockImplementation(readList)
 				f.stat.mockImplementation(readStat)
 				expect(await f.run(SyncStartMode.MANUAL_SYNC)).toMatchObject({
-					ended: true,
+					completed: true,
 				})
 				expect(f.errors).toEqual([])
 				expect(f.ends.at(-1)).toMatchObject({ failedCount: 0, scanIssues: [] })
@@ -362,7 +383,7 @@ describe.each(Object.values(SyncPolicy))(
 				expect((await f.storage.getRecords()).has(f.orphan)).toBe(false)
 				const writeCount = f.local.writes.length + f.remote.writes.length
 				expect(await f.run(SyncStartMode.MANUAL_SYNC)).toMatchObject({
-					ended: true,
+					completed: true,
 				})
 				expect(f.local.writes.length + f.remote.writes.length).toBe(writeCount)
 			},
@@ -388,7 +409,7 @@ describe('partial scan safety boundaries', () => {
 			})
 			const beforeLocal = f.local.snapshot(f.blocked)
 			const beforeRemote = f.remote.snapshot(f.blocked)
-			expect(await f.run()).toMatchObject({ ended: true })
+			expect(await f.run()).toMatchObject({ completed: true })
 			expect(f.errors).toEqual([])
 			expect(f.ends.at(-1)).toMatchObject({
 				failedCount: 0,
@@ -398,7 +419,7 @@ describe('partial scan safety boundaries', () => {
 			expect(f.remote.snapshot(f.blocked)).toEqual(beforeRemote)
 			expect(f.local.bytes(f.healthy)).toEqual(f.remote.bytes(f.healthy))
 			f.list.mockImplementation(readList)
-			expect(await f.run()).toMatchObject({ ended: true })
+			expect(await f.run()).toMatchObject({ completed: true })
 			expect(f.errors).toEqual([])
 			expect(f.ends.at(-1)).toMatchObject({ failedCount: 0, scanIssues: [] })
 			expect(f.local.bytes(f.common)).toEqual(f.remote.bytes(f.common))
@@ -417,7 +438,7 @@ describe('partial scan safety boundaries', () => {
 				type: 'exclude',
 				options: { caseSensitive: true },
 			})
-			expect(await f.run()).toMatchObject({ ended: true })
+			expect(await f.run()).toMatchObject({ completed: true })
 			expect(f.errors).toEqual([])
 			expect(f.local.bytes(f.healthy)).toEqual(f.remote.bytes(f.healthy))
 			expect([...f.local.writes, ...f.remote.writes]).toContain(f.healthy)
@@ -435,7 +456,7 @@ describe('partial scan safety boundaries', () => {
 		const beforeRecords = await f.storage.getRecords()
 		f.remote.remove(f.parent)
 		f.remote.writes.length = 0
-		expect(await f.run()).toMatchObject({ ended: true })
+		expect(await f.run()).toMatchObject({ completed: true })
 		expect(f.errors).toEqual([])
 		expect(f.ends.at(-1)).toMatchObject({ failedCount: 0 })
 		expect(f.local.snapshot(f.blocked)).toEqual(protectedContents)
@@ -447,28 +468,39 @@ describe('partial scan safety boundaries', () => {
 		)
 	})
 
-	it('reports partial completion even when every candidate is protected', async () => {
-		const f = await fixture(SyncPolicy.TwoWay)
-		f.local.entries.delete(f.healthy)
-		f.remote.entries.delete(f.healthy)
-		const readList = f.list.getMockImplementation()!
-		f.list.mockImplementation(async (p) => {
-			if (p === '.scan-case')
-				throw new Error('Directory unavailable 目录暂不可用🌱')
-			return readList(p)
-		})
-		const before = await f.storage.getRecords()
-		expect(await f.run()).toMatchObject({ ended: false, ranTasks: false })
-		expect(f.ends).toMatchObject([
-			{
-				failedCount: 0,
-				showNotice: true,
-				scanIssues: [{ path: '.scan-case' }],
-			},
-		])
-		expect(await f.storage.getRecords()).toEqual(before)
-		expect([...f.local.writes, ...f.remote.writes]).toEqual([])
-	})
+	it.each([
+		[SyncStartMode.AUTO_SYNC, false],
+		[SyncStartMode.MANUAL_SYNC, true],
+	] as const)(
+		'reports partial completion even when every candidate is protected in %s',
+		async (mode, showNotice) => {
+			const f = await fixture(SyncPolicy.TwoWay)
+			f.local.entries.delete(f.healthy)
+			f.remote.entries.delete(f.healthy)
+			const readList = f.list.getMockImplementation()!
+			f.list.mockImplementation(async (p) => {
+				if (p === '.scan-case')
+					throw new Error('Directory unavailable 目录暂不可用🌱')
+				return readList(p)
+			})
+			const before = await f.storage.getRecords()
+			expect(await f.run(mode)).toMatchObject({
+				completed: true,
+				ranTasks: false,
+			})
+			// Every normal outcome opens and closes one run, including a no-op.
+			expect(f.lifecycle).toEqual(['preparing', 'end'])
+			expect(f.ends).toMatchObject([
+				{
+					failedCount: 0,
+					showNotice,
+					scanIssues: [{ path: '.scan-case' }],
+				},
+			])
+			expect(await f.storage.getRecords()).toEqual(before)
+			expect([...f.local.writes, ...f.remote.writes]).toEqual([])
+		},
+	)
 
 	it('reports only unreadable paths that are still inside the sync scope', async () => {
 		const f = await fixture(SyncPolicy.TwoWay)
@@ -510,7 +542,7 @@ describe('partial scan safety boundaries', () => {
 			return readList(p)
 		})
 		const before = await f.storage.getRecords()
-		expect(await f.run()).toMatchObject({ ended: true })
+		expect(await f.run()).toMatchObject({ completed: true })
 		expect(f.ends.at(-1)).toMatchObject({ failedCount: 0, scanIssues: [] })
 		expect(f.list).not.toHaveBeenCalledWith(f.blocked)
 		expect((await f.storage.getRecords()).get(f.orphan)).toEqual(
@@ -525,7 +557,7 @@ describe('partial scan safety boundaries', () => {
 			const before = await f.storage.getRecords()
 			f.list.mockRejectedValue(new Error('Root unavailable 根目录暂不可用🌱'))
 			vi.mocked(f.webdav.exists).mockResolvedValue(false)
-			expect(await f.run(mode)).toMatchObject({ ended: false })
+			expect(await f.run(mode)).toMatchObject({ completed: false })
 			expect(f.errors).toMatchObject([{ name: 'LocalScanError' }])
 			expect(f.webdav.exists).not.toHaveBeenCalled()
 			expect(f.remoteWalk).not.toHaveBeenCalled()
@@ -542,7 +574,7 @@ describe('partial scan safety boundaries', () => {
 				throw new DOMException('Cancelled 已取消🌱', 'AbortError')
 			return readList(p)
 		})
-		expect(await f.run()).toMatchObject({ ended: false })
+		expect(await f.run()).toMatchObject({ completed: false })
 		expect(f.cancelled).toHaveBeenCalledOnce()
 		expect(f.errors).toEqual([])
 		expect(f.webdav.exists).not.toHaveBeenCalled()
@@ -559,7 +591,7 @@ describe('partial scan safety boundaries', () => {
 		const before = await f.storage.getRecords()
 		f.remote.entries.clear()
 		vi.mocked(f.webdav.exists).mockResolvedValue(false)
-		expect(await f.run()).toMatchObject({ ended: true })
+		expect(await f.run()).toMatchObject({ completed: true })
 		expect(f.errors).toEqual([])
 		const after = await f.storage.getRecords()
 		expect(after.get(f.common)).toEqual(before.get(f.common))

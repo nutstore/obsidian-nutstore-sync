@@ -611,7 +611,7 @@ export async function rendersSyncProgress(app: App) {
 			const path = 'Notes 笔记🌱/Section & <draft>📘'
 			progress.run = {
 				...syncing,
-				status: 'warning',
+				status: 'partialScan',
 				endedAt: Date.now(),
 				scanIssues: [
 					{

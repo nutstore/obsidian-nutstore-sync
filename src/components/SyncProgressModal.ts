@@ -41,6 +41,67 @@ const TASK_ICONS: Record<TaskKind, string> = {
 	sync: 'arrow-left-right',
 }
 
+const STATUS_TONES = [
+	'preparing',
+	'syncing',
+	'complete',
+	'warning',
+	'error',
+	'cancelled',
+] as const
+
+/** How each run status presents; exhaustive, so a new status must pick a look. */
+const STATUS_VIEWS: Record<
+	SyncRunStatus,
+	{
+		tone: (typeof STATUS_TONES)[number]
+		icon: string
+		title: (run: SyncRunSnapshot) => string
+	}
+> = {
+	preparing: {
+		tone: 'preparing',
+		icon: 'loader-circle',
+		title: () => i18n.t('sync.progressTitle'),
+	},
+	syncing: {
+		tone: 'syncing',
+		icon: 'refresh-cw',
+		title: () => i18n.t('sync.syncingFiles'),
+	},
+	cancelling: {
+		tone: 'syncing',
+		icon: 'loader-circle',
+		title: () => i18n.t('sync.syncingFiles'),
+	},
+	complete: {
+		tone: 'complete',
+		icon: 'circle-check-big',
+		title: () => i18n.t('sync.progressCompleteTitle'),
+	},
+	partialScan: {
+		tone: 'warning',
+		icon: 'triangle-alert',
+		title: () => i18n.t('sync.partialScanTitle'),
+	},
+	failedTasks: {
+		tone: 'warning',
+		icon: 'triangle-alert',
+		title: ({ failedCount }) =>
+			i18n.t('sync.completeWithFailed', { failedCount }),
+	},
+	error: {
+		tone: 'error',
+		icon: 'circle-x',
+		title: () => i18n.t('sync.failedStatus'),
+	},
+	cancelled: {
+		tone: 'cancelled',
+		icon: 'circle-stop',
+		title: () => i18n.t('sync.cancelled'),
+	},
+}
+
 export default class SyncProgressModal extends Modal {
 	private progressTitle!: HTMLElement
 	private statusIcon!: HTMLDivElement
@@ -48,6 +109,7 @@ export default class SyncProgressModal extends Modal {
 	private statusMessage!: HTMLDivElement
 	private scanIssuesSummary!: HTMLDivElement
 	private scanIssuesText!: HTMLSpanElement
+	private scanIssuesButton!: ButtonComponent
 	private progressBar!: HTMLDivElement
 	private progressText!: HTMLDivElement
 	private progressLabel!: HTMLDivElement
@@ -61,6 +123,10 @@ export default class SyncProgressModal extends Modal {
 	private currentFile!: HTMLDivElement
 	private filesList!: HTMLDivElement
 	private filesSection!: HTMLDivElement
+	/** What `filesList` currently shows, so updates only add what is new. */
+	private renderedRecords?: readonly SyncTaskRecord[]
+	private renderedCount = 0
+	private inFlightRow: HTMLElement | null = null
 	private updateMtimeSubscription: Subscription
 	private stopButtonComponent!: ButtonComponent
 	private hideButtonComponent!: ButtonComponent
@@ -125,6 +191,8 @@ export default class SyncProgressModal extends Modal {
 			this.scanIssuesText.setText(
 				i18n.t('scanIssues.summary', { count: scanIssueCount }),
 			)
+			// Per update, so a language change while the view is open applies here too.
+			this.scanIssuesButton.setButtonText(i18n.t('scanIssues.view'))
 		}
 
 		this.updateHeader(run, preparationText?.operation)
@@ -212,16 +280,33 @@ export default class SyncProgressModal extends Modal {
 			this.currentFile.title = ''
 		}
 
-		this.filesList.empty()
+		this.renderFiles(run)
+	}
 
-		// An ended run has no task in flight, even if one was the last to start.
-		if (run.current && run.currentInFlight) {
-			this.renderTaskRow(run.current, 'in-progress')
+	/**
+	 * Newest first. Records only grow within a run, so each tick adds just the
+	 * new rows; a different records array means a new run and a fresh list.
+	 */
+	private renderFiles({
+		completed,
+		current,
+		currentInFlight,
+	}: SyncRunSnapshot) {
+		if (completed !== this.renderedRecords) {
+			this.filesList.empty()
+			this.renderedRecords = completed
+			this.renderedCount = 0
+			this.inFlightRow = null
 		}
-
-		for (let i = run.completed.length - 1; i >= 0; i--) {
-			const record = run.completed[i]
+		this.inFlightRow?.remove()
+		this.inFlightRow = null
+		for (; this.renderedCount < completed.length; this.renderedCount++) {
+			const record = completed[this.renderedCount]
 			this.renderTaskRow(record, record.success ? 'success' : 'failed')
+		}
+		// An ended run has no task in flight, even if one was the last to start.
+		if (current && currentInFlight) {
+			this.inFlightRow = this.renderTaskRow(current, 'in-progress')
 		}
 	}
 
@@ -281,62 +366,31 @@ export default class SyncProgressModal extends Modal {
 		})
 	}
 
-	private updateHeader(
-		{ status: state, failedCount, scanIssues }: SyncRunSnapshot,
-		preparationOperation?: string,
-	): void {
-		const stateClasses = [
-			'nutstore-sync-progress__status-icon--preparing',
-			'nutstore-sync-progress__status-icon--syncing',
-			'nutstore-sync-progress__status-icon--complete',
-			'nutstore-sync-progress__status-icon--warning',
-			'nutstore-sync-progress__status-icon--error',
-			'nutstore-sync-progress__status-icon--cancelled',
-		]
-		removeClassTokens(this.statusIcon, ...stateClasses)
+	private updateHeader(run: SyncRunSnapshot, preparationOperation?: string) {
+		const view = STATUS_VIEWS[run.status]
+		removeClassTokens(
+			this.statusIcon,
+			...STATUS_TONES.map(
+				(tone) => `nutstore-sync-progress__status-icon--${tone}`,
+			),
+		)
 		addClassTokens(
 			this.statusIcon,
-			`nutstore-sync-progress__status-icon--${state === 'cancelling' ? 'syncing' : state}`,
+			`nutstore-sync-progress__status-icon--${view.tone}`,
 		)
-
-		const icon =
-			state === 'preparing' || state === 'cancelling'
-				? 'loader-circle'
-				: state === 'syncing'
-					? 'refresh-cw'
-					: state === 'complete'
-						? 'circle-check-big'
-						: state === 'warning'
-							? 'triangle-alert'
-							: state === 'cancelled'
-								? 'circle-stop'
-								: 'circle-x'
-		if (this.statusIcon.dataset.icon !== icon) {
+		if (this.statusIcon.dataset.icon !== view.icon) {
 			this.statusIcon.empty()
-			setIcon(this.statusIcon, icon)
-			this.statusIcon.dataset.icon = icon
+			setIcon(this.statusIcon, view.icon)
+			this.statusIcon.dataset.icon = view.icon
 		}
 		this.statusIcon.classList.toggle(
 			'nutstore-sync-spinning',
-			isSyncRunActive(state),
+			isSyncRunActive(run.status),
 		)
-
-		const title =
-			(state === 'preparing' ? preparationOperation : undefined) ||
-			(state === 'syncing' || state === 'cancelling'
-				? i18n.t('sync.syncingFiles')
-				: state === 'complete'
-					? i18n.t('sync.progressCompleteTitle')
-					: state === 'warning'
-						? scanIssues.length > 0
-							? i18n.t('sync.partialScanTitle')
-							: i18n.t('sync.completeWithFailed', { failedCount })
-						: state === 'cancelled'
-							? i18n.t('sync.cancelled')
-							: state === 'error'
-								? i18n.t('sync.failedStatus')
-								: i18n.t('sync.progressTitle'))
-		this.progressTitle.setText(title)
+		this.progressTitle.setText(
+			(run.status === 'preparing' ? preparationOperation : undefined) ||
+				view.title(run),
+		)
 	}
 
 	private updateControls(state: SyncRunStatus): void {
@@ -358,7 +412,7 @@ export default class SyncProgressModal extends Modal {
 	private renderTaskRow(
 		file: SyncTaskRef | SyncTaskRecord,
 		status: 'in-progress' | 'success' | 'failed',
-	): void {
+	): HTMLElement {
 		const iconCls =
 			status === 'in-progress'
 				? ':uno: text-[var(--text-warning)]'
@@ -394,6 +448,8 @@ export default class SyncProgressModal extends Modal {
 				})
 				.setText(error)
 		}
+		this.filesList.prepend(item)
+		return item
 	}
 
 	onOpen() {
@@ -444,13 +500,9 @@ export default class SyncProgressModal extends Modal {
 		this.scanIssuesText = scanIssuesSummary.createSpan()
 		// The list is opened on demand while this modal is up, so it never stacks
 		// on top of the progress the user is watching.
-		new ButtonComponent(scanIssuesSummary)
-			.setButtonText(i18n.t('scanIssues.view'))
-			.onClick(() =>
-				this.plugin.sync.events.showScanIssues(
-					this.plugin.sync.progress.run?.scanIssues ?? [],
-				),
-			)
+		this.scanIssuesButton = new ButtonComponent(scanIssuesSummary).onClick(() =>
+			this.plugin.sync.progress.showScanIssues(),
+		)
 
 		const progressCard = container.createDiv({
 			cls: 'nutstore-sync-progress__card',
@@ -567,6 +619,7 @@ export default class SyncProgressModal extends Modal {
 		this.progressLabel = progressLabel
 		this.currentFile = currentFile
 		this.filesList = filesList
+		this.renderedRecords = undefined
 		this.filesSection = filesSection
 
 		const footerButtons = contentEl.createDiv({

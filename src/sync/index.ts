@@ -7,10 +7,8 @@ import { dirname } from 'path-browserify'
 import { Subscription } from 'rxjs'
 import { WebDAVClient } from 'webdav'
 import DeleteConfirmModal from '~/components/DeleteConfirmModal'
-import FailedTasksModal, { FailedTaskInfo } from '~/components/FailedTasksModal'
 import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
-	CompletedTask,
 	emitEndSync,
 	emitPreparingSync,
 	emitSyncCancelled,
@@ -88,7 +86,9 @@ class SyncCancelledError extends Error {
 }
 
 export interface SyncStartResult {
-	ended: boolean
+	/** The scan reached a normal outcome, including a run with no tasks. */
+	completed: boolean
+	/** At least one task was dispatched, even if all of them failed. */
 	ranTasks: boolean
 	shouldReloadSettings: boolean
 }
@@ -178,21 +178,12 @@ export class NutstoreSync {
 			policy: syncPolicy,
 		})
 		this.currentLogger = createSyncLogger(this.currentLogPrefix)
+		const showNotice = mode === SyncStartMode.MANUAL_SYNC
+		// Every run starts here, so each later outcome event closes a started run.
+		emitPreparingSync({ showNotice })
 		try {
 			this.throwIfCancelled()
-			const showNotice = mode === SyncStartMode.MANUAL_SYNC
 			this.preparationProgressEnabled = showNotice
-			let preparingEmitted = false
-			const emitPreparingOnce = () => {
-				if (preparingEmitted) {
-					return
-				}
-				emitPreparingSync({ showNotice })
-				preparingEmitted = true
-			}
-			if (showNotice) {
-				emitPreparingOnce()
-			}
 
 			const settings = this.settings
 			const webdav = this.webdav
@@ -242,7 +233,7 @@ export class NutstoreSync {
 				if (this.isCancelled) {
 					emitSyncCancelled()
 					return {
-						ended: false,
+						completed: false,
 						ranTasks: false,
 						shouldReloadSettings: false,
 					}
@@ -258,7 +249,7 @@ export class NutstoreSync {
 						if (this.isCancelled) {
 							emitSyncCancelled()
 							return {
-								ended: false,
+								completed: false,
 								ranTasks: false,
 								shouldReloadSettings: false,
 							}
@@ -322,31 +313,17 @@ export class NutstoreSync {
 			})
 
 			if (tasks.length === 0) {
-				if (preparingEmitted) {
-					emitEndSync({
-						showNotice,
-						failedCount: 0,
-						scanIssues: this.scope.issues,
-					})
-					return {
-						ended: true,
-						ranTasks: false,
-						shouldReloadSettings: false,
-					}
-				}
 				emitEndSync({
-					showNotice: this.scope.issues.length > 0,
+					showNotice,
 					failedCount: 0,
 					scanIssues: this.scope.issues,
 				})
 				return {
-					ended: false,
+					completed: true,
 					ranTasks: false,
 					shouldReloadSettings: false,
 				}
 			}
-
-			emitPreparingOnce()
 
 			const noopTasks = tasks.filter((t) => t instanceof NoopTask)
 			const skippedTasks = tasks.filter((t) => t instanceof SkippedTask)
@@ -361,7 +338,7 @@ export class NutstoreSync {
 			if (this.isCancelled) {
 				emitSyncCancelled()
 				return {
-					ended: false,
+					completed: false,
 					ranTasks: false,
 					shouldReloadSettings: false,
 				}
@@ -383,7 +360,7 @@ export class NutstoreSync {
 				} else {
 					emitSyncCancelled()
 					return {
-						ended: false,
+						completed: false,
 						ranTasks: false,
 						shouldReloadSettings: false,
 					}
@@ -634,16 +611,19 @@ export class NutstoreSync {
 
 			// Emit start sync event after all confirmations are done
 			emitStartSync({ showNotice })
-			if (totalDisplayableTasks.length > 0) {
-				emitSyncProgress(
-					totalDisplayableTasks.length,
-					[],
-					null,
-					totalDisplayableTasks.some(
+			const progress = {
+				total: totalDisplayableTasks.length,
+				completedCount: 0,
+			}
+			if (progress.total > 0) {
+				emitSyncProgress({
+					...progress,
+					running: null,
+					hasLargeUploads: totalDisplayableTasks.some(
 						(task) =>
 							task instanceof PushTask && largeLocalPaths.has(task.localPath),
 					),
-				)
+				})
 			}
 			const chunkSize = 200
 			const taskChunks = chunk(optimizedTasks, chunkSize)
@@ -654,15 +634,8 @@ export class NutstoreSync {
 				completed: 0,
 			}
 
-			// Track all completed tasks across all chunks
-			const allCompletedTasks: CompletedTask[] = []
-
 			for (const taskChunk of taskChunks) {
-				const chunkResult = await this.execTasks(
-					taskChunk,
-					totalDisplayableTasks,
-					allCompletedTasks,
-				)
+				const chunkResult = await this.execTasks(taskChunk, progress)
 				allTasksResult.push(...chunkResult)
 				shouldReloadSettings ||= taskChunk.some((task, index) =>
 					this.didTaskReloadPluginSettings(task, chunkResult[index]),
@@ -681,7 +654,7 @@ export class NutstoreSync {
 			if (this.isCancelled) {
 				emitSyncCancelled()
 				return {
-					ended: false,
+					completed: false,
 					ranTasks: false,
 					shouldReloadSettings: false,
 				}
@@ -693,27 +666,8 @@ export class NutstoreSync {
 			)
 			this.logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
 
-			if (mode === SyncStartMode.MANUAL_SYNC && failedCount > 0) {
-				const failedTasksInfo: FailedTaskInfo[] = []
-				for (let i = 0; i < allTasksResult.length; i++) {
-					const result = allTasksResult[i]
-					if (!result.success && result.error) {
-						const task = result.error.task
-						failedTasksInfo.push({
-							taskName: getTaskName(task),
-							localPath: task.options.localPath,
-							errorMessage: describeSyncError(result.error),
-						})
-					}
-				}
-				closeModalOnAbort(
-					new FailedTasksModal(this.app, failedTasksInfo),
-					this.options.signal,
-				).open()
-			}
-
 			emitEndSync({ failedCount, showNotice, scanIssues: this.scope.issues })
-			return { ended: true, ranTasks: true, shouldReloadSettings }
+			return { completed: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
 			if (
 				this.isCancelled ||
@@ -727,7 +681,7 @@ export class NutstoreSync {
 				this.logger.error('Sync error:', error)
 			}
 			return {
-				ended: false,
+				completed: false,
 				ranTasks: false,
 				shouldReloadSettings: false,
 			}
@@ -769,10 +723,10 @@ export class NutstoreSync {
 		)
 	}
 
+	/** `progress` counts displayable tasks across chunks; advanced in place. */
 	private async execTasks(
 		tasks: BaseTask[],
-		totalDisplayableTasks: BaseTask[],
-		allCompletedTasks: CompletedTask[],
+		progress: { total: number; completedCount: number },
 	) {
 		const res: TaskResult[] = []
 		// Filter out NoopTask and CleanRecordTask from total count for progress display
@@ -783,8 +737,8 @@ export class NutstoreSync {
 		this.logger.debug(`Starting to execute sync tasks`, {
 			totalTasks: tasks.length,
 			displayedTasks: tasksToDisplay.length,
-			totalDisplayableTasks: totalDisplayableTasks.length,
-			alreadyCompleted: allCompletedTasks.length,
+			totalDisplayableTasks: progress.total,
+			alreadyCompleted: progress.completedCount,
 		})
 
 		for (let i = 0; i < tasks.length; ++i) {
@@ -805,9 +759,7 @@ export class NutstoreSync {
 				},
 			)
 
-			if (isDisplayable) {
-				emitSyncProgress(totalDisplayableTasks.length, allCompletedTasks, task)
-			}
+			if (isDisplayable) emitSyncProgress({ ...progress, running: task })
 
 			const taskResult = await this.executeWithRetry(task)
 
@@ -822,15 +774,18 @@ export class NutstoreSync {
 
 			res[i] = taskResult
 			if (isDisplayable) {
-				allCompletedTasks.push({
-					task,
-					success: taskResult.success,
-					error: taskResult.success
-						? undefined
-						: describeSyncError(taskResult.error),
+				progress.completedCount++
+				emitSyncProgress({
+					...progress,
+					running: null,
+					finished: {
+						task,
+						success: taskResult.success,
+						error: taskResult.success
+							? undefined
+							: describeSyncError(taskResult.error),
+					},
 				})
-				// Keep current=task so the header doesn't flicker between tasks
-				emitSyncProgress(totalDisplayableTasks.length, allCompletedTasks, task)
 			}
 		}
 

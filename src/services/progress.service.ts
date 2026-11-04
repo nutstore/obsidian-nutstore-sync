@@ -1,6 +1,8 @@
 import type { ScanIssue } from '~/sync/scope'
 import { throttle } from 'es-toolkit/compat'
 import { Notice } from 'obsidian'
+import FailedTasksModal from '../components/FailedTasksModal'
+import ScanIssuesModal from '../components/ScanIssuesModal'
 import SyncProgressModal from '../components/SyncProgressModal'
 import {
 	onEndSync,
@@ -28,7 +30,10 @@ export type SyncRunStatus =
 	| 'syncing'
 	| 'cancelling'
 	| 'complete'
-	| 'warning'
+	/** Some in-scope paths could not be read, so they were left untouched. */
+	| 'partialScan'
+	/** Everything was scanned, but some tasks failed. */
+	| 'failedTasks'
 	| 'error'
 	| 'cancelled'
 
@@ -59,7 +64,7 @@ export interface SyncRunSnapshot {
 	preparation: SyncPreparationProgress | null
 	total: number
 	completed: readonly SyncTaskRecord[]
-	/** The task most recently started; kept after it completes to avoid flicker. */
+	/** The task most recently started; kept between tasks so the header holds still. */
 	current: SyncTaskRef | null
 	currentInFlight: boolean
 	hasLargeUploads?: boolean
@@ -76,6 +81,8 @@ const toRef = (task: BaseTask): SyncTaskRef => ({
 
 export class ProgressService extends BaseService {
 	private progressModal: SyncProgressModal | null = null
+	private scanIssuesModal: ScanIssuesModal | null = null
+	private failedTasksModal: FailedTasksModal | null = null
 
 	/** `null` until the first run of this session starts. */
 	public run: SyncRunSnapshot | null = null
@@ -101,9 +108,17 @@ export class ProgressService extends BaseService {
 				this.patch({ status: 'cancelling' })
 			}),
 			onPreparingSync().subscribe(({ showNotice }) => {
+				this.records = []
 				this.run = {
-					...this.newRun(Date.now()),
+					status: 'preparing',
+					startedAt: Date.now(),
 					preparation: { phase: 'checkingRemote' },
+					total: 0,
+					completed: this.records,
+					current: null,
+					currentInFlight: false,
+					failedCount: 0,
+					scanIssues: [],
 				}
 				if (showNotice) this.showProgressModal()
 				else this.updateModal()
@@ -120,13 +135,19 @@ export class ProgressService extends BaseService {
 					status: this.run.status === 'cancelling' ? 'cancelling' : 'syncing',
 				})
 			}),
-			onEndSync().subscribe(({ failedCount, scanIssues = [] }) => {
-				this.finish({
+			onEndSync().subscribe(({ failedCount, showNotice, scanIssues = [] }) => {
+				const ended = this.finish({
+					// An unread subtree outranks failed tasks: it may hide more work.
 					status:
-						failedCount > 0 || scanIssues.length > 0 ? 'warning' : 'complete',
+						scanIssues.length > 0
+							? 'partialScan'
+							: failedCount > 0
+								? 'failedTasks'
+								: 'complete',
 					failedCount,
 					scanIssues,
 				})
+				if (ended) this.presentOutcome(showNotice)
 			}),
 			onSyncError().subscribe((error) => {
 				this.finish({ status: 'error', error })
@@ -137,20 +158,15 @@ export class ProgressService extends BaseService {
 			onSyncProgress().subscribe((p) => {
 				const run = this.run
 				if (!run || !isSyncRunActive(run.status)) return
-				// `p.completed` only grows within a run; project just the new entries.
-				if (p.completed.length < this.records.length) this.records = []
-				for (const { task, success, error } of p.completed.slice(
-					this.records.length,
-				)) {
+				if (p.finished) {
+					const { task, success, error } = p.finished
 					this.records.push({ ...toRef(task), success, error })
 				}
 				this.patch({
 					total: p.total,
 					completed: this.records,
-					current: p.current ? toRef(p.current) : null,
-					currentInFlight:
-						p.current !== null &&
-						p.completed[p.completed.length - 1]?.task !== p.current,
+					current: p.running ? toRef(p.running) : run.current,
+					currentInFlight: p.running !== null,
 					hasLargeUploads: p.hasLargeUploads ?? run.hasLargeUploads,
 				})
 			}),
@@ -158,39 +174,55 @@ export class ProgressService extends BaseService {
 	}
 
 	/**
-	 * Silent runs may end without a preparing event (nothing to do, or an early
-	 * failure). That still is the latest run, so it replaces the previous one.
+	 * Closes the run in progress. Every run opens with a preparing event, so an
+	 * outcome with no active run is a duplicate or a failure before any run began;
+	 * neither replaces the last real run.
 	 */
 	private finish(
 		outcome: Pick<SyncRunSnapshot, 'status'> & Partial<SyncRunSnapshot>,
-	) {
-		const now = Date.now()
-		const previous =
-			this.run && isSyncRunActive(this.run.status) ? this.run : null
-		this.run = {
-			...(previous ?? this.newRun(now)),
+	): boolean {
+		if (!this.run || !isSyncRunActive(this.run.status)) return false
+		this.patch({
 			...outcome,
 			preparation: null,
 			currentInFlight: false,
-			endedAt: now,
-		}
-		this.updateModal()
+			endedAt: Date.now(),
+		})
+		return true
 	}
 
-	/** A run with nothing done yet; resets the records that back `completed`. */
-	private newRun(startedAt: number): SyncRunSnapshot {
-		this.records = []
-		return {
-			status: 'preparing',
-			startedAt,
-			preparation: null,
-			total: 0,
-			completed: this.records,
-			current: null,
-			currentInFlight: false,
-			failedCount: 0,
-			scanIssues: [],
+	/**
+	 * The one rule for interrupting the user once a run ends. An open progress
+	 * view already shows the outcome. Otherwise unread paths always surface,
+	 * since they mean both devices were left untouched there; anything else is
+	 * reported only for runs the user started.
+	 */
+	private presentOutcome(showNotice: boolean) {
+		if (this.progressModal || !this.run) return
+		if (this.run.status === 'partialScan') this.showScanIssues()
+		else if (!showNotice) return
+		else if (this.run.status === 'failedTasks') this.showFailedTasks()
+		else new Notice(i18n.t('sync.complete'))
+	}
+
+	/** One list at a time: a later run refreshes the open list instead of stacking. */
+	public showScanIssues() {
+		const issues = this.run?.scanIssues ?? []
+		if (this.scanIssuesModal?.modalEl.isConnected) {
+			this.scanIssuesModal.update(issues)
+			return
 		}
+		this.scanIssuesModal = new ScanIssuesModal(this.plugin.app, issues)
+		this.scanIssuesModal.open()
+	}
+
+	private showFailedTasks() {
+		this.failedTasksModal?.close()
+		this.failedTasksModal = new FailedTasksModal(
+			this.plugin.app,
+			this.run?.completed.filter((record) => !record.success) ?? [],
+		)
+		this.failedTasksModal.open()
 	}
 
 	private patch(changes: Partial<SyncRunSnapshot>) {
@@ -237,6 +269,10 @@ export class ProgressService extends BaseService {
 		this.subscriptions.forEach((sub) => sub.unsubscribe())
 		this.subscriptions = []
 		this.closeProgressModal()
+		this.scanIssuesModal?.close()
+		this.scanIssuesModal = null
+		this.failedTasksModal?.close()
+		this.failedTasksModal = null
 		this.updateModal.cancel()
 	}
 }

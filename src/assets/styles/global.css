@@ -432,7 +432,8 @@
 	--nutstore-progress-accent: var(--text-success);
 }
 
-.modal.nutstore-sync-progress-modal[data-state='warning'] {
+.modal.nutstore-sync-progress-modal[data-state='partialScan'],
+.modal.nutstore-sync-progress-modal[data-state='failedTasks'] {
 	--nutstore-progress-accent: var(--text-warning);
 }
 
@@ -586,7 +587,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 0.75rem;
-	margin: 0 1.5rem 1rem;
+	margin: 0 1.5rem;
 	padding: 0.75rem 1rem;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 0.75rem;

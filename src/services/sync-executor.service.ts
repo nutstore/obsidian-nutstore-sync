@@ -153,7 +153,9 @@ export default class SyncExecutorService extends BaseService {
 			})
 
 			return (
-				result.ended && !scope.signal.aborted && !cancellation.signal.aborted
+				result.completed &&
+				!scope.signal.aborted &&
+				!cancellation.signal.aborted
 			)
 		} catch (error) {
 			if (cancellation.signal.aborted) {
@@ -169,20 +171,22 @@ export default class SyncExecutorService extends BaseService {
 			scope.signal.removeEventListener('abort', cancel)
 			this.inFlight = false
 			if (
-				result?.ended &&
+				result?.completed &&
 				!scope.signal.aborted &&
 				!cancellation.signal.aborted
 			) {
 				if (result.shouldReloadSettings) {
 					this.plugin.settingsService.scheduleReloadSettingsFromDisk()
 				}
-				await this.plugin.sync.gc.runBlobGc().catch((error) => {
-					logger.error('Error running auto GC after sync end:', error)
-				})
+				if (result.ranTasks) {
+					await this.plugin.sync.gc.runBlobGc().catch((error) => {
+						logger.error('Error running auto GC after sync end:', error)
+					})
+				}
 			}
 			// Failed preparation waits for a new trigger instead of draining stale requests.
 			if (
-				result?.ended &&
+				result?.completed &&
 				!scope.signal.aborted &&
 				!cancellation.signal.aborted &&
 				this.pendingAutoSync &&

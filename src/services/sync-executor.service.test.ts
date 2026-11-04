@@ -3,7 +3,7 @@ import type NutstorePlugin from '~/index'
 import type { SyncSelection } from '~/settings'
 import { ModuleLifecycle } from '~/modules/lifecycle'
 import { emitCancelSync } from '~/events'
-import { SyncStartMode } from '~/sync'
+import { SyncStartMode, type SyncStartResult } from '~/sync'
 import SyncExecutorService from './sync-executor.service'
 
 const { start, construct, notice } = vi.hoisted(() => ({
@@ -37,7 +37,11 @@ vi.mock('~/utils/logger', () => ({
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	start.mockResolvedValue({ ended: true, shouldReloadSettings: false })
+	start.mockResolvedValue({
+		completed: true,
+		ranTasks: true,
+		shouldReloadSettings: false,
+	})
 })
 
 function fixture(configDir = '.settings-设置-🌿') {
@@ -98,7 +102,7 @@ describe('synchronization execution gate', () => {
 
 	it('blocks further I/O after cancellation and releases the run only when current work settles', async () => {
 		const f = fixture()
-		let finish!: (value: { ended: boolean }) => void
+		let finish!: (value: SyncStartResult) => void
 		start.mockImplementationOnce(
 			() =>
 				new Promise((resolve) => {
@@ -116,7 +120,11 @@ describe('synchronization execution gate', () => {
 			await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
 		).toBe(false)
 		expect(start).toHaveBeenCalledOnce()
-		finish({ ended: false })
+		finish({
+			completed: false,
+			ranTasks: false,
+			shouldReloadSettings: false,
+		})
 		expect(await work).toBe(false)
 		expect(f.executor.isRunning()).toBe(false)
 		expect(f.runBlobGc).not.toHaveBeenCalled()
@@ -237,7 +245,7 @@ describe('synchronization execution gate', () => {
 
 	it('does not immediately restart an unsuccessful round from a queued request', async () => {
 		const f = fixture()
-		let finish!: (result: { ended: boolean }) => void
+		let finish!: (result: SyncStartResult) => void
 		start.mockImplementationOnce(
 			() =>
 				new Promise((resolve) => {
@@ -248,7 +256,11 @@ describe('synchronization execution gate', () => {
 		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
 		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
-		finish({ ended: false })
+		finish({
+			completed: false,
+			ranTasks: false,
+			shouldReloadSettings: false,
+		})
 		expect(await running).toBe(false)
 		expect(f.executor.isRunning()).toBe(false)
 		expect(f.runBlobGc).not.toHaveBeenCalled()
@@ -257,6 +269,61 @@ describe('synchronization execution gate', () => {
 			await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
 		).toBe(true)
 		expect(start).toHaveBeenCalledTimes(2)
+	})
+
+	it('accepts a completed empty round without running post-sync GC', async () => {
+		const f = fixture()
+		let finish!: (result: SyncStartResult) => void
+		start.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		await f.plugin.sync.lifecycle.update(true)
+		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
+		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+
+		finish({
+			completed: true,
+			ranTasks: false,
+			shouldReloadSettings: false,
+		})
+
+		expect(await running).toBe(true)
+		expect(f.executor.isRunning()).toBe(false)
+		expect(f.runBlobGc).not.toHaveBeenCalled()
+	})
+
+	it('drains a queued auto-sync after a completed empty round', async () => {
+		const f = fixture()
+		const finishes: ((result: SyncStartResult) => void)[] = []
+		start.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishes.push(resolve)
+				}),
+		)
+		await f.plugin.sync.lifecycle.update(true)
+		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
+		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
+
+		finishes[0]({
+			completed: true,
+			ranTasks: false,
+			shouldReloadSettings: false,
+		})
+		await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2))
+		expect(await running).toBe(true)
+
+		finishes[1]({
+			completed: true,
+			ranTasks: false,
+			shouldReloadSettings: false,
+		})
+		await vi.waitFor(() => expect(f.executor.isRunning()).toBe(false))
+		expect(f.runBlobGc).not.toHaveBeenCalled()
 	})
 
 	it('refuses cold disabled requests before accessing credentials or showing notices', async () => {
@@ -290,7 +357,7 @@ describe('synchronization execution gate', () => {
 
 	it('discards queued auto-sync and post-sync GC when a running sync is disabled', async () => {
 		const f = fixture()
-		let finish!: (result: { ended: boolean }) => void
+		let finish!: (result: SyncStartResult) => void
 		start.mockImplementationOnce(
 			() =>
 				new Promise((resolve) => {
@@ -302,7 +369,11 @@ describe('synchronization execution gate', () => {
 		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
 		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 		const stopping = f.plugin.sync.lifecycle.update(false)
-		finish({ ended: true })
+		finish({
+			completed: true,
+			ranTasks: true,
+			shouldReloadSettings: false,
+		})
 		await Promise.all([running, stopping])
 		expect(start).toHaveBeenCalledTimes(1)
 		expect(f.runBlobGc).not.toHaveBeenCalled()
