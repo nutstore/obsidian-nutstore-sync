@@ -481,6 +481,11 @@ export function ProviderSetup(props: ProviderSetupProps) {
 			classList={{
 				'is-provider-picker':
 					route() === 'custom' && customStep() === 'provider',
+				'is-custom-detail':
+					route() === 'custom' &&
+					(customStep() === 'connection' ||
+						customStep() === 'models' ||
+						customStep() === 'review'),
 			}}
 			aria-labelledby={titleId}
 			aria-describedby={continuedProviderName() ? descriptionId : undefined}
@@ -740,89 +745,90 @@ export function ProviderSetup(props: ProviderSetupProps) {
 								continueToModels()
 							}}
 						>
-							<label class="ns-provider-stepper__field">
-								<span class="ns-provider-stepper__field-label">
-									{t('chatbox.setup.custom.nameLabel')}
-								</span>
-								<input
-									type="text"
-									value={name()}
-									autocomplete="off"
-									placeholder={t('chatbox.setup.custom.namePlaceholder')}
-									onInput={(event) => setName(event.currentTarget.value)}
-								/>
-								<span class="ns-provider-stepper__field-hint">
-									{t('chatbox.setup.custom.nameHint')}
-								</span>
-							</label>
+							<div class="ns-provider-stepper__detail-content">
+								<label class="ns-provider-stepper__field">
+									<span class="ns-provider-stepper__field-label">
+										{t('chatbox.setup.custom.nameLabel')}
+									</span>
+									<input
+										type="text"
+										value={name()}
+										autocomplete="off"
+										placeholder={t('chatbox.setup.custom.namePlaceholder')}
+										onInput={(event) => setName(event.currentTarget.value)}
+									/>
+									<span class="ns-provider-stepper__field-hint">
+										{t('chatbox.setup.custom.nameHint')}
+									</span>
+								</label>
 
-							<label class="ns-provider-stepper__field">
-								<span class="ns-provider-stepper__field-label">
-									{t('chatbox.setup.custom.apiFormatLabel')}
-								</span>
-								<select
-									value={npm()}
-									onChange={(event) => setNpm(event.currentTarget.value)}
-								>
-									<For each={apiFormatOptions()}>
-										{(option) => (
-											<option value={option.value}>{option.label}</option>
-										)}
-									</For>
-								</select>
-								<span class="ns-provider-stepper__field-hint">
-									{t('chatbox.setup.custom.apiFormatHint')}
-								</span>
-							</label>
+								<label class="ns-provider-stepper__field">
+									<span class="ns-provider-stepper__field-label">
+										{t('chatbox.setup.custom.apiFormatLabel')}
+									</span>
+									<select
+										value={npm()}
+										onChange={(event) => setNpm(event.currentTarget.value)}
+									>
+										<For each={apiFormatOptions()}>
+											{(option) => (
+												<option value={option.value}>{option.label}</option>
+											)}
+										</For>
+									</select>
+									<span class="ns-provider-stepper__field-hint">
+										{t('chatbox.setup.custom.apiFormatHint')}
+									</span>
+								</label>
 
-							<label class="ns-provider-stepper__field">
-								<span class="ns-provider-stepper__field-label">
-									{t('chatbox.setup.custom.baseUrlLabel')}
-								</span>
-								<input
-									type="url"
-									value={api()}
-									autocomplete="off"
-									spellcheck={false}
-									placeholder={
-										getProviderDefaultBaseURL(npm()) ||
-										'https://api.example.com/v1'
-									}
-									onInput={(event) => setApi(event.currentTarget.value)}
-								/>
-								<span class="ns-provider-stepper__field-hint">
-									{t('chatbox.setup.custom.baseUrlHint')}
-								</span>
-							</label>
+								<label class="ns-provider-stepper__field">
+									<span class="ns-provider-stepper__field-label">
+										{t('chatbox.setup.custom.baseUrlLabel')}
+									</span>
+									<input
+										type="url"
+										value={api()}
+										autocomplete="off"
+										spellcheck={false}
+										placeholder={
+											getProviderDefaultBaseURL(npm()) ||
+											'https://api.example.com/v1'
+										}
+										onInput={(event) => setApi(event.currentTarget.value)}
+									/>
+									<span class="ns-provider-stepper__field-hint">
+										{t('chatbox.setup.custom.baseUrlHint')}
+									</span>
+								</label>
 
-							<label class="ns-provider-stepper__field">
-								<span class="ns-provider-stepper__field-label">
-									{t('chatbox.setup.custom.apiKeyLabel')}
-								</span>
-								<input
-									type="password"
-									value={apiKey()}
-									autocomplete="off"
-									placeholder={t('chatbox.setup.custom.apiKeyPlaceholder')}
-									onInput={(event) => setApiKey(event.currentTarget.value)}
-								/>
-								<span class="ns-provider-stepper__field-hint">
-									{t('chatbox.setup.custom.apiKeyHint')}
-								</span>
-							</label>
+								<label class="ns-provider-stepper__field">
+									<span class="ns-provider-stepper__field-label">
+										{t('chatbox.setup.custom.apiKeyLabel')}
+									</span>
+									<input
+										type="password"
+										value={apiKey()}
+										autocomplete="off"
+										placeholder={t('chatbox.setup.custom.apiKeyPlaceholder')}
+										onInput={(event) => setApiKey(event.currentTarget.value)}
+									/>
+									<span class="ns-provider-stepper__field-hint">
+										{t('chatbox.setup.custom.apiKeyHint')}
+									</span>
+								</label>
 
-							<label class="ns-provider-stepper__toggle">
-								<input
-									type="checkbox"
-									checked={allowBrowserCors()}
-									onChange={(event) => void changeCors(event.currentTarget)}
-								/>
-								<span>
-									<strong>{t('chatbox.setup.custom.corsLabel')}</strong>
-									<span>{t('chatbox.setup.custom.corsHint')}</span>
-								</span>
-							</label>
-
+								<label class="ns-provider-stepper__toggle">
+									<input
+										type="checkbox"
+										checked={allowBrowserCors()}
+										onChange={(event) => void changeCors(event.currentTarget)}
+									/>
+									<span>
+										<strong>{t('chatbox.setup.custom.corsLabel')}</strong>
+										<span>{t('chatbox.setup.custom.corsHint')}</span>
+									</span>
+								</label>
+							</div>
 							<div class="ns-provider-stepper__actions">
 								<button
 									type="button"
@@ -844,114 +850,118 @@ export function ProviderSetup(props: ProviderSetupProps) {
 
 					<Show when={route() === 'custom' && customStep() === 'models'}>
 						<div class="ns-provider-stepper__models">
-							<div class="ns-provider-stepper__model-toolbar">
-								<div>
-									<div class="ns-provider-stepper__section-title">
-										{t('chatbox.setup.custom.availableModelsTitle')}
+							<div class="ns-provider-stepper__detail-content">
+								<div class="ns-provider-stepper__model-toolbar">
+									<div>
+										<div class="ns-provider-stepper__section-title">
+											{t('chatbox.setup.custom.availableModelsTitle')}
+										</div>
+										<p>{t('chatbox.setup.custom.availableModelsHint')}</p>
 									</div>
-									<p>{t('chatbox.setup.custom.availableModelsHint')}</p>
-								</div>
-								<button
-									type="button"
-									class="ns-provider-stepper__button is-secondary"
-									disabled={isBusy()}
-									onClick={() => void fetchModels()}
-								>
-									<span class=":uno: i-lucide-refresh-cw size-4" />
-									{busyAction() === 'fetching'
-										? t('chatbox.setup.custom.fetching')
-										: t('chatbox.setup.custom.fetchModels')}
-								</button>
-							</div>
-
-							<Show when={pickerOpen() && rootEl}>
-								<DiscoveredModelsDialog
-									models={discoveredModels()}
-									isAdded={(modelId) => !!models()[modelId]}
-									mountEl={rootEl!}
-									onAdd={addDiscoveredModels}
-									onClose={() => setPickerOpen(false)}
-								/>
-							</Show>
-
-							<div class="ns-provider-stepper__manual-model">
-								<div class="ns-provider-stepper__section-title">
-									{t('chatbox.setup.custom.manualModelTitle')}
-								</div>
-								<p>{t('chatbox.setup.custom.manualModelHint')}</p>
-								<div class="ns-provider-stepper__inline-form">
-									<input
-										type="text"
-										value={manualModelId()}
-										autocomplete="off"
-										spellcheck={false}
-										placeholder={t(
-											'chatbox.setup.custom.manualModelPlaceholder',
-										)}
-										onInput={(event) =>
-											setManualModelId(event.currentTarget.value)
-										}
-										onKeyDown={(event) => {
-											if (event.key === 'Enter') {
-												event.preventDefault()
-												addManualModel()
-											}
-										}}
-									/>
 									<button
 										type="button"
 										class="ns-provider-stepper__button is-secondary"
-										onClick={addManualModel}
+										disabled={isBusy()}
+										onClick={() => void fetchModels()}
 									>
-										{t('chatbox.setup.custom.addModel')}
+										<span class=":uno: i-lucide-refresh-cw size-4" />
+										{busyAction() === 'fetching'
+											? t('chatbox.setup.custom.fetching')
+											: t('chatbox.setup.custom.fetchModels')}
 									</button>
 								</div>
-							</div>
 
-							<div class="ns-provider-stepper__selected-models">
-								<div class="ns-provider-stepper__section-title">
-									{t('chatbox.setup.custom.selectedModelsTitle', {
-										count: selectedModelList().length,
-									})}
+								<Show when={pickerOpen() && rootEl}>
+									<DiscoveredModelsDialog
+										models={discoveredModels()}
+										isAdded={(modelId) => !!models()[modelId]}
+										mountEl={rootEl!}
+										onAdd={addDiscoveredModels}
+										onClose={() => setPickerOpen(false)}
+									/>
+								</Show>
+
+								<div class="ns-provider-stepper__manual-model">
+									<div class="ns-provider-stepper__section-title">
+										{t('chatbox.setup.custom.manualModelTitle')}
+									</div>
+									<p>{t('chatbox.setup.custom.manualModelHint')}</p>
+									<div class="ns-provider-stepper__inline-form">
+										<input
+											type="text"
+											value={manualModelId()}
+											autocomplete="off"
+											spellcheck={false}
+											placeholder={t(
+												'chatbox.setup.custom.manualModelPlaceholder',
+											)}
+											onInput={(event) =>
+												setManualModelId(event.currentTarget.value)
+											}
+											onKeyDown={(event) => {
+												if (event.key === 'Enter') {
+													event.preventDefault()
+													addManualModel()
+												}
+											}}
+										/>
+										<button
+											type="button"
+											class="ns-provider-stepper__button is-secondary"
+											onClick={addManualModel}
+										>
+											{t('chatbox.setup.custom.addModel')}
+										</button>
+									</div>
 								</div>
-								<Show
-									when={selectedModelList().length > 0}
-									fallback={
-										<p>{t('chatbox.setup.custom.selectedModelsEmpty')}</p>
-									}
-								>
-									<ul>
-										<For each={selectedModelList()}>
-											{(model) => (
-												<li>
-													<span>
-														<strong>{modelName(model)}</strong>
-														<span>{model.id}</span>
-													</span>
-													<Show when={props.onEditModel}>
+
+								<div class="ns-provider-stepper__selected-models">
+									<div class="ns-provider-stepper__section-title">
+										{t('chatbox.setup.custom.selectedModelsTitle', {
+											count: selectedModelList().length,
+										})}
+									</div>
+									<Show
+										when={selectedModelList().length > 0}
+										fallback={
+											<p>{t('chatbox.setup.custom.selectedModelsEmpty')}</p>
+										}
+									>
+										<ul>
+											<For each={selectedModelList()}>
+												{(model) => (
+													<li>
+														<span>
+															<strong>{modelName(model)}</strong>
+															<span>{model.id}</span>
+														</span>
+														<Show when={props.onEditModel}>
+															<button
+																type="button"
+																onClick={() => editModel(model)}
+															>
+																{t('settings.ai.modals.model.edit')}
+															</button>
+														</Show>
 														<button
 															type="button"
-															onClick={() => editModel(model)}
+															aria-label={t(
+																'chatbox.setup.custom.removeModel',
+																{
+																	model: modelName(model),
+																},
+															)}
+															onClick={() => removeModel(model.id)}
 														>
-															{t('settings.ai.modals.model.edit')}
+															<span class=":uno: i-lucide-x size-4" />
 														</button>
-													</Show>
-													<button
-														type="button"
-														aria-label={t('chatbox.setup.custom.removeModel', {
-															model: modelName(model),
-														})}
-														onClick={() => removeModel(model.id)}
-													>
-														<span class=":uno: i-lucide-x size-4" />
-													</button>
-												</li>
-											)}
-										</For>
-									</ul>
-								</Show>
+													</li>
+												)}
+											</For>
+										</ul>
+									</Show>
+								</div>
 							</div>
-
 							<div class="ns-provider-stepper__actions">
 								<button
 									type="button"

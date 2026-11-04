@@ -643,6 +643,7 @@ export default class NutstoreLlmGatewayService extends BaseService {
 		pending: NutstoreLlmGatewayPendingAuthorization,
 		pollIntervalMs: number,
 	) {
+		let finishingAuthorization = false
 		try {
 			if (Date.now() >= pending.expiresAt) {
 				throw new Error(
@@ -683,14 +684,19 @@ export default class NutstoreLlmGatewayService extends BaseService {
 			}
 
 			this.stopAuthorizationPolling()
+			finishingAuthorization = true
 			await this.finishAuthorization(result.data)
 			this.emitAuthState()
 		} catch (error) {
 			this.scope.check()
-			if (this.settings.pendingAuthorization?.deviceCode !== pending.deviceCode)
-				return
-			this.stopAuthorizationPolling()
-			this.settings.pendingAuthorization = undefined
+			if (!finishingAuthorization) {
+				if (
+					this.settings.pendingAuthorization?.deviceCode !== pending.deviceCode
+				)
+					return
+				this.stopAuthorizationPolling()
+				this.settings.pendingAuthorization = undefined
+			}
 			await this.plugin.settingsService.saveSettings()
 			this.noticeError(error)
 			this.emitAuthState()

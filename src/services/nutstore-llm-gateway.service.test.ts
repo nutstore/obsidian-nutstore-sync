@@ -3,19 +3,26 @@ import type { AIProviderConfig } from '~/ai/core/types'
 import type NutstorePlugin from '~/index'
 import { createProviderConfig } from '~/ai/catalog/config'
 import { ModuleScope } from '~/modules/lifecycle'
+import { onNutstoreLlmGatewayAuth } from '~/events/nutstore-llm-gateway-auth'
 import NutstoreLlmGatewayService, {
 	type NutstoreLlmGatewayAuthSettings,
 } from './nutstore-llm-gateway.service'
 
-const { createAuthorization, poll, cancelDevice, fetchMock } = vi.hoisted(
-	() => ({
+const { createAuthorization, poll, cancelDevice, fetchMock, notice } =
+	vi.hoisted(() => ({
 		createAuthorization: vi.fn(),
 		poll: vi.fn(),
 		cancelDevice: vi.fn(),
 		fetchMock: vi.fn(),
-	}),
-)
-vi.mock('obsidian', () => ({ Notice: class {} }))
+		notice: vi.fn(),
+	}))
+vi.mock('obsidian', () => ({
+	Notice: class {
+		constructor(...args: unknown[]) {
+			notice(...args)
+		}
+	},
+}))
 vi.mock('~/consts', () => ({
 	LLM_GATEWAY_CLIENT_ID: 'neutral-client',
 	NUTSTORE_LLM_GATEWAY_PROVIDER_ID: 'gateway',
@@ -61,6 +68,48 @@ function fixture() {
 }
 
 describe('gateway lifetime', () => {
+	it('reports a model request failure after device authorization completes', async () => {
+		vi.useFakeTimers()
+		const f = fixture()
+		Object.assign(f.settings.ai.nutstoreLlmGateway, {
+			pendingAuthorization: {
+				clientId: 'neutral-client',
+				deviceCode: 'neutral-device',
+				userCode: 'neutral-code',
+				verificationUri: 'https://example.invalid/',
+				verificationUrl: 'https://example.invalid/',
+				intervalMs: 1000,
+				expiresAt: Date.now() + 60_000,
+			},
+		})
+		poll.mockResolvedValue({
+			ok: true,
+			data: {
+				access_token: 'neutral-access',
+				refresh_token: 'neutral-refresh',
+				expires_in: 120,
+			},
+		})
+		fetchMock.mockRejectedValue(new Error('模型 Model 🌱 暂不可用'))
+		const states: string[] = []
+		const subscription = onNutstoreLlmGatewayAuth().subscribe((event) =>
+			states.push(event.status),
+		)
+
+		await f.service.initializeProviderFromStoredAuth()
+		await vi.advanceTimersByTimeAsync(1000)
+
+		expect(
+			f.settings.ai.nutstoreLlmGateway.pendingAuthorization,
+		).toBeUndefined()
+		expect(f.settings.ai.nutstoreLlmGateway.accessToken).toBe('neutral-access')
+		expect(notice).toHaveBeenCalledWith('模型 Model 🌱 暂不可用', 10000)
+		expect(states.at(-1)).toBe('idle')
+		expect(f.save).toHaveBeenCalled()
+		subscription.unsubscribe()
+		f.scope.close()
+		f.service.onunload()
+	})
 	it('lists configured providers consistently with gateway authorization', () => {
 		const f = fixture()
 		const gateway = createProviderConfig({
