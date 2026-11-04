@@ -649,6 +649,34 @@ describe('App runtime and trusted SVG boundary', () => {
 		}
 	})
 
+	it('preserves raw and escaped closing script text in App code', async () => {
+		const dom = new JSDOM(
+			runtimeDocument(
+				{
+					html: '<p id="raw"></p><p id="escaped"></p>',
+					css: '',
+					javascript: String.raw`
+						document.querySelector('#raw').textContent = String.raw\`</script> 中文 English 🌿\`;
+						document.querySelector('#escaped').textContent = '\</SCRIPT> 中文 English 🌿';
+					`.replaceAll('\\`', '`'),
+				},
+				'neutral',
+			),
+			{ runScripts: 'dangerously' },
+		)
+		try {
+			await timeout(10)
+			expect(dom.window.document.querySelector('#raw')?.textContent).toBe(
+				'</script> 中文 English 🌿',
+			)
+			expect(dom.window.document.querySelector('#escaped')?.textContent).toBe(
+				'</SCRIPT> 中文 English 🌿',
+			)
+		} finally {
+			dom.window.close()
+		}
+	})
+
 	it('applies the markup policy inside nested templates before they are activated', async () => {
 		const dom = new JSDOM(
 			runtimeDocument(
