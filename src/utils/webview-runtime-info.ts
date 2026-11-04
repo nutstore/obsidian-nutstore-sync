@@ -5,7 +5,6 @@ export interface WebviewRuntimeInfo {
 
 /** UA-reported versions are diagnostic hints, not capability checks or exact engine builds. */
 export function getWebviewRuntimeInfo(
-	// eslint-disable-next-line obsidianmd/platform -- Collect browser diagnostics; OS detection uses Platform.
 	userAgent = navigator.userAgent,
 ): WebviewRuntimeInfo {
 	const chromium = /\b(?:Chrome|Chromium)\/([\d.]+)/.exec(userAgent)?.[1]

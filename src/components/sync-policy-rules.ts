@@ -1,3 +1,4 @@
+import createId from '~/utils/create-id'
 import i18n from '~/i18n'
 import {
 	getConflictStrategyI18nKey,
@@ -25,8 +26,13 @@ export function renderSyncPolicyRules(
 	const rules = definitions[getSyncPolicyI18nKey(policy)]
 	const table = container.createEl('table', {
 		cls: 'nutstore-sync-policy-rules',
-		attr: { 'aria-label': i18n.t('settings.syncPolicy.name') },
 	})
+	const caption = table.createEl('caption', {
+		text: i18n.t('settings.syncPolicy.name'),
+		attr: { hidden: '' },
+	})
+	caption.id = createId('accessible-label')
+	table.setAttribute('aria-labelledby', caption.id)
 	const heading = table.createEl('thead').createEl('tr')
 	heading.createEl('th', {
 		text: i18n.t('sync.confirmModal.condition'),

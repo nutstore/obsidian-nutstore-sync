@@ -148,7 +148,6 @@ export class ToolExecutor {
 			enableViewImage: model?.modalities.input.includes('image') ?? false,
 		})
 		if (definition.id === MASTER_AGENT_ID) {
-			await this.mcpService.refreshIfChanged()
 			if (session) {
 				Object.assign(
 					tools,

@@ -1,9 +1,11 @@
+import { sample } from 'es-toolkit'
 import { Notice } from 'obsidian'
 import {
 	Show,
 	createEffect,
 	createMemo,
 	createSignal,
+	createUniqueId,
 	on,
 	onCleanup,
 	onMount,
@@ -28,11 +30,12 @@ import { MessageCard } from './components/MessageCard'
 import { ModelPickerDialog } from './components/ModelPickerDialog'
 import { PaneResizer } from './components/PaneResizer'
 import { PendingList } from './components/PendingList'
+import { ProviderSetup } from './components/ProviderSetup'
 import { RunStateCard } from './components/RunStateCard'
 import { SessionHistorySheet } from './components/SessionHistorySheet'
 import { SubagentTimelineDialog } from './components/SubagentTimelineDialog'
 import { decideDropRoute, hasDragItems } from './drop-utils'
-import { shouldSubmitChatInput } from './utils'
+import { ChatComposer } from './components/ChatComposer'
 
 const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.input-height'
 const LEGACY_INPUT_HEIGHT_STORAGE_KEY =
@@ -101,10 +104,27 @@ function MessageScrollContent(props: {
 }
 
 function Chatbox(props: ChatboxProps) {
+	const sendLabelId = createUniqueId()
 	let workspaceHostEl: HTMLDivElement | undefined
 	type RecallArmedMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
-	const [isComposing, setIsComposing] = createSignal(false)
+	const isInputEmpty = createMemo(() => input().length === 0)
+	// Pick once per empty-input period, including after sending or clearing a draft.
+	const inputPlaceholder = createMemo(() => {
+		if (!isInputEmpty()) return ''
+		return t(
+			sample([
+				'chatbox.ui.placeholders.suggestions.ask',
+				'chatbox.ui.placeholders.suggestions.idea',
+				'chatbox.ui.placeholders.suggestions.summary',
+				'chatbox.ui.placeholders.suggestions.outline',
+				'chatbox.ui.placeholders.suggestions.explain',
+				'chatbox.ui.placeholders.suggestions.polish',
+				'chatbox.ui.placeholders.suggestions.steps',
+				'chatbox.ui.placeholders.suggestions.connections',
+			] as const),
+		)
+	})
 	const [historyOpen, setHistoryOpen] = createSignal(false)
 	const [selectedAgentId, setSelectedAgentId] = createSignal<string>()
 	const [modelPickerOpen, setModelPickerOpen] = createSignal(false)
@@ -129,7 +149,8 @@ function Chatbox(props: ChatboxProps) {
 	let splitLayoutEl: HTMLDivElement | undefined
 	let inputPaneEl: HTMLDivElement | undefined
 	let fileInputEl: HTMLInputElement | undefined
-	let inputTextareaEl: HTMLTextAreaElement | undefined
+	let composerCardEl: HTMLDivElement | undefined
+	let inputEditorEl: HTMLDivElement | undefined
 	let previousActiveSessionId: string | undefined
 	let defaultInputHeight = DEFAULT_INPUT_HEIGHT
 	let dragStartHeight = 0
@@ -217,7 +238,7 @@ function Chatbox(props: ChatboxProps) {
 		if (activeElement instanceof HTMLElement) {
 			activeElement.blur()
 		}
-		inputTextareaEl?.blur()
+		inputEditorEl?.blur()
 	}
 
 	function openCompressContextConfirm() {
@@ -287,6 +308,9 @@ function Chatbox(props: ChatboxProps) {
 
 	const selectedProvider = () =>
 		props.providers.find((provider) => provider.id === props.selectedProviderId)
+	const providerReady = createMemo(
+		() => props.providerSetup === undefined && !props.loading,
+	)
 	const dialogMountTarget = () => {
 		const contained =
 			chatboxContainerWidth() >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH &&
@@ -354,11 +378,11 @@ function Chatbox(props: ChatboxProps) {
 	}
 
 	function getInputPaneChromeHeight() {
-		if (!inputPaneEl || !inputTextareaEl) {
+		if (!inputPaneEl || !inputEditorEl) {
 			return 0
 		}
 		const paneHeight = inputPaneEl.getBoundingClientRect().height
-		const textareaHeight = inputTextareaEl.getBoundingClientRect().height
+		const textareaHeight = inputEditorEl.getBoundingClientRect().height
 		return Math.max(0, Math.round(paneHeight - textareaHeight))
 	}
 
@@ -536,10 +560,18 @@ function Chatbox(props: ChatboxProps) {
 	}
 
 	onMount(() => {
-		props.onWorkspaceHostChange?.(workspaceHostEl)
-		onCleanup(() => props.onWorkspaceHostChange?.(undefined))
 		props.onModalHostChange?.(chatboxRootEl)
 		onCleanup(() => props.onModalHostChange?.(undefined))
+	})
+
+	createEffect(() => {
+		if (!providerReady()) return
+		// The host owns the workspace panel's lifetime. Props are replaced with
+		// fresh callbacks on every view update (e.g. each pointerdown), so the
+		// callback must not be tracked or the panel is rebuilt under the cursor.
+		const notify = untrack(() => props.onWorkspaceHostChange)
+		notify?.(workspaceHostEl)
+		onCleanup(() => notify?.(undefined))
 	})
 
 	createEffect(
@@ -600,7 +632,7 @@ function Chatbox(props: ChatboxProps) {
 	)
 
 	createEffect(() => {
-		if (!inputTextareaEl) {
+		if (!providerReady() || !inputEditorEl) {
 			return
 		}
 		defaultInputHeight =
@@ -676,7 +708,7 @@ function Chatbox(props: ChatboxProps) {
 	})
 
 	createEffect(() => {
-		if (!inputPaneEl || !inputTextareaEl) {
+		if (!providerReady() || !inputPaneEl || !inputEditorEl) {
 			return
 		}
 		const observer = new ResizeObserver(() => {
@@ -690,7 +722,7 @@ function Chatbox(props: ChatboxProps) {
 			}
 		})
 		observer.observe(inputPaneEl)
-		observer.observe(inputTextareaEl)
+		observer.observe(inputEditorEl)
 		onCleanup(() => observer.disconnect())
 	})
 
@@ -883,44 +915,48 @@ function Chatbox(props: ChatboxProps) {
 			</Show>
 			<div class=":uno: flex min-w-0 flex-1 flex-col overflow-hidden">
 				{/* Header */}
-				<div class="ns-chatbox-header">
-					<button
-						class="ns-chatbox-nav-btn"
-						type="button"
-						aria-label={t('chatbox.ui.history.title')}
-						title={t('chatbox.ui.history.title')}
-						onClick={() => {
-							setHistoryOpen((value) => !value)
-							setModelPickerOpen(false)
-						}}
-					>
-						<span class=":uno: i-lucide-history size-4 shrink-0" />
-					</button>
-					<div
-						class="ns-chatbox-session-title"
-						title={props.title || t('chatbox.newChat')}
-					>
-						{props.title || t('chatbox.newChat')}
+				<Show when={!props.providerSetup}>
+					<div class="ns-chatbox-header">
+						<button
+							class="ns-chatbox-nav-btn"
+							type="button"
+							aria-label={t('chatbox.ui.history.title')}
+							title={t('chatbox.ui.history.title')}
+							onClick={() => {
+								setHistoryOpen((value) => !value)
+								setModelPickerOpen(false)
+							}}
+						>
+							<span class=":uno: i-lucide-history size-4 shrink-0" />
+						</button>
+						<div
+							class="ns-chatbox-session-title"
+							title={props.title || t('chatbox.newChat')}
+						>
+							{props.title || t('chatbox.newChat')}
+						</div>
+						<Show when={providerReady()}>
+							<button
+								class="ns-model-pill"
+								type="button"
+								aria-label={`${t('chatbox.ui.labels.provider')} / ${t('chatbox.ui.labels.model')}: ${modelPickerLabel()}`}
+								title={modelPickerLabel()}
+								onClick={() => {
+									setModelPickerOpen(true)
+									setHistoryOpen(false)
+								}}
+							>
+								<span class=":uno: i-lucide-sparkles size-3.5 shrink-0 ns-model-pill-icon" />
+								<span class="ns-model-pill-text">
+									{isSmallChatbox()
+										? compactModelPickerLabel()
+										: modelPickerLabel()}
+								</span>
+								<span class=":uno: i-lucide-chevron-down size-3 shrink-0 ns-model-pill-chevron" />
+							</button>
+						</Show>
 					</div>
-					<button
-						class="ns-model-pill"
-						type="button"
-						aria-label={`${t('chatbox.ui.labels.provider')} / ${t('chatbox.ui.labels.model')}: ${modelPickerLabel()}`}
-						title={modelPickerLabel()}
-						onClick={() => {
-							setModelPickerOpen(true)
-							setHistoryOpen(false)
-						}}
-					>
-						<span class=":uno: i-lucide-sparkles size-3.5 shrink-0 ns-model-pill-icon" />
-						<span class="ns-model-pill-text">
-							{isSmallChatbox()
-								? compactModelPickerLabel()
-								: modelPickerLabel()}
-						</span>
-						<span class=":uno: i-lucide-chevron-down size-3 shrink-0 ns-model-pill-chevron" />
-					</button>
-				</div>
+				</Show>
 
 				<div
 					ref={splitLayoutEl}
@@ -931,211 +967,261 @@ function Chatbox(props: ChatboxProps) {
 					<div
 						ref={messagesEl}
 						class=":uno: ns-chatbox-messages min-h-0 flex-1 overflow-y-auto px-[var(--ns-chatbox-pad-x)] pt-[var(--ns-chatbox-gap)] pb-[var(--ns-chatbox-gap)] scrollbar-default"
+						classList={{ 'is-provider-setup': !!props.providerSetup }}
 						style={{ 'overflow-anchor': stickToBottom() ? 'none' : 'auto' }}
 					>
 						<Show
-							when={
-								props.timeline.length > 0 ||
-								props.pending.length > 0 ||
-								isBusy()
-							}
+							when={props.providerSetup}
 							fallback={
-								<div class="ns-chatbox-empty">
-									<div class="ns-chatbox-empty-card">
-										<div class="ns-chatbox-empty-badge" aria-hidden="true">
-											<span class=":uno: i-lucide-sparkles size-6 shrink-0" />
-										</div>
-										<div class="ns-chatbox-empty-title">
-											{props.loading
-												? t('chatbox.ui.states.loading')
-												: props.title || t('chatbox.newChat')}
-										</div>
-										<Show when={!props.loading}>
-											<div class="ns-chatbox-empty-subtitle">
-												{t('chatbox.ui.states.empty')}
+								<Show
+									when={
+										props.timeline.length > 0 ||
+										props.pending.length > 0 ||
+										isBusy()
+									}
+									fallback={
+										<div class="ns-chatbox-empty">
+											<div class="ns-chatbox-empty-card">
+												<div class="ns-chatbox-empty-badge" aria-hidden="true">
+													<span class=":uno: i-lucide-sparkles size-6 shrink-0" />
+												</div>
+												<div class="ns-chatbox-empty-title">
+													{props.loading
+														? t('chatbox.ui.states.loading')
+														: props.title || t('chatbox.newChat')}
+												</div>
+												<Show when={!props.loading}>
+													<div class="ns-chatbox-empty-subtitle">
+														{t('chatbox.ui.states.empty')}
+													</div>
+												</Show>
 											</div>
-										</Show>
-									</div>
-								</div>
+										</div>
+									}
+								>
+									<MessageScrollContent
+										class=":uno: ns-chatbox-message-content flex flex-col gap-[var(--ns-chatbox-gap)]"
+										onResize={onMessageContentResize}
+									>
+										<TurnTimeline
+											timeline={props.timeline}
+											sessionId={props.activeSessionId}
+											runState={props.runState}
+										>
+											{(row, process) => (
+												<MessageCard
+													item={row().item}
+													displayBlocks={row().blocks}
+													process={process}
+													now={now()}
+													renderMarkdown={props.renderMarkdown}
+													streaming={
+														row().item.message.id === streamingMessageId()
+													}
+													onDeleteMessage={requestDeleteMessage}
+													onRegenerateMessage={requestRegenerateMessage}
+													onRecallMessage={requestRecallMessage}
+													getSubagent={(agentId) => props.agentsById[agentId]}
+													onOpenSubagent={setSelectedAgentId}
+													onOpenFileChange={props.onOpenFileChange}
+													onResolveResourceDataUrl={
+														props.onResolveResourceDataUrl
+													}
+												/>
+											)}
+										</TurnTimeline>
+										<RunStateCard
+											runState={props.runState}
+											onStop={props.onStopActiveRun}
+										/>
+										<PendingList pending={props.pending} />
+									</MessageScrollContent>
+								</Show>
 							}
 						>
-							<MessageScrollContent
-								class=":uno: ns-chatbox-message-content flex flex-col gap-[var(--ns-chatbox-gap)]"
-								onResize={onMessageContentResize}
-							>
-								<TurnTimeline
-									timeline={props.timeline}
-									sessionId={props.activeSessionId}
-									runState={props.runState}
-								>
-									{(row, process) => (
-										<MessageCard
-											item={row().item}
-											displayBlocks={row().blocks}
-											process={process}
-											now={now()}
-											renderMarkdown={props.renderMarkdown}
-											streaming={row().item.message.id === streamingMessageId()}
-											onDeleteMessage={requestDeleteMessage}
-											onRegenerateMessage={requestRegenerateMessage}
-											onRecallMessage={requestRecallMessage}
-											getSubagent={(agentId) => props.agentsById[agentId]}
-											onOpenSubagent={setSelectedAgentId}
-											onOpenFileChange={props.onOpenFileChange}
-											onResolveResourceDataUrl={props.onResolveResourceDataUrl}
-										/>
-									)}
-								</TurnTimeline>
-								<RunStateCard
-									runState={props.runState}
-									onStop={props.onStopActiveRun}
+							{(setup) => (
+								<ProviderSetup
+									initialDraft={props.providerSetupDraft}
+									onboarding={{
+										state: setup(),
+										nutstore: props.nutstoreSetup,
+										onStartNutstoreSetup: props.onStartNutstoreSetup,
+										onOpenNutstoreAuthorization:
+											props.onOpenNutstoreAuthorization,
+										onCancelNutstoreSetup: props.onCancelNutstoreSetup,
+									}}
+									onFetchProviderSetupModels={props.onFetchProviderSetupModels}
+									onCreateProviderSetupModel={props.onCreateProviderSetupModel}
+									onSaveProviderSetup={props.onSaveProviderSetup}
+									onEditModel={props.onEditProviderSetupModel}
 								/>
-								<PendingList pending={props.pending} />
-							</MessageScrollContent>
+							)}
 						</Show>
 					</div>
 
-					<PaneResizer
-						onResizeStart={onInputPaneResizeStart}
-						onResize={onInputPaneResize}
-						onResizeEnd={onInputPaneResizeEnd}
-						onDblClick={resetInputPaneHeight}
-					/>
+					<Show when={providerReady()}>
+						<PaneResizer
+							onResizeStart={onInputPaneResizeStart}
+							onResize={onInputPaneResize}
+							onResizeEnd={onInputPaneResizeEnd}
+							onDblClick={resetInputPaneHeight}
+						/>
 
-					{/* Input */}
-					<div
-						ref={inputPaneEl}
-						class={`:uno: chatbox-input-pane shrink-0 px-[var(--ns-chatbox-pad-x)] pb-2 ${'chatbox-input-pane--resizable'}`}
-					>
-						<div class="ns-composer-card">
-							<Show
-								when={
-									props.activeContextItems.length > 0 ||
-									props.draft.userContext.length > 0
-								}
+						{/* Input */}
+						<div
+							ref={inputPaneEl}
+							class={`:uno: chatbox-input-pane shrink-0 px-[var(--ns-chatbox-pad-x)] pb-2 ${'chatbox-input-pane--resizable'}`}
+						>
+							<div
+								ref={(element) => {
+									composerCardEl = element
+								}}
+								class="ns-composer-card"
 							>
-								<div class="chatbox-context-header">
-									<div class="ns-composer-context-items">
-										<Show when={props.activeContextItems.length > 0}>
-											<ContextArea items={props.activeContextItems} />
-										</Show>
-										<Show when={props.draft.userContext.length > 0}>
-											<ContextArea
-												items={props.draft.userContext}
-												onRemove={props.onRemoveUserContext}
+								<Show
+									when={
+										props.activeContextItems.length > 0 ||
+										props.draft.userContext.length > 0
+									}
+								>
+									<div class="chatbox-context-header">
+										<div class="ns-composer-context-items">
+											<Show when={props.activeContextItems.length > 0}>
+												<ContextArea items={props.activeContextItems} />
+											</Show>
+											<Show when={props.draft.userContext.length > 0}>
+												<ContextArea
+													items={props.draft.userContext}
+													onRemove={props.onRemoveUserContext}
+												/>
+											</Show>
+										</div>
+									</div>
+								</Show>
+								<ChatComposer
+									ref={(element) => {
+										inputEditorEl = element
+									}}
+									value={input()}
+									sessionId={props.activeSessionId}
+									placeholder={inputPlaceholder()}
+									height={getTextareaHeightStyle()}
+									completionAnchor={() => composerCardEl}
+									onChange={(text) => {
+										setInput(text)
+										props.onUpdateInputDraft(text)
+									}}
+									mentionPaths={() => props.onListMentionPaths?.() ?? []}
+									onMention={(path) => {
+										void Promise.resolve(props.onDropContextItem(path)).catch(
+											() => new Notice(t('chatbox.errors.mentionFailed')),
+										)
+									}}
+									commands={() => [
+										{
+											name: 'file',
+											description: t('chatbox.ui.actions.fileDescription'),
+											label: t('chatbox.ui.actions.selectFile'),
+											run: openFilePicker,
+										},
+										...(props.canCompress
+											? [
+													{
+														name: 'compact',
+														description: t(
+															'chatbox.ui.actions.compactDescription',
+														),
+														label: t('chatbox.ui.actions.compressContext'),
+														run: openCompressContextConfirm,
+													},
+												]
+											: []),
+										{
+											name: 'new',
+											description: t('chatbox.ui.actions.newDescription'),
+											label: t('chatbox.newChat'),
+											run: () => props.onNewSession(),
+										},
+									]}
+									onSubmit={() => {
+										void submit()
+									}}
+									onPasteImages={(files) => {
+										void addPickedFiles(files)
+									}}
+								/>
+
+								<div class="ns-composer-toolbar">
+									<Show when={props.onWorkspaceHostChange}>
+										<div class="ns-workspace-slot" ref={workspaceHostEl} />
+									</Show>
+									<div class="ns-composer-tools">
+										<button
+											class="ns-composer-tool-btn"
+											type="button"
+											title={t('chatbox.ui.actions.selectFile')}
+											aria-label={t('chatbox.ui.actions.selectFile')}
+											onClick={openFilePicker}
+										>
+											<span class=":uno: i-lucide-paperclip size-4 shrink-0" />
+										</button>
+										<button
+											class="ns-composer-tool-btn"
+											type="button"
+											title={t('chatbox.ui.actions.compressContext')}
+											aria-label={t('chatbox.ui.actions.compressContext')}
+											disabled={!props.canCompress}
+											onClick={openCompressContextConfirm}
+										>
+											<span class=":uno: i-lucide-minimize-2 size-4 shrink-0" />
+										</button>
+										<McpServersDialog
+											servers={props.mcpServers}
+											mountEl={dialogMountTarget().mountEl}
+											contained={dialogMountTarget().contained}
+											onToggle={props.onToggleSessionMcpServer}
+										/>
+										<button
+											class="ns-composer-tool-btn"
+											type="button"
+											title={t('chatbox.newChat')}
+											aria-label={t('chatbox.newChat')}
+											onClick={() => props.onNewSession()}
+										>
+											<span class=":uno: i-lucide-square-pen size-4 shrink-0" />
+										</button>
+									</div>
+									<button
+										class=":uno: mod-cta ns-composer-send"
+										type="button"
+										aria-labelledby={sendLabelId}
+										disabled={
+											(!input().trim() &&
+												!props.draft.userContext.length &&
+												!props.activeContextItems.length) ||
+											!props.canSend
+										}
+										onClick={() => void submit()}
+										title={contextUsageTitle()}
+									>
+										<Show when={props.contextWindow}>
+											<ContextRing
+												used={contextUsedTokens()}
+												total={props.contextWindow!}
+												size={15}
+												stroke={2.5}
 											/>
 										</Show>
-									</div>
-								</div>
-							</Show>
-							<textarea
-								ref={inputTextareaEl}
-								class=":uno: chatbox-input ns-composer-textarea flex-1 w-full text-sm outline-none"
-								style={(() => {
-									const height = getTextareaHeightStyle()
-									return height ? { height } : undefined
-								})()}
-								placeholder={t('chatbox.ui.placeholders.input')}
-								value={input()}
-								onInput={(event) => {
-									const nextInput = event.currentTarget.value
-									setInput(nextInput)
-									props.onUpdateInputDraft(nextInput)
-								}}
-								onPaste={(event) => {
-									const imageFiles = Array.from(
-										event.clipboardData?.items ?? [],
-									)
-										.filter(
-											(item) =>
-												item.kind === 'file' && item.type.startsWith('image/'),
-										)
-										.map((item) => item.getAsFile())
-										.filter((file): file is File => !!file)
-									if (!imageFiles.length) return
-									event.preventDefault()
-									void addPickedFiles(imageFiles)
-								}}
-								onCompositionStart={() => setIsComposing(true)}
-								onCompositionEnd={() => setIsComposing(false)}
-								onKeyDown={(event) => {
-									if (shouldSubmitChatInput(event, isComposing())) {
-										event.preventDefault()
-										void submit()
-									}
-								}}
-							/>
-
-							<div class="ns-composer-toolbar">
-								<Show when={props.onWorkspaceHostChange}>
-									<div class="ns-workspace-slot" ref={workspaceHostEl} />
-								</Show>
-								<div class="ns-composer-tools">
-									<button
-										class="ns-composer-tool-btn"
-										type="button"
-										title={t('chatbox.ui.actions.selectFile')}
-										aria-label={t('chatbox.ui.actions.selectFile')}
-										onClick={openFilePicker}
-									>
-										<span class=":uno: i-lucide-paperclip size-4 shrink-0" />
-									</button>
-									<button
-										class="ns-composer-tool-btn"
-										type="button"
-										title={t('chatbox.ui.actions.compressContext')}
-										aria-label={t('chatbox.ui.actions.compressContext')}
-										disabled={!props.canCompress}
-										onClick={openCompressContextConfirm}
-									>
-										<span class=":uno: i-lucide-minimize-2 size-4 shrink-0" />
-									</button>
-									<McpServersDialog
-										servers={props.mcpServers}
-										mountEl={dialogMountTarget().mountEl}
-										contained={dialogMountTarget().contained}
-										onToggle={props.onToggleSessionMcpServer}
-									/>
-									<button
-										class="ns-composer-tool-btn"
-										type="button"
-										title={t('chatbox.newChat')}
-										aria-label={t('chatbox.newChat')}
-										onClick={() => props.onNewSession()}
-									>
-										<span class=":uno: i-lucide-square-pen size-4 shrink-0" />
+										{/* Explicit references preserve the name when compact CSS hides the text. */}
+										<span id={sendLabelId} class="ns-composer-send-label">
+											{t('chatbox.ui.actions.send')}
+										</span>
+										<span class=":uno: i-lucide-arrow-up size-3.5 shrink-0" />
 									</button>
 								</div>
-								<button
-									class=":uno: mod-cta ns-composer-send"
-									type="button"
-									disabled={
-										(!input().trim() &&
-											!props.draft.userContext.length &&
-											!props.activeContextItems.length) ||
-										!props.canSend
-									}
-									onClick={() => void submit()}
-									title={contextUsageTitle()}
-									aria-label={t('chatbox.ui.actions.send')}
-								>
-									<Show when={props.contextWindow}>
-										<ContextRing
-											used={contextUsedTokens()}
-											total={props.contextWindow!}
-											size={15}
-											stroke={2.5}
-											title={contextUsageTitle()}
-										/>
-									</Show>
-									<span class="ns-composer-send-label">
-										{t('chatbox.ui.actions.send')}
-									</span>
-									<span class=":uno: i-lucide-arrow-up size-3.5 shrink-0" />
-								</button>
 							</div>
 						</div>
-					</div>
+					</Show>
 				</div>
 			</div>
 

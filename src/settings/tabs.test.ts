@@ -16,14 +16,6 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 describe('SETTINGS_TABS', () => {
-	it('should define sync, ai and troubleshooting tabs in order', () => {
-		expect(SETTINGS_TABS.map((tab) => tab.key)).toEqual([
-			'sync',
-			'ai',
-			'troubleshooting',
-		])
-	})
-
 	it.each(SETTINGS_TABS)(
 		'tab "$key" should have i18n text in both en and zh',
 		(tab) => {

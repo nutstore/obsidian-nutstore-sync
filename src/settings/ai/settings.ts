@@ -4,10 +4,10 @@ import {
 	getModelById,
 	getProviderById,
 	listModels,
-	listProviders,
 	sanitizeDefaultSelections,
 	sanitizeProviders,
 } from '~/ai/catalog/config'
+import type { AIProviderConfig } from '~/ai/core/types'
 import ProvidersManagerModal from '~/components/ProvidersManagerModal'
 import McpServersManagerModal from '~/components/McpServersManagerModal'
 import i18n from '~/i18n'
@@ -21,6 +21,8 @@ export default class AISettings extends BaseSettings {
 	getSearchTerms(): string[] {
 		return [
 			i18n.t('settings.ai.providers.name'),
+			i18n.t('settings.ai.defaultProvider.name'),
+			i18n.t('settings.ai.defaultProvider.desc'),
 			i18n.t('settings.ai.defaultModel.name'),
 			i18n.t('settings.ai.defaultModel.desc'),
 			i18n.t('settings.ai.mcp.name'),
@@ -32,14 +34,25 @@ export default class AISettings extends BaseSettings {
 	async display() {
 		this.containerEl.empty()
 
+		const providers = this.plugin.ai.gateway.listConfiguredProviders()
+		this.renderProviders(providers)
+		this.renderDefaultProvider(providers)
+		if (providers.length > 0) this.renderDefaultModel(providers)
+		this.renderMcpServers()
+		this.renderAccessControl()
+	}
+
+	private renderProviders(providers: AIProviderConfig[]) {
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.ai.providers.name'))
 			.setDesc(
-				i18n.t('settings.ai.providers.summary', {
-					count: this.listUserManagedProviders().length,
-				}),
+				providers.length === 0
+					? i18n.t('settings.ai.providers.emptyHint')
+					: i18n.t('settings.ai.providers.summary', {
+							count: providers.length,
+						}),
 			)
-			.addButton((button) =>
+			.addButton((button) => {
 				button
 					.setButtonText(i18n.t('settings.ai.providers.manage'))
 					.onClick(() => {
@@ -47,24 +60,19 @@ export default class AISettings extends BaseSettings {
 							await this.persist(false)
 							void this.display()
 						}).open()
-					}),
-			)
-
-		if (this.listUserManagedProviders().length === 0) {
-			this.containerEl.createEl('p', {
-				cls: ':uno: -mt-1 mb-5 opacity-75',
-				text: i18n.t('settings.ai.providers.emptyHint'),
+					})
 			})
-		}
+	}
+
+	private renderDefaultProvider(providers: AIProviderConfig[]) {
+		if (providers.length === 0) return
 
 		new Setting(this.containerEl)
-			.setName(i18n.t('settings.ai.defaultModel.name'))
-			.setDesc(i18n.t('settings.ai.defaultModel.desc'))
+			.setName(i18n.t('settings.ai.defaultProvider.name'))
+			.setDesc(i18n.t('settings.ai.defaultProvider.desc'))
 			.addDropdown((dropdown) => {
 				dropdown.addOption('', i18n.t('settings.ai.none'))
-				for (const provider of listProviders(
-					this.plugin.settings.ai.providers,
-				)) {
+				for (const provider of providers) {
 					dropdown.addOption(
 						provider.id,
 						provider.name || i18n.t('settings.ai.unnamedProvider'),
@@ -93,11 +101,16 @@ export default class AISettings extends BaseSettings {
 						void this.display()
 					})
 			})
+	}
+
+	private renderDefaultModel(providers: AIProviderConfig[]) {
+		const provider = providers.find(
+			(item) => item.id === this.plugin.settings.ai.defaultModel?.providerId,
+		)
+		new Setting(this.containerEl)
+			.setName(i18n.t('settings.ai.defaultModel.name'))
+			.setDesc(i18n.t('settings.ai.defaultModel.desc'))
 			.addDropdown((dropdown) => {
-				const provider = getProviderById(
-					this.plugin.settings.ai.providers,
-					this.plugin.settings.ai.defaultModel?.providerId,
-				)
 				dropdown.addOption('', i18n.t('settings.ai.none'))
 				for (const model of listModels(provider)) {
 					dropdown.addOption(
@@ -119,16 +132,16 @@ export default class AISettings extends BaseSettings {
 							this.plugin.settings.ai.defaultModel = undefined
 						}
 						await this.persist()
+						void this.display()
 					})
 			})
+	}
 
+	private renderMcpServers() {
+		const count = Object.keys(this.plugin.ai.mcp.getServers()).length
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.ai.mcp.name'))
-			.setDesc(
-				i18n.t('settings.ai.mcp.summary', {
-					count: Object.keys(this.plugin.ai.mcp.getServers()).length,
-				}),
-			)
+			.setDesc(i18n.t('settings.ai.mcp.summary', { count }))
 			.addButton((button) =>
 				button.setButtonText(i18n.t('settings.ai.mcp.manage')).onClick(() => {
 					new McpServersManagerModal(this.plugin, async () => {
@@ -136,7 +149,9 @@ export default class AISettings extends BaseSettings {
 					}).open()
 				}),
 			)
+	}
 
+	private renderAccessControl() {
 		new Setting(this.containerEl)
 			.setName(i18n.t('settings.ai.yolo.name'))
 			.setDesc(i18n.t('settings.ai.yolo.desc'))
@@ -148,12 +163,6 @@ export default class AISettings extends BaseSettings {
 						await this.persist(false)
 					}),
 			)
-	}
-
-	private listUserManagedProviders() {
-		return listProviders(this.plugin.settings.ai.providers).filter(
-			(provider) => !this.plugin.ai.gateway.isManagedProvider(provider),
-		)
 	}
 
 	private async persist(showNotice: boolean = true) {

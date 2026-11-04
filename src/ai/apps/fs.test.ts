@@ -51,7 +51,14 @@ function fixture(readonlyApps = false) {
 			disk.rm(`/${path}`, { recursive }),
 	}
 	const app = {
-		vault: { configDir: '.obsidian', adapter },
+		vault: {
+			adapter,
+			// App storage is rooted independently of Obsidian configuration.
+			// Any accidental dependency must fail these filesystem operations.
+			get configDir(): string {
+				throw new Error('App mounts must not access vault configuration')
+			},
+		},
 		fileManager: {},
 	} as unknown as App
 	const permissionGuard = vi.fn(async () => {})

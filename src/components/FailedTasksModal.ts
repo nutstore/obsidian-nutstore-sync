@@ -1,16 +1,13 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
+import type { SyncTaskRecord } from '~/services/progress.service'
+import { getTaskLabel } from '~/utils/get-task-name'
 
-interface FailedTaskInfo {
-	taskName: string
-	localPath: string
-	errorMessage: string
-}
-
+/** The failed tasks of a run, as recorded in its snapshot. */
 export default class FailedTasksModal extends Modal {
 	constructor(
 		app: App,
-		private failedTasks: FailedTaskInfo[],
+		private failedTasks: readonly SyncTaskRecord[],
 	) {
 		super(app)
 	}
@@ -42,9 +39,9 @@ export default class FailedTasksModal extends Modal {
 		const tbody = table.createEl('tbody')
 		this.failedTasks.forEach((task) => {
 			const row = tbody.createEl('tr')
-			row.createEl('td', { text: task.taskName })
+			row.createEl('td', { text: getTaskLabel(task) })
 			row.createEl('td', { text: task.localPath })
-			row.createEl('td', { text: task.errorMessage })
+			row.createEl('td', { text: task.error ?? '' })
 		})
 
 		const settingDiv = contentEl.createDiv({ cls: ':uno: mt-4' })
@@ -61,5 +58,3 @@ export default class FailedTasksModal extends Modal {
 		contentEl.empty()
 	}
 }
-
-export type { FailedTaskInfo }

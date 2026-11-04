@@ -1,7 +1,79 @@
 import type { App } from 'obsidian'
+import { SyncScope } from '~/sync/scope'
+import { traverseLocalVault } from '~/utils/traverse-local-vault'
 import { assert } from './assert'
 
 const E2E_ROOT = '.agents/nutstore-sync/e2e'
+
+/** Inject only the read failure; listings, metadata, encoding and recovery use
+ * the real host DataAdapter in the disposable integration vault. */
+export async function isolatesUnavailableVaultSubtrees(app: App) {
+	const root = `${E2E_ROOT}/Scan 扫描🌱`
+	const blocked = `${root}/Section 小节📘`
+	const note = `${blocked}/Example 示例🌿.md`
+	const sibling = `${root}/Sibling 同级🌱.md`
+	const content = 'Neutral content / 中性内容🌿'
+	await app.vault.adapter.mkdir(blocked)
+	await app.vault.adapter.write(note, content)
+	await app.vault.adapter.write(sibling, content)
+	let unavailable = true
+	const cause = new Error('Directory unavailable 目录暂不可用🌱')
+	const adapter = new Proxy(app.vault.adapter, {
+		get(target, key) {
+			if (key === 'list')
+				return async (path: string) => {
+					if (unavailable && path === blocked) throw cause
+					return target.list(path)
+				}
+			const value: unknown = Reflect.get(target, key)
+			return typeof value === 'function' ? value.bind(target) : value
+		},
+	})
+	const vault = new Proxy(app.vault, {
+		get(target, key) {
+			if (key === 'adapter') return adapter
+			const value: unknown = Reflect.get(target, key)
+			return typeof value === 'function' ? value.bind(target) : value
+		},
+	})
+	try {
+		const scope = new SyncScope()
+		const snapshot = await traverseLocalVault(vault, root, scope)
+		assert(
+			snapshot.issues.length === 1 && snapshot.issues[0].cause === cause,
+			'Host scan did not retain the unavailable directory diagnostic',
+		)
+		assert(
+			snapshot.entries.some((entry) => entry.path === sibling),
+			'Host scan lost the healthy sibling',
+		)
+		assert(
+			!snapshot.entries.some(
+				(entry) =>
+					entry.path === blocked || entry.path.startsWith(`${blocked}/`),
+			),
+			'Host scan exposed an incomplete subtree',
+		)
+		assert(
+			!scope.allows(root, { subtree: true, isDir: true }) &&
+				scope.allows(sibling, { subtree: true }),
+			'Host scan did not protect ancestor mutations independently of siblings',
+		)
+		assert(
+			(await app.vault.adapter.read(note)) === content,
+			'Host scan changed unavailable content',
+		)
+		unavailable = false
+		const recovered = await traverseLocalVault(vault, root)
+		assert(
+			recovered.issues.length === 0 &&
+				recovered.entries.some((entry) => entry.path === note),
+			'Host scan did not recover on the next invocation',
+		)
+	} finally {
+		await app.vault.adapter.rmdir(root, true)
+	}
+}
 
 export async function roundTripsVaultAdapterContent(app: App) {
 	const path = `${E2E_ROOT}/中性 sample 🌱.txt`

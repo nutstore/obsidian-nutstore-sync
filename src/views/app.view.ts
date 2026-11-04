@@ -23,14 +23,13 @@ export default class AppView extends ItemView {
 	private readonly unsubscribers: Array<() => void> = []
 	private output!: HTMLElement
 	private status!: HTMLElement
-	private heading!: HTMLElement
-	private appBadge?: HTMLElement
+	private readonly headerActions: HTMLElement[] = []
 	private closed = true
 	private signature = ''
 	private renderEpoch = 0
 	private epoch = 0
 	private refreshTimer?: number
-	private pinButton?: HTMLButtonElement
+	private pinButton?: HTMLElement
 	private cssChangeEvent?: EventRef
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -72,7 +71,7 @@ export default class AppView extends ItemView {
 		this.signature = ''
 		this.contentEl.empty()
 		this.contentEl.addClass('ns-app-view')
-		this.buildToolbar()
+		this.buildHeaderActions()
 		this.status = this.contentEl.createDiv({
 			cls: 'ns-app-status',
 			attr: { role: 'status' },
@@ -89,26 +88,18 @@ export default class AppView extends ItemView {
 		await this.refresh()
 	}
 
-	private buildToolbar() {
-		const toolbar = this.contentEl.createDiv({ cls: 'ns-app-toolbar' })
-		const brand = toolbar.createDiv({ cls: 'ns-app-brand' })
-		this.appBadge = brand.createSpan({ cls: 'ns-app-badge' })
-		setIcon(this.appBadge, 'blocks')
-		this.heading = brand.createSpan({ cls: 'ns-app-heading' })
-		const actions = toolbar.createDiv({ cls: 'ns-app-actions' })
+	/** Keep App chrome in Obsidian's header so the sandbox owns the full content area. */
+	private buildHeaderActions() {
 		const action = (
 			label: string,
 			icon: string,
 			run: () => Promise<unknown>,
 		) => {
-			const button = actions.createEl('button', {
-				cls: 'ns-app-button',
-				attr: { type: 'button', title: label, 'aria-label': label },
-			})
-			setIcon(button, icon)
-			this.registerDomEvent(button, 'click', () => {
+			const button = this.addAction(icon, label, () => {
+				if (!this.appId || this.closed) return
 				void run().catch((error) => this.reportActionError(error))
 			})
+			this.headerActions.push(button)
 			return button
 		}
 		action(i18n.t('apps.modify'), 'pencil', async () => {
@@ -139,21 +130,11 @@ export default class AppView extends ItemView {
 		try {
 			const loaded = await this.plugin.ai.workspaces.load(appId)
 			if (this.closed || epoch !== this.epoch) return
-			if (this.appBadge) {
-				this.appBadge.empty()
-				setIcon(
-					this.appBadge,
-					this.plugin.ai.appIcon(appId, loaded.manifest.iconSvg),
-				)
-				if (!this.appBadge.childElementCount) {
-					setIcon(this.appBadge, 'blocks')
-				}
-			}
 			if (this.pinButton) {
 				const label = i18n.t(loaded.state.pinned ? 'apps.unpin' : 'apps.pin')
 				this.pinButton.setAttribute('title', label)
 				this.pinButton.setAttribute('aria-label', label)
-				this.pinButton.classList.toggle('is-active', loaded.state.pinned)
+				this.pinButton.setAttribute('aria-pressed', String(loaded.state.pinned))
 				setIcon(this.pinButton, loaded.state.pinned ? 'pin-off' : 'pin')
 			}
 			this.render(loaded)
@@ -170,8 +151,7 @@ export default class AppView extends ItemView {
 	private render(loaded: LoadedApp) {
 		if (this.closed || !this.appId) return
 		const appId = this.appId
-		this.title = loaded.manifest.title
-		this.heading.textContent = this.title
+		this.updateTitle(loaded.manifest.title)
 		const signature = JSON.stringify([appId, loaded.manifest, loaded.content])
 		const epoch = ++this.renderEpoch
 		this.status.classList.remove('ns-app-error')
@@ -200,8 +180,7 @@ export default class AppView extends ItemView {
 				validated.manifest,
 				validated.content,
 			])
-			this.title = validated.manifest.title
-			this.heading.textContent = this.title
+			this.updateTitle(validated.manifest.title)
 			this.clearRuntime()
 			const host = this.plugin.ai.workspaces.createRuntimeHost(appId, () => {
 				if (!current()) throw new Error('This App version is no longer active')
@@ -236,6 +215,12 @@ export default class AppView extends ItemView {
 			if (!this.closed && epoch === this.renderEpoch) this.showError(error)
 		})
 	}
+	/** Obsidian creates the header before the asynchronous manifest load completes. */
+	private updateTitle(title: string) {
+		this.title = title
+		const heading = this.containerEl.querySelector('.view-header-title')
+		if (heading) heading.textContent = title
+	}
 	private clearRuntime() {
 		this.runtime?.destroy()
 		this.runtime = undefined
@@ -259,6 +244,8 @@ export default class AppView extends ItemView {
 			this.cssChangeEvent = undefined
 		}
 		for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe()
+		for (const action of this.headerActions.splice(0)) action.remove()
+		this.pinButton = undefined
 		this.contentEl.empty()
 	}
 }

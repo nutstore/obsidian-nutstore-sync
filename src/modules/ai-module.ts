@@ -72,6 +72,7 @@ export class AiModule {
 		)
 		this.apps = this.workspaces.store
 		this.chat = new ChatService(this.plugin, scope)
+		this.observeProviderReadiness(scope)
 		new AppRibbonManager(this.plugin, scope, this.apps)
 		this.models.initializeFromLocalSettings()
 		this.conflicts.onload()
@@ -153,6 +154,33 @@ export class AiModule {
 		)
 	}
 
+	/**
+	 * Provider onboarding starts in the editor so it has enough room. Once a
+	 * usable model exists, rerun the normal open action so the bootstrap leaf
+	 * moves to the device's configured Chatbox location.
+	 */
+	private observeProviderReadiness(scope: ModuleScope) {
+		let providerReady = this.chat.isProviderReady()
+		scope.register(
+			this.chat.subscribe(() => {
+				const nextProviderReady = this.chat.isProviderReady()
+				if (providerReady === nextProviderReady) return
+				providerReady = nextProviderReady
+				if (!nextProviderReady) return
+				if (
+					!this.plugin.app.workspace.getLeavesOfType(CHATBOX_VIEW_TYPE).length
+				) {
+					return
+				}
+				void scope.background(
+					() => this.openChatbox(),
+					(error) =>
+						logger.error('Failed to move Chatbox after provider setup', error),
+				)
+			}),
+		)
+	}
+
 	private async stop() {
 		for (const type of [
 			CHATBOX_VIEW_TYPE,
@@ -173,6 +201,7 @@ export class AiModule {
 		const scope = this.lifecycle.scope
 		const workspace = this.plugin.app.workspace
 		const inEditor =
+			!this.chat.isProviderReady() ||
 			this.plugin.localSettings.ai.chatboxLocation === ChatboxLocation.Editor
 		const existing = workspace.getLeavesOfType(CHATBOX_VIEW_TYPE)
 		const leaf =

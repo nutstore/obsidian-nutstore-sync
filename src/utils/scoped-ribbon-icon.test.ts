@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-/* eslint-disable obsidianmd/prefer-create-el -- Simulate the native ribbon without loading Obsidian DOM extensions. */
 import { describe, expect, it } from 'vitest'
 import type { Plugin } from 'obsidian'
 import { createScopedRibbonIcon } from './scoped-ribbon-icon'
@@ -57,4 +56,3 @@ describe('native ribbon registration ownership', () => {
 		second.dispose()
 	})
 })
-/* eslint-enable obsidianmd/prefer-create-el -- Native DOM fixture setup is complete. */

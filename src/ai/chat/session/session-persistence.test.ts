@@ -13,6 +13,42 @@ import {
 } from '~/ai/chat/session/session-persistence'
 
 describe('chat session persistence', () => {
+	it('round-trips prototype-named keys in nested tool JSON without changing prototypes', async () => {
+		const input = JSON.parse(
+			'{"__proto__":{"text":"中性 Neutral 🌿"},"nested":{"__proto__":"记录 Record 🌿","constructor":"字段 Field 🌿","prototype":"值 Value 🌿"}}',
+		)
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'neutral-中性-🌿',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master: createEmptyMasterAgent(1) },
+		}
+		session.subagents.master.timeline.push({
+			id: 'tool-工具-🌿',
+			role: 'assistant',
+			parts: [
+				{
+					type: 'dynamic-tool',
+					toolName: 'neutral',
+					toolCallId: 'neutral-call',
+					state: 'input-available',
+					input,
+				},
+			],
+		})
+		const encoded = await encodeChatSessionForStorage(session)
+		expect(JSON.stringify(encoded)).toBe(JSON.stringify(session))
+		const decoded = decodeChatSessionFromStorage(
+			JSON.parse(JSON.stringify(encoded)),
+		) as ChatSession
+		const part = decoded.subagents.master.timeline[0].parts[0]
+		if (part.type !== 'dynamic-tool') throw new Error('Expected tool part')
+		expect(part.input).toEqual(input)
+		expect(Object.getPrototypeOf(part.input)).toBe(Object.prototype)
+		expect(Object.keys(part.input as object)).toContain('__proto__')
+	})
+
 	it('persists only a workspace reference while App data stays independent', async () => {
 		const session: ChatSession = {
 			schemaVersion: 2,

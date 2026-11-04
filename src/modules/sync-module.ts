@@ -104,7 +104,11 @@ export class SyncModule {
 
 	/** Commands and ribbon share confirmation, account checks and execution. */
 	requestSync() {
-		if (!this.lifecycle.active || this.executor.isRunning()) return
+		if (!this.lifecycle.active) return
+		if (this.executor.isRunning()) {
+			this.progress.showProgressModal()
+			return
+		}
 		const scope = this.lifecycle.scope
 		if (!this.plugin.isAccountConfigured()) {
 			new Notice(i18n.t('sync.error.accountNotConfigured'))

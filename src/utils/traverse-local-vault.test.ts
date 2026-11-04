@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Stat, Vault } from 'obsidian'
-import { LocalScanError } from './local-scan-error'
+import { SyncScope } from '~/sync/scope'
 import { traverseLocalVault } from './traverse-local-vault'
 
 vi.mock('obsidian', () => ({
@@ -36,39 +36,47 @@ describe.each([
 ])('complete local scanning: %s', (folder, file) => {
 	it('reads adapter metadata even when the vault index is empty', async () => {
 		const f = fixture(folder, file)
-		expect((await traverseLocalVault(f.vault, '/')).map((s) => s.path)).toEqual(
-			[folder, file],
-		)
+		const snapshot = await traverseLocalVault(f.vault, '/')
+		expect(snapshot.entries.map((s) => s.path)).toEqual([folder, file])
 	})
 
-	it('rejects a partially scanned tree when a nested listing fails', async () => {
+	it('isolates a subtree when a nested listing fails', async () => {
 		const f = fixture(folder, file)
 		const cause = new Error('Folder unavailable')
 		f.list.mockImplementation(async (path) => {
 			if (path === folder) throw cause
 			return { files: [], folders: [folder] }
 		})
-		await expect(traverseLocalVault(f.vault, '/')).rejects.toMatchObject({
-			name: 'LocalScanError',
-			cause,
-		})
+		const scope = new SyncScope()
+		const snapshot = await traverseLocalVault(f.vault, '/', scope)
+
+		expect(snapshot.entries).toEqual([])
+		expect(snapshot.issues).toEqual([
+			{
+				path: folder,
+				operation: 'list',
+				cause,
+			},
+		])
 	})
 
 	it.each(['folder', 'file'])(
-		'rejects missing %s metadata and scans afresh on a later attempt',
+		'isolates missing %s metadata and scans afresh on a later attempt',
 		async (kind) => {
 			const f = fixture(folder, file)
 			const readStat = f.stat.getMockImplementation()!
 			f.stat.mockImplementation(async (path) =>
 				path === (kind === 'folder' ? folder : file) ? null : readStat(path),
 			)
-			await expect(traverseLocalVault(f.vault, '/')).rejects.toBeInstanceOf(
-				LocalScanError,
-			)
+			expect((await traverseLocalVault(f.vault, '/')).issues).toEqual([
+				expect.objectContaining({
+					path: kind === 'folder' ? folder : file,
+					operation: 'stat',
+				}),
+			])
 			f.stat.mockImplementation(readStat)
-			expect(
-				(await traverseLocalVault(f.vault, '/')).map((s) => s.path),
-			).toEqual([folder, file])
+			const snapshot = await traverseLocalVault(f.vault, '/')
+			expect(snapshot.entries.map((s) => s.path)).toEqual([folder, file])
 		},
 	)
 
@@ -76,7 +84,7 @@ describe.each([
 		const f = fixture(folder, file)
 		const cause = new Error('Metadata unavailable')
 		f.stat.mockRejectedValueOnce(cause)
-		await expect(traverseLocalVault(f.vault, '/')).rejects.toMatchObject({
+		expect((await traverseLocalVault(f.vault, '/')).issues[0]).toMatchObject({
 			cause,
 		})
 	})
@@ -91,6 +99,74 @@ describe.each([
 	it('accepts a successfully scanned empty vault', async () => {
 		const f = fixture(folder, file)
 		f.list.mockResolvedValue({ files: [], folders: [] })
-		await expect(traverseLocalVault(f.vault, '/')).resolves.toEqual([])
+		await expect(traverseLocalVault(f.vault, '/')).resolves.toEqual({
+			entries: [],
+			issues: [],
+		})
+	})
+	it('ignores inaccessible excluded directories', async () => {
+		const f = fixture(folder, file)
+		f.stat.mockRejectedValue(new Error('Excluded path unavailable'))
+		f.list.mockImplementation(async (path) => {
+			if (path !== '/') throw new Error('Excluded path unavailable')
+			return { files: [], folders: [folder] }
+		})
+		const scope = new SyncScope([
+			{
+				expr: `/${folder}/`,
+				type: 'exclude',
+				options: { caseSensitive: false },
+			},
+		])
+		expect(await traverseLocalVault(f.vault, '/', scope)).toEqual({
+			entries: [],
+			issues: [],
+		})
+	})
+
+	it('still aborts when the root listing fails', async () => {
+		const f = fixture(folder, file)
+		f.list.mockRejectedValueOnce(new Error('Root unavailable'))
+		await expect(traverseLocalVault(f.vault, '/')).rejects.toMatchObject({
+			name: 'LocalScanError',
+		})
+	})
+})
+
+describe('scanning with thousands of unreadable folders', () => {
+	it('isolates every one of them without quadratic slowdown', async () => {
+		const count = 10_000
+		const folders = Array.from(
+			{ length: count },
+			(_, i) => `目录 Folder ${i}🌱`,
+		)
+		const files = Array.from({ length: count }, (_, i) => `笔记 Note ${i}📘.md`)
+		const vault = {
+			configDir: '.obsidian',
+			getAbstractFileByPath: () => null,
+			adapter: {
+				list: async (path: string) => {
+					if (path === '/') return { files, folders }
+					throw new Error('Unavailable 暂不可用🌿')
+				},
+				stat: async (path: string): Promise<Stat> => ({
+					type: path.endsWith('.md') ? 'file' : 'folder',
+					mtime: 1,
+					ctime: 1,
+					size: 8,
+				}),
+			},
+		} as unknown as Vault
+		const scope = new SyncScope()
+		const started = performance.now()
+		const snapshot = await traverseLocalVault(vault, '/', scope)
+
+		expect(snapshot.issues).toHaveLength(count)
+		expect(scope.issues).toHaveLength(count)
+		// Healthy siblings stay in scope; every failed folder is protected.
+		expect(files.every((f) => scope.allows(f, { subtree: true }))).toBe(true)
+		expect(folders.some((f) => scope.allows(f, { subtree: true }))).toBe(false)
+		// Linear scope lookups took several seconds at this size.
+		expect(performance.now() - started).toBeLessThan(2000)
 	})
 })

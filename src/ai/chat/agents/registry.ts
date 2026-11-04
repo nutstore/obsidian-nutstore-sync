@@ -1,6 +1,5 @@
 import type { ToolSet } from 'ai'
 import { agentCommunicationTools } from '~/ai/tools/agent-communication'
-import { isMcpToolName } from '~/ai/mcp/types'
 
 export type AgentPermissionMode = 'ask' | 'readonly' | 'full'
 
@@ -68,6 +67,9 @@ function createMasterAgentDefinition(
 			? `${MASTER_SYSTEM_PROMPT}\n${MEMORY_GUIDANCE}`
 			: MASTER_SYSTEM_PROMPT,
 		tools: [
+			'mcp_list_servers',
+			'mcp_list_tools',
+			'mcp_execute',
 			'bash',
 			'apply_patch',
 			'view_image',
@@ -132,8 +134,6 @@ export function filterToolsForAgent<T extends ToolSet>(
 ): T {
 	const allowed = new Set(definition.tools)
 	return Object.fromEntries(
-		Object.entries(tools).filter(
-			([name]) => allowed.has(name) || isMcpToolName(name),
-		),
+		Object.entries(tools).filter(([name]) => allowed.has(name)),
 	) as T
 }

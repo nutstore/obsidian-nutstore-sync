@@ -294,7 +294,21 @@ export class SessionStore {
 			throw new SessionUnavailableError(sessionId)
 		}
 
-		const { session, changed } = this.rehydrateSession(stored)
+		let rehydrated: ReturnType<SessionStore['rehydrateSession']>
+		try {
+			// Migration and normalization validate persisted history too; report
+			// their failures through the same boundary as decoding failures.
+			rehydrated = this.rehydrateSession(stored)
+		} catch (error) {
+			new Notice(
+				i18n.t('chatbox.errors.corruptSessionFile', {
+					path: getChatSessionPath(sessionId),
+				}),
+				10000,
+			)
+			throw new SessionUnavailableError(sessionId, { cause: error })
+		}
+		const { session, changed } = rehydrated
 		this.resetSessionExecution(sessionId, session)
 		this.state.loadedSessions.set(sessionId, session)
 
@@ -397,10 +411,8 @@ export class SessionStore {
 		)
 		const { session: rehydrated, changed: opsRewritten } =
 			this.normalizeSession(migrated.session)
-		let changed =
-			migrated.changed ||
-			this.selection.sanitizeSessionSelection(rehydrated) ||
-			opsRewritten
+		const selectionChanged = this.selection.sanitizeSessionSelection(rehydrated)
+		let changed = migrated.changed || selectionChanged || opsRewritten
 
 		changed = normalizeRehydratedExecution(rehydrated) || changed
 

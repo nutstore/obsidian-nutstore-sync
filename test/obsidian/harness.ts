@@ -1,4 +1,5 @@
 import { Plugin } from 'obsidian'
+import { OBSIDIAN_E2E_RESULT_PATH } from './integration-protocol.mjs'
 import { rendersSyncConfirmation } from './checks/sync-confirm'
 import { createsIndependentApps, runsAppAIThroughSandbox } from './checks/apps'
 import {
@@ -12,11 +13,16 @@ import {
 	hotTogglesFeatureModules,
 	loadsProductionPlugin,
 	opensChatboxInChosenLocation,
+	opensProviderSetupInEditorThenMovesChatboxToChosenLocation,
 	keepsChatboxAboveMobileNavigation,
+	keepsWorkspacePickerAcrossPointerDown,
 	respectsSessionAppOpenMode,
 	reloadsProductionPlugin,
 	rendersSearchableSettings,
 	rendersSyncProgress,
+	listsUnscannedPathsInLargeModal,
+	keepsUnscannedPathsDialogUsableOnPhone,
+	opensTenThousandUnscannedPathsWithoutFreezing,
 	type LifecycleStep,
 } from './checks/plugin'
 import {
@@ -28,11 +34,9 @@ import {
 	resolvesResourceDataUrls,
 	respectsVaultDeletionPreference,
 	roundTripsVaultAdapterContent,
+	isolatesUnavailableVaultSubtrees,
 	skipsStaleVaultSkillEntries,
 } from './checks/vault'
-
-export const OBSIDIAN_E2E_RESULT_PATH =
-	'.obsidian/nutstore-sync-e2e-result.json'
 
 interface TestResult {
 	name: string
@@ -99,6 +103,9 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			'keeps the Chatbox composer above phone navigation across keyboard and layout changes',
 			() => keepsChatboxAboveMobileNavigation(this.app),
 		)
+		await run('keeps the workspace picker alive across pointer down', () =>
+			keepsWorkspacePickerAcrossPointerDown(this.app),
+		)
 		await run(
 			'respects automatic and manual session App opening independently of Chatbox location',
 			() => respectsSessionAppOpenMode(this.app),
@@ -106,6 +113,11 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		await run(
 			'opens Chatbox in the chosen area while preserving its session and Unicode draft',
 			() => opensChatboxInChosenLocation(this.app),
+		)
+		await run(
+			'moves Chatbox to the chosen area when a provider is configured',
+			() =>
+				opensProviderSetupInEditorThenMovesChatboxToChosenLocation(this.app),
 		)
 		await run('reloads the production plugin through the real lifecycle', () =>
 			reloadsProductionPlugin(this.app),
@@ -124,6 +136,10 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		)
 		await run('round-trips Vault adapter paths and content', () =>
 			roundTripsVaultAdapterContent(this.app),
+		)
+		await run(
+			'isolates an unavailable Unicode subtree and recovers through the real DataAdapter',
+			() => isolatesUnavailableVaultSubtrees(this.app),
 		)
 		await run(
 			'preserves UTF-8 when Bash writes a Vault file through a heredoc',
@@ -177,6 +193,15 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 		await run(
 			'renders sync progress through the loaded production plugin',
 			() => rendersSyncProgress(this.app),
+		)
+		await run('lists unscanned in-scope paths in a large modal', () =>
+			listsUnscannedPathsInLargeModal(this.app),
+		)
+		await run('opens 10000 unscanned paths without freezing', () =>
+			opensTenThousandUnscannedPathsWithoutFreezing(this.app),
+		)
+		await run('keeps the unscanned paths dialog usable on a phone', () =>
+			keepsUnscannedPathsDialogUsableOnPhone(this.app),
 		)
 
 		await run('detaches ChatBox when the production plugin is disabled', () =>

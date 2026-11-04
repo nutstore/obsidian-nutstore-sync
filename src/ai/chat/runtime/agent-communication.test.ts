@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getAgentDefinition } from '~/ai/chat/agents/registry'
 import { getSessionSubagents } from '~/ai/chat/domain'

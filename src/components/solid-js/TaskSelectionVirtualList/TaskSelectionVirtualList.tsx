@@ -1,13 +1,5 @@
-import {
-	elementScroll,
-	observeElementOffset,
-	observeElementRect,
-	Virtualizer,
-	type Rect,
-	type VirtualItem,
-	type VirtualizerOptions,
-} from '@tanstack/solid-virtual'
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js'
+import { createVirtualRows } from '../virtual-rows'
 import { t } from '../i18n'
 
 export interface TaskSelectionItem {
@@ -33,7 +25,6 @@ interface ScoredItem {
 const ALL_TYPE = '__all__'
 const ROW_ESTIMATE = 95
 const SEPARATOR = /[/\\.,\s_-]/
-const estimateSize = () => ROW_ESTIMATE
 
 function subsequenceScore(text: string, q: string): number {
 	if (!q) return 0
@@ -67,18 +58,6 @@ function subsequenceScore(text: string, q: string): number {
 	score -= boundaryCrossings * 30
 	score -= positions[0]
 	return score
-}
-
-interface VirtualRow {
-	index: number
-	start: number
-	end: number
-}
-
-function projectRows(items: VirtualItem[]): VirtualRow[] {
-	return items
-		.filter((v): v is VirtualItem => v != null)
-		.map((v) => ({ index: v.index, start: v.start, end: v.end }))
 }
 
 export default function TaskSelectionVirtualList(
@@ -148,77 +127,18 @@ export default function TaskSelectionVirtualList(
 
 	const totalItems = () => props.items.length
 
-	const getScrollEl = () => scrollEl ?? null
-
-	const [virtualRows, setVirtualRows] = createSignal<VirtualRow[]>([])
-
-	let virtualOptions: VirtualizerOptions<HTMLElement, HTMLElement> = {
-		count: 0,
-		getScrollElement: getScrollEl,
-		estimateSize,
-		observeElementRect(
-			instance: Virtualizer<HTMLElement, HTMLElement>,
-			cb: (rect: Rect) => void,
-		) {
-			const el = instance.options.getScrollElement()
-			if (el) {
-				cb({
-					width: el.clientWidth || el.getBoundingClientRect().width,
-					height: el.clientHeight || el.getBoundingClientRect().height,
-				})
-			}
-			return observeElementRect(instance, cb)
-		},
-		observeElementOffset,
-		scrollToFn: elementScroll,
-		onChange(instance: Virtualizer<HTMLElement, HTMLElement>) {
-			setVirtualRows(projectRows(instance.getVirtualItems()))
-		},
-		overscan: 8,
-	}
-
-	const virtualizer = new Virtualizer<HTMLElement, HTMLElement>(virtualOptions)
-
-	createEffect(() => {
-		const count = filteredItems().length
-		if (virtualOptions.count !== count) {
-			virtualOptions = {
-				...virtualOptions,
-				count,
-			}
-			virtualizer.setOptions(virtualOptions)
-			virtualizer._willUpdate()
-			setVirtualRows(projectRows(virtualizer.getVirtualItems()))
-		}
-	})
-
-	const pendingRows = new Map<number, HTMLElement>()
-	const [rowTick, bumpRowTick] = createSignal(0)
-
-	const registerRow = (index: number, node: HTMLElement) => {
-		pendingRows.set(index, node)
-		bumpRowTick((t) => t + 1)
-	}
-
-	createEffect(() => {
-		void rowTick()
-		if (pendingRows.size > 0) {
-			const rows = [...pendingRows]
-			pendingRows.clear()
-			window.setTimeout(() => {
-				for (const [index, node] of rows) {
-					if (node.isConnected) {
-						virtualizer.resizeItem(index, node.offsetHeight)
-					}
-				}
-			}, 8)
-		}
+	// A memo, so toggling a checkbox (same count) leaves the virtualizer alone.
+	const filteredCount = createMemo(() => filteredItems().length)
+	const { rows, totalSize, measure, scrollToTop } = createVirtualRows({
+		count: filteredCount,
+		estimateSize: ROW_ESTIMATE,
+		scrollElement: () => scrollEl,
 	})
 
 	createEffect(() => {
 		void typeFilter()
 		void query()
-		virtualizer.scrollToOffset(0)
+		scrollToTop()
 	})
 
 	return (
@@ -287,59 +207,61 @@ export default function TaskSelectionVirtualList(
 					<div ref={scrollEl} class=":uno: flex-1 overflow-auto">
 						<div
 							style={{
-								height: `${virtualizer.getTotalSize()}px`,
+								height: `${totalSize()}px`,
 								position: 'relative',
 								width: '100%',
 							}}
 						>
-							<For each={virtualRows()}>
+							<For each={rows()}>
 								{(vr) => {
-									if (!vr) return null
-									const scored = filteredItems()[vr.index]
-									if (!scored) return null
+									// The same row index shows different tasks as filters change.
+									const scored = createMemo(() => filteredItems()[vr.index])
 									return (
-										<div
-											ref={(el) => {
-												registerRow(vr.index, el)
-											}}
-											class=":uno: grid grid-cols-[2rem_4rem_1fr_1fr] items-start text-sm hover:bg-[var(--background-modifier-hover)] cursor-pointer border-b border-[var(--background-modifier-border)]"
-											style={{
-												position: 'absolute',
-												top: 0,
-												left: 0,
-												width: '100%',
-												transform: `translateY(${vr.start}px)`,
-											}}
-											onClick={() =>
-												props.onToggle(
-													scored.originalIndex,
-													!scored.item.checked,
-												)
-											}
-										>
-											<div class=":uno: flex items-start justify-center px-2 py-2">
-												<input
-													type="checkbox"
-													checked={scored.item.checked}
-													onClick={(e) => e.stopPropagation()}
-													onChange={(e) =>
+										<Show when={scored()}>
+											{(current) => (
+												<div
+													data-index={vr.index}
+													ref={measure}
+													class=":uno: grid grid-cols-[2rem_4rem_1fr_1fr] items-start text-sm hover:bg-[var(--background-modifier-hover)] cursor-pointer border-b border-[var(--background-modifier-border)]"
+													style={{
+														position: 'absolute',
+														top: 0,
+														left: 0,
+														width: '100%',
+														transform: `translateY(${vr.start}px)`,
+													}}
+													onClick={() =>
 														props.onToggle(
-															scored.originalIndex,
-															e.currentTarget.checked,
+															current().originalIndex,
+															!current().item.checked,
 														)
 													}
-												/>
-											</div>
-											<div class=":uno: p-2 text-[var(--text-normal)] border-l border-[var(--background-modifier-border)] break-all">
-												{scored.item.action}
-											</div>
-											<div class=":uno: p-2 text-[var(--text-normal)] border-l border-[var(--background-modifier-border)] break-all">
-												{scored.item.localPath}
-											</div>
-											<div class=":uno: p-2 text-[var(--text-normal)] border-l border-[var(--background-modifier-border)] break-all">
-												{scored.item.remotePath}
-											</div>
-										</div>
+												>
+													<div class=":uno: flex items-start justify-center px-2 py-2">
+														<input
+															type="checkbox"
+															checked={current().item.checked}
+															onClick={(e) => e.stopPropagation()}
+															onChange={(e) =>
+																props.onToggle(
+																	current().originalIndex,
+																	e.currentTarget.checked,
+																)
+															}
+														/>
+													</div>
+													<div class=":uno: p-2 text-[var(--text-normal)] border-l border-[var(--background-modifier-border)] break-all">
+														{current().item.action}
+													</div>
+													<div class=":uno: p-2 text-[var(--text-normal)] border-l border-[var(--background-modifier-border)] break-all">
+														{current().item.localPath}
+													</div>
+													<div class=":uno: p-2 text-[var(--text-normal)] border-l border-[var(--background-modifier-border)] break-all">
+														{current().item.remotePath}
+													</div>
+												</div>
+											)}
+										</Show>
 									)
 								}}
 							</For>

@@ -8,6 +8,7 @@ import type {
 import type { LanguageModelUsage } from 'ai'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
 import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
+import type { AIModelConfig } from '~/ai/core/types'
 
 interface ChatModelOption {
 	id: string
@@ -18,6 +19,27 @@ export interface ChatProviderOption {
 	id: string
 	name: string
 	models: ChatModelOption[]
+}
+
+export type ProviderSetupState =
+	| { kind: 'no-provider' }
+	| { kind: 'no-model'; providerId: string; providerName: string }
+
+export interface ChatNutstoreSetupState {
+	status: 'idle' | 'authorizing'
+	userCode?: string
+}
+
+export interface ChatProviderSetupDraft {
+	existingProviderId?: string
+	env?: string[]
+	doc?: string
+	name: string
+	npm: string
+	api?: string
+	apiKey: string
+	allowBrowserCors: boolean
+	models: Record<string, AIModelConfig>
 }
 
 interface ChatSessionHistoryItem {
@@ -63,6 +85,10 @@ interface ChatboxViewModel {
 	agentsById: Record<string, ChatAgentView>
 	otherBusySessionIds: string[]
 	providers: ChatProviderOption[]
+	/** Provider setup replaces the whole chat surface until a usable model exists. */
+	providerSetup?: ProviderSetupState
+	providerSetupDraft?: ChatProviderSetupDraft
+	nutstoreSetup: ChatNutstoreSetupState
 	selectedProviderId?: string
 	selectedModelId?: string
 	runState: ChatRunState
@@ -96,6 +122,21 @@ export interface ChatboxProps extends ChatboxViewModel {
 		modalMountTarget?: ChatModalMountTarget,
 	) => Promise<void>
 	onDeleteSession: (sessionId: string) => Promise<void>
+	onStartNutstoreSetup: () => Promise<void>
+	onOpenNutstoreAuthorization: () => Promise<void>
+	onCancelNutstoreSetup: () => Promise<void>
+	onFetchProviderSetupModels: (
+		draft: ChatProviderSetupDraft,
+	) => Promise<AIModelConfig[]>
+	onCreateProviderSetupModel: (
+		modelId: string,
+		providerApi?: string,
+	) => AIModelConfig
+	onSaveProviderSetup: (draft: ChatProviderSetupDraft) => Promise<void>
+	onEditProviderSetupModel: (
+		model: AIModelConfig,
+		save: (model: AIModelConfig) => boolean,
+	) => void
 	onSelectProvider: (providerId: string) => void
 	onSelectModel: (modelId: string) => void
 	onSendMessage: (
@@ -111,6 +152,8 @@ export interface ChatboxProps extends ChatboxViewModel {
 		replacement: UserContextItem | null,
 	) => void
 	onDropContextItem: (path: string) => Promise<void> | void
+	/** Vault Markdown paths available to the composer; resolved through the existing context flow. */
+	onListMentionPaths?: () => string[]
 	onCaptureActiveContext?: () => void
 	/** Mounts the host-owned chat target selector beside composer context. */
 	onWorkspaceHostChange?: (host?: HTMLElement) => void

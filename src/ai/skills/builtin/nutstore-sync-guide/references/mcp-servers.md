@@ -14,16 +14,26 @@ server.
    a letter or number.
 4. Only HTTP servers are supported. A server entry has `type: "http"`, a
    `url`, optional string `headers`, and optional boolean `enabled`. A server
-   with `enabled` missing or `false` is disabled; in-file `enabled: false`
+   with `enabled: false` is disabled; in-file `enabled: false`
    differs from disabling a server for one chat session.
 5. To add, edit, or remove a server, rewrite the complete `mcpServers` map with
    `jq` on the current contents or an `apply_patch` update (read the file before
    patching). Keep the JSON valid and intact, and never drop other servers.
 6. Handle headers as secrets: retain existing values where possible and never
    include their values in a chat response.
-7. MCP tools are refreshed before the next agent turn. After changing the file,
-   tell the user that the configuration will take effect on their next message;
-   the new tools are not available in the current turn.
+7. Use `mcp_list_servers({})` for the compact service directory: service names,
+   service descriptions, tool names as string arrays, and connection status.
+   Tool descriptions and parameter schemas are deliberately omitted here.
+8. Use `mcp_list_tools({"server":"notes-service"})` for the selected service's
+   complete tool names, descriptions and input schemas. `server` matches the
+   editor's Service name field and must not be empty or whitespace-only.
+   Read these schemas before execution; never guess argument names.
+9. Execute with `mcp_execute({"server":"notes-service","tool":"read_notes","args":{}})`
+   using the exact discovered tool name and arguments matching its schema.
+   Discovery and execution check configuration changes when called. Connections
+   and tool discovery happen in the background; a connecting service is not
+   ready yet. Do not claim its tools are available or repeatedly poll it.
+   A service disabled for this session cannot be listed or executed.
 
 Use this neutral example only when the user needs the file format:
 

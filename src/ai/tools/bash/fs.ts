@@ -405,12 +405,12 @@ export class ObsidianVaultFs implements IFileSystem {
 	}
 
 	private isInternalDirectory(inputPath: string) {
+		// Mounted views resolve paths inside their own root. Vault-wide
+		// virtual directories and configuration do not belong to that view.
+		if (this.options.rootPath) return false
 		const normalized = normalizeVirtualPath(inputPath)
 		const configDir = `/${normalizePath(this.vault.configDir)}`
-		return (
-			!this.options.rootPath &&
-			(normalized === `/${AGENTS_VAULT_PATH}` || normalized === configDir)
-		)
+		return normalized === `/${AGENTS_VAULT_PATH}` || normalized === configDir
 	}
 
 	private async listDirectory(inputPath: string) {

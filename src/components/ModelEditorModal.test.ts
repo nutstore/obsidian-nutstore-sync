@@ -5,7 +5,6 @@ import type NutstorePlugin from '..'
 import ModelEditorModal from './ModelEditorModal'
 
 vi.mock('obsidian', () => {
-	/* eslint-disable obsidianmd/prefer-create-el -- Implement host DOM helpers for jsdom */
 	function element(
 		tag = 'div',
 		options: {
@@ -124,7 +123,6 @@ vi.mock('obsidian', () => {
 			return this
 		}
 	}
-	/* eslint-enable obsidianmd/prefer-create-el -- End of DOM helper mock */
 
 	return {
 		Modal: MockModal,

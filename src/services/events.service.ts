@@ -11,7 +11,7 @@ import {
 } from '~/events'
 import i18n from '~/i18n'
 import { LocalScanError } from '~/utils/local-scan-error'
-import { is503Error } from '~/utils/is-503-error'
+import { describeSyncError } from '~/utils/describe-sync-error'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
@@ -32,9 +32,6 @@ export default class EventsService extends BaseService {
 					text: i18n.t('sync.preparing'),
 					showNotice,
 				})
-				if (showNotice) {
-					this.plugin.sync.progress.showProgressModal()
-				}
 			}),
 
 			onSyncPreparationProgress().subscribe((progress) => {
@@ -52,7 +49,7 @@ export default class EventsService extends BaseService {
 
 			onSyncProgress().subscribe((progress) => {
 				const percent =
-					Math.round((progress.completed.length / progress.total) * 10000) / 100
+					Math.round((progress.completedCount / progress.total) * 10000) / 100
 				this.plugin.sync.status.updateSyncStatus({
 					text: i18n.t('sync.progress', { percent }),
 				})
@@ -65,17 +62,13 @@ export default class EventsService extends BaseService {
 				})
 			}),
 
-			onEndSync().subscribe(({ failedCount, showNotice }) => {
+			// How the outcome is presented belongs to the progress service.
+			onEndSync().subscribe(({ failedCount, scanIssues = [] }) => {
 				this.plugin.toggleSyncUI(false)
-				const now = Date.now()
-				this.plugin.sync.status.setLastSyncTime(now, failedCount)
-				if (showNotice && !this.plugin.sync.progress.hasVisibleSyncModal()) {
-					const text =
-						failedCount > 0
-							? i18n.t('sync.completeWithFailed', { failedCount })
-							: i18n.t('sync.complete')
-					new Notice(text)
-				}
+				this.plugin.sync.status.setLastSyncTime(
+					Date.now(),
+					failedCount + scanIssues.length,
+				)
 			}),
 
 			onSyncError().subscribe((error) => {
@@ -99,9 +92,7 @@ export default class EventsService extends BaseService {
 				} else {
 					new Notice(
 						i18n.t('sync.failedWithError', {
-							error: is503Error(error)
-								? i18n.t('sync.error.requestsTooFrequent')
-								: error.message,
+							error: describeSyncError(error),
 						}),
 					)
 				}

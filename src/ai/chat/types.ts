@@ -28,7 +28,7 @@ export type ReasoningPart = Extract<
 export type ChatMessageContentPart =
 	TextPart | FilePart | ReasoningPart | ToolCallPart
 
-interface ContextCheckpointData {
+export interface ContextCheckpointData {
 	mode: 'summary' | 'reset'
 	summary?: string
 	/**
@@ -36,10 +36,12 @@ interface ContextCheckpointData {
 	 * model context even when the summary was generated in the background.
 	 */
 	summarizedThroughMessageId?: string
-	/** Message ids retained outside the summary when the checkpoint was made. */
+	/**
+	 * Message ids retained outside the summary when the checkpoint was made.
+	 * Also defines the retained context when a migrated checkpoint has no
+	 * snapshot boundary, or that boundary is absent from the timeline.
+	 */
 	retainedMessageIds?: string[]
-	/** @deprecated Checkpoints created before snapshot compaction use this. */
-	preservedTurnCount?: number
 }
 
 export type SystemNotificationData =

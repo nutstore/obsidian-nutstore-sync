@@ -178,45 +178,6 @@ describe('context compression', () => {
 		).toBe(shortTurns.length)
 	})
 
-	it('resolves preserved turns recursively across appended checkpoints', () => {
-		const checkpoint = (
-			id: string,
-			preservedTurnCount: number,
-		): AppUIMessage => ({
-			id,
-			role: 'user',
-			metadata: { createdAt: 10 },
-			parts: [
-				{
-					type: 'data-context-checkpoint',
-					data: {
-						mode: 'summary',
-						summary: id,
-						preservedTurnCount,
-					},
-				},
-			],
-		})
-		const timeline = [
-			message('u1', 'user', 1),
-			message('a1', 'assistant', 2),
-			checkpoint('c1', 1),
-			message('u2', 'user', 3),
-			message('a2', 'assistant', 4),
-			checkpoint('c2', 2),
-			message('u3', 'user', 5),
-		]
-
-		expect(selectContextTimeline(timeline).map((item) => item.id)).toEqual([
-			'c2',
-			'u1',
-			'a1',
-			'u2',
-			'a2',
-			'u3',
-		])
-	})
-
 	it('ignores usage from retained turns until a new response is generated', () => {
 		const agent = createEmptyMasterAgent(1)
 		const checkpoint: AppUIMessage = {

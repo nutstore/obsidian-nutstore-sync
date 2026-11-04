@@ -276,9 +276,13 @@
 			"none": "Not set",
 			"unnamedProvider": "Unnamed provider",
 			"unnamedModel": "Unnamed model",
+			"defaultProvider": {
+				"name": "Default provider",
+				"desc": "Model provider preferred for new chat sessions"
+			},
 			"defaultModel": {
 				"name": "Default model",
-				"desc": "Optional model selected for new chat sessions"
+				"desc": "Default model selected for new chat sessions from this provider"
 			},
 			"nutstoreLlmGateway": {
 				"name": "Nutstore AI",
@@ -345,19 +349,20 @@
 			"providers": {
 				"name": "Providers",
 				"desc": "Manage available AI providers",
+				"services": "Available services",
+				"servicesHint": "Connect a service to select its models in chat",
+				"builtIn": "Built-in",
+				"delete": "Delete",
 				"summary": "{{count}} provider(s) configured",
-				"emptyHint": "No providers configured yet. Click “Manage providers” to add one.",
-				"manage": "Manage providers",
+				"emptyHint": "Connect a provider to choose a model and start chatting.",
+				"manage": "Manage",
 				"add": "Add provider",
-				"refreshPresetName": "Get latest model list",
-				"refreshPresetDesc": "Get the latest model list.",
-				"refreshPresetModels": "Get model list",
+				"refreshShort": "Refresh list",
 				"refreshPresetModelsLoading": "Fetching...",
 				"refreshPresetModelsSuccess": "Fetched ✓ providers {{providers}} models {{models}}",
 				"refreshPresetModelsFailure": "Failed ×",
 				"presetModelsRefreshFailed": "Update failed. Continuing with local/built-in model list.",
 				"presetModelsRefreshFailedWithReason": "Update failed. Continuing with local/built-in model list: {{reason}}",
-				"empty": "No provider configured yet.",
 				"defaultEndpoint": "Default endpoint",
 				"presetCustom": "Custom",
 				"updateModels": "Update models",
@@ -445,7 +450,7 @@
 			"mcp": {
 				"name": "MCP servers",
 				"summary": "{{count}} server(s) configured",
-				"manage": "Manage MCP servers",
+				"manage": "Manage",
 				"manager": {
 					"title": "MCP servers",
 					"add": "Add server",
@@ -453,6 +458,7 @@
 					"configFileHint": "Stored in {{path}}. You can also ask the AI in chat to edit this file.",
 					"parseError": "Failed to parse {{path}}: {{reason}}",
 					"statusDisabled": "disabled",
+					"statusConnecting": "Connecting and discovering tools…",
 					"statusConnected": "{{count}} tool(s)",
 					"statusError": "connection failed: {{reason}}",
 					"test": "Test",
@@ -480,11 +486,33 @@
 					"duplicateName": "A server with this name already exists",
 					"emptyUrl": "URL cannot be empty",
 					"invalidUrl": "Invalid URL"
+				},
+				"discovery": {
+					"installed": "Installed",
+					"discover": "Discover",
+					"intro": "Connect your notes to web research and technical knowledge. Keyless services can be added in one click. Services requiring authentication open their settings first. Public access may have usage limits; test on your current device before use.",
+					"website": "Official documentation ↗",
+					"remove": "Remove service",
+					"confirmRemove": "Confirm removal",
+					"testing": "Connecting…",
+					"noKey": "No API key required",
+					"optionalKey": "API key optional",
+					"exa": "Search the web, read pages and find research sources for your notes.",
+					"deepwiki": "Explore public GitHub repositories and turn project documentation into learning notes.",
+					"tavily": "Search and extract web content for research. Configure your API key using the official documentation. Browser sign-in is not supported here yet.",
+					"context7": "Find current library documentation and examples for technical notes. Add an Authorization header for your API key.",
+					"parallel": "Search the web and read pages for research notes. Add an Authorization: Bearer header for higher usage limits.",
+					"jina": "Read pages, search sources, and access embeddings and reranking. Some capabilities require an API key via an Authorization: Bearer header.",
+					"firecrawl": "Convert pages to Markdown, search and parse sources. Keyless access is limited and rate-limited; crawling and other tools need an API key in request headers. See the official documentation.",
+					"microsoft-learn": "Search and read official Microsoft Learn documentation and code samples for Azure, .NET and related technologies.",
+					"cloudflare-docs": "Search official Cloudflare documentation for notes on Workers, networking and cloud services.",
+					"kagi": "Search the web with Kagi for research sources. Requires a Kagi API key in the Authorization: Bearer header when adding the service.",
+					"requiresKey": "Requires authentication"
 				}
 			},
 			"yolo": {
 				"name": "Full access",
-				"desc": "⚠️ When on, the AI can edit files and change plugin settings without asking for confirmation each time."
+				"desc": "When on, the AI can edit files and change plugin settings without asking for confirmation each time."
 			},
 			"memory": {
 				"heading": "Memory",
@@ -758,17 +786,20 @@
 		"hideButton": "Hide",
 		"closeButton": "Close",
 		"showProgressButton": "Show sync progress",
-		"notSyncing": "No sync currently in progress",
+		"noRunYet": "No sync has run yet",
 		"percentComplete": "{{percent}}%",
 		"currentFile": "{{path}}",
 		"filePath": "{{path}}",
 		"progressTitle": "Sync progress",
 		"progressCompleteTitle": "Sync complete",
+		"mobileLargeUploadHint": "Uploading large files on mobile may cause the app to crash. If this happens, lower the size threshold for “{{setting}}” in settings, for example to 20 MB or 40 MB, depending on your device.",
 		"progressLabel": "Sync progress",
 		"cacheProgressLabel": "Cache update progress",
 		"syncingFiles": "Syncing files...",
 		"updatingCache": "Updating local cache...",
 		"failedStatus": "Sync failed",
+		"cancelling": "Stopping sync",
+		"cancellingHint": "Waiting for the current request to finish. Obsidian cannot abort an upload already sent. Sync will then stop and you can start again.",
 		"cancelled": "Sync cancelled",
 		"suggestUseClientForManyTasks": "Tip: When there are many sync tasks, we recommend using the Nutstore client for better performance and stability. The plugin is more suitable for mobile use!",
 		"fileOp": {
@@ -820,7 +851,8 @@
 				"receiveOnly": "Confirm receive",
 				"receiveOnlyRevertLocalChanges": "Restore local and receive"
 			}
-		}
+		},
+		"partialScanTitle": "Partially synced"
 	},
 	"taskList": {
 		"title": "Sync task list",
@@ -862,6 +894,104 @@
 		"openCommand": "Open chatbox",
 		"addToContext": "Add to AI context",
 		"newChat": "New chat",
+		"setup": {
+			"continueEyebrow": "Continue setting up {{provider}}",
+			"progressLabel": "Provider setup progress",
+			"steps": {
+				"choose": "Choose method",
+				"provider": "Choose provider",
+				"authorize": "Authorize",
+				"connection": "Connect provider",
+				"models": "Choose models",
+				"ready": "Start chatting"
+			},
+			"choice": {
+				"title": "Choose where your models come from",
+				"nutstoreTitle": "Official Nutstore API",
+				"nutstoreDescription": "Authorize with your Nutstore account and load available models without entering an API key.",
+				"customTitle": "Custom provider",
+				"customDescription": "Connect OpenAI, Anthropic, or another compatible model API."
+			},
+			"nutstore": {
+				"title": "Authorize Nutstore AI",
+				"idleDescription": "Authorization happens outside this Obsidian view. We will open the Nutstore authorization page, then continue automatically when it finishes.",
+				"benefitAccount": "Secure authorization with your Nutstore account",
+				"benefitModels": "Automatic access to available official models",
+				"benefitBilling": "One place to review credits and usage",
+				"authorize": "Open authorization page",
+				"starting": "Starting authorization…",
+				"waitingTitle": "Waiting for browser authorization",
+				"waitingDescription": "Confirm the code below in the newly opened page. Keep this view open when you finish.",
+				"codeLabel": "Device code",
+				"openPage": "Reopen authorization page",
+				"cancel": "Cancel authorization"
+			},
+			"custom": {
+				"providerTitle": "Choose a model provider",
+				"searchProviders": "Search provider name or ID",
+				"noProviderResults": "No matching preset provider. You can continue with a manual setup.",
+				"presetModelCount": "{{count}} preset models",
+				"manualTitle": "Configure manually",
+				"manualDescription": "For self-hosted services, proxies, or compatible APIs that are not listed.",
+				"connectionTitle": "Connect a model provider",
+				"nameLabel": "Provider name",
+				"namePlaceholder": "For example: Northwind AI",
+				"nameHint": "Identifies this service in the Chatbox model picker.",
+				"apiFormatLabel": "API format",
+				"apiFormatHint": "Choose the compatible protocol used by this service.",
+				"baseUrlLabel": "Base URL",
+				"baseUrlHint": "Leave empty to use the selected protocol's default endpoint. Compatible services usually require a URL.",
+				"apiKeyLabel": "API key",
+				"apiKeyPlaceholder": "Enter the key issued by the provider",
+				"apiKeyHint": "Sent only to this model provider; it is never synced to Nutstore.",
+				"corsLabel": "Allow browser cross-origin requests",
+				"corsHint": "Can improve streaming on supported providers. Leave disabled if the connection behaves unexpectedly.",
+				"modelsTitle": "Choose available models",
+				"availableModelsTitle": "Load from provider",
+				"availableModelsHint": "Read the models exposed by this endpoint, then choose the ones you want.",
+				"fetchModels": "Fetch models",
+				"fetching": "Fetching…",
+				"searchModels": "Search models",
+				"added": "Added",
+				"addSelected": "Add selected models",
+				"noModelsFound": "No models were returned. Check the endpoint and key, or add a model ID manually.",
+				"pickModelsTitle": "Choose models to add",
+				"pickModelsDescription": "Check the models you want to enable, then add them to this provider.",
+				"selectAll": "Select all",
+				"deselectAll": "Clear selection",
+				"noMatchingModels": "No matching models",
+				"cancel": "Cancel",
+				"manualModelTitle": "Add manually",
+				"manualModelHint": "If you know the model ID, enter it directly instead of waiting for discovery.",
+				"manualModelPlaceholder": "For example: model-neutral",
+				"addModel": "Add",
+				"selectedModelsTitle": "{{count}} model(s) selected",
+				"selectedModelsEmpty": "No models selected yet. Add one to continue.",
+				"removeModel": "Remove model {{model}}",
+				"reviewTitle": "Review and start",
+				"editorReviewTitle": "Review provider",
+				"reviewProvider": "Provider",
+				"reviewApiFormat": "API format",
+				"reviewEndpoint": "Endpoint",
+				"reviewModels": "Enabled models",
+				"reviewHint": "You can edit or remove this provider later in AI settings."
+			},
+			"actions": {
+				"back": "Back",
+				"continue": "Continue",
+				"review": "Review setup",
+				"saving": "Saving…",
+				"finish": "Save and start chatting"
+			},
+			"errors": {
+				"nameRequired": "Enter a provider name.",
+				"modelRequired": "Add at least one model before continuing.",
+				"fetchFailed": "Could not fetch the model list.",
+				"saveFailed": "Could not save the model provider.",
+				"authorizationFailed": "Could not complete Nutstore AI authorization.",
+				"cancelAuthorizationFailed": "Could not cancel authorization."
+			}
+		},
 		"sessionDeleted": "Session deleted",
 		"exportSaved": "Session exported: {{fileName}}",
 		"exportFailed": "Failed to export session",
@@ -918,6 +1048,9 @@
 				"deleteSession": "Delete",
 				"cancel": "Cancel",
 				"close": "Close",
+				"fileDescription": "Attach images or text files to this message",
+				"compactDescription": "Summarize this conversation to free up context",
+				"newDescription": "Start a new conversation",
 				"selectFile": "Select File",
 				"send": "Send",
 				"stopRun": "Stop",
@@ -934,6 +1067,7 @@
 				"contextUsage": "Context: {{used}}% used (window {{total}} tokens · total {{usedTokens}})"
 			},
 			"labels": {
+				"messageInput": "Message",
 				"provider": "Provider",
 				"model": "Model",
 				"tool": "Tool",
@@ -982,7 +1116,16 @@
 				"agentWaiting": "Waiting for agent messages"
 			},
 			"placeholders": {
-				"input": "Type a message. Enter to send, Shift+Enter for newline"
+				"suggestions": {
+					"ask": "What would you like me to do?",
+					"idea": "Have an idea? Let’s explore it",
+					"summary": "Try asking me to summarize a note",
+					"outline": "Turn an idea into an outline",
+					"explain": "Need a concept explained? Ask me",
+					"polish": "Make a passage clearer",
+					"steps": "Break a goal into next steps",
+					"connections": "Explore connections between notes"
+				}
 			},
 			"dialogs": {
 				"subagentTimeline": {
@@ -1036,6 +1179,7 @@
 			"apiKeyRequired": "The selected provider is missing an API key",
 			"providerBaseUrlRequired": "The selected OpenAI-compatible provider is missing a base URL",
 			"noModel": "Select a model before sending",
+			"mentionFailed": "Could not add the referenced note.",
 			"unsupportedAttachmentType": "Unsupported file type: {{name}}",
 			"unknownTool": "Unknown tool: {{name}}",
 			"toolFieldRequired": "{{field}} is required",
@@ -1104,13 +1248,33 @@
 		"createAppDescriptionPlaceholder": "Describe the layout, features, and interactions.",
 		"create": "Create",
 		"cancel": "Cancel",
+		"manageApps": "Manage Apps",
+		"searchApps": "Search Apps…",
+		"noSearchResults": "No Apps found",
+		"noInstalledApps": "No Apps installed",
+		"open": "Open",
+		"delete": "Delete",
 		"deleteApp": "Delete App",
-		"deleteAppPrompt": "Delete this App and its data? Chat history will be kept.",
+		"deleteAppPrompt": "Delete “{{name}}”? This will delete all files and saved data belonging to this App.",
 		"workspace": "App workspace",
 		"noWorkspace": "General chat",
 		"missingApp": "App workspace is unavailable",
 		"describeApp": "Describe what you want to build in chat. Your App will appear here.",
 		"createPrompt": "Write an App. Here is its description:",
 		"createPromptName": "App name: {{name}}"
+	},
+	"scanIssues": {
+		"title": "Some folders were not synced",
+		"instruction": "{{count}} paths that should sync could not be scanned and were skipped this time. Their content on both devices is unchanged, and they will be scanned again on the next sync. If this keeps happening, check that they are readable (permissions, file name, storage).",
+		"operations": {
+			"list": "Reading folder contents",
+			"stat": "Reading file info"
+		},
+		"copy": "Copy all",
+		"copied": "Copied {{count}} paths",
+		"copyFailed": "Could not copy to the clipboard",
+		"close": "Close",
+		"view": "View details",
+		"summary": "{{count}} paths could not be scanned and were skipped. Their content on both devices is unchanged."
 	}
 }

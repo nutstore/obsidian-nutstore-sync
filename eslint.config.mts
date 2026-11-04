@@ -59,6 +59,19 @@ if (!foundJsRecommended) {
 	)
 }
 
+// eslint-plugin-obsidianmd rules describe code that runs inside Obsidian.
+// Tooling runs under Node and tests run under a simulated host, so neither
+// loads these rules' subject. Derived from the plugin config rather than
+// listed here so new upstream rules stay out of non-runtime files.
+const disabledObsidianRules: Record<string, 'off'> = {}
+for (const config of obsidianRecommended) {
+	for (const rule of Object.keys(config.rules ?? {})) {
+		if (rule.startsWith('obsidianmd/')) {
+			disabledObsidianRules[rule] = 'off'
+		}
+	}
+}
+
 // These plugins still publish ESLint 9-compatible rule types. Their runtime
 // interfaces are exercised by `pnpm lint`; keep compatibility assertions at
 // the declaration boundary while this project runs ESLint 10.
@@ -83,13 +96,6 @@ export default defineConfig([
 
 	...obsidianRecommended,
 
-	{
-		files: codeFiles,
-		rules: {
-			'eslint-comments/no-restricted-disable': 'off',
-		},
-	},
-
 	// Tooling executes in Node, not in Obsidian's browser-like runtime.
 	{
 		files: nodeFiles,
@@ -100,12 +106,9 @@ export default defineConfig([
 			},
 		},
 		rules: {
+			...disabledObsidianRules,
 			'@typescript-eslint/no-require-imports': 'off',
 			'no-restricted-globals': 'off',
-			'obsidianmd/hardcoded-config-path': 'off',
-			'obsidianmd/no-global-this': 'off',
-			'obsidianmd/no-nodejs-modules': 'off',
-			'obsidianmd/rule-custom-message': 'off',
 		},
 	},
 
@@ -163,11 +166,47 @@ export default defineConfig([
 		},
 	},
 
+	// This function is serialized into an opaque-origin iframe. A value import
+	// would type-check in the host but disappear from its serialized source.
+	{
+		files: ['src/ai/apps/sandbox.ts'],
+		rules: {
+			// The iframe document is a separate realm without Obsidian's DOM
+			// extensions, so `createEl` does not exist there.
+			'obsidianmd/prefer-create-el': 'off',
+			'@typescript-eslint/no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							group: ['**'],
+							allowTypeImports: true,
+							message:
+								'Sandbox dependencies must be passed explicitly; only type imports survive the serialization boundary.',
+						},
+					],
+				},
+			],
+		},
+	},
+
+	// `Platform` reports the OS and host kind, never the WebView engine or its
+	// version. This module reads the UA only to report that engine for issue
+	// diagnostics, so the rule's premise (OS detection) does not hold here.
+	// OS and host facts stay with `Platform` at their display sites.
+	{
+		files: ['src/utils/webview-runtime-info.ts'],
+		rules: {
+			'obsidianmd/platform': 'off',
+		},
+	},
+
 	// Tests intentionally trade some static strictness for practical mocking
 	// and compatibility assertions.
 	{
 		files: testFiles,
 		rules: {
+			...disabledObsidianRules,
 			'@typescript-eslint/no-deprecated': 'off',
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/await-thenable': 'off',
@@ -177,10 +216,6 @@ export default defineConfig([
 			'@typescript-eslint/no-unsafe-return': 'off',
 			'@typescript-eslint/only-throw-error': 'off',
 			'@typescript-eslint/unbound-method': 'off',
-			'obsidianmd/hardcoded-config-path': 'off',
-			'obsidianmd/no-global-this': 'off',
-			'obsidianmd/no-nodejs-modules': 'off',
-			'obsidianmd/prefer-file-manager-trash-file': 'off',
 		},
 	},
 

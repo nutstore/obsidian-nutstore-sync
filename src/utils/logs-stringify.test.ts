@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LogEntry } from '~/services/logger.service'
+import { LocalScanError } from './local-scan-error'
 import logsStringify from './logs-stringify'
 
 function makeEntry(
@@ -71,6 +72,40 @@ describe('logsStringify', () => {
 			expect(
 				logsStringify(makeEntry('error', [new CustomError('custom')])),
 			).toContain('custom')
+		})
+
+		it('retains causes on Errors nested inside log objects', () => {
+			const cause = new Error('索引暂不可用 Index unavailable 📘')
+			const error = new Error('查询失败 Query failed 🌧️', { cause })
+
+			const result = logsStringify(
+				makeEntry('error', [{ operation: '中性查询🌱', error }]),
+			)!
+			const structured = JSON.parse(result.slice(result.indexOf('{'))) as {
+				error: { cause: { message: string } }
+			}
+
+			expect(structured.error.cause.message).toBe(
+				'索引暂不可用 Index unavailable 📘',
+			)
+		})
+
+		it('keeps the underlying cause of an incomplete local scan', () => {
+			const cause = Object.assign(
+				new Error('目录读取失败 Directory read failed 🌿'),
+				{ code: 'EACCES' },
+			)
+			const error = new LocalScanError('笔记/中性目录🌱', { cause })
+
+			const result = logsStringify(
+				makeEntry('error', ['[Sync] failed:', error]),
+			)!
+
+			expect(result).toContain("Local scan incomplete at '笔记/中性目录🌱'")
+			expect(result).toContain('path: "笔记/中性目录🌱"')
+			expect(result).toContain('Caused by:')
+			expect(result).toContain('目录读取失败 Directory read failed 🌿')
+			expect(result).toContain('code: "EACCES"')
 		})
 
 		it('falls back to name: message when stack is absent', () => {
@@ -165,6 +200,16 @@ describe('logsStringify', () => {
 			expect(result).toContain('42n')
 		})
 
+		it('does not truncate long multilingual log args', () => {
+			const longValue = `开始 Begin 🌿\n${'完整记录 Full record 📘\n'.repeat(
+				2_000,
+			)}结束 End 🧭`
+
+			const result = logsStringify(makeEntry('info', [longValue]))!
+
+			expect(result).toContain(longValue)
+		})
+
 		it('handles deeply nested plain objects', () => {
 			const deep = { a: { b: { c: { value: 'deep' } } } }
 			const result = logsStringify(makeEntry('debug', [deep]))!
@@ -196,6 +241,7 @@ describe('logsStringify', () => {
 				},
 			)
 			expect(() => logsStringify(hostile)).not.toThrow()
+			expect(logsStringify(hostile)).toContain('boom args')
 		})
 	})
 

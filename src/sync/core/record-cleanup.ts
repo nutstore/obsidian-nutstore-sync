@@ -1,21 +1,17 @@
-import { FsWalkResult } from '~/fs/fs.interface'
+import type { FsWalkResult } from '~/fs/fs.interface'
 
+/**
+ * A record is orphaned only when neither complete walk contains its path.
+ * Ignored entries still prove existence: filtering controls synchronization,
+ * not deletion of the history needed if the path becomes included again.
+ */
 export function shouldCreateCleanRecordTask(
 	recordPath: string,
-	localStats: FsWalkResult[],
-	remoteStats: FsWalkResult[],
+	localStats: readonly FsWalkResult[],
+	remoteStats: readonly FsWalkResult[],
 ): boolean {
-	const hasVisibleLocal = localStats.some(
-		(item) => item.stat.path === recordPath && !item.ignored,
+	return (
+		!localStats.some((item) => item.stat.path === recordPath) &&
+		!remoteStats.some((item) => item.stat.path === recordPath)
 	)
-	const hasVisibleRemote = remoteStats.some(
-		(item) => item.stat.path === recordPath && !item.ignored,
-	)
-	if (hasVisibleLocal || hasVisibleRemote) {
-		return false
-	}
-
-	const hasAnyLocal = localStats.some((item) => item.stat.path === recordPath)
-	const hasAnyRemote = remoteStats.some((item) => item.stat.path === recordPath)
-	return !hasAnyLocal && !hasAnyRemote
 }

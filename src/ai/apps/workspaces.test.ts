@@ -201,7 +201,6 @@ const adapter = {
 function fixture() {
 	Object.defineProperty(document, 'win', {
 		configurable: true,
-		// eslint-disable-next-line obsidianmd/prefer-create-el -- Supply Obsidian's document helper in jsdom.
 		value: { createDiv: () => document.createElement('div') },
 	})
 	const app = {
@@ -502,6 +501,51 @@ describe('App workspaces over real App files', () => {
 
 		host.error('中性错误 Neutral failure 🌿')
 		expect(logger.error).toHaveBeenCalledWith('中性错误 Neutral failure 🌿')
+	})
+
+	it('retains long multilingual log diagnostics without truncation or pruning', async () => {
+		const { service } = fixture()
+		const created = await service.create(
+			'org.example.diagnostics',
+			'中性诊断 Neutral diagnostics 🌿',
+		)
+		const message = `开始 Begin 🌿\n${'完整记录 Full record 📘 '.repeat(50_000)}结束 End 🧭`
+		const stack = `堆栈 Stack 🧭\n${'at 中性位置 Neutral location 🌐:1:1\n'.repeat(1_000)}结束 End 🌿`
+		const filename = `目录/中性文件-${'文件名 File name 🌱'.repeat(400)}.js`
+
+		service.logs.append(created.id, {
+			level: 'error',
+			source: 'runtime',
+			message,
+			stack,
+			filename,
+		})
+		await service.logs.flush(created.id)
+
+		const stored = JSON.parse(text(sourcePath(created.id, APP_LOG_FILE)).trim())
+		expect(stored.message).toBe(message)
+		expect(stored.stack).toBe(stack)
+		expect(stored.filename).toBe(filename)
+	})
+
+	it('retains every log event without rate limiting', async () => {
+		const { service } = fixture()
+		const created = await service.create(
+			'org.example.event_log',
+			'中性事件日志 Neutral event log 🌿',
+		)
+		for (let index = 0; index < 250; index += 1) {
+			service.logs.append(created.id, {
+				level: 'info',
+				source: 'runtime',
+				message: `中性事件 ${index} Neutral event 🌿`,
+			})
+		}
+		await service.logs.flush(created.id)
+
+		const lines = text(sourcePath(created.id, APP_LOG_FILE)).trim().split('\n')
+		expect(lines).toHaveLength(250)
+		expect(lines[249]).toContain('中性事件 249 Neutral event 🌿')
 	})
 
 	it('uninstalls other Apps and itself with confirmation while protecting App files', async () => {

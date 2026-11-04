@@ -4,12 +4,21 @@ import { getSessionSubagents, isTerminalAgent } from '~/ai/chat/domain'
 import type { LanguageModelUsage } from 'ai'
 import { Notice } from 'obsidian'
 import {
+	createModelConfig,
+	getFirstModel,
 	getModelById,
 	getProviderById,
 	listModels,
-	listProviders,
 	resolveInitialSelection,
 } from '~/ai/catalog/config'
+import {
+	providerFromEditorDraft,
+	providerToEditorDraft,
+} from '~/ai/catalog/provider-editor'
+import {
+	fetchProviderModels,
+	resolvePresetModel,
+} from '~/ai/catalog/fetch-models'
 import {
 	haveSameUserContextItems,
 	type UserContextItem,
@@ -57,8 +66,10 @@ import {
 	type SessionLegacyStore,
 } from '~/ai/chat/session/session-store'
 import type { ChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
+import { resolveProviderSetupState } from '~/ai/chat/ui/provider-setup'
 import type {
 	ChatboxProps,
+	ChatProviderSetupDraft,
 	ChatProviderOption,
 	RecallMessageResult,
 } from '~/ai/chat/ui/types'
@@ -68,10 +79,12 @@ import {
 	collectOtherBusySessionIds,
 } from '~/ai/chat/ui/view-projection'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
+import { assertProviderUsable } from '~/ai/core/runtime'
 import { BUILTIN_SKILLS } from '~/ai/skills/builtin'
 import { SkillRepository } from '~/ai/skills/repository'
 import { createAbortError, isAbortError } from '~/utils/abort'
 import SessionExportModal from '~/components/SessionExportModal'
+import { openProviderSetupModelEditor } from '~/components/ModelEditorModal'
 import i18n from '~/i18n'
 import { chatMetaKV, chatSessionKV, type ChatMetaRecord } from '~/storage'
 import { createUniqueWordId } from '~/utils/create-id'
@@ -86,6 +99,13 @@ type ChatboxActionHandlers = Pick<
 	| 'onSwitchSession'
 	| 'onExportSession'
 	| 'onDeleteSession'
+	| 'onStartNutstoreSetup'
+	| 'onOpenNutstoreAuthorization'
+	| 'onCancelNutstoreSetup'
+	| 'onFetchProviderSetupModels'
+	| 'onCreateProviderSetupModel'
+	| 'onSaveProviderSetup'
+	| 'onEditProviderSetupModel'
 	| 'onSelectProvider'
 	| 'onSelectModel'
 	| 'onSendMessage'
@@ -137,7 +157,7 @@ export default class ChatService extends BaseService {
 			plugin.settings.ai.disabledSkills.includes(name),
 		)
 		this.selection = new Selection(
-			() => plugin.settings.ai,
+			() => this.getUsableAiSettings(),
 			this.state,
 			() => this.notify(),
 			(session) => this.store.persistSession(session),
@@ -384,6 +404,11 @@ export default class ChatService extends BaseService {
 		const activeSession = this.getLoadedActiveSession()
 		const activeRuntime = this.getViewRuntime(activeSession)
 		const selection = this.resolveViewSelection(activeSession)
+		const providers = this.buildProviderOptions()
+		const providerSetup = resolveProviderSetupState(
+			providers,
+			!this.state.initialized,
+		)
 		const selectedProvider = getProviderById(
 			this.plugin.settings.ai.providers,
 			selection.selectedProviderId,
@@ -410,7 +435,16 @@ export default class ChatService extends BaseService {
 				this.state.activeSessionId,
 				(id) => this.runtimeStates.get(id),
 			),
-			providers: this.buildProviderOptions(),
+			providers,
+			providerSetup,
+			providerSetupDraft:
+				providerSetup?.kind === 'no-model'
+					? this.buildProviderSetupDraft(providerSetup.providerId)
+					: undefined,
+			nutstoreSetup: {
+				status: this.plugin.ai.gateway.isAuthorizing() ? 'authorizing' : 'idle',
+				userCode: this.plugin.ai.gateway.getPendingAuthorization()?.userCode,
+			},
 			selectedProviderId: selection.selectedProviderId,
 			selectedModelId: selection.selectedModelId,
 			runState:
@@ -509,10 +543,9 @@ export default class ChatService extends BaseService {
 		const modelId = activeSession
 			? activeSession.model?.modelId
 			: emptyStateSelection.modelId || fallbackSelection.modelId
-		const selectedProvider = getProviderById(
-			this.plugin.settings.ai.providers,
-			providerId,
-		)
+		const selectedProvider = this.plugin.ai.gateway
+			.listConfiguredProviders()
+			.find((provider) => provider.id === providerId)
 		const selectedModel = getModelById(selectedProvider, modelId)
 
 		return {
@@ -530,7 +563,7 @@ export default class ChatService extends BaseService {
 	}
 
 	private buildProviderOptions(): ChatProviderOption[] {
-		return listProviders(this.plugin.settings.ai.providers).map((provider) => ({
+		return this.plugin.ai.gateway.listConfiguredProviders().map((provider) => ({
 			id: provider.id,
 			name: provider.name || i18n.t('settings.ai.unnamedProvider'),
 			models: listModels(provider).map((model) => ({
@@ -538,6 +571,41 @@ export default class ChatService extends BaseService {
 				name: model.name || i18n.t('settings.ai.unnamedModel'),
 			})),
 		}))
+	}
+
+	/**
+	 * The open action and the chatbox consume the same readiness rule so opening
+	 * the view can never race its first render into a different decision.
+	 */
+	isProviderReady() {
+		return (
+			resolveProviderSetupState(this.buildProviderOptions(), false) ===
+			undefined
+		)
+	}
+
+	/**
+	 * Selection must resolve against the same provider set the chatbox shows.
+	 * Unauthorized managed providers stay in settings but are not configured.
+	 */
+	private getUsableAiSettings() {
+		const providers = Object.fromEntries(
+			this.plugin.ai.gateway
+				.listConfiguredProviders()
+				.map((provider) => [provider.id, provider]),
+		)
+		return { ...this.plugin.settings.ai, providers }
+	}
+
+	private buildProviderSetupDraft(
+		providerId: string,
+	): ChatProviderSetupDraft | undefined {
+		const provider = getProviderById(
+			this.plugin.settings.ai.providers,
+			providerId,
+		)
+		if (!provider) return undefined
+		return providerToEditorDraft(provider)
 	}
 
 	private bindViewActions(): ChatboxActionHandlers {
@@ -549,6 +617,22 @@ export default class ChatService extends BaseService {
 			onExportSession: (sessionId, modalMountTarget) =>
 				this.exportSession(sessionId, modalMountTarget),
 			onDeleteSession: (sessionId: string) => this.deleteSession(sessionId),
+			onStartNutstoreSetup: () => this.startNutstoreSetup(),
+			onOpenNutstoreAuthorization: () =>
+				this.plugin.ai.gateway.openPendingAuthorizationPage(),
+			onCancelNutstoreSetup: () => this.cancelNutstoreSetup(),
+			onFetchProviderSetupModels: (draft) =>
+				this.fetchProviderSetupModels(draft),
+			onCreateProviderSetupModel: (modelId, providerApi) =>
+				this.createProviderSetupModel(modelId, providerApi),
+			onSaveProviderSetup: (draft) => this.saveProviderSetup(draft),
+			onEditProviderSetupModel: (model, save) =>
+				openProviderSetupModelEditor(
+					this.plugin,
+					model,
+					save,
+					this.getChatModalMountTarget(),
+				),
 			onSelectProvider: (providerId: string) => this.selectProvider(providerId),
 			onSelectModel: (modelId: string) => this.selectModel(modelId),
 			onSendMessage: (text: string) => this.sendMessage(text),
@@ -832,6 +916,109 @@ export default class ChatService extends BaseService {
 	selectProvider(providerId: string) {
 		this.scope.check()
 		this.selection.selectProvider(providerId)
+	}
+
+	async startNutstoreSetup() {
+		this.scope.check()
+		const gateway = this.plugin.ai.gateway
+		if (gateway.isAuthorized()) {
+			const refreshed = await gateway.refreshModels({
+				removeOnAuthError: true,
+			})
+			if (refreshed) {
+				await this.plugin.settingsService.saveSettings()
+			}
+			this.notify()
+			return
+		}
+
+		await gateway.startAuthorization()
+		this.scope.check()
+		await gateway.openPendingAuthorizationPage()
+		this.notify()
+	}
+
+	async cancelNutstoreSetup() {
+		this.scope.check()
+		await this.plugin.ai.gateway.cancelAuthorization()
+		this.scope.check()
+		this.notify()
+	}
+
+	async fetchProviderSetupModels(
+		draft: ChatProviderSetupDraft,
+	): Promise<AIModelConfig[]> {
+		this.scope.check()
+		const provider = this.createProviderFromSetupDraft(draft)
+		const models = await fetchProviderModels(provider, {
+			signal: this.scope.signal,
+		})
+		this.scope.check()
+		return models.map((model) => model.modelConfig)
+	}
+
+	createProviderSetupModel(modelId: string, providerApi?: string) {
+		const normalizedId = modelId.trim()
+		const preset = resolvePresetModel(normalizedId, providerApi)
+		return preset
+			? {
+					...preset,
+					id: normalizedId,
+					name: preset.name || normalizedId,
+				}
+			: createModelConfig(
+					{ id: normalizedId, name: normalizedId },
+					normalizedId,
+				)
+	}
+
+	async saveProviderSetup(draft: ChatProviderSetupDraft) {
+		this.scope.check()
+		const provider = this.createProviderFromSetupDraft(draft)
+		const firstModel = getFirstModel(provider)
+		if (!provider.name.trim()) {
+			throw new Error(i18n.t('chatbox.setup.errors.nameRequired'))
+		}
+		if (!firstModel) {
+			throw new Error(i18n.t('chatbox.setup.errors.modelRequired'))
+		}
+		if (!provider.id) {
+			throw new Error(i18n.t('settings.ai.errors.emptyProviderId'))
+		}
+		if (this.plugin.ai.gateway.isProviderId(provider.id)) {
+			throw new Error(i18n.t('settings.ai.errors.reservedProviderId'))
+		}
+		const existingId = draft.existingProviderId
+		if (
+			this.plugin.settings.ai.providers[provider.id] &&
+			provider.id !== existingId
+		) {
+			throw new Error(i18n.t('settings.ai.errors.duplicateProviderId'))
+		}
+		assertProviderUsable(provider)
+
+		const providers = {
+			...this.plugin.settings.ai.providers,
+			[provider.id]: provider,
+		}
+		this.plugin.settings.ai.providers = providers
+		// Onboarding configures the first usable provider, so its first model becomes the default.
+		this.plugin.settings.ai.defaultModel = {
+			providerId: provider.id,
+			modelId: firstModel.id,
+		}
+		await this.plugin.settingsService.saveSettings()
+		this.scope.check()
+		this.notify()
+	}
+
+	private createProviderFromSetupDraft(draft: ChatProviderSetupDraft) {
+		return providerFromEditorDraft(
+			draft,
+			draft.existingProviderId
+				? this.plugin.settings.ai.providers[draft.existingProviderId]
+				: undefined,
+		)
 	}
 
 	selectModel(modelId: string) {

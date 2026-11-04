@@ -9,7 +9,9 @@ export class WebDAVService extends BaseService {
 		super()
 	}
 
-	async createWebDAVClient(): Promise<WebDAVClient> {
+	async createWebDAVClient(
+		check: () => void = () => {},
+	): Promise<WebDAVClient> {
 		const scope = this.plugin.sync.lifecycle.scope
 		const davEndpoint = getNutstoreDavEndpoint(this.plugin.settings)
 		let client: WebDAVClient
@@ -26,7 +28,10 @@ export class WebDAVService extends BaseService {
 			})
 		}
 		scope.check()
-		return createRateLimitedWebDAVClient(client, scope.check)
+		return createRateLimitedWebDAVClient(client, () => {
+			scope.check()
+			check()
+		})
 	}
 
 	async checkWebDAVConnection(): Promise<{ error?: Error; success: boolean }> {

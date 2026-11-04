@@ -4,6 +4,7 @@ import { getMasterAgent } from '~/ai/chat/domain'
 import type {
 	AppUIMessage,
 	ChatAgentState,
+	ContextCheckpointData,
 	ChatMessageMeta,
 	ChatTodoItem,
 	ReversibleToolOp,
@@ -41,13 +42,7 @@ export class MessageFactory {
 	appendContextBoundary(
 		session: ChatSession,
 		agent: ChatAgentState,
-		checkpoint: {
-			mode: 'summary' | 'reset'
-			summary?: string
-			summarizedThroughMessageId?: string
-			retainedMessageIds?: string[]
-			preservedTurnCount?: number
-		},
+		checkpoint: ContextCheckpointData,
 	) {
 		const now = Date.now()
 		agent.timeline.push({

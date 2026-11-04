@@ -1,4 +1,5 @@
 import { Vault } from 'obsidian'
+import { SyncScope } from '~/sync/scope'
 import type { NutstoreSettings } from '~/settings'
 import { SyncRecord } from '~/storage/sync-record'
 import {
@@ -16,6 +17,7 @@ import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
 export class LocalVaultFileSystem implements AbstractFileSystem {
+	scope = new SyncScope()
 	constructor(
 		private readonly options: {
 			vault: Vault
@@ -44,10 +46,13 @@ export class LocalVaultFileSystem implements AbstractFileSystem {
 				: undefined)
 		const compiledRules = compileFilterRules(filterRules?.rules)
 
-		const stats = await traverseLocalVault(
+		this.scope = new SyncScope(filterRules?.rules)
+		const snapshot = await traverseLocalVault(
 			this.options.vault,
 			this.options.vault.getRoot().path,
+			this.scope,
 		)
+		const stats = snapshot.entries
 		const includedStats = stats.filter(
 			(stat) =>
 				!isSyncCacheLocalPath(stat.path, this.options.vault.configDir) &&
