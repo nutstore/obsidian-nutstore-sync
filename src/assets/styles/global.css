@@ -4460,6 +4460,16 @@
 	color: var(--text-muted);
 }
 
+.chatbox-collapsible .chatbox-collapsible-preview {
+	direction: rtl;
+	text-align: left;
+	text-overflow: ellipsis;
+}
+
+.chatbox-collapsible .chatbox-collapsible-preview > span {
+	unicode-bidi: isolate;
+}
+
 .chatbox-collapsible-plain > summary > .chatbox-collapsible-leading-chevron,
 .chatbox-collapsible-plain > summary .chatbox-collapsible-icon,
 .chatbox-collapsible-plain > summary .chatbox-collapsible-icon > span {

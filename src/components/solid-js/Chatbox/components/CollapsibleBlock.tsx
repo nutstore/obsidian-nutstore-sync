@@ -48,6 +48,7 @@ export function CollapsibleBlock(props: {
 
 export function TitledCollapsibleBlock(props: {
 	title: JSX.Element
+	preview?: string
 	iconClass?: string
 	iconLabel?: string
 	headerActions?: JSX.Element
@@ -62,7 +63,7 @@ export function TitledCollapsibleBlock(props: {
 		<CollapsibleBlock
 			appearance={appearance()}
 			summary={
-				<div class=":uno: flex min-w-0 items-center gap-2">
+				<div class=":uno: flex min-w-0 flex-1 items-center gap-2">
 					<Show when={props.iconClass}>
 						<span
 							class=":uno: chatbox-collapsible-icon flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
@@ -79,6 +80,11 @@ export function TitledCollapsibleBlock(props: {
 					<div class=":uno: chatbox-collapsible-title truncate font-medium text-[var(--text-normal)]">
 						{props.title}
 					</div>
+					<Show when={props.preview}>
+						<span class=":uno: chatbox-collapsible-preview min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[var(--text-muted)]">
+							<span dir="auto">{props.preview}</span>
+						</span>
+					</Show>
 				</div>
 			}
 			headerActions={props.headerActions}

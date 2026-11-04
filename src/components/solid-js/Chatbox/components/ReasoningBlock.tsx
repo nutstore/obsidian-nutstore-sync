@@ -8,6 +8,7 @@ export function ReasoningBlock(props: {
 	return (
 		<TitledCollapsibleBlock
 			title={t('chatbox.ui.labels.reasoning')}
+			preview={props.part.text}
 			iconClass=":uno: i-lucide-brain"
 		>
 			<pre class=":uno: m-0 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
