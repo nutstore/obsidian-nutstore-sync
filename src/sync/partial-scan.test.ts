@@ -551,7 +551,7 @@ describe('partial scan safety boundaries', () => {
 	})
 
 	it.each([SyncStartMode.AUTO_SYNC, SyncStartMode.MANUAL_SYNC])(
-		'stops %s before remote access or history reset when the root cannot be listed',
+		'stops %s after the remote probe but before remote traversal or history reset when the root cannot be listed',
 		async (mode) => {
 			const f = await fixture(SyncPolicy.TwoWay)
 			const before = await f.storage.getRecords()
@@ -559,7 +559,7 @@ describe('partial scan safety boundaries', () => {
 			vi.mocked(f.webdav.exists).mockResolvedValue(false)
 			expect(await f.run(mode)).toMatchObject({ completed: false })
 			expect(f.errors).toMatchObject([{ name: 'LocalScanError' }])
-			expect(f.webdav.exists).not.toHaveBeenCalled()
+			expect(f.webdav.exists).toHaveBeenCalledOnce()
 			expect(f.remoteWalk).not.toHaveBeenCalled()
 			expect(await f.storage.getRecords()).toEqual(before)
 			expect([...f.local.writes, ...f.remote.writes]).toEqual([])
@@ -577,9 +577,33 @@ describe('partial scan safety boundaries', () => {
 		expect(await f.run()).toMatchObject({ completed: false })
 		expect(f.cancelled).toHaveBeenCalledOnce()
 		expect(f.errors).toEqual([])
-		expect(f.webdav.exists).not.toHaveBeenCalled()
+		expect(f.webdav.exists).toHaveBeenCalledOnce()
 		expect([...f.local.writes, ...f.remote.writes]).toEqual([])
 	})
+
+	it.each([SyncStartMode.AUTO_SYNC, SyncStartMode.MANUAL_SYNC])(
+		'stops %s at a rate-limited root probe before reading local files',
+		async (mode) => {
+			const f = await fixture(SyncPolicy.TwoWay)
+			const before = await f.storage.getRecords()
+			vi.mocked(f.webdav.exists).mockRejectedValueOnce(
+				new Error('Invalid response: 503 Service Unavailable'),
+			)
+
+			const startedAt = Date.now()
+			const result = await f.run(mode)
+
+			expect(result).toMatchObject({ completed: false, ranTasks: false })
+			expect(result.rateLimitedUntil).toBeGreaterThanOrEqual(startedAt + 60_000)
+			expect(f.list).not.toHaveBeenCalled()
+			expect(f.remoteWalk).not.toHaveBeenCalled()
+			expect(f.errors).toMatchObject([
+				{ message: 'Invalid response: 503 Service Unavailable' },
+			])
+			expect(await f.storage.getRecords()).toEqual(before)
+			expect([...f.local.writes, ...f.remote.writes]).toEqual([])
+		},
+	)
 
 	it('retains protected records when initializing a missing remote root', async () => {
 		const f = await fixture(SyncPolicy.SendOnlyOverrideChanges)

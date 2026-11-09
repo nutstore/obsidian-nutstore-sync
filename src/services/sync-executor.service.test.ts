@@ -32,7 +32,12 @@ vi.mock('~/sync/log', () => ({
 	getSyncTriggerLabel: () => 'auto',
 }))
 vi.mock('~/utils/logger', () => ({
-	default: { info: vi.fn(), error: vi.fn() },
+	default: {
+		debug: vi.fn(),
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+	},
 }))
 
 beforeEach(() => {
@@ -269,6 +274,47 @@ describe('synchronization execution gate', () => {
 			await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
 		).toBe(true)
 		expect(start).toHaveBeenCalledTimes(2)
+	})
+
+	it('suppresses automatic and manual runs until a remote rate limit expires', async () => {
+		const f = fixture()
+		const now = Date.now()
+		const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+		try {
+			await f.plugin.sync.lifecycle.update(true)
+			start.mockResolvedValueOnce({
+				completed: false,
+				ranTasks: false,
+				shouldReloadSettings: false,
+				rateLimitedUntil: now + 60_000,
+			})
+
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
+			).toBe(false)
+			expect(start).toHaveBeenCalledOnce()
+
+			notice.mockClear()
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
+			).toBe(false)
+			expect(start).toHaveBeenCalledOnce()
+			expect(notice).not.toHaveBeenCalled()
+
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC }),
+			).toBe(false)
+			expect(start).toHaveBeenCalledOnce()
+			expect(notice).toHaveBeenCalledOnce()
+
+			clock.mockReturnValue(now + 60_000)
+			expect(
+				await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC }),
+			).toBe(true)
+			expect(start).toHaveBeenCalledTimes(2)
+		} finally {
+			clock.mockRestore()
+		}
 	})
 
 	it('accepts a completed empty round without running post-sync GC', async () => {

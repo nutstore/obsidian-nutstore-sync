@@ -28,6 +28,7 @@ export default class SyncExecutorService extends BaseService {
 	private inFlight = false
 	private pendingAutoSync = false
 	private work?: Promise<boolean>
+	private remoteRateLimitedUntil = 0
 
 	constructor(private plugin: NutstorePlugin) {
 		super()
@@ -44,6 +45,15 @@ export default class SyncExecutorService extends BaseService {
 		if (this.isRunning()) {
 			if (options.mode === SyncStartMode.AUTO_SYNC) this.pendingAutoSync = true
 			else new Notice(i18n.t('sync.blockedBySync'))
+			return Promise.resolve(false)
+		}
+		if (this.isRemoteRateLimited()) {
+			logger.debug('Sync skipped while remote rate limit cooldown is active:', {
+				mode: options.mode,
+				remainingMs: this.remoteRateLimitedUntil - Date.now(),
+			})
+			if (options.mode === SyncStartMode.MANUAL_SYNC)
+				new Notice(i18n.t('sync.error.requestsTooFrequent'))
 			return Promise.resolve(false)
 		}
 		const work = this.performSync(options, this.plugin.sync.lifecycle.scope)
@@ -151,6 +161,9 @@ export default class SyncExecutorService extends BaseService {
 				mode: options.mode,
 				syncPolicy,
 			})
+			if (result.rateLimitedUntil) {
+				this.applyRemoteRateLimit(result.rateLimitedUntil, options.mode)
+			}
 
 			return (
 				result.completed &&
@@ -196,5 +209,31 @@ export default class SyncExecutorService extends BaseService {
 				void this.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 			}
 		}
+	}
+
+	private isRemoteRateLimited(): boolean {
+		if (Date.now() < this.remoteRateLimitedUntil) return true
+		if (this.remoteRateLimitedUntil > 0) {
+			logger.info('Remote rate limit cooldown expired:', {
+				until: new Date(this.remoteRateLimitedUntil).toISOString(),
+			})
+		}
+		this.remoteRateLimitedUntil = 0
+		return false
+	}
+
+	private applyRemoteRateLimit(until: number, mode: SyncStartMode) {
+		const now = Date.now()
+		const extended = now < this.remoteRateLimitedUntil
+		const deadline = Math.max(this.remoteRateLimitedUntil, until)
+		if (deadline <= this.remoteRateLimitedUntil) return
+
+		this.remoteRateLimitedUntil = deadline
+		logger.warn('Remote rate limit cooldown active:', {
+			mode,
+			until: new Date(deadline).toISOString(),
+			remainingMs: deadline - now,
+			extended,
+		})
 	}
 }

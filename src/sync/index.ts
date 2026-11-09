@@ -1,6 +1,3 @@
-import { SyncScope } from './scope'
-import { closeModalOnAbort } from '~/modules/modal-lifetime'
-import { isAbortError } from '~/utils/abort'
 import { chunk } from 'es-toolkit/compat'
 import { Notice, Platform, Vault, moment, normalizePath } from 'obsidian'
 import { dirname } from 'path-browserify'
@@ -11,18 +8,19 @@ import TaskListConfirmModal from '~/components/TaskListConfirmModal'
 import {
 	emitEndSync,
 	emitPreparingSync,
-	emitSyncCancelled,
-	emitSyncPreparationProgress,
 	emitStartSync,
+	emitSyncCancelled,
 	emitSyncError,
+	emitSyncPreparationProgress,
 	emitSyncProgress,
-	type SyncPreparationProgress,
 	onCancelSync,
+	type SyncPreparationProgress,
 } from '~/events'
 import IFileSystem from '~/fs/fs.interface'
 import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
+import { closeModalOnAbort } from '~/modules/modal-lifetime'
 import CacheService from '~/services/cache.service.v1'
 import { SyncPolicy } from '~/settings'
 import { syncRecordKV } from '~/storage'
@@ -32,6 +30,7 @@ import {
 	formatSyncLogPrefix,
 	type SyncLogger,
 } from '~/sync/log'
+import { isAbortError } from '~/utils/abort'
 import breakableSleep from '~/utils/breakable-sleep'
 import { computeEffectiveFilterRules } from '~/utils/config-dir-rules'
 import { describeSyncError } from '~/utils/describe-sync-error'
@@ -52,6 +51,7 @@ import SendOnlySyncDecider, {
 	SendOnlyOverrideChangesSyncDecider,
 } from './decision/send-only.decider'
 import TwoWaySyncDecider from './decision/two-way.decider'
+import { SyncScope } from './scope'
 import CleanRecordTask from './tasks/clean-record.task'
 import ConflictResolveTask, {
 	ConflictStrategy,
@@ -69,8 +69,8 @@ import { mergeMkdirTasks } from './utils/merge-mkdir-tasks'
 import { mergeRemoveRemoteTasks } from './utils/merge-remove-remote-tasks'
 import {
 	countRecordUpdateOperations,
-	type UpdateMtimeProgress,
 	updateMtimeInRecord as updateMtimeInRecordUtil,
+	type UpdateMtimeProgress,
 } from './utils/update-records'
 
 export enum SyncStartMode {
@@ -91,7 +91,11 @@ export interface SyncStartResult {
 	/** At least one task was dispatched, even if all of them failed. */
 	ranTasks: boolean
 	shouldReloadSettings: boolean
+	/** Remote requests rejected by a rate limit may resume after this time. */
+	rateLimitedUntil?: number
 }
+
+const REMOTE_RATE_LIMIT_COOLDOWN_MS = 60_000
 
 export class NutstoreSync {
 	remoteFs: IFileSystem
@@ -200,6 +204,12 @@ export class NutstoreSync {
 			)
 			const cacheService = new CacheService(this.plugin)
 
+			// The probe is read-only, so an unavailable remote can fail before
+			// spending time on the local snapshot.
+			this.throwIfCancelled()
+			this.emitPreparationProgress({ phase: 'checkingRemote' })
+			let remoteBaseDirExists = await webdav.exists(remoteBaseDir)
+
 			// Validate the entire local snapshot before creating directories or resetting records.
 			const localStats = await this.localFS.walk()
 			if (this.localFS instanceof LocalVaultFileSystem)
@@ -214,10 +224,8 @@ export class NutstoreSync {
 				)
 			}
 			this.throwIfCancelled()
-			this.emitPreparationProgress({ phase: 'checkingRemote' })
-			let remoteBaseDirExits = await webdav.exists(remoteBaseDir)
 
-			if (!remoteBaseDirExits) {
+			if (!remoteBaseDirExists) {
 				// Preserve unknown/excluded history while retaining fresh-remote semantics.
 				const records = await syncRecord.getRecords()
 				await syncRecord.setRecords(
@@ -229,7 +237,7 @@ export class NutstoreSync {
 				)
 			}
 
-			while (!remoteBaseDirExits) {
+			while (!remoteBaseDirExists) {
 				if (this.isCancelled) {
 					emitSyncCancelled()
 					return {
@@ -244,7 +252,7 @@ export class NutstoreSync {
 					})
 					break
 				} catch (e) {
-					if (is503Error(e as Error)) {
+					if (is503Error(e)) {
 						await this.handle503Error(60000)
 						if (this.isCancelled) {
 							emitSyncCancelled()
@@ -254,7 +262,7 @@ export class NutstoreSync {
 								shouldReloadSettings: false,
 							}
 						}
-						remoteBaseDirExits = await webdav.exists(remoteBaseDir)
+						remoteBaseDirExists = await webdav.exists(remoteBaseDir)
 					} else {
 						throw e
 					}
@@ -669,6 +677,9 @@ export class NutstoreSync {
 			emitEndSync({ failedCount, showNotice, scanIssues: this.scope.issues })
 			return { completed: true, ranTasks: true, shouldReloadSettings }
 		} catch (error) {
+			const rateLimitedUntil = is503Error(error)
+				? Date.now() + REMOTE_RATE_LIMIT_COOLDOWN_MS
+				: undefined
 			if (
 				this.isCancelled ||
 				error instanceof SyncCancelledError ||
@@ -684,6 +695,7 @@ export class NutstoreSync {
 				completed: false,
 				ranTasks: false,
 				shouldReloadSettings: false,
+				rateLimitedUntil,
 			}
 		} finally {
 			this.preparationProgressEnabled = false
