@@ -83,7 +83,6 @@ vi.mock('~/ai/mcp/result-artifact', () => ({
 }))
 vi.mock('~/ai/transport/obsidian-fetch', () => ({ obsidianFetch: vi.fn() }))
 vi.mock('~/utils/mkdirs-vault', () => ({ mkdirsVault: vi.fn(async () => {}) }))
-vi.mock('~/utils/logger', () => ({ default: { warn: vi.fn() } }))
 
 const fixtures: Array<{ scope: ModuleScope; service: McpService }> = []
 afterEach(async () => {

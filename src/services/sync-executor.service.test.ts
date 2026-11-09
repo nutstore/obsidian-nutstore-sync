@@ -31,14 +31,6 @@ vi.mock('~/sync/log', () => ({
 	getSyncPolicyLabel: () => 'two-way',
 	getSyncTriggerLabel: () => 'auto',
 }))
-vi.mock('~/utils/logger', () => ({
-	default: {
-		debug: vi.fn(),
-		info: vi.fn(),
-		warn: vi.fn(),
-		error: vi.fn(),
-	},
-}))
 
 beforeEach(() => {
 	vi.clearAllMocks()

@@ -44,9 +44,6 @@ vi.mock('~/components/FailedTasksModal', () => ({
 }))
 vi.mock('~/components/TaskListConfirmModal', () => ({ default: class {} }))
 vi.mock('~/components/DeleteConfirmModal', () => ({ default: class {} }))
-vi.mock('~/utils/logger', () => ({
-	default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}))
 
 interface Entry {
 	isDir: boolean

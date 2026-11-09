@@ -7,13 +7,13 @@ import type { LoadedApp } from '~/ai/apps/workspaces'
 import type { RuntimeHost } from '~/ai/apps/runtime'
 import AppView from './app.view'
 import i18n from '~/i18n'
+import logger from '~/utils/logger'
 
 const diagnostics = vi.hoisted(() => ({
 	notice: vi.fn(),
-	error: vi.fn(),
 	icon: vi.fn(),
 }))
-vi.mock('~/utils/logger', () => ({ default: { error: diagnostics.error } }))
+const errorSpy = vi.spyOn(logger, 'error')
 
 function element(
 	tag = 'div',
@@ -502,7 +502,7 @@ describe('App view sandbox lifetime', () => {
 			.querySelector<HTMLElement>(`[aria-label="${i18n.t('apps.unpin')}"]`)!
 			.click()
 		await vi.waitFor(() =>
-			expect(diagnostics.error).toHaveBeenCalledWith(
+			expect(errorSpy).toHaveBeenCalledWith(
 				'App action failed',
 				'neutral-app',
 				failure,
