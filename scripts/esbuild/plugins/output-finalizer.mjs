@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { analyzeMetafile } from 'esbuild'
 import { finalizeUnoCss, readDevelopmentUnoSource } from './unocss.mjs'
 
 function findOutputFile(outputFiles, name) {
@@ -8,9 +9,10 @@ function findOutputFile(outputFiles, name) {
 	)
 }
 
-export function createOutputFinalizer({ prod }) {
+export function createOutputFinalizer({ prod, analyze }) {
 	const jsPath = path.resolve(prod ? './dist/main.js' : './main.js')
 	const cssPath = path.resolve('./styles.css')
+	const metafilePath = analyze ? path.resolve('./dist/meta.json') : undefined
 
 	return {
 		name: 'finalize-output',
@@ -56,6 +58,22 @@ export function createOutputFinalizer({ prod }) {
 					fs.promises.writeFile(jsPath, finalized.js),
 					fs.promises.writeFile(cssPath, finalized.css),
 				])
+
+				if (metafilePath && result.metafile) {
+					await fs.promises.mkdir(path.dirname(metafilePath), {
+						recursive: true,
+					})
+					await fs.promises.writeFile(
+						metafilePath,
+						JSON.stringify(result.metafile),
+					)
+					console.info(
+						await analyzeMetafile(result.metafile, {
+							verbose: analyze === 'analyze:verbose',
+						}),
+					)
+					console.info(`metafile: ${metafilePath}`)
+				}
 			})
 		},
 	}
