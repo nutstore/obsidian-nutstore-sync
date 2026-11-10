@@ -5,7 +5,6 @@ import i18n from '~/i18n'
 import { blobStore } from '~/storage/blob'
 import { formatLocalTimestampForFilename } from '~/utils/local-date'
 import logger from '~/utils/logger'
-import logsStringify from '~/utils/logs-stringify'
 import { getWebviewRuntimeInfo } from '~/utils/webview-runtime-info'
 import BaseSettings from '../settings.base'
 
@@ -116,13 +115,6 @@ export default class TroubleshootingSettings extends BaseSettings {
 
 	hide() {}
 
-	private get logs() {
-		return this.plugin.loggerService.logs
-			.map(logsStringify)
-			.filter((log) => log !== null && log !== undefined)
-			.join('\n\n')
-	}
-
 	private async saveLogsToNote() {
 		try {
 			const now = new Date()
@@ -131,7 +123,8 @@ export default class TroubleshootingSettings extends BaseSettings {
 			const dirPath = 'nutstore-sync/logs'
 			const filePath = `${dirPath}/${fileName}`
 			const { runtime, userAgent } = getWebviewRuntimeInfo()
-			const content = `# Nutstore Plugin Logs\n\nGenerated at: ${now.toLocaleString()}\n\nPlugin version: ${this.plugin.manifest.version}\n\nRuntime (UA-reported): ${runtime ?? 'Unknown'}\n\nUser Agent: ${userAgent}\n\n---\n\n${this.logs}`
+			const logs = this.plugin.loggerService.collectLogs()
+			const content = `# Nutstore Plugin Logs\n\nGenerated at: ${now.toLocaleString()}\n\nPlugin version: ${this.plugin.manifest.version}\n\nRuntime (UA-reported): ${runtime ?? 'Unknown'}\n\nUser Agent: ${userAgent}\n\n---\n\n${logs}`
 
 			const folderExists = await this.app.vault.adapter.exists(dirPath)
 			if (!folderExists) {

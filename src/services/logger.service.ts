@@ -1,7 +1,8 @@
 import type { ConsolaReporter, LogObject } from 'consola'
-import { moment } from 'obsidian'
-import { IN_DEV } from '~/consts'
 import logger from '~/utils/logger'
+import logsStringify from '~/utils/logs-stringify'
+import { formatLocalTimestamp } from '~/utils/local-date'
+import { LogRetention, type LogRetentionStats } from './log-retention'
 import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 
@@ -11,8 +12,21 @@ export interface LogEntry {
 	args: unknown[]
 }
 
+/**
+ * The plugin's only long-lived log storage, feeding "save logs to note".
+ *
+ * Every line is formatted at write time, not at save time: the saved text must
+ * describe the state the caller logged instead of a later mutation, and
+ * retention must not keep live object graphs (tasks, responses, the plugin
+ * itself) reachable. LogRetention then compresses the text into chunks and
+ * bounds memory by bytes, so a six-figure line history costs a few MiB.
+ */
 export default class LoggerService extends BaseService {
-	logs: LogEntry[] = []
+	private readonly retention = new LogRetention()
+	private attached = false
+	private readonly reporter: ConsolaReporter = {
+		log: (logObj: LogObject) => this.retain(logObj),
+	}
 
 	constructor(plugin: NutstorePlugin) {
 		super()
@@ -20,24 +34,57 @@ export default class LoggerService extends BaseService {
 	}
 
 	override onload() {
-		const reporter: ConsolaReporter = {
-			log: (logObj: LogObject) => {
-				this.logs.push({
-					timestamp: moment(logObj.date).format('YYYY-MM-DD HH:mm:ss'),
-					level: logObj.type,
-					args: logObj.args,
-				})
-			},
-		}
-		if (IN_DEV) {
-			// Keep default Consola console reporter; add ours alongside it.
-			logger.addReporter(reporter)
-		} else {
-			logger.setReporters([reporter])
-		}
+		this.attach()
+	}
+
+	override onunload() {
+		this.detach()
+	}
+
+	/** Retained log text, oldest first, for "save logs to note". */
+	collectLogs(): string {
+		return this.retention.collect()
+	}
+
+	/** What retention currently holds, and what it costs after compression. */
+	get stats(): LogRetentionStats {
+		return this.retention.stats
 	}
 
 	clear() {
-		this.logs = []
+		this.retention.clear()
+	}
+
+	/**
+	 * Registration must stay symmetric: exactly one add in `onload`, one remove in
+	 * `onunload`. Without the guard a second load would duplicate every line, and
+	 * a missed removal would keep a dead service's retained text alive.
+	 */
+	private attach() {
+		if (this.attached) return
+		this.attached = true
+		logger.addReporter(this.reporter)
+	}
+
+	private detach() {
+		if (!this.attached) return
+		this.attached = false
+		logger.removeReporter(this.reporter)
+	}
+
+	private retain(logObj: LogObject) {
+		// The sink is best-effort: losing one diagnostic must not fail the
+		// operation that was being logged.
+		try {
+			this.retention.append(
+				logsStringify({
+					timestamp: formatLocalTimestamp(logObj.date),
+					level: logObj.type,
+					args: logObj.args,
+				}) ?? '',
+			)
+		} catch {
+			// See above: retention failure must not break the caller.
+		}
 	}
 }
