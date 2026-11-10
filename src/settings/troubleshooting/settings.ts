@@ -123,15 +123,28 @@ export default class TroubleshootingSettings extends BaseSettings {
 			const dirPath = 'nutstore-sync/logs'
 			const filePath = `${dirPath}/${fileName}`
 			const { runtime, userAgent } = getWebviewRuntimeInfo()
-			const logs = this.plugin.loggerService.collectLogs()
-			const content = `# Nutstore Plugin Logs\n\nGenerated at: ${now.toLocaleString()}\n\nPlugin version: ${this.plugin.manifest.version}\n\nRuntime (UA-reported): ${runtime ?? 'Unknown'}\n\nUser Agent: ${userAgent}\n\n---\n\n${logs}`
+			const header = `# Nutstore Plugin Logs\n\nGenerated at: ${now.toLocaleString()}\n\nPlugin version: ${this.plugin.manifest.version}\n\nRuntime (UA-reported): ${runtime ?? 'Unknown'}\n\nUser Agent: ${userAgent}\n\n---\n\n`
 
 			const folderExists = await this.app.vault.adapter.exists(dirPath)
 			if (!folderExists) {
 				await this.app.vault.adapter.mkdir(dirPath)
 			}
 
-			const file = await this.app.vault.create(filePath, content)
+			const file = await this.app.vault.create(filePath, header)
+			try {
+				// Append chunk by chunk through the adapter. The vault owns the TFile
+				// (so the note can be opened), while the adapter writes straight to
+				// disk instead of emitting one vault modification per chunk - which
+				// would feed this plugin's own vault watcher hundreds of times.
+				await this.plugin.loggerService.writeLogsTo((text) =>
+					this.app.vault.adapter.append(file.path, text),
+				)
+			} catch (error) {
+				// Never leave a note that looks complete but stops mid-history.
+				await this.app.fileManager.trashFile(file).catch(() => undefined)
+				throw error
+			}
+
 			new Notice(i18n.t('settings.log.savedToNote', { fileName: filePath }))
 			await this.app.workspace.getLeaf().openFile(file)
 		} catch (error) {

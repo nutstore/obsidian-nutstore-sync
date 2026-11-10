@@ -2,7 +2,11 @@ import type { ConsolaReporter, LogObject } from 'consola'
 import logger from '~/utils/logger'
 import logsStringify from '~/utils/logs-stringify'
 import { formatLocalTimestamp } from '~/utils/local-date'
-import { LogRetention, type LogRetentionStats } from './log-retention'
+import {
+	LogRetention,
+	type LogRetentionStats,
+	type LogSink,
+} from './log-retention'
 import { BaseService } from './service.interface'
 import NutstorePlugin from '..'
 
@@ -19,7 +23,9 @@ export interface LogEntry {
  * describe the state the caller logged instead of a later mutation, and
  * retention must not keep live object graphs (tasks, responses, the plugin
  * itself) reachable. LogRetention then compresses the text into chunks and
- * bounds memory by bytes, so a six-figure line history costs a few MiB.
+ * bounds memory by bytes, so a six-figure line history costs a few MiB. Saving
+ * streams one expanded chunk at a time, so it never re-materialises the whole
+ * history in memory.
  */
 export default class LoggerService extends BaseService {
 	private readonly retention = new LogRetention()
@@ -41,9 +47,9 @@ export default class LoggerService extends BaseService {
 		this.detach()
 	}
 
-	/** Retained log text, oldest first, for "save logs to note". */
-	collectLogs(): string {
-		return this.retention.collect()
+	/** Streams retained log text, oldest first, for "save logs to note". */
+	async writeLogsTo(sink: LogSink): Promise<void> {
+		await this.retention.writeTo(sink)
 	}
 
 	/** What retention currently holds, and what it costs after compression. */

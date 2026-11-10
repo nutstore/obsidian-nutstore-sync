@@ -43,6 +43,9 @@ export interface LogRetentionLimits {
 	byteLimit: number
 }
 
+/** Receives one expanded chunk at a time; resolves once it is safely written. */
+export type LogSink = (text: string) => Promise<void>
+
 /**
  * Bounded, in-memory retention of fully formatted log lines.
  *
@@ -94,19 +97,33 @@ export class LogRetention {
 	}
 
 	/**
-	 * Every retained entry, oldest first, joined with newlines. Materialises the
-	 * whole history at once: peak memory is whatever the compressed budget
-	 * expands to, not the budget itself.
+	 * Every retained entry, oldest first, joined with newlines, but only one
+	 * expanded chunk is alive at a time: the sink is awaited before the next
+	 * chunk is inflated. Peak memory therefore stays chunk-sized (the expanded
+	 * block plus the copy handed to the sink), independent of how much history
+	 * is stored.
+	 *
+	 * The chunk list and pending tail are snapshotted before the first await, so
+	 * entries logged while the sink writes belong to the next export instead of
+	 * landing in the middle of a note whose content is already being written.
+	 */
+	async writeTo(sink: LogSink): Promise<void> {
+		const chunks = this.chunks.slice()
+		const pending = this.pending.slice()
+		let separator = ''
+		for (const part of this.parts(chunks, pending)) {
+			await sink(separator + part)
+			separator = '\n'
+		}
+	}
+
+	/**
+	 * Every retained entry as one string. Convenience for small reads and tests;
+	 * production export must use `writeTo`, because this materialises the whole
+	 * history at once.
 	 */
 	collect(): string {
-		const parts: string[] = []
-		for (const chunk of this.chunks) {
-			parts.push(this.expand(chunk))
-		}
-		if (this.pending.length > 0) {
-			parts.push(this.pending.join('\n'))
-		}
-		return parts.join('\n')
+		return [...this.parts(this.chunks, this.pending)].join('\n')
 	}
 
 	clear() {
@@ -145,6 +162,11 @@ export class LogRetention {
 		return typeof chunk.data === 'string'
 			? chunk.data
 			: decoder.decode(inflateSync(chunk.data))
+	}
+
+	private *parts(chunks: LogChunk[], pending: string[]): Generator<string> {
+		for (const chunk of chunks) yield this.expand(chunk)
+		if (pending.length > 0) yield pending.join('\n')
 	}
 }
 

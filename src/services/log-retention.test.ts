@@ -40,6 +40,63 @@ describe('LogRetention', () => {
 		expect(retention.stats.sealedChunks).toBeGreaterThan(0)
 	})
 
+	it('streams the same ordered text without materialising the whole history', async () => {
+		const retention = new LogRetention()
+		const lines = Array.from({ length: 1_200 }, (_, index) => line(index))
+
+		for (const entry of lines) retention.append(entry)
+
+		const chunks: string[] = []
+		await retention.writeTo(async (text) => {
+			chunks.push(text)
+		})
+
+		expect(chunks.length).toBeGreaterThan(1)
+		expect(chunks.join('')).toBe(lines.join('\n'))
+		// The sink receives one expanded chunk, never an accumulated history, so
+		// the largest block stays near the chunk character limit.
+		expect(Math.max(...chunks.map((text) => text.length))).toBeLessThan(100_000)
+	})
+
+	it('snapshots the history before the first await', async () => {
+		const retention = new LogRetention()
+		retention.append('早期条目 🌱')
+
+		let release = () => {}
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const written: string[] = []
+		const writing = retention.writeTo(async (text) => {
+			written.push(text)
+			await blocked
+		})
+
+		// Logged while the sink is still writing: belongs to the next export.
+		retention.append('追加条目 🧭')
+		release()
+		await writing
+
+		expect(written.join('')).toBe('早期条目 🌱')
+	})
+
+	it('writes nothing when empty and keeps the pending tail whole', async () => {
+		const retention = new LogRetention()
+		const written: string[] = []
+		const sink = async (text: string) => {
+			written.push(text)
+		}
+
+		await retention.writeTo(sink)
+		expect(written).toEqual([])
+
+		const entries = [line(1), line(2)]
+		for (const entry of entries) retention.append(entry)
+
+		await retention.writeTo(sink)
+		expect(written).toEqual([entries.join('\n')])
+	})
+
 	it('keeps unicode, emoji and over-long lines byte-exact', () => {
 		const retention = new LogRetention()
 		const entries = [
