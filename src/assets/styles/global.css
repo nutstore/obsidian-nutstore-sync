@@ -2432,6 +2432,24 @@
 	opacity: 0.65;
 }
 
+/* Restored sessions mount the newest turns first; older turns load on demand. */
+.chatbox-root .ns-chatbox-load-earlier {
+	align-self: center;
+	margin-bottom: var(--ns-chatbox-gap);
+	padding: 0.25rem 0.75rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: var(--background-primary-alt);
+	color: var(--text-muted);
+	font-size: 0.6875rem;
+	cursor: pointer;
+}
+
+.chatbox-root .ns-chatbox-load-earlier:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 /* Empty welcome state */
 .ns-chatbox-empty {
 	display: flex;

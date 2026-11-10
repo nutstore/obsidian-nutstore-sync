@@ -37,6 +37,11 @@ import { SessionHistorySheet } from './components/SessionHistorySheet'
 import { SubagentTimelineDialog } from './components/SubagentTimelineDialog'
 import { decideDropRoute, hasDragItems } from './drop-utils'
 import { ChatComposer } from './components/ChatComposer'
+import {
+	DEFAULT_VISIBLE_TURNS,
+	VISIBLE_TURN_PAGE,
+	sliceTimelineByTurns,
+} from './timeline-window'
 
 const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.input-height'
 const LEGACY_INPUT_HEIGHT_STORAGE_KEY =
@@ -145,6 +150,7 @@ function Chatbox(props: ChatboxProps) {
 	const [stickToBottom, setStickToBottom] = createSignal(true)
 	const [isFileDragActive, setIsFileDragActive] = createSignal(false)
 	const [now, setNow] = createSignal(Date.now())
+	const [visibleTurns, setVisibleTurns] = createSignal(DEFAULT_VISIBLE_TURNS)
 	let chatboxRootEl: HTMLDivElement | undefined
 	let messagesEl: HTMLDivElement | undefined
 	let splitLayoutEl: HTMLDivElement | undefined
@@ -250,6 +256,12 @@ function Chatbox(props: ChatboxProps) {
 		})
 	}
 
+	const visibleTimeline = createMemo(() =>
+		sliceTimelineByTurns(props.timeline, visibleTurns()),
+	)
+	const hasEarlierTurns = createMemo(
+		() => visibleTimeline().length < props.timeline.length,
+	)
 	const isBusy = () => props.runState !== 'idle'
 	const streamingMessageId = createMemo(() => {
 		if (!isBusy()) return undefined
@@ -462,6 +474,19 @@ function Chatbox(props: ChatboxProps) {
 		if (stickToBottom()) scrollMessagesToBottom()
 	}
 
+	function loadEarlierTurns() {
+		const element = messagesEl
+		const previousHeight = element?.scrollHeight ?? 0
+		const previousScrollTop = element?.scrollTop ?? 0
+		setVisibleTurns((value) => value + VISIBLE_TURN_PAGE)
+		if (!element) return
+		getViewWindow().requestAnimationFrame(() => {
+			if (!messagesEl) return
+			messagesEl.scrollTop =
+				messagesEl.scrollHeight - previousHeight + previousScrollTop
+		})
+	}
+
 	async function addPickedFile(file: File) {
 		if (!isSupportedPickedFile(file)) {
 			new Notice(
@@ -587,6 +612,7 @@ function Chatbox(props: ChatboxProps) {
 			([activeSessionId]) => {
 				const sessionChanged = previousActiveSessionId !== activeSessionId
 				previousActiveSessionId = activeSessionId?.toString()
+				if (sessionChanged) setVisibleTurns(DEFAULT_VISIBLE_TURNS)
 				if (sessionChanged || stickToBottom()) {
 					scrollMessagesToBottom(sessionChanged)
 				}
@@ -1017,8 +1043,17 @@ function Chatbox(props: ChatboxProps) {
 										class=":uno: ns-chatbox-message-content flex flex-col gap-[var(--ns-chatbox-gap)] px-[var(--ns-chatbox-pad-x)] pt-[var(--ns-chatbox-gap)] pb-[var(--ns-chatbox-gap)]"
 										onResize={onMessageContentResize}
 									>
+										<Show when={hasEarlierTurns()}>
+											<button
+												type="button"
+												class="ns-chatbox-load-earlier"
+												onClick={loadEarlierTurns}
+											>
+												{t('chatbox.ui.actions.loadEarlierHistory')}
+											</button>
+										</Show>
 										<TurnTimeline
-											timeline={props.timeline}
+											timeline={visibleTimeline()}
 											sessionId={props.activeSessionId}
 											runState={props.runState}
 										>

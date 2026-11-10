@@ -1045,6 +1045,7 @@
 			},
 			"actions": {
 				"exportAsMarkdown": "Export as Markdown",
+				"loadEarlierHistory": "Load earlier messages",
 				"deleteSession": "Delete",
 				"cancel": "Cancel",
 				"close": "Close",
