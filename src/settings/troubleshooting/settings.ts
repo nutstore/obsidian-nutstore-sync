@@ -1,6 +1,6 @@
 import { Notice, Setting } from 'obsidian'
 import CacheClearModal from '~/components/CacheClearModal'
-import { IN_DEV } from '~/consts'
+import { IN_DEV, PLUGIN_VERSION } from '~/consts'
 import i18n from '~/i18n'
 import { blobStore } from '~/storage/blob'
 import { formatLocalTimestampForFilename } from '~/utils/local-date'
@@ -123,7 +123,7 @@ export default class TroubleshootingSettings extends BaseSettings {
 			const dirPath = 'nutstore-sync/logs'
 			const filePath = `${dirPath}/${fileName}`
 			const { runtime, userAgent } = getWebviewRuntimeInfo()
-			const header = `# Nutstore Plugin Logs\n\nGenerated at: ${now.toLocaleString()}\n\nPlugin version: ${this.plugin.manifest.version}\n\nRuntime (UA-reported): ${runtime ?? 'Unknown'}\n\nUser Agent: ${userAgent}\n\n---\n\n`
+			const header = `# Nutstore Plugin Logs\n\nGenerated at: ${now.toLocaleString()}\n\nPlugin version: ${PLUGIN_VERSION}\n\nRuntime (UA-reported): ${runtime ?? 'Unknown'}\n\nUser Agent: ${userAgent}\n\n---\n\n`
 
 			const folderExists = await this.app.vault.adapter.exists(dirPath)
 			if (!folderExists) {

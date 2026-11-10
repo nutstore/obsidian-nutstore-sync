@@ -1,5 +1,6 @@
 import type { ModuleScope } from '~/modules/lifecycle'
 import { guardAppIO } from '~/modules/guard-io'
+import { PLUGIN_VERSION } from '~/consts'
 import { getSessionSubagents, isTerminalAgent } from '~/ai/chat/domain'
 import type { LanguageModelUsage } from 'ai'
 import { Notice } from 'obsidian'
@@ -880,7 +881,7 @@ export default class ChatService extends BaseService {
 				vault: guardAppIO(this.plugin.app, this.scope.check, this.scope.track)
 					.vault,
 				manifestId: this.plugin.manifest.id,
-				manifestVersion: this.plugin.manifest.version,
+				pluginVersion: PLUGIN_VERSION,
 				session,
 				title,
 				includeToolMessages: options.includeToolMessages,

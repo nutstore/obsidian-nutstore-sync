@@ -27,7 +27,7 @@ import { formatDuration } from '~/utils/format-duration'
 interface ExportSessionParams {
 	vault: Vault
 	manifestId: string
-	manifestVersion: string
+	pluginVersion: string
 	session: ChatSession
 	title: string
 	includeToolMessages: boolean
@@ -396,7 +396,7 @@ async function buildSessionMarkdown(
 	session: ChatSession,
 	title: string,
 	includeToolMessages: boolean,
-	manifestVersion: string,
+	pluginVersion: string,
 	assetsDirPath: string,
 	assetsMarkdownPrefix: string,
 ) {
@@ -425,7 +425,7 @@ async function buildSessionMarkdown(
 		`${toYamlKeyLabel(frontmatter.updatedAt)}: ${JSON.stringify(new Date(session.updatedAt).toLocaleString())}`,
 		`${toYamlKeyLabel(frontmatter.model)}: ${JSON.stringify(sessionModel || null)}`,
 		`${toYamlKeyLabel(frontmatter.includeToolMessages)}: ${includeToolMessages ? 'true' : 'false'}`,
-		`${toYamlKeyLabel(frontmatter.pluginVersion)}: ${JSON.stringify(manifestVersion)}`,
+		`${toYamlKeyLabel(frontmatter.pluginVersion)}: ${JSON.stringify(pluginVersion)}`,
 		'---',
 		'',
 		`# ${toMarkdownHeadingText(title)}`,
@@ -513,7 +513,7 @@ export async function exportSessionToMarkdownFile(params: ExportSessionParams) {
 		params.session,
 		params.title,
 		params.includeToolMessages,
-		params.manifestVersion,
+		params.pluginVersion,
 		assetsDirPath,
 		assetsMarkdownPrefix,
 	)
