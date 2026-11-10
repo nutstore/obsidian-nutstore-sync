@@ -672,7 +672,21 @@ export class NutstoreSync {
 			this.logger.info(
 				`[Sync] Completed: ${allTasksResult.length - failedCount} success, ${failedCount} failed`,
 			)
-			this.logger.debug('tasks result', allTasksResult, 'failed:', failedCount)
+			if (failedCount > 0) {
+				this.logger.debug(
+					'[Sync] Failed tasks',
+					allTasksResult.flatMap((result, index) =>
+						result.success
+							? []
+							: [
+									{
+										path: optimizedTasks[index].localPath,
+										error: describeSyncError(result.error),
+									},
+								],
+					),
+				)
+			}
 
 			emitEndSync({ failedCount, showNotice, scanIssues: this.scope.issues })
 			return { completed: true, ranTasks: true, shouldReloadSettings }
