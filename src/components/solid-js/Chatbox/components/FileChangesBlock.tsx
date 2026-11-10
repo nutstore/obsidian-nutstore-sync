@@ -170,10 +170,15 @@ function FileChange(props: {
 	onOpenFile?: (vaultPath: string, line?: number) => Promise<void> | void
 }) {
 	const [open, setOpen] = createSignal(false)
+	const [started, setStarted] = createSignal(false)
 	const [diff] = createResource(
-		() => (open() ? props.change : undefined),
+		() => (started() ? props.change : undefined),
 		async (change) => (change ? buildFileDiff(change) : undefined),
 	)
+	const handleOpenChange = (value: boolean) => {
+		setOpen(value)
+		if (value) setStarted(true)
+	}
 	return (
 		<CollapsibleBlock
 			summary={
@@ -189,7 +194,7 @@ function FileChange(props: {
 				</Show>
 			}
 			open={open()}
-			onOpenChange={setOpen}
+			onOpenChange={handleOpenChange}
 		>
 			{() => (
 				<Show

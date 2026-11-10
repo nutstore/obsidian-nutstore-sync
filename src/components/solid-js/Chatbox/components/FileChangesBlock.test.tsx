@@ -45,6 +45,12 @@ describe('file changes block', () => {
 		await nextTask()
 		await nextTask()
 		expect(buildFileDiff).toHaveBeenCalledTimes(1)
+
+		details.open = false
+		await nextTask()
+		details.open = true
+		await nextTask()
+		expect(buildFileDiff).toHaveBeenCalledTimes(1)
 		dispose()
 	})
 })

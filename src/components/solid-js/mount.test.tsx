@@ -43,7 +43,7 @@ describe('createMount replace mode', () => {
 
 	it('deletes an optional prop that disappears', () => {
 		const container = document.createElement('div')
-		const controller = createMount(
+		const controller = createMount<ViewProps>(
 			View,
 			container,
 			{ items: [], optional: 'shown 显示 🚀' },
