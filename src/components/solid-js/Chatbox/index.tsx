@@ -3,5 +3,5 @@ import { createMount } from '../mount'
 import Chatbox from './Chatbox'
 
 export function mountChatbox(el: Element, props: ChatboxProps) {
-	return createMount(Chatbox, el, props)
+	return createMount(Chatbox, el, props, { updateMode: 'replace' })
 }
