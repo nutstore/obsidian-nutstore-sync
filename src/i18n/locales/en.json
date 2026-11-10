@@ -4,6 +4,7 @@
 	},
 	"settings": {
 		"modules": {
+			"heading": "Module switches",
 			"sync": "Enable synchronization",
 			"ai": "Enable AI",
 			"description": "Takes effect immediately. Turning off stops this module and preserves its settings and data."
