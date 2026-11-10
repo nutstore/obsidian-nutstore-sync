@@ -330,6 +330,55 @@ describe('chat session persistence', () => {
 		expect(Array.from(input.uint8Array)).toEqual(Array.from(bytes))
 	})
 
+	it('round-trips binary payloads across base64 chunk boundaries', async () => {
+		const bytes = new Uint8Array(100_000)
+		for (let index = 0; index < bytes.length; index += 1) {
+			bytes[index] = (index * 37 + 11) % 256
+		}
+		const master = createEmptyMasterAgent(1)
+		master.timeline.push({
+			id: 'binary-chunks-中性-🌿',
+			role: 'assistant',
+			metadata: { createdAt: 1 },
+			parts: [
+				{
+					type: 'dynamic-tool',
+					toolName: 'binary-test',
+					toolCallId: 'binary-chunks-call',
+					state: 'input-available',
+					input: {
+						blob: new Blob([bytes], { type: 'application/octet-stream' }),
+						arrayBuffer: bytes.slice().buffer,
+						uint8Array: bytes,
+					},
+				},
+			],
+		})
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'binary-chunks-session',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master },
+		}
+
+		const decoded = decodeChatSessionFromStorage(
+			await encodeChatSessionForStorage(session),
+		) as ChatSession
+		const part = decoded.subagents.master.timeline[0]?.parts[0]
+		if (part?.type !== 'dynamic-tool') {
+			throw new Error('Expected a dynamic tool part')
+		}
+		const input = part.input as {
+			blob: Blob
+			arrayBuffer: ArrayBuffer
+			uint8Array: Uint8Array
+		}
+		expect(new Uint8Array(await input.blob.arrayBuffer())).toEqual(bytes)
+		expect(new Uint8Array(input.arrayBuffer)).toEqual(bytes)
+		expect(input.uint8Array).toEqual(bytes)
+	})
+
 	it('rejects unsupported binary views', async () => {
 		const bytes = new TextEncoder().encode('中性 text 🙂')
 		const master = createEmptyMasterAgent(1)

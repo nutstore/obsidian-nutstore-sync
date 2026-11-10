@@ -73,8 +73,12 @@ export function isChatMetaFile(value: unknown): value is ChatMetaFile {
 	)
 }
 
-function stringifyJsonFile(value: unknown) {
-	return `${JSON.stringify(value, null, 2)}\n`
+/**
+ * Session snapshots stay compact because every save rewrites the whole file;
+ * the small meta index keeps its indentation for readable diffs.
+ */
+function stringifyJsonFile(value: unknown, pretty = false) {
+	return `${JSON.stringify(value, null, pretty ? 2 : undefined)}\n`
 }
 
 export class SessionsFileBackend {
@@ -165,7 +169,7 @@ export class SessionsFileBackend {
 		await writeLocalTextAtomic(
 			this.vault,
 			getChatMetaPath(),
-			stringifyJsonFile(meta),
+			stringifyJsonFile(meta, true),
 		)
 	}
 
