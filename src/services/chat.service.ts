@@ -351,8 +351,9 @@ export default class ChatService extends BaseService {
 		const initialSession = await this.store.loadInitialSession()
 		this.scope.check()
 		if (initialSession) {
-			this.taskManager.restoreMasterTaskContinuations(initialSession)
-			await this.store.persistSession(initialSession)
+			const restored =
+				this.taskManager.restoreMasterTaskContinuations(initialSession)
+			if (restored) await this.store.persistSession(initialSession)
 		}
 
 		if (!this.state.sessionIndex.length) {
@@ -785,8 +786,8 @@ export default class ChatService extends BaseService {
 		const session = await this.store.loadSessionById(sessionId)
 		this.scope.check()
 		this.state.activeSessionId = sessionId
-		this.taskManager.restoreMasterTaskContinuations(session)
-		await this.store.persistSession(session)
+		const restored = this.taskManager.restoreMasterTaskContinuations(session)
+		if (restored) await this.store.persistSession(session)
 		await this.store.persistMetaAndIndex()
 		this.notify()
 	}

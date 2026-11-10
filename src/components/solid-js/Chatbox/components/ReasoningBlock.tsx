@@ -11,9 +11,11 @@ export function ReasoningBlock(props: {
 			preview={props.part.text}
 			iconClass=":uno: i-lucide-brain"
 		>
-			<pre class=":uno: m-0 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
-				{props.part.text ?? ''}
-			</pre>
+			{() => (
+				<pre class=":uno: m-0 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-muted)]">
+					{props.part.text ?? ''}
+				</pre>
+			)}
 		</TitledCollapsibleBlock>
 	)
 }

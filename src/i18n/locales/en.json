@@ -1088,7 +1088,9 @@
 				"create": "Added",
 				"update": "Modified",
 				"delete": "Deleted",
-				"binary": "Binary file; text diff is unavailable"
+				"binary": "Binary file; text diff is unavailable",
+				"loadingDiff": "Computing diff…",
+				"tooLarge": "File too large for an inline line diff; open it in the editor instead"
 			},
 			"states": {
 				"loading": "Restoring chat…",

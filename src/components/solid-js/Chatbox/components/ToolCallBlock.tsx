@@ -162,40 +162,42 @@ function ViewImageToolCallBlock(props: {
 			open={open()}
 			onOpenChange={handleOpenChange}
 		>
-			<Show
-				when={src()}
-				fallback={
-					<Show
-						when={loading()}
-						fallback={
-							<div class=":uno: text-xs text-[var(--text-muted)]">
-								Image preview unavailable.
-							</div>
-						}
-					>
-						<div
-							class=":uno: h-40 animate-pulse rounded-2 bg-[var(--background-modifier-hover)]"
-							role="status"
+			{() => (
+				<Show
+					when={src()}
+					fallback={
+						<Show
+							when={loading()}
+							fallback={
+								<div class=":uno: text-xs text-[var(--text-muted)]">
+									Image preview unavailable.
+								</div>
+							}
 						>
-							<span class=":uno: sr-only">
-								{t('chatbox.ui.states.loadingContextItem')}
-							</span>
-						</div>
-					</Show>
-				}
-			>
-				{(src) => (
-					<img
-						class=":uno: max-h-100 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
-						src={src()}
-						alt={props.path}
-						onLoad={(event) => {
-							const image = event.currentTarget
-							setDimensions(`${image.naturalWidth}x${image.naturalHeight}`)
-						}}
-					/>
-				)}
-			</Show>
+							<div
+								class=":uno: h-40 animate-pulse rounded-2 bg-[var(--background-modifier-hover)]"
+								role="status"
+							>
+								<span class=":uno: sr-only">
+									{t('chatbox.ui.states.loadingContextItem')}
+								</span>
+							</div>
+						</Show>
+					}
+				>
+					{(src) => (
+						<img
+							class=":uno: max-h-100 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
+							src={src()}
+							alt={props.path}
+							onLoad={(event) => {
+								const image = event.currentTarget
+								setDimensions(`${image.naturalWidth}x${image.naturalHeight}`)
+							}}
+						/>
+					)}
+				</Show>
+			)}
 		</TitledCollapsibleBlock>
 	)
 }
@@ -219,12 +221,14 @@ function CollapsibleToolCallBlock(props: {
 				iconLabel={props.iconLabel}
 				headerActions={props.headerActions}
 			>
-				<MarkdownContent
-					markdown={formatToolDetailsMarkdown(props.params, props.result)}
-					renderMarkdown={props.renderMarkdown}
-					compact
-					details
-				/>
+				{() => (
+					<MarkdownContent
+						markdown={formatToolDetailsMarkdown(props.params, props.result)}
+						renderMarkdown={props.renderMarkdown}
+						compact
+						details
+					/>
+				)}
 			</TitledCollapsibleBlock>
 			<FileChangesBlock
 				changes={props.fileChanges}
