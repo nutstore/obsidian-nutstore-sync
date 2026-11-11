@@ -1518,7 +1518,11 @@
 
 .ns-chatbox-markdown--details.markdown-rendered pre {
 	max-height: 12rem;
-	background: var(--background-primary);
+	margin: 0;
+	padding: var(--size-4-2) var(--size-4-3);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
 }
 
 .ns-chatbox-runnable-code {

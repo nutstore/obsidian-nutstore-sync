@@ -151,23 +151,29 @@ export function stringifyJsonValue(value: unknown) {
 }
 
 export function formatToolDetailsMarkdown(params?: unknown, result?: string) {
-	const lines: string[] = []
+	const sections: string[] = []
 	if (params !== undefined) {
-		lines.push(`${t('chatbox.ui.labels.params')}:`, '')
-		lines.push(fencedCode('json', stringifyJsonValue(params)))
+		sections.push(
+			`${t('chatbox.ui.labels.params')}:\n\n${formatToolParamsMarkdown(params)}`,
+		)
 	}
 	const resultText = result?.trim()
 
 	if (resultText) {
-		lines.push(
-			'',
-			`${t('chatbox.ui.labels.result')}:`,
-			'',
-			fencedCode('text', resultText),
+		sections.push(
+			`${t('chatbox.ui.labels.result')}:\n\n${formatToolResultMarkdown(resultText)}`,
 		)
 	}
 
-	return lines.join('\n')
+	return sections.join('\n\n')
+}
+
+export function formatToolParamsMarkdown(params: unknown) {
+	return fencedCode('json', stringifyJsonValue(params))
+}
+
+export function formatToolResultMarkdown(result: string) {
+	return fencedCode('text', result.trim())
 }
 
 export function formatSystemNotificationMarkdown(
