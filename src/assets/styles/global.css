@@ -39,6 +39,13 @@
 	animation: nutstore-sync-spin 2s linear infinite;
 }
 
+/* Obsidian's .clickable-icon sets display: flex, while its ribbon re-render only
+ * resets inline display. Combining both classes outranks that host rule, and the
+ * class itself survives the pass. */
+.clickable-icon.nutstore-ribbon-action-hidden {
+	display: none;
+}
+
 .modal.sync-confirm-modal {
 	container-name: sync-confirm;
 	container-type: inline-size;

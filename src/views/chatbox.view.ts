@@ -74,6 +74,8 @@ export default class ChatboxView extends ItemView {
 	private activeSelectionSnapshot?: SelectedTextContextItem
 	private highlightedEditorView?: EditorView
 	private preservingSelectionForChatFocus = false
+	/** Vault paths for `@` completions; invalidated when the file set changes. */
+	private mentionPaths?: string[]
 	private readonly renderMarkdown: NonNullable<ChatboxProps['renderMarkdown']> =
 		async (
 			el: HTMLElement,
@@ -182,6 +184,12 @@ export default class ChatboxView extends ItemView {
 				this.controller?.update(this.getChatboxProps())
 			}),
 		)
+		const invalidateMentionPaths = () => {
+			this.mentionPaths = undefined
+		}
+		this.registerEvent(this.app.vault.on('create', invalidateMentionPaths))
+		this.registerEvent(this.app.vault.on('delete', invalidateMentionPaths))
+		this.registerEvent(this.app.vault.on('rename', invalidateMentionPaths))
 		this.registerDomEvent(document, 'selectionchange', () => {
 			if (this.preservingSelectionForChatFocus) {
 				return
@@ -426,6 +434,16 @@ export default class ChatboxView extends ItemView {
 		editor.focus()
 	}
 
+	/** Rebuilt only when files are added, removed or renamed, not per keystroke. */
+	private getMentionPaths(): string[] {
+		if (!this.mentionPaths) {
+			this.mentionPaths = this.app.vault
+				.getMarkdownFiles()
+				.map((file) => file.path)
+		}
+		return this.mentionPaths
+	}
+
 	private getChatboxProps(): ChatboxProps {
 		const viewProps = this.chat.getViewProps()
 		const activeContextItems = this.getActiveContextItems().filter((item) => {
@@ -457,8 +475,7 @@ export default class ChatboxView extends ItemView {
 				this.persistSelectionHighlight(true)
 				this.controller?.update(this.getChatboxProps())
 			},
-			onListMentionPaths: () =>
-				this.app.vault.getMarkdownFiles().map((file) => file.path),
+			onListMentionPaths: () => this.getMentionPaths(),
 			onAddUserContext: (item) => {
 				this.chat.addUserContext(item)
 			},

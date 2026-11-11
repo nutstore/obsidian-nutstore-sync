@@ -18,11 +18,14 @@ import {
 	createPendingContextItem,
 } from '~/ai/chat/context/user-context'
 import { resolveUsedContextTokens } from '~/ai/chat/domain'
-import { CHATBOX_DIALOG_CONTAINED_MIN_WIDTH } from '~/ai/chat/ui/modal-mount'
+import { resolveChatModalMountTarget } from '~/ai/chat/ui/modal-mount'
 import type { ChatTimelineMessageItem, ChatboxProps } from '~/ai/chat/ui/types'
 import { t } from '../i18n'
 import { observeBottomFollow } from './bottom-follow'
-import { ConfirmDialog } from './components/ConfirmDialog'
+import {
+	ConfirmDialog,
+	type ConfirmDialogView,
+} from './components/ConfirmDialog'
 import { ContextArea } from './components/ContextArea'
 import { ContextRing } from './components/ContextRing'
 import { McpServersDialog } from './components/McpServersDialog'
@@ -46,21 +49,32 @@ import {
 const INPUT_HEIGHT_STORAGE_KEY = 'nutstore-sync.chatbox.input-height'
 const LEGACY_INPUT_HEIGHT_STORAGE_KEY =
 	'nutstore-sync.chatbox.desktop-input-height'
-const DEFAULT_INPUT_HEIGHT = 184
-const DEFAULT_COMPACT_INPUT_HEIGHT = 144
-const INPUT_MIN_HEIGHT = 128
-const COMPACT_INPUT_MIN_HEIGHT = 104
-const INPUT_ABSOLUTE_MIN_HEIGHT = 72
-const COMPACT_INPUT_ABSOLUTE_MIN_HEIGHT = 64
-const MESSAGES_MIN_HEIGHT = 200
-const COMPACT_MESSAGES_MIN_HEIGHT = 120
 const RESIZER_HITBOX_HEIGHT = 10
-const INPUT_MAX_VIEWPORT_RATIO = 0.6
-const COMPACT_INPUT_MAX_VIEWPORT_RATIO = 0.45
 const COMPACT_LAYOUT_MAX_WIDTH = 768
 const SM_MAX_WIDTH = 640
 const PICKER_ACCEPT = 'image/*,.txt,.md,.markdown'
 const TEXT_FILE_EXTENSIONS = new Set(['txt', 'md', 'markdown'])
+
+/**
+ * Composer pane geometry per layout mode. Compact keeps the composer and a few
+ * message lines inside a phone-sized viewport; the pairs read top to bottom.
+ */
+const INPUT_PANE_LAYOUT = {
+	regular: {
+		defaultHeight: 184,
+		minHeight: 128,
+		absoluteMinHeight: 72,
+		messagesMinHeight: 200,
+		maxViewportRatio: 0.6,
+	},
+	compact: {
+		defaultHeight: 144,
+		minHeight: 104,
+		absoluteMinHeight: 64,
+		messagesMinHeight: 120,
+		maxViewportRatio: 0.45,
+	},
+} as const
 
 function getFileExtension(filename: string): string {
 	const extension = filename.split('.').pop()?.trim().toLowerCase()
@@ -109,10 +123,22 @@ function MessageScrollContent(props: {
 	)
 }
 
+/** Which recall confirmation is armed; the second click performs the recall. */
+type RecallArmedMode = 'only' | 'restore'
+
+/** One confirmation slot: destructive prompts never stack. */
+type PendingConfirm =
+	| { kind: 'delete-session'; sessionId: string }
+	| { kind: 'compress-context' }
+	| {
+			kind: 'message'
+			action: 'delete' | 'regenerate' | 'recall'
+			item: ChatTimelineMessageItem
+	  }
+
 function Chatbox(props: ChatboxProps) {
 	const sendLabelId = createUniqueId()
 	let workspaceHostEl: HTMLDivElement | undefined
-	type RecallArmedMode = 'only' | 'restore'
 	const [input, setInput] = createSignal('')
 	const isInputEmpty = createMemo(() => input().length === 0)
 	// Pick once per empty-input period, including after sending or clearing a draft.
@@ -134,16 +160,7 @@ function Chatbox(props: ChatboxProps) {
 	const [historyOpen, setHistoryOpen] = createSignal(false)
 	const [selectedAgentId, setSelectedAgentId] = createSignal<string>()
 	const [modelPickerOpen, setModelPickerOpen] = createSignal(false)
-	const [sessionPendingDeleteId, setSessionPendingDeleteId] =
-		createSignal<string>()
-	const [pendingDeleteMessage, setPendingDeleteMessage] =
-		createSignal<ChatTimelineMessageItem>()
-	const [pendingRegenerateMessage, setPendingRegenerateMessage] =
-		createSignal<ChatTimelineMessageItem>()
-	const [pendingRecallMessage, setPendingRecallMessage] =
-		createSignal<ChatTimelineMessageItem>()
-	const [pendingCompressContextConfirm, setPendingCompressContextConfirm] =
-		createSignal(false)
+	const [pendingConfirm, setPendingConfirm] = createSignal<PendingConfirm>()
 	const [recallArmedMode, setRecallArmedMode] = createSignal<RecallArmedMode>()
 	const [chatboxContainerWidth, setChatboxContainerWidth] = createSignal(0)
 	const [inputPaneHeight, setInputPaneHeight] = createSignal<number>()
@@ -160,11 +177,13 @@ function Chatbox(props: ChatboxProps) {
 	let inputEditorEl: HTMLDivElement | undefined
 	let previousActiveSessionId: string | undefined
 	let previousMessagesScrollTop = 0
-	let defaultInputHeight = DEFAULT_INPUT_HEIGHT
+	let defaultInputHeight: number = INPUT_PANE_LAYOUT.regular.defaultHeight
 	let dragStartHeight = 0
 
-	createEffect(() => {
-		const hasLiveDuration =
+	// One tick per second only while some duration can still grow. The memo keeps
+	// streaming updates from restarting the timer on every chunk.
+	const hasLiveDuration = createMemo(
+		() =>
 			Object.values(props.agentsById).some(
 				(agent) =>
 					agent.status === 'queued' ||
@@ -178,8 +197,11 @@ function Chatbox(props: ChatboxProps) {
 						!!block.timing &&
 						block.timing.finishedAt === undefined,
 				),
-			)
-		if (!hasLiveDuration) return
+			),
+	)
+
+	createEffect(() => {
+		if (!hasLiveDuration()) return
 		const viewWindow = getViewWindow()
 		setNow(Date.now())
 		const interval = viewWindow.setInterval(() => setNow(Date.now()), 1000)
@@ -215,31 +237,9 @@ function Chatbox(props: ChatboxProps) {
 		return getViewWindow().innerWidth < SM_MAX_WIDTH
 	}
 
-	function getDefaultInputPaneHeight() {
-		return isCompactLayout()
-			? DEFAULT_COMPACT_INPUT_HEIGHT
-			: DEFAULT_INPUT_HEIGHT
-	}
-
-	function getInputMinHeight() {
-		return isCompactLayout() ? COMPACT_INPUT_MIN_HEIGHT : INPUT_MIN_HEIGHT
-	}
-
-	function getInputAbsoluteMinHeight() {
-		return isCompactLayout()
-			? COMPACT_INPUT_ABSOLUTE_MIN_HEIGHT
-			: INPUT_ABSOLUTE_MIN_HEIGHT
-	}
-
-	function getMessagesMinHeight() {
-		return isCompactLayout() ? COMPACT_MESSAGES_MIN_HEIGHT : MESSAGES_MIN_HEIGHT
-	}
-
-	function getInputMaxViewportRatio() {
-		return isCompactLayout()
-			? COMPACT_INPUT_MAX_VIEWPORT_RATIO
-			: INPUT_MAX_VIEWPORT_RATIO
-	}
+	const inputPaneLayout = createMemo(
+		() => INPUT_PANE_LAYOUT[isCompactLayout() ? 'compact' : 'regular'],
+	)
 
 	function dismissInputFocus() {
 		const activeElement = getViewDocument().activeElement
@@ -252,7 +252,7 @@ function Chatbox(props: ChatboxProps) {
 	function openCompressContextConfirm() {
 		dismissInputFocus()
 		getViewWindow().requestAnimationFrame(() => {
-			setPendingCompressContextConfirm(true)
+			setPendingConfirm({ kind: 'compress-context' })
 		})
 	}
 
@@ -272,7 +272,9 @@ function Chatbox(props: ChatboxProps) {
 		return undefined
 	})
 
-	const contextUsedTokens = () => resolveUsedContextTokens(props.usage)
+	const contextUsedTokens = createMemo(() =>
+		resolveUsedContextTokens(props.usage),
+	)
 	const contextUsageRatio = () => {
 		const total = props.contextWindow
 		if (!total || total <= 0) return 0
@@ -301,65 +303,40 @@ function Chatbox(props: ChatboxProps) {
 		return remaining <= threshold
 	}
 
-	const lastMessageFingerprint = () => {
-		const item = props.timeline.at(-1)
-		if (!item) return 'empty'
-		const textLength = item.message.parts
-			.filter((part) => part.type === 'text')
-			.reduce((total, part) => total + part.text.length, 0)
-		const blockFingerprint = item.displayBlocks
-			.map((block) => {
-				if (block.kind === 'content') return `c:${block.parts.length}`
-				if (block.kind === 'reasoning') return `r:${block.part.text.length}`
-				if (block.kind === 'tool-call') {
-					return `tc:${block.toolCall.toolCallId}:${block.toolCall.state}`
-				}
-				return `sn:${JSON.stringify(block.notification)}`
-			})
-			.join('|')
-		return `${item.message.id}:${textLength}:${blockFingerprint}:${item.message.role}`
-	}
-
-	const selectedProvider = () =>
-		props.providers.find((provider) => provider.id === props.selectedProviderId)
+	const selectedProvider = createMemo(() =>
+		props.providers.find(
+			(provider) => provider.id === props.selectedProviderId,
+		),
+	)
+	const selectedModel = createMemo(() =>
+		selectedProvider()?.models.find(
+			(model) => model.id === props.selectedModelId,
+		),
+	)
 	const providerReady = createMemo(
 		() => props.providerSetup === undefined && !props.loading,
 	)
-	const dialogMountTarget = () => {
-		const contained =
-			chatboxContainerWidth() >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH &&
-			!!chatboxRootEl
-		return {
-			mountEl: contained
-				? chatboxRootEl
-				: (chatboxRootEl?.ownerDocument?.body ?? getViewDocument().body),
-			contained,
-			hostEl: chatboxRootEl,
-		}
-	}
+	// One target per width change: every dialog shares it, so neither the
+	// allocation nor the layout read repeats per dialog render.
+	const dialogMountTarget = createMemo(() =>
+		resolveChatModalMountTarget(chatboxRootEl, {
+			width: chatboxContainerWidth(),
+		}),
+	)
+	/** Stable lookup so streaming updates do not hand rows a new prop every chunk. */
+	const getSubagent = (agentId: string) => props.agentsById[agentId]
 	const selectedAgent = () => {
 		const agentId = selectedAgentId()
-		return agentId ? props.agentsById[agentId] : undefined
+		return agentId ? getSubagent(agentId) : undefined
 	}
-	const modelPickerLabel = () => {
-		const provider = selectedProvider()
-		const selectedModel = provider?.models.find(
-			(model) => model.id === props.selectedModelId,
-		)
-		return (
-			[provider?.name, selectedModel?.name].filter(Boolean).join(' · ') ||
-			t('chatbox.ui.states.noModel')
-		)
-	}
-	const compactModelPickerLabel = () => {
-		const provider = selectedProvider()
-		const selectedModel = provider?.models.find(
-			(model) => model.id === props.selectedModelId,
-		)
-		return (
-			selectedModel?.name || provider?.name || t('chatbox.ui.states.noModel')
-		)
-	}
+	const modelPickerLabel = () =>
+		[selectedProvider()?.name, selectedModel()?.name]
+			.filter(Boolean)
+			.join(' · ') || t('chatbox.ui.states.noModel')
+	const compactModelPickerLabel = () =>
+		selectedModel()?.name ||
+		selectedProvider()?.name ||
+		t('chatbox.ui.states.noModel')
 	function readStoredInputPaneHeight() {
 		try {
 			const raw = getViewWindow().localStorage.getItem(INPUT_HEIGHT_STORAGE_KEY)
@@ -401,23 +378,24 @@ function Chatbox(props: ChatboxProps) {
 	}
 
 	function getMaxInputPaneHeight() {
+		const layout = inputPaneLayout()
 		const viewportMax = Math.floor(
-			getViewWindow().innerHeight * getInputMaxViewportRatio(),
+			getViewWindow().innerHeight * layout.maxViewportRatio,
 		)
 		const splitHeight = splitLayoutEl?.getBoundingClientRect().height ?? 0
 		if (splitHeight <= 0) {
-			return Math.max(getInputMinHeight(), viewportMax)
+			return Math.max(layout.minHeight, viewportMax)
 		}
 		const messagesBound = Math.floor(
-			splitHeight - getMessagesMinHeight() - RESIZER_HITBOX_HEIGHT,
+			splitHeight - layout.messagesMinHeight - RESIZER_HITBOX_HEIGHT,
 		)
 		const maxHeight = Math.min(messagesBound, viewportMax)
-		return Math.max(getInputAbsoluteMinHeight(), maxHeight)
+		return Math.max(layout.absoluteMinHeight, maxHeight)
 	}
 
 	function clampInputPaneHeight(height: number) {
 		const maxHeight = getMaxInputPaneHeight()
-		const minHeight = Math.min(getInputMinHeight(), maxHeight)
+		const minHeight = Math.min(inputPaneLayout().minHeight, maxHeight)
 		return Math.round(Math.min(Math.max(height, minHeight), maxHeight))
 	}
 
@@ -430,13 +408,25 @@ function Chatbox(props: ChatboxProps) {
 		return next
 	}
 
+	/** Window and pane resizes shrink the available space; keep the height legal. */
+	function reapplyInputPaneHeight() {
+		const height = inputPaneHeight()
+		if (typeof height !== 'number') {
+			return
+		}
+		const clampedHeight = clampInputPaneHeight(height)
+		if (clampedHeight !== height) {
+			applyInputPaneHeight(clampedHeight, true)
+		}
+	}
+
 	function getTextareaHeightStyle() {
 		const paneHeight = inputPaneHeight()
 		if (typeof paneHeight !== 'number') {
 			return undefined
 		}
 		const chromeHeight = getInputPaneChromeHeight()
-		return `${Math.max(getInputAbsoluteMinHeight(), paneHeight - chromeHeight)}px`
+		return `${Math.max(inputPaneLayout().absoluteMinHeight, paneHeight - chromeHeight)}px`
 	}
 
 	function resetInputPaneHeight() {
@@ -531,14 +521,6 @@ function Chatbox(props: ChatboxProps) {
 		setIsFileDragActive(false)
 	}
 
-	function handleRootDragEnter(event: DragEvent) {
-		if (!hasDragItems(event)) {
-			return
-		}
-		event.preventDefault()
-		setIsFileDragActive(true)
-	}
-
 	function handleRootDragOver(event: DragEvent) {
 		if (!hasDragItems(event)) {
 			return
@@ -620,14 +602,12 @@ function Chatbox(props: ChatboxProps) {
 		),
 	)
 
+	// Any timeline update can grow the last message; follow it while pinned.
 	createEffect(
 		on(
-			() => [props.activeSessionId, lastMessageFingerprint()],
+			() => [props.activeSessionId, props.timeline] as const,
 			([activeSessionId], previous) => {
-				const previousActiveSessionId = previous?.[0]
-				if (activeSessionId !== previousActiveSessionId || !stickToBottom()) {
-					return
-				}
+				if (activeSessionId !== previous?.[0] || !stickToBottom()) return
 				scrollMessagesToBottom()
 			},
 		),
@@ -677,7 +657,7 @@ function Chatbox(props: ChatboxProps) {
 		}
 		defaultInputHeight =
 			Math.round(inputPaneEl?.getBoundingClientRect().height ?? 0) ||
-			getDefaultInputPaneHeight()
+			inputPaneLayout().defaultHeight
 		const storedHeight = readStoredInputPaneHeight()
 		applyInputPaneHeight(storedHeight ?? defaultInputHeight)
 	})
@@ -701,30 +681,30 @@ function Chatbox(props: ChatboxProps) {
 			return
 		}
 		const root = chatboxRootEl
-		const onDragEnter = (event: DragEvent) => handleRootDragEnter(event)
-		const onDragOver = (event: DragEvent) => handleRootDragOver(event)
-		const onDragLeave = (event: DragEvent) => handleRootDragLeave(event)
 		const onDrop = (event: DragEvent) => {
 			void handleRootDrop(event)
 		}
-		root.addEventListener('dragenter', onDragEnter, true)
-		root.addEventListener('dragover', onDragOver, true)
-		root.addEventListener('dragleave', onDragLeave, true)
+		root.addEventListener('dragenter', handleRootDragOver, true)
+		root.addEventListener('dragover', handleRootDragOver, true)
+		root.addEventListener('dragleave', handleRootDragLeave, true)
 		root.addEventListener('drop', onDrop, true)
 		onCleanup(() => {
-			root.removeEventListener('dragenter', onDragEnter, true)
-			root.removeEventListener('dragover', onDragOver, true)
-			root.removeEventListener('dragleave', onDragLeave, true)
+			root.removeEventListener('dragenter', handleRootDragOver, true)
+			root.removeEventListener('dragover', handleRootDragOver, true)
+			root.removeEventListener('dragleave', handleRootDragLeave, true)
 			root.removeEventListener('drop', onDrop, true)
 		})
 	})
 
+	// The capture callback is recreated on every host update; the listener stays
+	// put and reads the current prop when the pointer lands.
+	const onPointerDownCapture = () => props.onCaptureActiveContext?.()
+
 	createEffect(() => {
-		if (!chatboxRootEl || !props.onCaptureActiveContext) {
+		if (!chatboxRootEl) {
 			return
 		}
 		const root = chatboxRootEl
-		const onPointerDownCapture = () => props.onCaptureActiveContext?.()
 		root.addEventListener('pointerdown', onPointerDownCapture, true)
 		onCleanup(() => {
 			root.removeEventListener('pointerdown', onPointerDownCapture, true)
@@ -733,34 +713,17 @@ function Chatbox(props: ChatboxProps) {
 
 	createEffect(() => {
 		const viewWindow = getViewWindow()
-		const onResize = () => {
-			const height = inputPaneHeight()
-			if (typeof height !== 'number') {
-				return
-			}
-			const clampedHeight = clampInputPaneHeight(height)
-			if (clampedHeight !== height) {
-				applyInputPaneHeight(clampedHeight, true)
-			}
-		}
-		viewWindow.addEventListener('resize', onResize)
-		onCleanup(() => viewWindow.removeEventListener('resize', onResize))
+		viewWindow.addEventListener('resize', reapplyInputPaneHeight)
+		onCleanup(() =>
+			viewWindow.removeEventListener('resize', reapplyInputPaneHeight),
+		)
 	})
 
 	createEffect(() => {
 		if (!providerReady() || !inputPaneEl || !inputEditorEl) {
 			return
 		}
-		const observer = new ResizeObserver(() => {
-			const height = inputPaneHeight()
-			if (typeof height !== 'number') {
-				return
-			}
-			const clampedHeight = clampInputPaneHeight(height)
-			if (clampedHeight !== height) {
-				applyInputPaneHeight(clampedHeight, true)
-			}
-		})
+		const observer = new ResizeObserver(reapplyInputPaneHeight)
 		observer.observe(inputPaneEl)
 		observer.observe(inputEditorEl)
 		onCleanup(() => observer.disconnect())
@@ -790,35 +753,29 @@ function Chatbox(props: ChatboxProps) {
 		}
 	}
 
-	async function confirmDeleteSession() {
-		const sessionId = sessionPendingDeleteId()
-		if (!sessionId) {
-			return
-		}
-		setSessionPendingDeleteId(undefined)
-		await props.onDeleteSession(sessionId)
+	function dismissConfirm() {
+		setRecallArmedMode(undefined)
+		setPendingConfirm(undefined)
 	}
 
 	function requestDeleteMessage(messageId: string) {
 		if (!props.onDeleteMessage) return
-		const item = props.timeline.find((item) => item.message.id === messageId)
-		if (!item) return
-		setPendingDeleteMessage(item)
+		const item = props.timeline.find((entry) => entry.message.id === messageId)
+		if (item) setPendingConfirm({ kind: 'message', action: 'delete', item })
 	}
 
 	function requestRegenerateMessage(messageId: string) {
 		if (!props.onRegenerateMessage) return
-		const item = props.timeline.find((item) => item.message.id === messageId)
-		if (!item) return
-		setPendingRegenerateMessage(item)
+		const item = props.timeline.find((entry) => entry.message.id === messageId)
+		if (item) setPendingConfirm({ kind: 'message', action: 'regenerate', item })
 	}
 
 	function requestRecallMessage(messageId: string) {
 		if (!props.onRecallMessage) return
-		const item = props.timeline.find((item) => item.message.id === messageId)
+		const item = props.timeline.find((entry) => entry.message.id === messageId)
 		if (!item) return
 		setRecallArmedMode(undefined)
-		setPendingRecallMessage(item)
+		setPendingConfirm({ kind: 'message', action: 'recall', item })
 	}
 
 	async function doRecallMessage(
@@ -839,81 +796,25 @@ function Chatbox(props: ChatboxProps) {
 		props.onUpdateInputDraft(fallbackText)
 	}
 
-	async function confirmRecallMessage() {
-		const item = pendingRecallMessage()
-		if (!item) return
-		setRecallArmedMode(undefined)
-		setPendingRecallMessage(undefined)
-		await doRecallMessage(item)
-	}
-
-	function confirmRegenerateMessage() {
-		const item = pendingRegenerateMessage()
-		if (!item) return
-		setPendingRegenerateMessage(undefined)
-		props.onRegenerateMessage?.(item.message.id)
-	}
-
-	function confirmDeleteMessage() {
-		const item = pendingDeleteMessage()
-		if (!item) return
-		setPendingDeleteMessage(undefined)
-		props.onDeleteMessage?.(item.message.id)
-	}
-
-	async function confirmCompressContext() {
-		setPendingCompressContextConfirm(false)
-		await props.onCompressContext()
-	}
-
-	const deleteMessageConfirmText = () => {
-		const item = pendingDeleteMessage()
-		if (!item) return ''
-		switch (item.message.role) {
-			case 'user':
-				return t('chatbox.ui.dialogs.deleteMessage.userConfirm')
-			default:
-				return t('chatbox.ui.dialogs.deleteMessage.assistantConfirm')
-		}
-	}
-
-	const deleteMessageHasReversibleOps = () =>
-		Boolean(
-			pendingDeleteMessage() &&
-			props.onRecallHasReversibleOps?.(pendingDeleteMessage()!.message.id),
-		)
-
-	const recallHasReversibleOps = () => {
-		const item = pendingRecallMessage()
-		if (!item) return false
-		if (props.onRecallHasReversibleOps) {
-			return props.onRecallHasReversibleOps(item.message.id)
-		}
-		return false
-	}
-
-	async function confirmRecallAndRestoreMessage() {
-		const item = pendingRecallMessage()
-		if (!item) return
-		setRecallArmedMode(undefined)
-		setPendingRecallMessage(undefined)
-		await doRecallMessage(item, { restoreFiles: true })
-	}
-
-	const confirmRecallOnlyButton = () => {
-		if (recallArmedMode() === 'only') {
-			void confirmRecallMessage()
+	/** The first click arms a recall variant; the second click performs it. */
+	function armOrConfirmRecall(mode: RecallArmedMode) {
+		if (recallArmedMode() !== mode) {
+			setRecallArmedMode(mode)
 			return
 		}
-		setRecallArmedMode('only')
+		const request = pendingConfirm()
+		if (request?.kind !== 'message' || request.action !== 'recall') return
+		dismissConfirm()
+		void doRecallMessage(request.item, { restoreFiles: mode === 'restore' })
 	}
 
-	const confirmRecallRestoreButton = () => {
-		if (recallArmedMode() === 'restore') {
-			void confirmRecallAndRestoreMessage()
-			return
-		}
-		setRecallArmedMode('restore')
+	const hasReversibleOps = (item: ChatTimelineMessageItem) =>
+		!!props.onRecallHasReversibleOps?.(item.message.id)
+
+	function deleteMessageConfirmText(item: ChatTimelineMessageItem) {
+		return item.message.role === 'user'
+			? t('chatbox.ui.dialogs.deleteMessage.userConfirm')
+			: t('chatbox.ui.dialogs.deleteMessage.assistantConfirm')
 	}
 
 	const recallOnlyConfirmLabel = () =>
@@ -925,6 +826,79 @@ function Chatbox(props: ChatboxProps) {
 		recallArmedMode() === 'restore'
 			? t('chatbox.ui.dialogs.recall.restoreSecondTitle')
 			: t('chatbox.ui.dialogs.recall.restoreConfirm')
+
+	/** Copy and actions for the single confirmation slot. */
+	const confirmDialog = createMemo((): ConfirmDialogView | undefined => {
+		const request = pendingConfirm()
+		if (!request) return undefined
+		switch (request.kind) {
+			case 'delete-session':
+				return {
+					title: t('chatbox.ui.dialogs.deleteSession.title'),
+					message: t('chatbox.ui.dialogs.deleteSession.message'),
+					confirmLabel: t('chatbox.ui.dialogs.deleteSession.confirm'),
+					onConfirm: () => {
+						dismissConfirm()
+						void props.onDeleteSession(request.sessionId)
+					},
+				}
+			case 'compress-context':
+				return {
+					title: t('chatbox.ui.dialogs.compressContext.title'),
+					message: t('chatbox.ui.dialogs.compressContext.message'),
+					confirmLabel: t('chatbox.ui.dialogs.compressContext.confirm'),
+					onConfirm: () => {
+						dismissConfirm()
+						void props.onCompressContext()
+					},
+				}
+			case 'message': {
+				const { action, item } = request
+				if (action === 'delete') {
+					return {
+						title: t('chatbox.ui.dialogs.deleteMessage.title'),
+						message:
+							deleteMessageConfirmText(item) +
+							(hasReversibleOps(item)
+								? `\n\n${t('chatbox.ui.dialogs.deleteMessage.toolRestoreWarning')}`
+								: ''),
+						confirmLabel: t('chatbox.ui.dialogs.deleteMessage.confirm'),
+						onConfirm: () => {
+							dismissConfirm()
+							props.onDeleteMessage?.(item.message.id)
+						},
+					}
+				}
+				if (action === 'regenerate') {
+					return {
+						title: t('chatbox.ui.dialogs.regenerate.title'),
+						message: t('chatbox.ui.dialogs.regenerate.message'),
+						confirmLabel: t('chatbox.ui.dialogs.regenerate.confirm'),
+						onConfirm: () => {
+							dismissConfirm()
+							props.onRegenerateMessage?.(item.message.id)
+						},
+					}
+				}
+				return {
+					title: t('chatbox.ui.dialogs.recall.title'),
+					message: t('chatbox.ui.dialogs.recall.message'),
+					confirmLabel: recallOnlyConfirmLabel(),
+					confirmClass:
+						recallArmedMode() === 'only' ? 'mod-warning' : undefined,
+					secondaryConfirmLabel: hasReversibleOps(item)
+						? recallRestoreConfirmLabel()
+						: undefined,
+					secondaryConfirmClass:
+						recallArmedMode() === 'restore' ? 'mod-warning' : undefined,
+					actionsLayout: 'vertical',
+					cancelPlacement: 'end',
+					onConfirm: () => armOrConfirmRecall('only'),
+					onSecondaryConfirm: () => armOrConfirmRecall('restore'),
+				}
+			}
+		}
+	})
 
 	return (
 		<div
@@ -1070,7 +1044,7 @@ function Chatbox(props: ChatboxProps) {
 													onDeleteMessage={requestDeleteMessage}
 													onRegenerateMessage={requestRegenerateMessage}
 													onRecallMessage={requestRecallMessage}
-													getSubagent={(agentId) => props.agentsById[agentId]}
+													getSubagent={getSubagent}
 													onOpenSubagent={setSelectedAgentId}
 													onOpenFileChange={props.onOpenFileChange}
 													onResolveResourceDataUrl={
@@ -1119,7 +1093,7 @@ function Chatbox(props: ChatboxProps) {
 						{/* Input */}
 						<div
 							ref={inputPaneEl}
-							class={`:uno: chatbox-input-pane shrink-0 px-[var(--ns-chatbox-pad-x)] pb-2 ${'chatbox-input-pane--resizable'}`}
+							class=":uno: chatbox-input-pane chatbox-input-pane--resizable shrink-0 px-[var(--ns-chatbox-pad-x)] pb-2"
 						>
 							<div
 								ref={(element) => {
@@ -1294,7 +1268,9 @@ function Chatbox(props: ChatboxProps) {
 				onExportSession={(sessionId) =>
 					void props.onExportSession(sessionId, dialogMountTarget())
 				}
-				onDelete={(sessionId) => setSessionPendingDeleteId(sessionId)}
+				onDelete={(sessionId) =>
+					setPendingConfirm({ kind: 'delete-session', sessionId })
+				}
 			/>
 
 			<Show when={modelPickerOpen()}>
@@ -1316,93 +1292,22 @@ function Chatbox(props: ChatboxProps) {
 				mountEl={dialogMountTarget().mountEl}
 				contained={dialogMountTarget().contained}
 				renderMarkdown={props.renderMarkdown}
-				getSubagent={(agentId) => props.agentsById[agentId]}
+				getSubagent={getSubagent}
 				onSelectAgent={setSelectedAgentId}
 				onOpenFileChange={props.onOpenFileChange}
 				onClose={() => setSelectedAgentId(undefined)}
 			/>
 
-			{/* Delete session dialog */}
-			<Show when={sessionPendingDeleteId()}>
-				<ConfirmDialog
-					title={t('chatbox.ui.dialogs.deleteSession.title')}
-					message={t('chatbox.ui.dialogs.deleteSession.message')}
-					confirmLabel={t('chatbox.ui.dialogs.deleteSession.confirm')}
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => setSessionPendingDeleteId(undefined)}
-					onConfirm={() => void confirmDeleteSession()}
-				/>
-			</Show>
-
-			{/* Delete message dialog */}
-			<Show when={pendingDeleteMessage()}>
-				<ConfirmDialog
-					title={t('chatbox.ui.dialogs.deleteMessage.title')}
-					message={`${deleteMessageConfirmText()}${
-						deleteMessageHasReversibleOps()
-							? `\n\n${t('chatbox.ui.dialogs.deleteMessage.toolRestoreWarning')}`
-							: ''
-					}`}
-					confirmLabel={t('chatbox.ui.dialogs.deleteMessage.confirm')}
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => setPendingDeleteMessage(undefined)}
-					onConfirm={confirmDeleteMessage}
-				/>
-			</Show>
-
-			<Show when={pendingCompressContextConfirm()}>
-				<ConfirmDialog
-					title={t('chatbox.ui.dialogs.compressContext.title')}
-					message={t('chatbox.ui.dialogs.compressContext.message')}
-					confirmLabel={t('chatbox.ui.dialogs.compressContext.confirm')}
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => setPendingCompressContextConfirm(false)}
-					onConfirm={() => void confirmCompressContext()}
-				/>
-			</Show>
-
-			{/* Regenerate message dialog */}
-			<Show when={pendingRegenerateMessage()}>
-				<ConfirmDialog
-					title={t('chatbox.ui.dialogs.regenerate.title')}
-					message={t('chatbox.ui.dialogs.regenerate.message')}
-					confirmLabel={t('chatbox.ui.dialogs.regenerate.confirm')}
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => setPendingRegenerateMessage(undefined)}
-					onConfirm={confirmRegenerateMessage}
-				/>
-			</Show>
-
-			{/* Recall message dialog */}
-			<Show when={pendingRecallMessage()}>
-				<ConfirmDialog
-					title={t('chatbox.ui.dialogs.recall.title')}
-					message={t('chatbox.ui.dialogs.recall.message')}
-					confirmLabel={recallOnlyConfirmLabel()}
-					confirmClass={
-						recallArmedMode() === 'only' ? 'mod-warning' : undefined
-					}
-					secondaryConfirmLabel={
-						recallHasReversibleOps() ? recallRestoreConfirmLabel() : undefined
-					}
-					secondaryConfirmClass={
-						recallArmedMode() === 'restore' ? 'mod-warning' : undefined
-					}
-					actionsLayout="vertical"
-					cancelPlacement="end"
-					mountEl={dialogMountTarget().mountEl}
-					contained={dialogMountTarget().contained}
-					onCancel={() => {
-						setRecallArmedMode(undefined)
-						setPendingRecallMessage(undefined)
-					}}
-					onConfirm={confirmRecallOnlyButton}
-					onSecondaryConfirm={confirmRecallRestoreButton}
-				/>
+			{/* One confirmation slot: destructive prompts never stack. */}
+			<Show when={confirmDialog()}>
+				{(dialog) => (
+					<ConfirmDialog
+						view={dialog()}
+						mountEl={dialogMountTarget().mountEl}
+						contained={dialogMountTarget().contained}
+						onCancel={dismissConfirm}
+					/>
+				)}
 			</Show>
 		</div>
 	)
