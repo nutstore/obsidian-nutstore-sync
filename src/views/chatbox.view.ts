@@ -85,8 +85,12 @@ export default class ChatboxView extends ItemView {
 			const app = this.app
 			const plugin = this.plugin
 			const component = new Component()
+			// `addChild` loads the component with this view and makes the view unload
+			// it if a render is still in flight when the view closes. `removeChild`
+			// below is required because unloading does not detach it from the parent;
+			// streamed Markdown rerenders would otherwise accumulate one dead child
+			// component per frame for the lifetime of the view.
 			this.addChild(component)
-			component.load()
 
 			const fallbackText = markdown
 			const renderedEl = el.ownerDocument.win.createDiv()
@@ -102,7 +106,7 @@ export default class ChatboxView extends ItemView {
 				)
 			} catch (error) {
 				logger.error('Error rendering chat markdown:', error)
-				component.unload()
+				this.removeChild(component)
 				el.replaceChildren()
 				el.textContent = fallbackText
 				return
@@ -159,7 +163,7 @@ export default class ChatboxView extends ItemView {
 
 			return () => {
 				el.removeEventListener('click', onLinkClick)
-				component.unload()
+				this.removeChild(component)
 				el.replaceChildren()
 			}
 		}
