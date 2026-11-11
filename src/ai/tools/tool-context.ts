@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import type { App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 import type { ReadTracker } from '~/ai/tools/file-operation'

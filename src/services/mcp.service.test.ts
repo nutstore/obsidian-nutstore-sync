@@ -4,7 +4,7 @@ import { ModuleScope } from '~/modules/lifecycle'
 import type { McpServerConfig } from '~/ai/mcp/types'
 import McpService from './mcp.service'
 import { formatMcpToolResult } from '~/ai/mcp/result-artifact'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import {
 	createAgentDefinitions,
 	filterToolsForAgent,

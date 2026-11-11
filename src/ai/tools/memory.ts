@@ -1,5 +1,5 @@
 import { tool } from 'ai'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import type { MemoryRepository } from '~/ai/memory/repository'
 import {
 	MEMORY_ENTRY_CHARACTER_LIMIT,
