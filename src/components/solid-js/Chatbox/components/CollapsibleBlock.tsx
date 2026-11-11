@@ -117,7 +117,17 @@ export function TitledCollapsibleBlock(props: {
 			open={props.open}
 			onOpenChange={props.onOpenChange}
 		>
-			{props.children}
+			{() => (
+				<div
+					class={
+						appearance() === 'plain'
+							? ':uno: chatbox-document-content min-w-0 py-2'
+							: ':uno: border-t border-[var(--background-modifier-border)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-gap)]'
+					}
+				>
+					{renderContent(props.children)}
+				</div>
+			)}
 		</CollapsibleBlock>
 	)
 }
