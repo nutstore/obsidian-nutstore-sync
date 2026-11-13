@@ -33,4 +33,26 @@ describe('reasoning preview', () => {
 		)
 		dispose()
 	})
+
+	it('bounds the collapsed header while the body keeps the full text', async () => {
+		const body = `${'Reviewing 审阅 🧭 '.repeat(40)}Conclusion 结论 👩‍💻`
+		const container = document.createElement('div')
+		const dispose = render(
+			() => <ReasoningBlock part={{ type: 'reasoning', text: body }} />,
+			container,
+		)
+
+		const preview = container.querySelector('.chatbox-collapsible-preview')!
+		expect(preview.textContent!.length).toBeLessThanOrEqual(200)
+		expect(preview.textContent!.endsWith('Conclusion 结论 👩‍💻')).toBe(true)
+
+		const details = container.querySelector<HTMLDetailsElement>(
+			'details.chatbox-collapsible',
+		)!
+		details.open = true
+		await nextTask()
+
+		expect(container.querySelector('pre')?.textContent).toBe(body)
+		dispose()
+	})
 })

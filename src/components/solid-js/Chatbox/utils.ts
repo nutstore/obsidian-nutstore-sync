@@ -196,6 +196,53 @@ export function formatSystemNotificationMarkdown(
 	return fencedCode('json', stringifyJsonValue(notification))
 }
 
+/** Characters kept in a collapsed reasoning header; the rest stays in the body. */
+const REASONING_PREVIEW_LIMIT = 200
+
+/**
+ * Code points that modify the character before them, so they cannot start a
+ * preview: combining diacritics and the emoji joiner/variation selectors.
+ */
+function isTrailingMark(code: number) {
+	return (
+		(code >= 0x0300 && code <= 0x036f) ||
+		code === 0x200d ||
+		code === 0xfe0e ||
+		code === 0xfe0f
+	)
+}
+
+/**
+ * Tail window of streamed reasoning, for its single-line collapsed header.
+ *
+ * The header renders one nowrap line, so handing it the whole text makes every
+ * streamed frame lay out and bidi-resolve tens of kilobytes on the main thread.
+ * A fixed window bounds that cost; CSS (`direction: rtl` on
+ * `.chatbox-collapsible-preview`) still trims the window to the available width
+ * on narrow screens.
+ *
+ * The window starts on a code point boundary: a cut inside a surrogate pair or
+ * inside a joiner/variation-selector sequence renders a replacement glyph and a
+ * stray modifier where the preview begins. Whitespace exposed by the cut is
+ * skipped for the same reason - it would only shift the visible tail rightwards.
+ */
+export function reasoningPreview(
+	text: string | undefined,
+	limit = REASONING_PREVIEW_LIMIT,
+) {
+	if (!text) return ''
+	if (text.length <= limit) return text
+	let start = text.length - limit
+	while (start < text.length) {
+		const code = text.charCodeAt(start)
+		// A low surrogate means the cut split a pair: drop the orphaned half.
+		const orphanedHalf = code >= 0xdc00 && code <= 0xdfff
+		if (!orphanedHalf && !isTrailingMark(code) && text[start].trim()) break
+		start += 1
+	}
+	return text.slice(start)
+}
+
 export function runStateLabel(runState: ChatRunState) {
 	switch (runState) {
 		case 'thinking':
