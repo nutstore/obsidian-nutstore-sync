@@ -1,4 +1,4 @@
-import { LogEntry } from '~/services/logger.service'
+import type { LogEntry } from '~/services/logger.service'
 import { describeThrownValue } from './error-inspection'
 import { formatError } from './format-error'
 

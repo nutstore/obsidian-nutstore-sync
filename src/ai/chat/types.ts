@@ -12,7 +12,7 @@ import type {
 	ToolCallPart,
 } from 'ai'
 
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
 
 type AssistantContentArray = Extract<

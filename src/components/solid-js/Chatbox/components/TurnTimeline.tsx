@@ -83,18 +83,20 @@ export function TurnTimeline(props: {
 											</span>
 										}
 									>
-										<CollapsibleAppearance.Provider value="plain">
-											<div class=":uno: chatbox-process-flow flex min-w-0 flex-col gap-[var(--ns-chatbox-gap)]">
-												<For each={[...messages().keys()]}>
-													{(messageKey) => {
-														const message = createMemo(() =>
-															messages().get(messageKey)!,
-														)
-														return <>{props.children(message, true)}</>
-													}}
-												</For>
-											</div>
-										</CollapsibleAppearance.Provider>
+										{() => (
+											<CollapsibleAppearance.Provider value="plain">
+												<div class=":uno: chatbox-process-flow flex min-w-0 flex-col gap-[var(--ns-chatbox-gap)]">
+													<For each={[...messages().keys()]}>
+														{(messageKey) => {
+															const message = createMemo(() =>
+																messages().get(messageKey)!,
+															)
+															return <>{props.children(message, true)}</>
+														}}
+													</For>
+												</div>
+											</CollapsibleAppearance.Provider>
+										)}
 									</TitledCollapsibleBlock>
 								)
 							}}

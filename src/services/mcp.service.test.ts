@@ -4,7 +4,7 @@ import { ModuleScope } from '~/modules/lifecycle'
 import type { McpServerConfig } from '~/ai/mcp/types'
 import McpService from './mcp.service'
 import { formatMcpToolResult } from '~/ai/mcp/result-artifact'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import {
 	createAgentDefinitions,
 	filterToolsForAgent,
@@ -83,7 +83,6 @@ vi.mock('~/ai/mcp/result-artifact', () => ({
 }))
 vi.mock('~/ai/transport/obsidian-fetch', () => ({ obsidianFetch: vi.fn() }))
 vi.mock('~/utils/mkdirs-vault', () => ({ mkdirsVault: vi.fn(async () => {}) }))
-vi.mock('~/utils/logger', () => ({ default: { warn: vi.fn() } }))
 
 const fixtures: Array<{ scope: ModuleScope; service: McpService }> = []
 afterEach(async () => {

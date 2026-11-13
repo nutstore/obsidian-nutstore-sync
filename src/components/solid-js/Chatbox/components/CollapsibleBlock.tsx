@@ -1,7 +1,25 @@
-import { Show, createContext, useContext, type JSX } from 'solid-js'
+import {
+	Show,
+	createContext,
+	createEffect,
+	createSignal,
+	useContext,
+	type JSX,
+} from 'solid-js'
 
 /** Process descendants share a presentation without changing their content or behavior. */
 export const CollapsibleAppearance = createContext<'card' | 'plain'>('card')
+
+/**
+ * A function defers building the content until the block is first expanded.
+ * Collapsed blocks in a restored session can otherwise mount thousands of rows
+ * the user never asked for.
+ */
+type CollapsibleContent = JSX.Element | (() => JSX.Element)
+
+function renderContent(content: CollapsibleContent) {
+	return typeof content === 'function' ? content() : content
+}
 
 export function CollapsibleBlock(props: {
 	summary: JSX.Element
@@ -9,10 +27,14 @@ export function CollapsibleBlock(props: {
 	appearance?: 'card' | 'plain'
 	open?: boolean
 	onOpenChange?: (open: boolean) => void
-	children: JSX.Element
+	children: CollapsibleContent
 }) {
 	const inheritedAppearance = useContext(CollapsibleAppearance)
 	const appearance = () => props.appearance ?? inheritedAppearance
+	const [contentMounted, setContentMounted] = createSignal(false)
+	createEffect(() => {
+		if (props.open) setContentMounted(true)
+	})
 	return (
 		<details
 			class={
@@ -21,7 +43,11 @@ export function CollapsibleBlock(props: {
 					: ':uno: chatbox-collapsible rounded-3 border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)]'
 			}
 			open={props.open}
-			onToggle={(event) => props.onOpenChange?.(event.currentTarget.open)}
+			onToggle={(event) => {
+				const open = event.currentTarget.open
+				if (open) setContentMounted(true)
+				props.onOpenChange?.(open)
+			}}
 		>
 			<summary class=":uno: flex cursor-pointer list-none items-center justify-between gap-3 px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-card-py)] text-xs text-[var(--text-muted)] marker:hidden">
 				<Show when={appearance() === 'plain'}>
@@ -41,20 +67,21 @@ export function CollapsibleBlock(props: {
 					</Show>
 				</div>
 			</summary>
-			{props.children}
+			<Show when={contentMounted()}>{renderContent(props.children)}</Show>
 		</details>
 	)
 }
 
 export function TitledCollapsibleBlock(props: {
 	title: JSX.Element
+	preview?: string
 	iconClass?: string
 	iconLabel?: string
 	headerActions?: JSX.Element
 	appearance?: 'card' | 'plain'
 	open?: boolean
 	onOpenChange?: (open: boolean) => void
-	children: JSX.Element
+	children: CollapsibleContent
 }) {
 	const inheritedAppearance = useContext(CollapsibleAppearance)
 	const appearance = () => props.appearance ?? inheritedAppearance
@@ -62,7 +89,7 @@ export function TitledCollapsibleBlock(props: {
 		<CollapsibleBlock
 			appearance={appearance()}
 			summary={
-				<div class=":uno: flex min-w-0 items-center gap-2">
+				<div class=":uno: flex min-w-0 flex-1 items-center gap-2">
 					<Show when={props.iconClass}>
 						<span
 							class=":uno: chatbox-collapsible-icon flex size-5 shrink-0 items-center justify-center text-[var(--text-muted)]"
@@ -79,21 +106,28 @@ export function TitledCollapsibleBlock(props: {
 					<div class=":uno: chatbox-collapsible-title truncate font-medium text-[var(--text-normal)]">
 						{props.title}
 					</div>
+					<Show when={props.preview}>
+						<span class=":uno: chatbox-collapsible-preview min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[var(--text-muted)]">
+							<span dir="auto">{props.preview}</span>
+						</span>
+					</Show>
 				</div>
 			}
 			headerActions={props.headerActions}
 			open={props.open}
 			onOpenChange={props.onOpenChange}
 		>
-			<div
-				class={
-					appearance() === 'plain'
-						? ':uno: chatbox-document-content min-w-0 py-2'
-						: ':uno: border-t border-[var(--background-modifier-border)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-gap)]'
-				}
-			>
-				{props.children}
-			</div>
+			{() => (
+				<div
+					class={
+						appearance() === 'plain'
+							? ':uno: chatbox-document-content min-w-0 py-2'
+							: ':uno: border-t border-[var(--background-modifier-border)] px-[var(--ns-chatbox-pad-x)] py-[var(--ns-chatbox-gap)]'
+					}
+				>
+					{renderContent(props.children)}
+				</div>
+			)}
 		</CollapsibleBlock>
 	)
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildLineDiff } from './file-diff'
+import { toBase64 } from 'js-base64'
+import { buildFileDiff, buildLineDiff } from './file-diff'
 
 function numberedLines(count: number) {
 	return Array.from({ length: count }, (_, index) => `line ${index + 1}`)
@@ -187,5 +188,38 @@ describe('buildLineDiff', () => {
 			{ kind: 'add', newLine: 1, text: 'alpha' },
 			{ kind: 'add', newLine: 2, text: 'beta' },
 		])
+	})
+})
+
+describe('buildFileDiff', () => {
+	it('summarizes a change that exceeds the diff text budget', async () => {
+		const before = 'item '.repeat(40_000)
+		const after = `${before}\ntrailing`
+		const diff = await buildFileDiff({
+			vaultPath: 'notes/neutral.md',
+			operation: 'update',
+			before: { kind: 'file', contentBase64: toBase64(before) },
+			after: { kind: 'file', contentBase64: toBase64(after) },
+		})
+
+		expect(diff).toEqual({
+			vaultPath: 'notes/neutral.md',
+			operation: 'update',
+			oversized: true,
+		})
+	})
+
+	it('summarizes an oversized file creation', async () => {
+		const diff = await buildFileDiff({
+			vaultPath: 'notes/neutral.md',
+			operation: 'create',
+			before: { kind: 'file' },
+			after: {
+				kind: 'file',
+				contentBase64: toBase64('emoji 🌿 '.repeat(30_000)),
+			},
+		})
+
+		expect(diff).toMatchObject({ operation: 'create', oversized: true })
 	})
 })

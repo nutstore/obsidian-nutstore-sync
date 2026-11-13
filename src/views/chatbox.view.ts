@@ -74,6 +74,8 @@ export default class ChatboxView extends ItemView {
 	private activeSelectionSnapshot?: SelectedTextContextItem
 	private highlightedEditorView?: EditorView
 	private preservingSelectionForChatFocus = false
+	/** Vault paths for `@` completions; invalidated when the file set changes. */
+	private mentionPaths?: string[]
 	private readonly renderMarkdown: NonNullable<ChatboxProps['renderMarkdown']> =
 		async (
 			el: HTMLElement,
@@ -83,8 +85,12 @@ export default class ChatboxView extends ItemView {
 			const app = this.app
 			const plugin = this.plugin
 			const component = new Component()
+			// `addChild` loads the component with this view and makes the view unload
+			// it if a render is still in flight when the view closes. `removeChild`
+			// below is required because unloading does not detach it from the parent;
+			// streamed Markdown rerenders would otherwise accumulate one dead child
+			// component per frame for the lifetime of the view.
 			this.addChild(component)
-			component.load()
 
 			const fallbackText = markdown
 			const renderedEl = el.ownerDocument.win.createDiv()
@@ -100,7 +106,7 @@ export default class ChatboxView extends ItemView {
 				)
 			} catch (error) {
 				logger.error('Error rendering chat markdown:', error)
-				component.unload()
+				this.removeChild(component)
 				el.replaceChildren()
 				el.textContent = fallbackText
 				return
@@ -157,7 +163,7 @@ export default class ChatboxView extends ItemView {
 
 			return () => {
 				el.removeEventListener('click', onLinkClick)
-				component.unload()
+				this.removeChild(component)
 				el.replaceChildren()
 			}
 		}
@@ -182,6 +188,12 @@ export default class ChatboxView extends ItemView {
 				this.controller?.update(this.getChatboxProps())
 			}),
 		)
+		const invalidateMentionPaths = () => {
+			this.mentionPaths = undefined
+		}
+		this.registerEvent(this.app.vault.on('create', invalidateMentionPaths))
+		this.registerEvent(this.app.vault.on('delete', invalidateMentionPaths))
+		this.registerEvent(this.app.vault.on('rename', invalidateMentionPaths))
 		this.registerDomEvent(document, 'selectionchange', () => {
 			if (this.preservingSelectionForChatFocus) {
 				return
@@ -426,6 +438,16 @@ export default class ChatboxView extends ItemView {
 		editor.focus()
 	}
 
+	/** Rebuilt only when files are added, removed or renamed, not per keystroke. */
+	private getMentionPaths(): string[] {
+		if (!this.mentionPaths) {
+			this.mentionPaths = this.app.vault
+				.getMarkdownFiles()
+				.map((file) => file.path)
+		}
+		return this.mentionPaths
+	}
+
 	private getChatboxProps(): ChatboxProps {
 		const viewProps = this.chat.getViewProps()
 		const activeContextItems = this.getActiveContextItems().filter((item) => {
@@ -457,8 +479,7 @@ export default class ChatboxView extends ItemView {
 				this.persistSelectionHighlight(true)
 				this.controller?.update(this.getChatboxProps())
 			},
-			onListMentionPaths: () =>
-				this.app.vault.getMarkdownFiles().map((file) => file.path),
+			onListMentionPaths: () => this.getMentionPaths(),
 			onAddUserContext: (item) => {
 				this.chat.addUserContext(item)
 			},

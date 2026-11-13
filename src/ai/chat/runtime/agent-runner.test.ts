@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { tool, type ToolSet } from 'ai'
 import { MockLanguageModelV4 } from 'ai/test'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { ChatSession } from '~/ai/chat/domain'
 import { MessageFactory } from '~/ai/chat/messages/message-factory'
 import {

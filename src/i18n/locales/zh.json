@@ -4,6 +4,7 @@
 	},
 	"settings": {
 		"modules": {
+			"heading": "模块开关",
 			"sync": "启用同步模块",
 			"ai": "启用 AI 模块",
 			"description": "关闭后停止该模块，会禁用相关代码，保留已有配置和数据。"
@@ -1045,6 +1046,7 @@
 			},
 			"actions": {
 				"exportAsMarkdown": "导出为 Markdown",
+				"loadEarlierHistory": "加载更早的对话",
 				"deleteSession": "删除",
 				"cancel": "取消",
 				"close": "关闭",
@@ -1088,7 +1090,9 @@
 				"create": "新增",
 				"update": "修改",
 				"delete": "删除",
-				"binary": "二进制文件，无法显示文本差异"
+				"binary": "二进制文件，无法显示文本差异",
+				"loadingDiff": "正在计算差异…",
+				"tooLarge": "文件过大，已跳过行级差异；可在编辑器中打开查看"
 			},
 			"states": {
 				"loading": "正在恢复聊天…",

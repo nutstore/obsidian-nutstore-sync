@@ -947,6 +947,7 @@ export async function rendersSearchableSettings(app: App) {
 						labels.settings.sections.transfer,
 						labels.settings.sections.interface,
 						labels.settings.sections.filters,
+						labels.settings.modules.heading,
 					],
 					[
 						labels.settings.sections.ai,
@@ -954,6 +955,7 @@ export async function rendersSearchableSettings(app: App) {
 						labels.settings.ai.subagents.heading,
 						labels.settings.ai.skills.heading,
 						labels.settings.ai.preferences,
+						labels.settings.modules.heading,
 					],
 					[labels.settings.troubleshooting.title],
 				]

@@ -1,5 +1,5 @@
 import { tool } from 'ai'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import i18n from '~/i18n'
 import { textValue } from './shared'
 import { recordMetadataDep } from './tool-context'

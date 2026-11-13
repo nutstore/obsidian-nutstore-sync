@@ -185,7 +185,7 @@ export class TaskManager implements AgentCommunication {
 
 	/** Legacy artifacts remain immutable, with a deterministic identity for deduplication. */
 	private ensureExecutionHistory(session: ChatSession, agent: ChatAgentState) {
-		if (agent.executions?.length || !agent.resultPath) return
+		if (agent.executions?.length || !agent.resultPath) return false
 		const id = `legacy-${agent.id}`
 		agent.executions = [
 			{
@@ -202,6 +202,7 @@ export class TaskManager implements AgentCommunication {
 			},
 		]
 		agent.executionId = id
+		return true
 	}
 
 	private async deliverInput(
@@ -743,12 +744,16 @@ export class TaskManager implements AgentCommunication {
 		return true
 	}
 
-	/** Reload retains input, but never implicitly executes historical work. */
+	/**
+	 * Reload retains input, but never implicitly executes historical work.
+	 * Returns whether the session changed and therefore needs persisting.
+	 */
 	restoreMasterTaskContinuations(session: ChatSession) {
-		if (!this.isCurrentSession(session)) return
+		if (!this.isCurrentSession(session)) return false
+		let changed = false
 		const master = getMasterAgent(session)
 		for (const agent of getSessionSubagents(session)) {
-			this.ensureExecutionHistory(session, agent)
+			changed = this.ensureExecutionHistory(session, agent) || changed
 			for (const execution of agent.executions ?? []) {
 				if (!execution.resultPath) continue
 				const target = findAgent(master, execution.initiator) ?? master
@@ -770,8 +775,10 @@ export class TaskManager implements AgentCommunication {
 					target.id,
 				)
 				target.pendingInputs.push(input)
+				changed = true
 			}
 		}
+		return changed
 	}
 
 	private createTaskResultInput(

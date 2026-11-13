@@ -1,5 +1,6 @@
 import type { ModuleScope } from '~/modules/lifecycle'
 import { guardAppIO } from '~/modules/guard-io'
+import { PLUGIN_VERSION } from '~/consts'
 import { getSessionSubagents, isTerminalAgent } from '~/ai/chat/domain'
 import type { LanguageModelUsage } from 'ai'
 import { Notice } from 'obsidian'
@@ -74,8 +75,7 @@ import type {
 	RecallMessageResult,
 } from '~/ai/chat/ui/types'
 import {
-	buildAgentViews,
-	buildTimeline,
+	ChatViewProjector,
 	collectOtherBusySessionIds,
 } from '~/ai/chat/ui/view-projection'
 import type { AIModelConfig, AIProviderConfig } from '~/ai/core/types'
@@ -146,6 +146,12 @@ export default class ChatService extends BaseService {
 	private readonly sessionProcessor: SessionProcessor
 	private readonly compactionCoordinator: ContextCompactionCoordinator
 	private readonly skillRepository: SkillRepository
+	private readonly viewProjector = new ChatViewProjector()
+	private viewActions?: ChatboxActionHandlers
+	private sessionHistoryCache?: {
+		source: ChatSessionIndexItem[]
+		result: ChatboxProps['sessionHistory']
+	}
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -351,8 +357,9 @@ export default class ChatService extends BaseService {
 		const initialSession = await this.store.loadInitialSession()
 		this.scope.check()
 		if (initialSession) {
-			this.taskManager.restoreMasterTaskContinuations(initialSession)
-			await this.store.persistSession(initialSession)
+			const restored =
+				this.taskManager.restoreMasterTaskContinuations(initialSession)
+			if (restored) await this.store.persistSession(initialSession)
 		}
 
 		if (!this.state.sessionIndex.length) {
@@ -402,6 +409,9 @@ export default class ChatService extends BaseService {
 
 	getViewProps(): ChatboxProps {
 		const activeSession = this.getLoadedActiveSession()
+		const projected = activeSession
+			? this.viewProjector.projectSession(activeSession)
+			: undefined
 		const activeRuntime = this.getViewRuntime(activeSession)
 		const selection = this.resolveViewSelection(activeSession)
 		const providers = this.buildProviderOptions()
@@ -426,10 +436,10 @@ export default class ChatService extends BaseService {
 			loading: !this.state.initialized,
 			title: this.getActiveSessionTitle(),
 			activeContextItems: [],
-			sessionHistory: this.state.sessionIndex.map((item) => ({ ...item })),
+			sessionHistory: this.getSessionHistory(),
 			activeSessionId: this.state.activeSessionId,
-			timeline: activeSession ? buildTimeline(activeSession) : [],
-			agentsById: activeSession ? buildAgentViews(activeSession) : {},
+			timeline: projected?.timeline ?? [],
+			agentsById: projected?.agentsById ?? {},
 			otherBusySessionIds: collectOtherBusySessionIds(
 				this.state.loadedSessions,
 				this.state.activeSessionId,
@@ -474,8 +484,23 @@ export default class ChatService extends BaseService {
 			mcpServers: this.buildMcpServerOptions(activeSession),
 			usage,
 			contextWindow,
-			...this.bindViewActions(),
+			...this.getViewActions(),
 		}
+	}
+
+	private getSessionHistory(): ChatboxProps['sessionHistory'] {
+		const source = this.state.sessionIndex
+		if (this.sessionHistoryCache?.source === source) {
+			return this.sessionHistoryCache.result
+		}
+		const result = source.map((item) => ({ ...item }))
+		this.sessionHistoryCache = { source, result }
+		return result
+	}
+
+	/** Stable view callbacks keep unchanged props out of the render path. */
+	private getViewActions(): ChatboxActionHandlers {
+		return (this.viewActions ??= this.bindViewActions())
 	}
 
 	private buildMcpServerOptions(activeSession?: ChatSession) {
@@ -785,8 +810,8 @@ export default class ChatService extends BaseService {
 		const session = await this.store.loadSessionById(sessionId)
 		this.scope.check()
 		this.state.activeSessionId = sessionId
-		this.taskManager.restoreMasterTaskContinuations(session)
-		await this.store.persistSession(session)
+		const restored = this.taskManager.restoreMasterTaskContinuations(session)
+		if (restored) await this.store.persistSession(session)
 		await this.store.persistMetaAndIndex()
 		this.notify()
 	}
@@ -856,7 +881,7 @@ export default class ChatService extends BaseService {
 				vault: guardAppIO(this.plugin.app, this.scope.check, this.scope.track)
 					.vault,
 				manifestId: this.plugin.manifest.id,
-				manifestVersion: this.plugin.manifest.version,
+				pluginVersion: PLUGIN_VERSION,
 				session,
 				title,
 				includeToolMessages: options.includeToolMessages,

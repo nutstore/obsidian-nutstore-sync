@@ -1,8 +1,11 @@
 const ERROR_MESSAGE = 'Invalid response: 503 Service Unavailable'
 
-export function is503Error(err: Error | string) {
-	if (err instanceof Error) {
-		return err.message === ERROR_MESSAGE
+type ServiceUnavailableError =
+	(Error & { message: typeof ERROR_MESSAGE }) | typeof ERROR_MESSAGE
+
+export function is503Error(error: unknown): error is ServiceUnavailableError {
+	if (error instanceof Error) {
+		return error.message === ERROR_MESSAGE
 	}
-	return err === ERROR_MESSAGE
+	return error === ERROR_MESSAGE
 }

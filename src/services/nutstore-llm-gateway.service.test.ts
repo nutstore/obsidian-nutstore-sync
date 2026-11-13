@@ -41,7 +41,6 @@ vi.mock('@nutstore/sso-js', () => ({
 	},
 }))
 vi.mock('~/ai/transport/obsidian-fetch', () => ({ obsidianFetch: fetchMock }))
-vi.mock('~/utils/logger', () => ({ default: { error: vi.fn() } }))
 
 afterEach(() => {
 	vi.useRealTimers()

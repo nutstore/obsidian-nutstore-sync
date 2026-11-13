@@ -8,6 +8,8 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "run-s lint build:plugin",
 		"build:plugin": "node esbuild.config.mjs production && swc ./dist/main.js -o main.js",
+		"analyze": "node esbuild.config.mjs production analyze",
+		"analyze:verbose": "node esbuild.config.mjs production analyze:verbose",
 		"lint": "run-p lint:eslint lint:tsc lint:deps",
 		"lint:deps": "pnpm audit --prod --audit-level=high",
 		"lint:eslint": "eslint . --max-warnings=0",

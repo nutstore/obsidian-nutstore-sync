@@ -4,6 +4,7 @@
 	},
 	"settings": {
 		"modules": {
+			"heading": "Module switches",
 			"sync": "Enable synchronization",
 			"ai": "Enable AI",
 			"description": "Takes effect immediately. Turning off stops this module and preserves its settings and data."
@@ -1045,6 +1046,7 @@
 			},
 			"actions": {
 				"exportAsMarkdown": "Export as Markdown",
+				"loadEarlierHistory": "Load earlier messages",
 				"deleteSession": "Delete",
 				"cancel": "Cancel",
 				"close": "Close",
@@ -1088,7 +1090,9 @@
 				"create": "Added",
 				"update": "Modified",
 				"delete": "Deleted",
-				"binary": "Binary file; text diff is unavailable"
+				"binary": "Binary file; text diff is unavailable",
+				"loadingDiff": "Computing diff…",
+				"tooLarge": "File too large for an inline line diff; open it in the editor instead"
 			},
 			"states": {
 				"loading": "Restoring chat…",

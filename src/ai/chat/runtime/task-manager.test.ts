@@ -304,7 +304,7 @@ describe('TaskManager parent notifications', () => {
 			manager.setMasterAgentInputHandler(handler)
 
 			normalizeRehydratedExecution(session)
-			manager.restoreMasterTaskContinuations(session)
+			expect(manager.restoreMasterTaskContinuations(session)).toBe(true)
 
 			expect(handler).not.toHaveBeenCalled()
 			expect(parent.pendingInputs).toHaveLength(1)
@@ -314,11 +314,11 @@ describe('TaskManager parent notifications', () => {
 			})
 			if (depth > 0) expect(parent.status).toBe('cancelled')
 			// Both pending and consumed legacy notifications deduplicate by artifact path.
-			manager.restoreMasterTaskContinuations(session)
+			expect(manager.restoreMasterTaskContinuations(session)).toBe(false)
 			expect(parent.pendingInputs).toHaveLength(1)
 			parent.timeline.push(...parent.pendingInputs.splice(0))
 			normalizeRehydratedExecution(session)
-			manager.restoreMasterTaskContinuations(session)
+			expect(manager.restoreMasterTaskContinuations(session)).toBe(false)
 			expect(parent.pendingInputs).toEqual([])
 			expect(handler).not.toHaveBeenCalled()
 		},

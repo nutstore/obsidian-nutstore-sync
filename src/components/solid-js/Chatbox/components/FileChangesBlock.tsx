@@ -106,13 +106,14 @@ function DiffHunk(props: { hunk: FileDiffHunk }) {
 }
 
 function FileChangeSummary(props: {
-	diff: FileDiff
+	change: ReversibleToolOp
+	diff?: FileDiff
 	onOpenFile?: (vaultPath: string, line?: number) => Promise<void> | void
 }) {
-	const operationLabel = () => t(OPERATION_LABEL[props.diff.operation])
+	const operationLabel = () => t(OPERATION_LABEL[props.change.operation])
 	const openLine = () =>
-		props.diff.hunks?.[0]?.lines.find((line) => line.kind === 'add')?.newLine ??
-		props.diff.hunks?.[0]?.newStart
+		props.diff?.hunks?.[0]?.lines.find((line) => line.kind === 'add')
+			?.newLine ?? props.diff?.hunks?.[0]?.newStart
 	return (
 		<div class=":uno: flex min-w-0 items-center gap-2">
 			<span
@@ -138,10 +139,10 @@ function FileChangeSummary(props: {
 				}}
 				onClick={(event) => {
 					event.stopPropagation()
-					void props.onOpenFile?.(props.diff.vaultPath, openLine())
+					void props.onOpenFile?.(props.change.vaultPath, openLine())
 				}}
 			>
-				{props.diff.vaultPath}
+				{props.change.vaultPath}
 			</button>
 		</div>
 	)
@@ -159,34 +160,79 @@ function FileChangeStats(props: { diff: FileDiff }) {
 	)
 }
 
+/**
+ * Diffs are computed on first expansion: a restored session can hold many file
+ * snapshots, and diffing all of them used to block the main thread for seconds
+ * on mobile before the first frame could paint.
+ */
 function FileChange(props: {
 	change: ReversibleToolOp
 	onOpenFile?: (vaultPath: string, line?: number) => Promise<void> | void
 }) {
-	const [diff] = createResource(() => props.change, buildFileDiff)
 	const [open, setOpen] = createSignal(false)
+	const [started, setStarted] = createSignal(false)
+	const [diff] = createResource(
+		() => (started() ? props.change : undefined),
+		async (change) => (change ? buildFileDiff(change) : undefined),
+	)
+	const handleOpenChange = (value: boolean) => {
+		setOpen(value)
+		if (value) setStarted(true)
+	}
 	return (
-		<Show when={diff()} keyed>
-			{(value) => (
-				<CollapsibleBlock
-					summary={
-						<FileChangeSummary diff={value} onOpenFile={props.onOpenFile} />
-					}
-					headerActions={<FileChangeStats diff={value} />}
-					open={open()}
-					onOpenChange={setOpen}
-				>
-					<Show when={value.binary}>
+		<CollapsibleBlock
+			summary={
+				<FileChangeSummary
+					change={props.change}
+					diff={diff()}
+					onOpenFile={props.onOpenFile}
+				/>
+			}
+			headerActions={
+				<Show when={diff()}>
+					{(value) => <FileChangeStats diff={value()} />}
+				</Show>
+			}
+			open={open()}
+			onOpenChange={handleOpenChange}
+		>
+			{() => (
+				<Show
+					when={diff()}
+					fallback={
 						<div class=":uno: rounded-3 px-2 py-1.5 text-xs text-[var(--text-muted)]">
-							{t('chatbox.ui.fileChanges.binary')}
+							{t('chatbox.ui.fileChanges.loadingDiff')}
 						</div>
-					</Show>
-					<div class=":uno: overflow-hidden rounded-3 rounded-t-6">
-						<For each={value.hunks}>{(hunk) => <DiffHunk hunk={hunk} />}</For>
-					</div>
-				</CollapsibleBlock>
+					}
+				>
+					{(value) => (
+						<Show
+							when={!value().oversized}
+							fallback={
+								<div class=":uno: rounded-3 px-2 py-1.5 text-xs text-[var(--text-muted)]">
+									{t('chatbox.ui.fileChanges.tooLarge')}
+								</div>
+							}
+						>
+							<Show when={value().binary}>
+								<div class=":uno: rounded-3 px-2 py-1.5 text-xs text-[var(--text-muted)]">
+									{t('chatbox.ui.fileChanges.binary')}
+								</div>
+							</Show>
+							<Show when={value().hunks}>
+								{(hunks) => (
+									<div class=":uno: overflow-hidden rounded-3 rounded-t-6">
+										<For each={hunks()}>
+											{(hunk) => <DiffHunk hunk={hunk} />}
+										</For>
+									</div>
+								)}
+							</Show>
+						</Show>
+					)}
+				</Show>
 			)}
-		</Show>
+		</CollapsibleBlock>
 	)
 }
 

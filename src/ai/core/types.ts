@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import type { ChatTodoItem, ReversibleToolOp } from '~/ai/chat/types'
 
 export const aiModelModalitySchema = z.enum([
