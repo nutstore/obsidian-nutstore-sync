@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.6.2] - 2026-11-17
 
 - 修复召回草稿在持久化前未进行同步的问题 | Fix: sync recalled drafts before persistence
 - 修复模型提供商选择器与会话选择状态不同步的问题 | Fix: sync provider picker with session selection
