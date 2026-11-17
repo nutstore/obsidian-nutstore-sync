@@ -152,6 +152,7 @@ export default class ChatService extends BaseService {
 		source: ChatSessionIndexItem[]
 		result: ChatboxProps['sessionHistory']
 	}
+	private providerOptionsCache?: ChatProviderOption[]
 
 	constructor(
 		private plugin: NutstorePlugin,
@@ -587,15 +588,51 @@ export default class ChatService extends BaseService {
 		)
 	}
 
+	private areProviderOptionsEqual(
+		a: ChatProviderOption[],
+		b: ChatProviderOption[],
+	) {
+		if (a.length !== b.length) return false
+		for (let i = 0; i < a.length; i += 1) {
+			const pa = a[i]
+			const pb = b[i]
+			if (
+				pa.id !== pb.id ||
+				pa.name !== pb.name ||
+				pa.models.length !== pb.models.length
+			) {
+				return false
+			}
+			for (let j = 0; j < pa.models.length; j += 1) {
+				const ma = pa.models[j]
+				const mb = pb.models[j]
+				if (ma.id !== mb.id || ma.name !== mb.name) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+
 	private buildProviderOptions(): ChatProviderOption[] {
-		return this.plugin.ai.gateway.listConfiguredProviders().map((provider) => ({
-			id: provider.id,
-			name: provider.name || i18n.t('settings.ai.unnamedProvider'),
-			models: listModels(provider).map((model) => ({
-				id: model.id,
-				name: model.name || i18n.t('settings.ai.unnamedModel'),
-			})),
-		}))
+		const next = this.plugin.ai.gateway
+			.listConfiguredProviders()
+			.map((provider) => ({
+				id: provider.id,
+				name: provider.name || i18n.t('settings.ai.unnamedProvider'),
+				models: listModels(provider).map((model) => ({
+					id: model.id,
+					name: model.name || i18n.t('settings.ai.unnamedModel'),
+				})),
+			}))
+		if (
+			this.providerOptionsCache &&
+			this.areProviderOptionsEqual(this.providerOptionsCache, next)
+		) {
+			return this.providerOptionsCache
+		}
+		this.providerOptionsCache = next
+		return next
 	}
 
 	/**

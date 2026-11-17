@@ -1,4 +1,4 @@
-import { For } from 'solid-js'
+import { Index, createEffect } from 'solid-js'
 import { Portal } from 'solid-js/web'
 
 import type { ChatboxProps } from '~/ai/chat/ui/types'
@@ -14,8 +14,35 @@ export function ModelPickerDialog(props: {
 	onSelectModel: (modelId: string) => void
 	onClose: () => void
 }) {
+	let providerSelectEl: HTMLSelectElement | undefined
+	let modelSelectEl: HTMLSelectElement | undefined
+
 	const selectedProvider = () =>
 		props.providers.find((provider) => provider.id === props.selectedProviderId)
+
+	// Replacing or reordering <option> nodes causes native <select> elements to
+	// fall back to index 0 ("") even when selectedProviderId/selectedModelId did
+	// not change; re-sync the DOM value after option updates commit.
+	const syncProviderSelection = () => {
+		const target = props.selectedProviderId || ''
+		const hasTarget =
+			!target || props.providers.some((provider) => provider.id === target)
+		const nextValue = hasTarget ? target : ''
+		if (providerSelectEl && providerSelectEl.value !== nextValue) {
+			providerSelectEl.value = nextValue
+		}
+	}
+	createEffect(syncProviderSelection)
+
+	createEffect(() => {
+		const target = props.selectedModelId || ''
+		const models = selectedProvider()?.models || []
+		const hasTarget = !target || models.some((model) => model.id === target)
+		const nextValue = hasTarget ? target : ''
+		if (modelSelectEl && modelSelectEl.value !== nextValue) {
+			modelSelectEl.value = nextValue
+		}
+	})
 
 	return (
 		<Portal mount={props.mountEl}>
@@ -45,23 +72,26 @@ export function ModelPickerDialog(props: {
 						{t('chatbox.ui.labels.provider')}
 					</div>
 					<select
+						ref={providerSelectEl}
 						class=":uno: mt-2 w-full border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-2 py-1 text-[var(--text-normal)] disabled:cursor-not-allowed disabled:opacity-50"
 						value={props.selectedProviderId || ''}
-						onChange={(event) =>
+						onChange={(event) => {
 							props.onSelectProvider(event.currentTarget.value)
-						}
+							syncProviderSelection()
+						}}
 					>
 						<option value="">{t('chatbox.ui.states.noProvider')}</option>
-						<For each={props.providers}>
+						<Index each={props.providers}>
 							{(provider) => (
-								<option value={provider.id}>{provider.name}</option>
+								<option value={provider().id}>{provider().name}</option>
 							)}
-						</For>
+						</Index>
 					</select>
 					<div class=":uno: mt-4 text-xs text-[var(--text-muted)]">
 						{t('chatbox.ui.labels.model')}
 					</div>
 					<select
+						ref={modelSelectEl}
 						class=":uno: mt-2 w-full border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-2 py-1 text-[var(--text-normal)] disabled:cursor-not-allowed disabled:opacity-50"
 						value={props.selectedModelId || ''}
 						disabled={!selectedProvider()?.models.length}
@@ -71,9 +101,9 @@ export function ModelPickerDialog(props: {
 						}}
 					>
 						<option value="">{t('chatbox.ui.states.noModel')}</option>
-						<For each={selectedProvider()?.models || []}>
-							{(model) => <option value={model.id}>{model.name}</option>}
-						</For>
+						<Index each={selectedProvider()?.models || []}>
+							{(model) => <option value={model().id}>{model().name}</option>}
+						</Index>
 					</select>
 				</div>
 			</div>

@@ -173,8 +173,9 @@ export class MessageOps {
 			}
 			runtime.draft.userContext = recalledUserContext
 			runtime.draft.text = recalledText
-			await this.store.persistSession(session)
+			const persistence = this.store.persistSession(session)
 			this.notify()
+			await persistence
 			return {
 				text: recalledText,
 				userContext: copyUserContextItems(recalledUserContext),
