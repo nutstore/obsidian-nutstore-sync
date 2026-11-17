@@ -2,7 +2,7 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.6.1] - 2026-11-17
 
 - 新增 App 管理器弹窗，支持应用管理、固定状态切换及工具栏操作 | Added AppManagerModal for managing installed apps, toggling pins, and toolbar actions
 - 新增 MCP 服务发现与执行功能，并扩展了服务发现目录 | Added MCP server discovery, execution, and expanded the discovery catalog
