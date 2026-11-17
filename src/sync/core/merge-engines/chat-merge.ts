@@ -569,6 +569,14 @@ function mergeAgentState(
 			? base.pendingInputs
 			: undefined
 
+	const survivingMessageIds = new Set<string>()
+	for (const msg of mergedTimeline) {
+		const id = getMessageId(msg)
+		if (id !== undefined) survivingMessageIds.add(id)
+	}
+
+	// A message in the merged timeline has already been consumed, even if
+	// another device still has it in its pending queue.
 	const mergedPending = mergeKeyedSequence({
 		baseItems: basePending,
 		localItems: localPending,
@@ -577,6 +585,9 @@ function mergeAgentState(
 		getKey: getMessageId,
 		getRunSortOrder: getMessageTimestamp,
 		mergeConflict: (b, l, r) => mergeMessage(b, l, r, preferRemote),
+	}).filter((msg) => {
+		const id = getMessageId(msg)
+		return id === undefined || !survivingMessageIds.has(id)
 	})
 
 	const allInputMessageIds = new Set<string>()
@@ -584,11 +595,6 @@ function mergeAgentState(
 	collectMessageIds(local, allInputMessageIds)
 	collectMessageIds(remote, allInputMessageIds)
 
-	const survivingMessageIds = new Set<string>()
-	for (const msg of mergedTimeline) {
-		const id = getMessageId(msg)
-		if (id !== undefined) survivingMessageIds.add(id)
-	}
 	for (const msg of mergedPending) {
 		const id = getMessageId(msg)
 		if (id !== undefined) survivingMessageIds.add(id)

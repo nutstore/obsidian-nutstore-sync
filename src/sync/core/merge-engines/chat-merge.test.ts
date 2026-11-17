@@ -414,6 +414,124 @@ describe('chat session merge engine', () => {
 		expect(master.timeline.map((m) => m.id)).toEqual(['u1', 'u3', 'u2'])
 	})
 
+	it.each([
+		{ hasBase: false, consumedLocally: true },
+		{ hasBase: false, consumedLocally: false },
+		{ hasBase: true, consumedLocally: true },
+		{ hasBase: true, consumedLocally: false },
+	])(
+		'keeps consumed messages out of pending inputs (base: $hasBase, local: $consumedLocally)',
+		({ hasBase, consumedLocally }) => {
+			const input = makeMessage('通知-🌱', 'user', '任务已完成 🌱', 100)
+			const updatedInput = makeMessage(
+				'通知-🌱',
+				'user',
+				'任务完成通知 🌱',
+				100,
+			)
+			const firstPending = makeMessage('待处理-一', 'user', '继续整理 📚', 200)
+			const secondPending = makeMessage('待处理-二', 'user', '检查结果 ✅', 300)
+			const operation = {
+				vaultPath: '笔记🌱.md',
+				operation: 'create' as const,
+				before: { kind: 'file' as const },
+			}
+			const base = makeSessionPayload({
+				subagents: {
+					master: makeAgent('master', { pendingInputs: [input] }),
+				},
+			})
+			const consumed = makeSessionPayload({
+				updatedAt: 200,
+				subagents: {
+					master: makeAgent('master', {
+						timeline: [input],
+						pendingInputs: [firstPending],
+						operations: { [input.id]: [operation] },
+					}),
+				},
+			})
+			const stale = makeSessionPayload({
+				updatedAt: 300,
+				subagents: {
+					master: makeAgent('master', {
+						pendingInputs: [hasBase ? updatedInput : input, secondPending],
+					}),
+				},
+			})
+			const result = chatSessionMergeEngine.merge({
+				hasBase,
+				baseContentText: hasBase ? compact(base) : '',
+				localContentText: compact(consumedLocally ? consumed : stale),
+				remoteContentText: compact(consumedLocally ? stale : consumed),
+			})
+
+			expect(result.success).toBe(true)
+			const master = (
+				JSON.parse(result.mergedText!) as { session: ChatSession }
+			).session.subagents.master
+			const expectedPending = hasBase
+				? [firstPending, secondPending]
+				: [secondPending, firstPending]
+			expect(master.timeline).toEqual([input])
+			expect(master.pendingInputs).toEqual(expectedPending)
+			expect(master.operations[input.id]).toEqual([operation])
+
+			// Re-merging an out-of-date device must not requeue the notification.
+			const repeated = chatSessionMergeEngine.merge({
+				hasBase: false,
+				baseContentText: '',
+				localContentText: result.mergedText!,
+				remoteContentText: compact(stale),
+			})
+			expect(repeated.success).toBe(true)
+			const repeatedMaster = (
+				JSON.parse(repeated.mergedText!) as { session: ChatSession }
+			).session.subagents.master
+			expect(repeatedMaster.timeline).toEqual([input])
+			expect(repeatedMaster.pendingInputs).toEqual(expectedPending)
+		},
+	)
+
+	it('reconciles pending inputs within each subagent, not across agents', () => {
+		const sharedId = makeMessage('消息-🌏', 'user', '整理内容 🌏', 100)
+		const childInput = makeMessage('通知-✅', 'user', '子任务完成 ✅', 200)
+		const local = makeSessionPayload({
+			subagents: {
+				master: makeAgent('master', {
+					timeline: [sharedId],
+					subagents: {
+						child: makeAgent('child', { timeline: [childInput] }),
+					},
+				}),
+			},
+		})
+		const remote = makeSessionPayload({
+			subagents: {
+				master: makeAgent('master', {
+					subagents: {
+						child: makeAgent('child', {
+							pendingInputs: [sharedId, childInput],
+						}),
+					},
+				}),
+			},
+		})
+
+		const result = chatSessionMergeEngine.merge({
+			hasBase: false,
+			baseContentText: '',
+			localContentText: compact(local),
+			remoteContentText: compact(remote),
+		})
+		expect(result.success).toBe(true)
+		const master = (JSON.parse(result.mergedText!) as { session: ChatSession })
+			.session.subagents.master
+		expect(master.timeline).toEqual([sharedId])
+		expect(master.subagents.child.timeline).toEqual([childInput])
+		expect(master.subagents.child.pendingInputs).toEqual([sharedId])
+	})
+
 	it('merges subagent trees recursively and handles __proto__ keys safely', () => {
 		const baseSub = makeAgent('sub-1', {
 			status: 'running',
