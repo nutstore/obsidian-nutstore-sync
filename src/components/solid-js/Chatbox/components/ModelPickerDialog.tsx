@@ -23,7 +23,7 @@ export function ModelPickerDialog(props: {
 	// Replacing or reordering <option> nodes causes native <select> elements to
 	// fall back to index 0 ("") even when selectedProviderId/selectedModelId did
 	// not change; re-sync the DOM value after option updates commit.
-	createEffect(() => {
+	const syncProviderSelection = () => {
 		const target = props.selectedProviderId || ''
 		const hasTarget =
 			!target || props.providers.some((provider) => provider.id === target)
@@ -31,7 +31,8 @@ export function ModelPickerDialog(props: {
 		if (providerSelectEl && providerSelectEl.value !== nextValue) {
 			providerSelectEl.value = nextValue
 		}
-	})
+	}
+	createEffect(syncProviderSelection)
 
 	createEffect(() => {
 		const target = props.selectedModelId || ''
@@ -74,9 +75,10 @@ export function ModelPickerDialog(props: {
 						ref={providerSelectEl}
 						class=":uno: mt-2 w-full border border-[var(--background-modifier-border)] bg-[var(--background-primary-alt)] px-2 py-1 text-[var(--text-normal)] disabled:cursor-not-allowed disabled:opacity-50"
 						value={props.selectedProviderId || ''}
-						onChange={(event) =>
+						onChange={(event) => {
 							props.onSelectProvider(event.currentTarget.value)
-						}
+							syncProviderSelection()
+						}}
 					>
 						<option value="">{t('chatbox.ui.states.noProvider')}</option>
 						<Index each={props.providers}>
