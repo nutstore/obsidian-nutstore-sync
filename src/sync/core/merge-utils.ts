@@ -3,6 +3,18 @@ import { isEqual } from 'es-toolkit/compat'
 import { diffComm, mergeDiff3 as nodeMergeDiff3 } from 'node-diff3'
 import { BufferLike } from 'webdav'
 import * as Y from 'yjs'
+import { resolveWithMergeRouter } from './merge-router'
+import type {
+	Diff3MergeParams,
+	IntelligentMergeParams,
+	IntelligentMergeResult,
+} from './merge-types'
+
+export type {
+	Diff3MergeParams,
+	IntelligentMergeParams,
+	IntelligentMergeResult,
+} from './merge-types'
 
 // --- Logic for Latest Timestamp Resolution ---
 
@@ -59,34 +71,18 @@ export function resolveByLatestTimestamp(
 
 // --- Logic for Intelligent Merge Resolution ---
 
-export interface IntelligentMergeParams {
-	localContentText: string
-	remoteContentText: string
-	baseContentText: string
-	filePath?: string
-	hasBase?: boolean
-}
+export function resolveByDiff3Merge(
+	params: Diff3MergeParams,
+): IntelligentMergeResult {
+	const { localContentText, remoteContentText, baseContentText } = params
 
-export interface IntelligentMergeResult {
-	success: boolean
-	mergedText?: string
-	error?: string // Generic error message
-	isIdentical?: boolean // Flag if contents were already identical
-}
-
-export interface Diff3MergeParams {
-	localContentText: string
-	remoteContentText: string
-	baseContentText: string
-}
-
-export function resolveByDiff3Merge({
-	localContentText,
-	remoteContentText,
-	baseContentText,
-}: Diff3MergeParams): IntelligentMergeResult {
 	if (localContentText === remoteContentText) {
 		return { success: true, isIdentical: true }
+	}
+
+	const routed = resolveWithMergeRouter(params)
+	if (routed !== undefined) {
+		return routed
 	}
 
 	const { result } = nodeMergeDiff3(
@@ -687,6 +683,11 @@ export async function resolveByIntelligentMerge(
 
 	if (localContentText === remoteContentText) {
 		return { success: true, isIdentical: true }
+	}
+
+	const routed = resolveWithMergeRouter(params)
+	if (routed !== undefined) {
+		return routed
 	}
 
 	if (filePath?.trim().toLowerCase().endsWith('.json')) {
