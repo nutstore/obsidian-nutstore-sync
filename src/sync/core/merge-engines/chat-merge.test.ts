@@ -12,12 +12,16 @@ import {
 	isChatMetaPath,
 	isChatSessionPath,
 } from './chat-merge'
+import { diff3MergeEngine } from './diff3-merge'
+import { jsonMergeEngine } from './json-merge'
 import {
-	DEFAULT_MERGE_ENGINES,
+	DIFF3_MERGE_ENGINES,
+	NO_CONFLICT_MERGE_ENGINES,
 	matchMergeEngine,
 	resolveWithMergeRouter,
-} from './merge-router'
-import { resolveByDiff3Merge, resolveByIntelligentMerge } from './merge-utils'
+} from './router'
+import { resolveByDiff3Merge, resolveByIntelligentMerge } from '../merge-utils'
+import { yjsTextMergeEngine } from './yjs-text-merge'
 
 function makeMessage(
 	id: string,
@@ -111,16 +115,50 @@ describe('merge router & pure path matchers', () => {
 		)
 	})
 
-	it('routes paths using pure match predicates', () => {
+	it('routes paths by priority across Diff3 and NoConflictMerge pipelines', () => {
 		expect(
-			matchMergeEngine('.agents/nutstore-sync/sessions/abc.json')?.id,
+			matchMergeEngine(
+				'.agents/nutstore-sync/sessions/abc.json',
+				NO_CONFLICT_MERGE_ENGINES,
+			)?.id,
 		).toBe(chatSessionMergeEngine.id)
-		expect(matchMergeEngine('.agents/nutstore-sync/chat-meta.json')?.id).toBe(
-			chatMetaMergeEngine.id,
+		expect(
+			matchMergeEngine(
+				'.agents/nutstore-sync/chat-meta.json',
+				NO_CONFLICT_MERGE_ENGINES,
+			)?.id,
+		).toBe(chatMetaMergeEngine.id)
+		expect(
+			matchMergeEngine('settings/example.json', NO_CONFLICT_MERGE_ENGINES)?.id,
+		).toBe(jsonMergeEngine.id)
+		expect(
+			matchMergeEngine('notes/daily.md', NO_CONFLICT_MERGE_ENGINES)?.id,
+		).toBe(yjsTextMergeEngine.id)
+		expect(matchMergeEngine(undefined, NO_CONFLICT_MERGE_ENGINES)?.id).toBe(
+			yjsTextMergeEngine.id,
 		)
-		expect(matchMergeEngine('notes/daily.md')).toBeUndefined()
-		expect(matchMergeEngine(undefined)).toBeUndefined()
-		expect(DEFAULT_MERGE_ENGINES).toHaveLength(2)
+
+		expect(
+			matchMergeEngine(
+				'.agents/nutstore-sync/sessions/abc.json',
+				DIFF3_MERGE_ENGINES,
+			)?.id,
+		).toBe(chatSessionMergeEngine.id)
+		expect(
+			matchMergeEngine(
+				'.agents/nutstore-sync/chat-meta.json',
+				DIFF3_MERGE_ENGINES,
+			)?.id,
+		).toBe(chatMetaMergeEngine.id)
+		expect(
+			matchMergeEngine('settings/example.json', DIFF3_MERGE_ENGINES)?.id,
+		).toBe(diff3MergeEngine.id)
+		expect(matchMergeEngine('notes/daily.md', DIFF3_MERGE_ENGINES)?.id).toBe(
+			diff3MergeEngine.id,
+		)
+		expect(matchMergeEngine(undefined, DIFF3_MERGE_ENGINES)?.id).toBe(
+			diff3MergeEngine.id,
+		)
 
 		const customResult = resolveWithMergeRouter(
 			{
@@ -131,13 +169,32 @@ describe('merge router & pure path matchers', () => {
 			},
 			[
 				{
-					id: 'custom',
+					id: 'custom-first',
 					match: (path) => path.endsWith('.txt'),
-					merge: () => ({ success: true, mergedText: 'custom-merged' }),
+					merge: () => ({ success: true, mergedText: 'first-matched' }),
+				},
+				{
+					id: 'custom-second',
+					match: () => true,
+					merge: () => ({ success: true, mergedText: 'second-matched' }),
 				},
 			],
 		)
-		expect(customResult).toEqual({ success: true, mergedText: 'custom-merged' })
+		expect(customResult).toEqual({
+			success: true,
+			mergedText: 'first-matched',
+		})
+
+		const unmatched = resolveWithMergeRouter(
+			{
+				filePath: 'notes/daily.md',
+				baseContentText: 'a',
+				localContentText: 'b',
+				remoteContentText: 'c',
+			},
+			[],
+		)
+		expect(unmatched.success).toBe(false)
 	})
 })
 

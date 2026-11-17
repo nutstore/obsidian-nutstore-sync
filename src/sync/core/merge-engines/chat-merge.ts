@@ -18,7 +18,7 @@ import type {
 	IntelligentMergeParams,
 	IntelligentMergeResult,
 	MergeEngine,
-} from './merge-types'
+} from './types'
 
 const CHAT_ROOT_DIR = '.agents/nutstore-sync'
 const CHAT_SESSIONS_PREFIX = `${CHAT_ROOT_DIR}/sessions/`
