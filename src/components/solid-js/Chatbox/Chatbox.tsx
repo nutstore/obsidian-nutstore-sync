@@ -778,24 +778,6 @@ function Chatbox(props: ChatboxProps) {
 		setPendingConfirm({ kind: 'message', action: 'recall', item })
 	}
 
-	async function doRecallMessage(
-		item: ChatTimelineMessageItem,
-		options?: { restoreFiles?: boolean },
-	) {
-		const recalled = await props.onRecallMessage?.(item.message.id, options)
-		if (recalled?.text !== undefined) {
-			setInput(recalled.text)
-			props.onUpdateInputDraft(recalled.text)
-			return
-		}
-		const fallbackText = item.message.parts
-			.filter((p) => p.type === 'text')
-			.map((p) => p.text)
-			.join('\n')
-		setInput(fallbackText)
-		props.onUpdateInputDraft(fallbackText)
-	}
-
 	/** The first click arms a recall variant; the second click performs it. */
 	function armOrConfirmRecall(mode: RecallArmedMode) {
 		if (recallArmedMode() !== mode) {
@@ -805,7 +787,9 @@ function Chatbox(props: ChatboxProps) {
 		const request = pendingConfirm()
 		if (request?.kind !== 'message' || request.action !== 'recall') return
 		dismissConfirm()
-		void doRecallMessage(request.item, { restoreFiles: mode === 'restore' })
+		void props.onRecallMessage?.(request.item.message.id, {
+			restoreFiles: mode === 'restore',
+		})
 	}
 
 	const hasReversibleOps = (item: ChatTimelineMessageItem) =>
