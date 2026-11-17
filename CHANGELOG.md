@@ -2,6 +2,13 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 修复召回草稿在持久化前未进行同步的问题 | Fix: sync recalled drafts before persistence
+- 修复模型提供商选择器与会话选择状态不同步的问题 | Fix: sync provider picker with session selection
+- 修复聊天框更新时模型选择器状态未能保持的问题 | Fix: preserve model picker selection across chatbox updates
+
+
 ## [1.6.1] - 2026-11-17
 
 - 新增 App 管理器弹窗，支持应用管理、固定状态切换及工具栏操作 | Added AppManagerModal for managing installed apps, toggling pins, and toolbar actions
