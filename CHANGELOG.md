@@ -2,6 +2,23 @@
 
 本项目的所有重要更改都将记录在此文件中。All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- 新增 App 管理器弹窗，支持应用管理、固定状态切换及工具栏操作 | Added AppManagerModal for managing installed apps, toggling pins, and toolbar actions
+- 新增 MCP 服务发现与执行功能，并扩展了服务发现目录 | Added MCP server discovery, execution, and expanded the discovery catalog
+- 新增模型提供商统一设置与入门引导，支持从不可用提供商中恢复会话 | Unified provider setup and onboarding; added session recovery for unavailable providers
+- 新增基于 CodeMirror 的代码编辑器及上下文补全功能 | Added CodeMirror composer and context completions
+- 新增同步进度详情，包括失败原因、扫描摘要及未扫描路径列表 | Added sync progress details with failure reasons, scan summaries, and unscanned paths list
+- 新增日志留存策略，实现流式日志压缩存储与增强的保存机制 | Implemented streaming log retention with compressed chunks and enhanced saving mechanism
+- 优化同步稳定性，支持保护不可读子树，并在触发远程频率限制时自动暂停 | Improved sync stability by protecting unreadable subtrees and pausing during rate limit cooldowns
+- 优化聊天界面体验，支持折叠状态显示推理过程、输入框占位建议及移动端适配 | Enhanced chat UI with reasoning tails in collapsed headers, input placeholders, and mobile optimizations
+- 优化智能合并冲突处理，并重构合并引擎架构以支持路径匹配 | Improved intelligent merge conflict handling and refactored merge engines with path-matching
+- 修复同步任务日志记录，准确报告构建版本、同步结果及详细错误描述 | Fixed sync logging to accurately report build versions, outcomes, and detailed error descriptions
+- 修复 App 运行时安全性与稳定性，保留代码中转义的 script 标签 | Hardened App runtime stability and preserved escaped script tags in App code
+- 修复虚拟列表在容器调整大小时的重新测量问题，并共享底层逻辑 | Fixed virtual row remeasuring on resize and shared logic between list components
+- 修复多项 UI 样式问题，包括全局动画方向、模态框响应式布局及组件折叠状态样式 | Fixed various UI issues including animation directions, modal responsiveness, and collapsible block styling
+
+
 ## [1.6.0] - 2026-10-27
 
 - 引入沙盒应用工作区、文件系统访问权限、应用创建弹窗及自动打开绑定应用的功能 | Introduced sandboxed App workspaces, filesystem access, App creation modal, and auto-opening of bound Apps.
