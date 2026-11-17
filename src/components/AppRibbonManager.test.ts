@@ -5,11 +5,11 @@ import type NutstorePlugin from '~/index'
 import type { SavedApp } from '~/ai/apps/store'
 import type { AppStore } from '~/ai/apps/store'
 import AppRibbonManager from './AppRibbonManager'
+import logger from '~/utils/logger'
 
 const icons = vi.hoisted(() => ({ add: vi.fn(), remove: vi.fn() }))
-const logger = vi.hoisted(() => ({ error: vi.fn() }))
+const errorSpy = vi.spyOn(logger, 'error')
 vi.mock('obsidian', () => ({ addIcon: icons.add, removeIcon: icons.remove }))
-vi.mock('~/utils/logger', () => ({ default: logger }))
 
 function savedApp(
 	overrides: {
@@ -198,7 +198,7 @@ describe('independent App ribbon integration', () => {
 
 		expect(f.host.querySelectorAll('[data-nutstore-app-id]')).toHaveLength(1)
 		expect(f.commands.has('open-app-app-invalid-icon')).toBe(false)
-		expect(logger.error).toHaveBeenCalled()
+		expect(errorSpy).toHaveBeenCalled()
 	})
 
 	it('ignores listing entries without a readable App', async () => {

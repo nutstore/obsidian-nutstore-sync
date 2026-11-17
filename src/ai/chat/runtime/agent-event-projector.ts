@@ -20,6 +20,12 @@ import type {
 } from '~/ai/chat/types'
 import type { AppToolMetadata } from '~/ai/core/types'
 
+/**
+ * Upper bound on how often streamed deltas rebuild the view. Discrete events
+ * (step start, tool execution, assistant step) are never throttled.
+ */
+const STREAM_UPDATE_INTERVAL_MS = 50
+
 export type AgentProjectionEvent =
 	| { type: 'step-start' }
 	| { type: 'text-delta'; delta: string }
@@ -63,7 +69,7 @@ interface AgentEventProjectorOptions {
 
 export class AgentEventProjector {
 	private assistantMessage?: AppUIMessage
-	private lastStreamNotifyAt = 0
+	private lastStreamUpdateAt = Number.NEGATIVE_INFINITY
 	private readonly toolInputs = new Map<string, string>()
 
 	constructor(private options: AgentEventProjectorOptions) {}
@@ -85,7 +91,7 @@ export class AgentEventProjector {
 				if (part?.type === 'reasoning') part.text += event.delta
 				else message.parts.push({ type: 'reasoning', text: event.delta })
 				this.touch()
-				this.options.notify()
+				if (this.takeStreamUpdateWindow()) this.options.notify()
 				return
 			}
 			case 'tool-input-start': {
@@ -103,8 +109,13 @@ export class AgentEventProjector {
 			case 'tool-input-delta': {
 				const input = this.toolInputs.get(event.id)
 				if (input === undefined) return
-				this.toolInputs.set(event.id, input + event.delta)
-				const { value } = await parsePartialJson(input + event.delta)
+				const nextInput = input + event.delta
+				this.toolInputs.set(event.id, nextInput)
+				// Partial JSON parsing walks the whole accumulated input, so it shares
+				// the frame budget with the notify it feeds. The authoritative input
+				// arrives as a discrete tool-execution-start event.
+				if (!this.takeStreamUpdateWindow()) return
+				const { value } = await parsePartialJson(nextInput)
 				if (!this.options.isTurnAlive()) return
 				const part = this.assistantMessage?.parts.find(
 					(part) =>
@@ -330,10 +341,19 @@ export class AgentEventProjector {
 		if (part?.type === 'text') part.text += delta
 		else message.parts.push({ type: 'text', text: delta })
 		this.touch()
-		if (Date.now() - this.lastStreamNotifyAt >= 33) {
-			this.lastStreamNotifyAt = Date.now()
-			this.options.notify()
-		}
+		if (this.takeStreamUpdateWindow()) this.options.notify()
+	}
+
+	/**
+	 * Streaming deltas outpace a frame; coalescing them keeps projection work
+	 * proportional to frames instead of tokens. Discrete lifecycle events still
+	 * notify immediately and carry the final state of a throttled stream.
+	 */
+	private takeStreamUpdateWindow() {
+		const now = Date.now()
+		if (now - this.lastStreamUpdateAt < STREAM_UPDATE_INTERVAL_MS) return false
+		this.lastStreamUpdateAt = now
+		return true
 	}
 
 	private ensureAssistantMessage() {

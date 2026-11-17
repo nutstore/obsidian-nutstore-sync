@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import { APP_DEFAULT_ICON } from './icon'
 
 export const appManifestSchema = z.object({

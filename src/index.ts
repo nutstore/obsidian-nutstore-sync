@@ -78,6 +78,9 @@ export default class NutstorePlugin extends Plugin {
 		this.loaded = false
 		this.settingTab?.unload()
 		this.settingsService.onunload()
+		// Obsidian reuses this module across disable/enable: the log reporter must
+		// be detached or the dead service keeps retaining its log text.
+		this.loggerService.onunload()
 		void Promise.all([
 			this.sync.lifecycle.update(false),
 			this.ai.lifecycle.update(false),

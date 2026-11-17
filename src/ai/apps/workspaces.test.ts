@@ -17,6 +17,7 @@ import { AppWorkspaces } from './workspaces'
 import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import type { RuntimeHost } from './runtime'
 import { readLocalText } from '~/utils/local-vault-io'
+import logger from '~/utils/logger'
 
 vi.mock('obsidian', () => ({
 	normalizePath: (path: string) =>
@@ -37,7 +38,7 @@ const logWrite = vi.hoisted(() => ({
 	gate: undefined as Promise<void> | undefined,
 	started: undefined as (() => void) | undefined,
 }))
-const logger = vi.hoisted(() => ({ error: vi.fn() }))
+const errorSpy = vi.spyOn(logger, 'error')
 const permissionGuard = vi.hoisted(() => vi.fn(async () => {}))
 const runtimeControl = vi.hoisted(() => ({
 	fail: false,
@@ -53,7 +54,6 @@ const runtimeControl = vi.hoisted(() => ({
 	}>,
 }))
 
-vi.mock('~/utils/logger', () => ({ default: logger }))
 vi.mock('~/utils/mkdirs-vault', () => ({ mkdirsVault: async () => {} }))
 vi.mock('~/ai/tools/permission-guard', () => ({
 	createPermissionGuard: () => permissionGuard,
@@ -247,7 +247,7 @@ beforeEach(() => {
 	pathListeners.clear()
 	logWrite.gate = undefined
 	logWrite.started = undefined
-	logger.error.mockClear()
+	errorSpy.mockClear()
 	permissionGuard.mockClear()
 	runtimeControl.fail = false
 	runtimeControl.gate = undefined
@@ -500,7 +500,7 @@ describe('App workspaces over real App files', () => {
 		expect(Object.keys(JSON.parse(stored.trim()))).not.toContain('revisionId')
 
 		host.error('中性错误 Neutral failure 🌿')
-		expect(logger.error).toHaveBeenCalledWith('中性错误 Neutral failure 🌿')
+		expect(errorSpy).toHaveBeenCalledWith('中性错误 Neutral failure 🌿')
 	})
 
 	it('retains long multilingual log diagnostics without truncation or pruning', async () => {

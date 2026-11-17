@@ -15,9 +15,16 @@ function getChatboxWidth(rootEl?: HTMLElement | null) {
 
 export function resolveChatModalMountTarget(
 	rootEl?: HTMLElement | null,
+	options?: {
+		/**
+		 * Chatbox width the caller already tracks. Passing it keeps target
+		 * resolution off the forced-layout path for callers that observe resize.
+		 */
+		width?: number
+	},
 ): ChatModalMountTarget {
 	const ownerDocument = rootEl?.ownerDocument ?? document
-	const width = getChatboxWidth(rootEl)
+	const width = options?.width ?? getChatboxWidth(rootEl)
 	if (rootEl?.isConnected && width >= CHATBOX_DIALOG_CONTAINED_MIN_WIDTH) {
 		return {
 			mountEl: rootEl,

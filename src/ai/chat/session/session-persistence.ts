@@ -1,3 +1,4 @@
+import { limitAsync } from 'es-toolkit'
 import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 
 // V1 (IndexedDB era) kept binary payloads as ArrayBuffers, which IndexedDB
@@ -79,17 +80,19 @@ export type PersistedChatSession = PersistedValue<
 	ChatSession | LegacyChatSession
 >
 
+/** A multiple of 3 keeps every chunk's base64 padding-free. */
+const BASE64_CHUNK_BYTES = 3 * 0x2000
+
 function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
 	const bytes = new Uint8Array(buffer)
-	const chunkSize = 0x8000
-	let binary = ''
-	for (let i = 0; i < bytes.length; i += chunkSize) {
-		binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+	let base64 = ''
+	for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
+		const chunk = bytes.subarray(offset, offset + BASE64_CHUNK_BYTES)
+		base64 += btoa(String.fromCharCode(...chunk))
+			.replace(/\+/g, '-')
+			.replace(/\//g, '_')
 	}
-	return btoa(binary)
-		.replace(/\+/g, '-')
-		.replace(/\//g, '_')
-		.replace(/=+$/g, '')
+	return base64.replace(/=+$/g, '')
 }
 
 function base64UrlToArrayBuffer(value: string): ArrayBuffer {
@@ -173,13 +176,24 @@ function isPersistedUrlRecord(value: unknown): value is PersistedUrlRecord {
 	)
 }
 
-async function encodeBlobs(value: unknown): Promise<unknown> {
+interface BlobEncoding {
+	blob: Blob
+	record: PersistedBlobRecord
+}
+
+/**
+ * Clones the graph synchronously so later mutations cannot enter the snapshot,
+ * while collecting Blob payloads for one bounded asynchronous pass.
+ */
+function encodeBlobs(value: unknown, blobs: BlobEncoding[]): unknown {
 	if (value instanceof Blob) {
-		return {
+		const record: PersistedBlobRecord = {
 			[BLOB_RECORD_MARKER_V2]: true,
 			type: value.type,
-			data: arrayBufferToBase64Url(await value.arrayBuffer()),
-		} satisfies PersistedBlobRecord
+			data: '',
+		}
+		blobs.push({ blob: value, record })
+		return record
 	}
 	if (value instanceof URL) {
 		return {
@@ -196,20 +210,24 @@ async function encodeBlobs(value: unknown): Promise<unknown> {
 		)
 	}
 	if (Array.isArray(value)) {
-		return Promise.all(value.map(encodeBlobs))
+		return value.map((entry) => encodeBlobs(entry, blobs))
 	}
 	if (!value || typeof value !== 'object') {
 		return value
 	}
 
-	const entries = await Promise.all(
-		Object.entries(value).map(async ([key, entry]) => [
+	return Object.fromEntries(
+		Object.entries(value).map(([key, entry]) => [
 			key,
-			await encodeBlobs(entry),
+			encodeBlobs(entry, blobs),
 		]),
 	)
-	return Object.fromEntries(entries)
 }
+
+/** Blob reads are memory-heavy; keep only a few buffers alive at once. */
+const encodeBlob = limitAsync(async ({ blob, record }: BlobEncoding) => {
+	record.data = arrayBufferToBase64Url(await blob.arrayBuffer())
+}, 3)
 
 function decodeBinaryRecord(
 	value: PersistedBinaryRecord,
@@ -235,6 +253,11 @@ function decodeBinaryRecord(
 	return buffer
 }
 
+/**
+ * Decodes in place on the freshly parsed snapshot. `JSON.parse` already
+ * produced a private graph, so replacing records in their parents avoids a
+ * second copy of the whole session.
+ */
 function decodeBlobs(value: unknown): unknown {
 	if (isPersistedBlobRecord(value)) {
 		return new Blob([base64UrlToArrayBuffer(value.data)], {
@@ -251,7 +274,10 @@ function decodeBlobs(value: unknown): unknown {
 		return new URL(value.href)
 	}
 	if (Array.isArray(value)) {
-		return value.map(decodeBlobs)
+		for (let index = 0; index < value.length; index += 1) {
+			value[index] = decodeBlobs(value[index])
+		}
+		return value
 	}
 	if (
 		!value ||
@@ -262,9 +288,22 @@ function decodeBlobs(value: unknown): unknown {
 	) {
 		return value
 	}
-	return Object.fromEntries(
-		Object.entries(value).map(([key, entry]) => [key, decodeBlobs(entry)]),
-	)
+
+	const record = value as Record<string, unknown>
+	for (const key of Object.keys(record)) {
+		const entry = decodeBlobs(record[key])
+		if (key === '__proto__') {
+			Object.defineProperty(record, key, {
+				value: entry,
+				writable: true,
+				enumerable: true,
+				configurable: true,
+			})
+		} else {
+			record[key] = entry
+		}
+	}
+	return record
 }
 
 /**
@@ -277,9 +316,16 @@ function decodeBlobs(value: unknown): unknown {
 export async function encodeChatSessionForStorage(
 	session: ChatSession,
 ): Promise<PersistedChatSession> {
-	return (await encodeBlobs(session)) as PersistedChatSession
+	const blobs: BlobEncoding[] = []
+	const snapshot = encodeBlobs(session, blobs)
+	await Promise.all(blobs.map(encodeBlob))
+	return snapshot as PersistedChatSession
 }
 
+/**
+ * Restores binary values in place. The input snapshot is consumed: callers must
+ * not reuse it after decoding.
+ */
 export function decodeChatSessionFromStorage(
 	stored: PersistedChatSession,
 ): ChatSession | LegacyChatSession {

@@ -1,5 +1,5 @@
 import { tool } from 'ai'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import type { TaskOrigin } from '~/ai/chat/runtime/master-turn-scheduler'
 import type { ChatAgentStatus } from '~/ai/chat/types'
 import { agentIdDep, sessionDep } from './tool-context'

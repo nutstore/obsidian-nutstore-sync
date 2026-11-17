@@ -1,6 +1,6 @@
 import { posix as pathPosix } from 'path-browserify'
 import { tool } from 'ai'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import i18n from '~/i18n'
 import { ReversibleOpRecorder } from '~/ai/tools/bash/fs'
 import {

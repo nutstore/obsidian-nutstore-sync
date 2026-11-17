@@ -1,5 +1,5 @@
 import { tool } from 'ai'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import type McpService from '~/services/mcp.service'
 
 const serviceName = z.string().check(z.trim(), z.minLength(1))

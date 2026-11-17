@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import { NUTSTORE_SYNC_AGENTS_MOUNT_POINT } from '~/ai/tools/bash/mount-points'
 
 export const MCP_CONFIG_VAULT_PATH = '.agents/nutstore-sync/mcp.json'

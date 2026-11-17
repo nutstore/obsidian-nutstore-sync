@@ -204,4 +204,118 @@ describe('AgentEventProjector', () => {
 		expect(agent.timeline).toEqual([])
 		expect(agent.toolTimings).toEqual({})
 	})
+
+	it('coalesces streamed reasoning and text into frame-sized updates', async () => {
+		vi.useFakeTimers()
+		try {
+			vi.setSystemTime(1_000)
+			const agent = createEmptyMasterAgent(1)
+			const session: ChatSession = {
+				schemaVersion: 2,
+				id: 'session',
+				createdAt: 1,
+				updatedAt: 1,
+				subagents: { master: agent },
+			}
+			const notify = vi.fn()
+			const projector = new AgentEventProjector({
+				session,
+				agent,
+				store: { persistSession: vi.fn(async () => undefined) } as never,
+				messageFactory: new MessageFactory({ app: {} } as never, vi.fn()),
+				notify,
+				assistantMeta: { providerId: 'provider', modelId: 'model' },
+				isTurnAlive: () => true,
+			})
+
+			for (let index = 0; index < 5; index += 1) {
+				await projector.project({
+					type: 'reasoning-delta',
+					delta: 'Inspect 检查 🌿',
+				})
+			}
+			expect(notify).toHaveBeenCalledTimes(1)
+
+			vi.setSystemTime(1_060)
+			await projector.project({
+				type: 'reasoning-delta',
+				delta: 'Finish 完成 🚀',
+			})
+			expect(notify).toHaveBeenCalledTimes(2)
+
+			vi.setSystemTime(1_070)
+			await projector.project({ type: 'text-delta', delta: 'Reply 回复 🌿' })
+			expect(notify).toHaveBeenCalledTimes(2)
+
+			vi.setSystemTime(1_120)
+			await projector.project({ type: 'text-delta', delta: ' Done 🚀' })
+			expect(notify).toHaveBeenCalledTimes(3)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('parses streamed tool input within the frame budget and keeps the final input', async () => {
+		vi.useFakeTimers()
+		try {
+			vi.setSystemTime(1_000)
+			const agent = createEmptyMasterAgent(1)
+			const session: ChatSession = {
+				schemaVersion: 2,
+				id: 'session',
+				createdAt: 1,
+				updatedAt: 1,
+				subagents: { master: agent },
+			}
+			const notify = vi.fn()
+			const projector = new AgentEventProjector({
+				session,
+				agent,
+				store: { persistSession: vi.fn(async () => undefined) } as never,
+				messageFactory: new MessageFactory({ app: {} } as never, vi.fn()),
+				notify,
+				assistantMeta: { providerId: 'provider', modelId: 'model' },
+				isTurnAlive: () => true,
+			})
+
+			await projector.project({
+				type: 'tool-input-start',
+				id: 'call-1',
+				toolName: 'write',
+			})
+			expect(notify).toHaveBeenCalledTimes(1)
+
+			await projector.project({
+				type: 'tool-input-delta',
+				id: 'call-1',
+				delta: '{"purpose":"',
+			})
+			expect(notify).toHaveBeenCalledTimes(2)
+
+			await projector.project({
+				type: 'tool-input-delta',
+				id: 'call-1',
+				delta: 'Read 读取 🌿"}',
+			})
+			expect(notify).toHaveBeenCalledTimes(2)
+
+			vi.setSystemTime(1_010)
+			await projector.project({
+				type: 'tool-execution-start',
+				toolCall: {
+					type: 'tool-call',
+					toolCallId: 'call-1',
+					toolName: 'write',
+					input: { purpose: 'Final 最终 🚀' },
+				} as never,
+			})
+			expect(notify).toHaveBeenCalledTimes(3)
+			expect(agent.timeline[0].parts[0]).toMatchObject({
+				state: 'input-available',
+				input: { purpose: 'Final 最终 🚀' },
+			})
+		} finally {
+			vi.useRealTimers()
+		}
+	})
 })

@@ -6,6 +6,7 @@ import {
 	formatSystemNotificationMarkdown,
 	formatTime,
 	formatToolDetailsMarkdown,
+	reasoningPreview,
 	shouldSubmitChatInput,
 	toolCallDisplayTitle,
 	toolCallPurpose,
@@ -192,5 +193,39 @@ describe('toolCallDisplayTitle', () => {
 		})
 		expect(title).toContain(text)
 		expect(title).not.toContain(id)
+	})
+})
+
+describe('reasoningPreview', () => {
+	it('returns text that already fits unchanged', () => {
+		expect(reasoningPreview('Compare 比较 🌿')).toBe('Compare 比较 🌿')
+		expect(reasoningPreview('')).toBe('')
+		expect(reasoningPreview(undefined)).toBe('')
+	})
+
+	it('keeps the tail of a long reasoning text', () => {
+		const text = `${'Reviewing 审阅 🧭 '.repeat(60)}Conclusion 结论 👩‍💻`
+		const preview = reasoningPreview(text)
+		expect(preview.length).toBeLessThanOrEqual(200)
+		expect(text.endsWith(preview)).toBe(true)
+		expect(preview.endsWith('Conclusion 结论 👩‍💻')).toBe(true)
+	})
+
+	it('starts on a whole code point when the cut splits a surrogate pair', () => {
+		const text = '🌱'.repeat(10)
+		// Nine is odd, so the cut lands on the low half of the fifth emoji.
+		expect(text.charCodeAt(text.length - 9)).toBeGreaterThanOrEqual(0xdc00)
+		expect(reasoningPreview(text, 9)).toBe('🌱'.repeat(4))
+	})
+
+	it('does not start the window on a joiner left by a split emoji', () => {
+		const text = `${'Reviewing 🧭 '.repeat(30)}👩‍💻`
+		const preview = reasoningPreview(text, 3)
+		expect(preview).toBe('💻')
+	})
+
+	it('drops whitespace exposed by the cut', () => {
+		const text = `${'审阅'.repeat(20)}\n   ${'结论 👩‍💻'}`
+		expect(reasoningPreview(text, 12)).toBe('结论 👩‍💻')
 	})
 })

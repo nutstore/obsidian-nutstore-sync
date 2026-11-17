@@ -1,6 +1,6 @@
 import { appFSMethods, createAppFS } from './capabilities/fs'
 import { createAppKV, dispatchAppKV, type AppKVHost } from './capabilities/kv'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import createId from '~/utils/create-id'
 import type { AppContent } from './source'
 import { emptyAppTheme, readAppTheme, type AppTheme } from './theme'

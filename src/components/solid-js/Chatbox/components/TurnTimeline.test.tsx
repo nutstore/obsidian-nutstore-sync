@@ -25,6 +25,10 @@ const item = (
 const cleanups: (() => void)[] = []
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()))
 
+async function nextTask() {
+	await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 function mountTimeline(timeline: ChatTimelineMessageItem[]) {
 	const [state, setState] = createStore<{
 		timeline: ChatTimelineMessageItem[]
@@ -68,11 +72,20 @@ function mountTimeline(timeline: ChatTimelineMessageItem[]) {
 		setState,
 		message: (id: string) =>
 			container.querySelector<HTMLDetailsElement>(`[data-message="${id}"]`)!,
+		async openProcess() {
+			const details = container.querySelector<HTMLDetailsElement>(
+				'details.chatbox-collapsible',
+			)
+			if (!details) throw new Error('Expected a process block')
+			details.open = true
+			await nextTask()
+			await nextTask()
+		},
 	}
 }
 
 describe('turn timeline', () => {
-	it('keeps process content expanded while tools arrive and execution ends', () => {
+	it('keeps process content expanded while tools arrive and execution ends', async () => {
 		const input = [
 			item('user', 'user', [content('Compare 比较 🌿')]),
 			item('work', 'assistant', [
@@ -83,6 +96,7 @@ describe('turn timeline', () => {
 			]),
 		]
 		const view = mountTimeline(input)
+		await view.openProcess()
 		view.message('work').open = true
 		view.setState('timeline', 1, 'displayBlocks', 1, {
 			kind: 'tool-call',

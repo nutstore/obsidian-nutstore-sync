@@ -1,8 +1,9 @@
 import type { ChatSession } from '~/ai/chat/domain'
 import { getMasterAgent, getSessionSubagents } from '~/ai/chat/domain'
 import type { SessionRuntimeState } from '~/ai/chat/runtime/chat-state'
+import type { AppUIMessage, ChatAgentState } from '~/ai/chat/types'
 import { projectTimelineMessageGroups } from '~/ai/chat/ui/display-blocks'
-import type { ChatboxProps } from '~/ai/chat/ui/types'
+import type { ChatAgentView, ChatTimelineMessageItem } from '~/ai/chat/ui/types'
 
 // Solid stores attach reactive Symbol metadata to wrapped plain objects. Keep
 // that metadata in the view layer instead of mutating the canonical session.
@@ -34,66 +35,218 @@ function snapshotViewValue<T>(
 	return snapshot as T
 }
 
-function buildAgentTimeline(
-	agent: import('~/ai/chat/types').ChatAgentState,
-	createdAt: number,
-): ChatboxProps['timeline'] {
-	const messages = snapshotViewValue([
-		...agent.timeline,
-		...agent.pendingInputs,
-	])
-	const toolTimings = snapshotViewValue(agent.toolTimings)
-	const operations = snapshotViewValue(agent.operations)
-	const timeline = projectTimelineMessageGroups(
-		messages,
-		toolTimings,
-		operations,
-	).map(({ message, blocks }) => ({
-		createdAt: message.metadata?.createdAt ?? createdAt,
-		message,
-		displayBlocks: blocks,
+/**
+ * The projection depends on these values only. Strings and objects are
+ * replaced rather than mutated by the runtime, so identity comparison is a
+ * sufficient change test and costs one pass over the parts.
+ */
+function fingerprintMessage(
+	message: AppUIMessage,
+	operations: ChatAgentState['operations'][string] | undefined,
+	toolTimings: ChatAgentState['toolTimings'],
+) {
+	const fingerprint: unknown[] = [message.id, message.role, message.metadata]
+	for (const part of message.parts) {
+		const values = Object.values(part as Record<string, unknown>)
+		fingerprint.push(values.length, ...values)
+		if (part.type === 'dynamic-tool') {
+			fingerprint.push(toolTimings[part.toolCallId])
+		}
+	}
+	fingerprint.push(operations)
+	return fingerprint
+}
+
+function matchesFingerprint(
+	left: readonly unknown[],
+	right: readonly unknown[],
+) {
+	if (left.length !== right.length) return false
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) return false
+	}
+	return true
+}
+
+function buildProjectedItem(
+	message: AppUIMessage,
+	operations: ChatAgentState['operations'][string] | undefined,
+	toolTimings: ChatAgentState['toolTimings'],
+	fallbackCreatedAt: number,
+): ChatTimelineMessageItem | undefined {
+	const snapshotMessage = snapshotViewValue(message)
+	const timings: ChatAgentState['toolTimings'] = {}
+	for (const part of message.parts) {
+		if (part.type !== 'dynamic-tool') continue
+		const timing = toolTimings[part.toolCallId]
+		if (timing) timings[part.toolCallId] = snapshotViewValue(timing)
+	}
+	const projected = projectTimelineMessageGroups(
+		[snapshotMessage],
+		timings,
+		operations ? { [message.id]: snapshotViewValue(operations) } : {},
+	)[0]
+	if (!projected) return undefined
+	return {
+		createdAt: projected.message.metadata?.createdAt ?? fallbackCreatedAt,
+		message: projected.message,
+		displayBlocks: projected.blocks,
 		showHeader: true,
-	}))
+	}
+}
+
+function applyShowHeaders(timeline: ChatTimelineMessageItem[]) {
 	let previousModelId: string | undefined
 	let canContinue = false
-	for (const item of timeline) {
-		if (item.message.role === 'user') {
+	let changed = false
+	const next = timeline.map((item) => {
+		let showHeader = true
+		if (item.message.role === 'assistant') {
+			const modelId = item.message.metadata?.llm?.modelId
+			showHeader = !canContinue || !modelId || modelId !== previousModelId
+			previousModelId = modelId
+			canContinue = !!modelId
+		} else if (item.message.role === 'user') {
 			previousModelId = undefined
 			canContinue = false
-			continue
 		}
-		const modelId = item.message.metadata?.llm?.modelId
-		item.showHeader = !canContinue || !modelId || modelId !== previousModelId
-		previousModelId = modelId
-		canContinue = !!modelId
+		if (item.showHeader === showHeader) return item
+		changed = true
+		return { ...item, showHeader }
+	})
+	return changed ? next : timeline
+}
+
+interface ProjectedMessage {
+	fingerprint: readonly unknown[]
+	item?: ChatTimelineMessageItem
+}
+
+interface AgentProjection {
+	order: readonly string[]
+	messages: ReadonlyMap<string, ProjectedMessage>
+	timeline: ChatTimelineMessageItem[]
+	view?: ChatAgentView
+	viewFingerprint?: readonly unknown[]
+}
+
+/**
+ * Chat sessions are mutated in place during a run. This projector keeps the
+ * detached view snapshots for unchanged messages, so a streamed delta clones
+ * one message instead of the whole session and the view layer sees stable
+ * references for everything else.
+ */
+export class ChatViewProjector {
+	private readonly agents = new WeakMap<ChatAgentState, AgentProjection>()
+
+	projectSession(session: ChatSession): {
+		timeline: ChatTimelineMessageItem[]
+		agentsById: Record<string, ChatAgentView>
+	} {
+		const timeline = this.projectAgent(
+			getMasterAgent(session),
+			session.createdAt,
+		).timeline
+		const agentsById: Record<string, ChatAgentView> = {}
+		for (const agent of getSessionSubagents(session)) {
+			const projection = this.projectAgent(agent, agent.createdAt)
+			const view = this.buildAgentView(agent, projection)
+			if (view) agentsById[agent.id] = view
+		}
+		return { timeline, agentsById }
 	}
-	return timeline
-}
 
-export function buildTimeline(session: ChatSession): ChatboxProps['timeline'] {
-	return buildAgentTimeline(getMasterAgent(session), session.createdAt)
-}
+	private projectAgent(
+		agent: ChatAgentState,
+		fallbackCreatedAt: number,
+	): AgentProjection {
+		const previous = this.agents.get(agent)
+		const messages = new Map<string, ProjectedMessage>()
+		const order: string[] = []
+		const timeline: ChatTimelineMessageItem[] = []
+		let changed = !previous
 
-export function buildAgentViews(
-	session: ChatSession,
-): ChatboxProps['agentsById'] {
-	const views: ChatboxProps['agentsById'] = {}
-	const visit = (agent: import('~/ai/chat/types').ChatAgentState) => {
-		for (const child of Object.values(agent.subagents)) {
-			views[child.id] = {
-				id: child.id,
-				type: child.type,
-				status: child.status,
-				createdAt: child.createdAt,
-				startedAt: child.startedAt,
-				finishedAt: child.finishedAt,
-				timeline: buildAgentTimeline(child, child.createdAt),
+		for (const message of [...agent.timeline, ...agent.pendingInputs]) {
+			order.push(message.id)
+			const operations = agent.operations[message.id]
+			const fingerprint = fingerprintMessage(
+				message,
+				operations,
+				agent.toolTimings,
+			)
+			const cached = previous?.messages.get(message.id)
+			if (cached && matchesFingerprint(cached.fingerprint, fingerprint)) {
+				messages.set(message.id, cached)
+				if (cached.item) timeline.push(cached.item)
+				continue
 			}
-			visit(child)
+			changed = true
+			const item = buildProjectedItem(
+				message,
+				operations,
+				agent.toolTimings,
+				fallbackCreatedAt,
+			)
+			const projected: ProjectedMessage = { fingerprint, item }
+			messages.set(message.id, projected)
+			if (item) timeline.push(item)
 		}
+
+		const sameOrder =
+			previous?.order.length === order.length &&
+			previous.order.every((id, index) => id === order[index])
+		if (previous && !changed && sameOrder) return previous
+
+		const headedTimeline = applyShowHeaders(timeline)
+		for (const item of headedTimeline) {
+			const projected = messages.get(item.message.id)
+			if (projected && projected.item !== item) projected.item = item
+		}
+
+		const projection: AgentProjection = {
+			order,
+			messages,
+			timeline: headedTimeline,
+			view: previous?.view,
+			viewFingerprint: previous?.viewFingerprint,
+		}
+		this.agents.set(agent, projection)
+		return projection
 	}
-	visit(getMasterAgent(session))
-	return views
+
+	private buildAgentView(
+		agent: ChatAgentState,
+		projection: AgentProjection,
+	): ChatAgentView | undefined {
+		const fingerprint = [
+			agent.id,
+			agent.type,
+			agent.status,
+			agent.createdAt,
+			agent.startedAt,
+			agent.finishedAt,
+			projection.timeline,
+		]
+		if (
+			projection.view &&
+			projection.viewFingerprint &&
+			matchesFingerprint(projection.viewFingerprint, fingerprint)
+		) {
+			return projection.view
+		}
+		const view: ChatAgentView = {
+			id: agent.id,
+			type: agent.type,
+			status: agent.status,
+			createdAt: agent.createdAt,
+			startedAt: agent.startedAt,
+			finishedAt: agent.finishedAt,
+			timeline: projection.timeline,
+		}
+		projection.view = view
+		projection.viewFingerprint = fingerprint
+		return view
+	}
 }
 
 export function collectOtherBusySessionIds(

@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 
 export type JsonValue =
 	null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }

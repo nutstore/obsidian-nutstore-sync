@@ -7,6 +7,12 @@ const pkgJson = JSON.parse(readFileSync('./package.json', 'utf-8'))
 if (existsSync('.env')) process.loadEnvFile('.env')
 
 const prod = process.argv[2] === 'production'
+// `analyze` / `analyze:verbose` writes dist/meta.json and prints esbuild's
+// size report after a production build; `analyze:verbose` also shows which
+// modules pull each dependency in.
+const analyze = process.argv.find(
+	(arg) => arg === 'analyze' || arg === 'analyze:verbose',
+)
 process.env.NODE_ENV = prod ? 'production' : 'development'
 
 const buildOptions = {
@@ -45,10 +51,10 @@ const buildOptions = {
 	treeShaking: true,
 	outfile: prod ? 'dist/main.js' : 'main.js',
 	write: false,
-	metafile: !prod,
+	metafile: true,
 	minify: prod,
 	platform: 'browser',
-	plugins: createBuildPlugins({ prod }),
+	plugins: createBuildPlugins({ prod, analyze }),
 	alias: {
 		localforage: './node_modules/localforage/dist/localforage.nopromises.js',
 		'node:zlib': './src/shims/node-zlib.ts',

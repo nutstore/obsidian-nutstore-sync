@@ -166,6 +166,24 @@ export default defineConfig([
 		},
 	},
 
+	// Zod's named `z` export is an ordinary object that includes every locale.
+	// A namespace import keeps the same property access (`z.object`) while
+	// letting esbuild tree-shake the unused locale modules.
+	{
+		files: ['src/**/*.{ts,tsx}'],
+		rules: {
+			'no-restricted-syntax': [
+				'error',
+				{
+					selector:
+						"ImportDeclaration[source.value=/^zod(\\/(?:v4|mini|v4-mini))?$/] > ImportSpecifier[imported.name='z']",
+					message:
+						"Use `import * as z from 'zod/mini'` (or the matching zod entry) so esbuild can tree-shake zod locales.",
+				},
+			],
+		},
+	},
+
 	// This function is serialized into an opaque-origin iframe. A value import
 	// would type-check in the host but disappear from its serialized source.
 	{

@@ -1,5 +1,5 @@
-import { XMLParser } from 'fast-xml-parser'
 import { isNil, partial } from 'es-toolkit/compat'
+import { XMLParser } from 'fast-xml-parser'
 import { basename, join } from 'path-browserify'
 import { FileStat } from 'webdav'
 import type { NutstoreSettings } from '~/settings'
@@ -125,7 +125,7 @@ export async function getDirectoryContents(
 			nextUrl.pathname = decodeURI(nextUrl.pathname)
 			currentUrl = nextUrl.toString()
 		} catch (e) {
-			if (is503Error(e as Error)) {
+			if (is503Error(e)) {
 				logger.error('503 error, retrying...')
 				for (let elapsed = 0; elapsed < 60_000; elapsed += 500) {
 					throwIfCancelled?.()

@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import i18n from '~/i18n'
 
 export const textValue = (field: string) =>

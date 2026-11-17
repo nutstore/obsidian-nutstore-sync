@@ -122,7 +122,7 @@ export async function exportsImagesThroughBrowserTransport(app: App) {
 		const file = await exportSessionToMarkdownFile({
 			vault: app.vault,
 			manifestId: 'neutral-export',
-			manifestVersion: '1.0.0',
+			pluginVersion: '1.0.0',
 			session,
 			title: 'Neutral export 中性导出 🌱',
 			includeToolMessages: false,

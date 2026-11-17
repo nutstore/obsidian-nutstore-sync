@@ -1,5 +1,6 @@
 import { apiVersion, Platform, setIcon } from 'obsidian'
 import { CHATBOX_AI_ICON_ID } from '~/assets/icons/obsidian-nutstore-ai-icon'
+import { PLUGIN_VERSION } from '~/consts'
 import i18n from '~/i18n'
 import { getWebviewRuntimeInfo } from '~/utils/webview-runtime-info'
 import BaseSettings from '../settings.base'
@@ -27,7 +28,7 @@ export default class PluginRuntimeInfoSettings extends BaseSettings {
 		})
 		identity.createDiv({
 			cls: 'nutstore-plugin-info__version',
-			text: `v${this.plugin.manifest.version}`,
+			text: `v${PLUGIN_VERSION}`,
 		})
 
 		const details = card.createEl('dl', {

@@ -5,7 +5,7 @@ import type {
 	TextStreamPart,
 	ToolSet,
 } from 'ai'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import { jsonBytes, jsonValue, type JsonValue } from '../capabilities/kv'
 
 /** The bridge carries JSON, never provider objects, credentials or executable schemas. */

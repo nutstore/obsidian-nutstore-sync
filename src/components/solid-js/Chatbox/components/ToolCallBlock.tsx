@@ -15,12 +15,12 @@ import {
 } from '../tool-call-status'
 import {
 	formatDuration,
-	formatToolDetailsMarkdown,
+	formatToolParamsMarkdown,
 	formatToolResult,
+	formatToolResultMarkdown,
 	toolCallDisplayTitle,
-	toolCallPurpose,
 } from '../utils'
-import { TitledCollapsibleBlock } from './CollapsibleBlock'
+import { CollapsibleBlock, TitledCollapsibleBlock } from './CollapsibleBlock'
 import { FileChangesBlock } from './FileChangesBlock'
 import { MarkdownContent } from './MarkdownContent'
 import { TodoListBlock } from './TodoListBlock'
@@ -162,40 +162,42 @@ function ViewImageToolCallBlock(props: {
 			open={open()}
 			onOpenChange={handleOpenChange}
 		>
-			<Show
-				when={src()}
-				fallback={
-					<Show
-						when={loading()}
-						fallback={
-							<div class=":uno: text-xs text-[var(--text-muted)]">
-								Image preview unavailable.
-							</div>
-						}
-					>
-						<div
-							class=":uno: h-40 animate-pulse rounded-2 bg-[var(--background-modifier-hover)]"
-							role="status"
+			{() => (
+				<Show
+					when={src()}
+					fallback={
+						<Show
+							when={loading()}
+							fallback={
+								<div class=":uno: text-xs text-[var(--text-muted)]">
+									Image preview unavailable.
+								</div>
+							}
 						>
-							<span class=":uno: sr-only">
-								{t('chatbox.ui.states.loadingContextItem')}
-							</span>
-						</div>
-					</Show>
-				}
-			>
-				{(src) => (
-					<img
-						class=":uno: max-h-100 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
-						src={src()}
-						alt={props.path}
-						onLoad={(event) => {
-							const image = event.currentTarget
-							setDimensions(`${image.naturalWidth}x${image.naturalHeight}`)
-						}}
-					/>
-				)}
-			</Show>
+							<div
+								class=":uno: h-40 animate-pulse rounded-2 bg-[var(--background-modifier-hover)]"
+								role="status"
+							>
+								<span class=":uno: sr-only">
+									{t('chatbox.ui.states.loadingContextItem')}
+								</span>
+							</div>
+						</Show>
+					}
+				>
+					{(src) => (
+						<img
+							class=":uno: max-h-100 max-w-full rounded-2 border border-[var(--background-modifier-border)] object-contain"
+							src={src()}
+							alt={props.path}
+							onLoad={(event) => {
+								const image = event.currentTarget
+								setDimensions(`${image.naturalWidth}x${image.naturalHeight}`)
+							}}
+						/>
+					)}
+				</Show>
+			)}
 		</TitledCollapsibleBlock>
 	)
 }
@@ -219,18 +221,61 @@ function CollapsibleToolCallBlock(props: {
 				iconLabel={props.iconLabel}
 				headerActions={props.headerActions}
 			>
-				<MarkdownContent
-					markdown={formatToolDetailsMarkdown(props.params, props.result)}
-					renderMarkdown={props.renderMarkdown}
-					compact
-					details
-				/>
+				{() => (
+					<ToolCallDetails
+						params={props.params}
+						result={props.result}
+						renderMarkdown={props.renderMarkdown}
+					/>
+				)}
 			</TitledCollapsibleBlock>
 			<FileChangesBlock
 				changes={props.fileChanges}
 				onOpenFile={props.onOpenFileChange}
 			/>
 		</>
+	)
+}
+
+function ToolCallDetails(props: {
+	params: unknown
+	result?: string
+	renderMarkdown?: ChatboxProps['renderMarkdown']
+}) {
+	const resultText = () => props.result?.trim()
+	return (
+		<div class=":uno: chatbox-tool-details flex min-w-0 flex-col gap-1.5">
+			<Show when={props.params !== undefined}>
+				<CollapsibleBlock
+					appearance="plain"
+					summary={<span>{t('chatbox.ui.labels.params')}</span>}
+				>
+					{() => (
+						<MarkdownContent
+							markdown={formatToolParamsMarkdown(props.params)}
+							renderMarkdown={props.renderMarkdown}
+							compact
+							details
+						/>
+					)}
+				</CollapsibleBlock>
+			</Show>
+			<Show when={resultText()}>
+				{(result) => (
+					<div class=":uno: min-w-0">
+						<div class=":uno: px-1 pb-1 text-xs text-[var(--text-muted)]">
+							{t('chatbox.ui.labels.result')}
+						</div>
+						<MarkdownContent
+							markdown={formatToolResultMarkdown(result())}
+							renderMarkdown={props.renderMarkdown}
+							compact
+							details
+						/>
+					</div>
+				)}
+			</Show>
+		</div>
 	)
 }
 
@@ -312,7 +357,6 @@ function PurposeToolCallBlock(props: {
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	const visual = () => toolStatusVisual(props.block.toolCall)
-	const hasPurpose = () => toolCallPurpose(props.block.toolCall) !== undefined
 	return (
 		<CollapsibleToolCallBlock
 			title={
@@ -323,7 +367,7 @@ function PurposeToolCallBlock(props: {
 			}
 			iconClass={visual().iconClass}
 			iconLabel={visual().label}
-			params={hasPurpose() ? undefined : props.block.toolCall.input}
+			params={props.block.toolCall.input}
 			result={formatToolResult(props.block.toolCall)}
 			fileChanges={props.block.fileChanges}
 			onOpenFileChange={props.onOpenFileChange}

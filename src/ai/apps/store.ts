@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import type { App } from 'obsidian'
 import { dirname } from 'path-browserify'
 import { mkdirsVault } from '~/utils/mkdirs-vault'

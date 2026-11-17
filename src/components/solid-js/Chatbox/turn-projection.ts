@@ -18,6 +18,20 @@ export interface TurnProcess {
 
 export type TurnRow = TurnMessage | TurnProcess
 
+/**
+ * A user message starts a turn unless it only carries system notifications;
+ * those are process evidence and stay inside the surrounding turn.
+ */
+export function isTurnStart(item: ChatTimelineMessageItem) {
+	return (
+		item.message.role === 'user' &&
+		!(
+			item.displayBlocks.length > 0 &&
+			item.displayBlocks.every((block) => block.kind === 'system-notification')
+		)
+	)
+}
+
 /** UI-only slices retain the original message and block identities for actions. */
 export function projectTurns(
 	timeline: readonly ChatTimelineMessageItem[],
@@ -76,15 +90,7 @@ export function projectTurns(
 		turn = []
 	}
 	for (const item of timeline) {
-		if (
-			item.message.role === 'user' &&
-			!(
-				item.displayBlocks.length > 0 &&
-				item.displayBlocks.every(
-					(block) => block.kind === 'system-notification',
-				)
-			)
-		) {
+		if (isTurnStart(item)) {
 			flush(false)
 			userId = item.message.id
 			rows.push(messageRow(item))

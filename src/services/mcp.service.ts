@@ -1,3 +1,4 @@
+import { PLUGIN_VERSION } from '~/consts'
 import { throwIfAborted } from '~/utils/abort'
 import { guardAppIO } from '~/modules/guard-io'
 import type { ModuleScope } from '~/modules/lifecycle'
@@ -321,7 +322,7 @@ export default class McpService extends BaseService {
 		const client = new Client(
 			{
 				name: 'obsidian-nutstore-sync',
-				version: this.plugin.manifest.version,
+				version: PLUGIN_VERSION,
 			},
 			{ jsonSchemaValidator: noopJsonSchemaValidator },
 		)

@@ -6,20 +6,23 @@ import BaseSettings from './settings.base'
 
 export default class ModuleSettings extends BaseSettings {
 	module: FeatureModule = 'sync'
-	readonly name = () =>
-		i18n.t(
+	readonly name = () => i18n.t('settings.modules.heading')
+	readonly showGroupHeading = true
+
+	private label() {
+		return i18n.t(
 			this.module === 'sync' ? 'settings.modules.sync' : 'settings.modules.ai',
 		)
-	readonly showGroupHeading = false
+	}
 
 	getSearchTerms() {
-		return [this.name(), i18n.t('settings.modules.description')]
+		return [this.label(), i18n.t('settings.modules.description')]
 	}
 
 	async display() {
 		this.containerEl.empty()
 		new Setting(this.containerEl)
-			.setName(this.name())
+			.setName(this.label())
 			.setDesc(i18n.t('settings.modules.description'))
 			.addToggle((toggle) =>
 				toggle

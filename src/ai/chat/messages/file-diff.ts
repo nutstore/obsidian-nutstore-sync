@@ -4,6 +4,13 @@ import type { ReversibleFileSnapshot, ReversibleToolOp } from '../types'
 
 const CONTEXT_LINES = 2
 
+/**
+ * diff-match-patch is superlinear on large rewrites and runs on the main
+ * thread. A chat session can accumulate many file snapshots, so an oversized
+ * change is summarized instead of diffed and stays inspectable in the editor.
+ */
+const MAX_DIFF_TEXT_CHARS = 200_000
+
 export interface FileDiffLine {
 	kind: 'context' | 'add' | 'remove'
 	oldLine?: number
@@ -30,6 +37,8 @@ export interface FileDiff {
 	operation: ReversibleToolOp['operation']
 	hunks?: FileDiffHunk[]
 	binary?: boolean
+	/** The change exceeds the diff budget; inspect it in the editor instead. */
+	oversized?: boolean
 }
 
 interface ProjectedLine {
@@ -243,45 +252,54 @@ export async function buildFileDiff(
 			return { vaultPath: change.vaultPath, operation: change.operation }
 		}
 		const after = await snapshotText(change.after)
-		return after === undefined
-			? {
-					vaultPath: change.vaultPath,
-					operation: change.operation,
-					binary: true,
-				}
-			: {
-					vaultPath: change.vaultPath,
-					operation: change.operation,
-					hunks: buildLineDiff('', after),
-				}
+		if (after === undefined) return binaryDiff(change)
+		if (after.length > MAX_DIFF_TEXT_CHARS) return oversizedDiff(change)
+		return {
+			vaultPath: change.vaultPath,
+			operation: change.operation,
+			hunks: buildLineDiff('', after),
+		}
 	}
 	if (change.operation === 'delete') {
 		if (change.before.kind === 'dir') {
 			return { vaultPath: change.vaultPath, operation: change.operation }
 		}
 		const before = await snapshotText(change.before)
-		return before === undefined
-			? {
-					vaultPath: change.vaultPath,
-					operation: change.operation,
-					binary: true,
-				}
-			: {
-					vaultPath: change.vaultPath,
-					operation: change.operation,
-					hunks: buildLineDiff(before, ''),
-				}
+		if (before === undefined) return binaryDiff(change)
+		if (before.length > MAX_DIFF_TEXT_CHARS) return oversizedDiff(change)
+		return {
+			vaultPath: change.vaultPath,
+			operation: change.operation,
+			hunks: buildLineDiff(before, ''),
+		}
 	}
 	if (!change.after) return undefined
 	const [before, after] = await Promise.all([
 		snapshotText(change.before),
 		snapshotText(change.after),
 	])
-	return before === undefined || after === undefined
-		? { vaultPath: change.vaultPath, operation: change.operation, binary: true }
-		: {
-				vaultPath: change.vaultPath,
-				operation: change.operation,
-				hunks: buildLineDiff(before, after),
-			}
+	if (before === undefined || after === undefined) return binaryDiff(change)
+	if (before.length + after.length > MAX_DIFF_TEXT_CHARS)
+		return oversizedDiff(change)
+	return {
+		vaultPath: change.vaultPath,
+		operation: change.operation,
+		hunks: buildLineDiff(before, after),
+	}
+}
+
+function binaryDiff(change: ReversibleToolOp): FileDiff {
+	return {
+		vaultPath: change.vaultPath,
+		operation: change.operation,
+		binary: true,
+	}
+}
+
+function oversizedDiff(change: ReversibleToolOp): FileDiff {
+	return {
+		vaultPath: change.vaultPath,
+		operation: change.operation,
+		oversized: true,
+	}
 }

@@ -14,12 +14,14 @@ export function SystemNotificationBlock(props: {
 			title={t('chatbox.ui.labels.systemNotification')}
 			iconClass=":uno: i-lucide-bell"
 		>
-			<MarkdownContent
-				markdown={formatSystemNotificationMarkdown(props.block.notification)}
-				renderMarkdown={props.renderMarkdown}
-				compact
-				details
-			/>
+			{() => (
+				<MarkdownContent
+					markdown={formatSystemNotificationMarkdown(props.block.notification)}
+					renderMarkdown={props.renderMarkdown}
+					compact
+					details
+				/>
+			)}
 		</TitledCollapsibleBlock>
 	)
 }

@@ -1,5 +1,5 @@
 import type { IFileSystem } from 'just-bash/browser'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 
 const path = z.string().check(
 	z.minLength(1),

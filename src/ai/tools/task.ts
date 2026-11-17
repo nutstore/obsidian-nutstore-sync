@@ -1,5 +1,5 @@
 import { tool } from 'ai'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import {
 	type AgentDefinition,
 	listDispatchableDefinitions,

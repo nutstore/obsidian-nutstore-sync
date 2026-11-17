@@ -1,4 +1,4 @@
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 
 /** App source trees are plain vault directories; the directory name is the identity. */
 export const APP_ROOT_DIR = '.agents/nutstore-sync/apps'

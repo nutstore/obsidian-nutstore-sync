@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { idAgent } from 'id-agent'
-import { z } from 'zod/mini'
+import * as z from 'zod/mini'
 import {
 	AGENTS_MOUNT_POINT,
 	BUILTIN_SKILLS_MOUNT_POINT,

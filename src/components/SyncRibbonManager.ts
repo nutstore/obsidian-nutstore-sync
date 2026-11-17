@@ -1,9 +1,12 @@
-import { addClassTokens, removeClassTokens } from '~/utils/class-tokens'
+import { toggleClassTokens } from '~/utils/class-tokens'
 import { emitCancelSync } from '../events'
 import i18n from '../i18n'
 import type NutstorePlugin from '../index'
 import { BaseService } from '../services/service.interface'
 import { createScopedRibbonIcon } from '~/utils/scoped-ribbon-icon'
+
+/** Obsidian re-renders ribbon actions on layout changes; only a class survives. */
+const HIDDEN_CLASS = 'nutstore-ribbon-action-hidden'
 
 export class SyncRibbonManager extends BaseService {
 	private startRibbonEl: HTMLElement | null = null
@@ -30,7 +33,7 @@ export class SyncRibbonManager extends BaseService {
 		this.startRibbonEl = start.element
 		this.stopRibbonEl = stop.element
 		this.disposers.push(start.dispose, stop.dispose)
-		addClassTokens(this.stopRibbonEl, ':uno: hidden')
+		this.update()
 	}
 
 	override onunload() {
@@ -45,14 +48,8 @@ export class SyncRibbonManager extends BaseService {
 		if (!this.startRibbonEl || !this.stopRibbonEl) {
 			return
 		}
-		if (this.plugin.isSyncing) {
-			this.startRibbonEl.setAttr('aria-disabled', 'true')
-			this.startRibbonEl.addClass('nutstore-sync-spinning')
-			removeClassTokens(this.stopRibbonEl, ':uno: hidden')
-		} else {
-			this.startRibbonEl.removeAttribute('aria-disabled')
-			this.startRibbonEl.removeClass('nutstore-sync-spinning')
-			addClassTokens(this.stopRibbonEl, ':uno: hidden')
-		}
+		const syncing = this.plugin.isSyncing
+		toggleClassTokens(this.startRibbonEl, HIDDEN_CLASS, syncing)
+		toggleClassTokens(this.stopRibbonEl, HIDDEN_CLASS, !syncing)
 	}
 }
