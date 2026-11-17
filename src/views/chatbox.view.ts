@@ -201,8 +201,11 @@ export default class ChatboxView extends ItemView {
 			if (!this.app.workspace.getActiveViewOfType(MarkdownView)) {
 				return
 			}
+			const previousKey = this.getActiveContextKey()
 			this.captureActiveContextSnapshot()
-			this.controller?.update(this.getChatboxProps())
+			if (this.getActiveContextKey() !== previousKey) {
+				this.controller?.update(this.getChatboxProps())
+			}
 		})
 	}
 
@@ -396,6 +399,16 @@ export default class ChatboxView extends ItemView {
 		})
 	}
 
+	private getActiveContextKey(): string {
+		if (this.activeSelectionSnapshot) {
+			return `selection:${getUserContextItemHash(this.activeSelectionSnapshot)}`
+		}
+		if (this.activeFilePathSnapshot) {
+			return `file:${this.activeFilePathSnapshot}`
+		}
+		return ''
+	}
+
 	private getActiveContextItems(): UserContextItem[] {
 		if (this.activeSelectionSnapshot) {
 			return [this.activeSelectionSnapshot]
@@ -474,10 +487,13 @@ export default class ChatboxView extends ItemView {
 			onSendMessage: (text: string, contextItems?: UserContextItem[]) =>
 				this.chat.sendMessage(text, contextItems ?? []),
 			onCaptureActiveContext: () => {
+				const previousKey = this.getActiveContextKey()
 				this.captureActiveContextSnapshot(true)
 				this.preservingSelectionForChatFocus = !!this.activeSelectionSnapshot
 				this.persistSelectionHighlight(true)
-				this.controller?.update(this.getChatboxProps())
+				if (this.getActiveContextKey() !== previousKey) {
+					this.controller?.update(this.getChatboxProps())
+				}
 			},
 			onListMentionPaths: () => this.getMentionPaths(),
 			onAddUserContext: (item) => {
