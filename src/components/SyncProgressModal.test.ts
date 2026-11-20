@@ -132,12 +132,12 @@ const runOf = (patch: Partial<SyncRunSnapshot> = {}): SyncRunSnapshot => ({
 })
 
 function mount(preparation: SyncPreparationProgress = scanning()) {
-	const progress: { run: SyncRunSnapshot } = {
-		run: runOf({ status: 'preparing', preparation }),
+	const progress: { modalRun: SyncRunSnapshot } = {
+		modalRun: runOf({ status: 'preparing', preparation }),
 	}
 	/** The service replaces the snapshot on every change; do the same here. */
 	const set = (patch: Partial<SyncRunSnapshot>) => {
-		progress.run = { ...progress.run, ...patch }
+		progress.modalRun = { ...progress.modalRun, ...patch }
 	}
 	const settings = { skipLargeFiles: { maxSize: '' } }
 	const showScanIssues = vi.fn()

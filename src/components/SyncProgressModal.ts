@@ -167,7 +167,7 @@ export default class SyncProgressModal extends Modal {
 
 		// The modal is only opened once a run exists; a late tick after the
 		// service dropped it has nothing left to show.
-		const run = this.plugin.sync.progress.run
+		const run = this.plugin.sync.progress.modalRun
 		if (!run) return
 		const { preparation, status: state } = run
 		const preparationText = preparation
@@ -501,7 +501,9 @@ export default class SyncProgressModal extends Modal {
 		// The list is opened on demand while this modal is up, so it never stacks
 		// on top of the progress the user is watching.
 		this.scanIssuesButton = new ButtonComponent(scanIssuesSummary).onClick(() =>
-			this.plugin.sync.progress.showScanIssues(),
+			this.plugin.sync.progress.showScanIssues(
+				this.plugin.sync.progress.modalRun?.scanIssues ?? [],
+			),
 		)
 
 		const progressCard = container.createDiv({
@@ -629,7 +631,9 @@ export default class SyncProgressModal extends Modal {
 		const stopButton = new ButtonComponent(footerButtons)
 			.setButtonText(i18n.t('sync.stopButton'))
 			.onClick(() => {
-				if (this.plugin.sync.progress.run?.status === 'cancelling') {
+				const status = this.plugin.sync.progress.modalRun?.status
+				if (!status || !isSyncRunActive(status)) return
+				if (status === 'cancelling') {
 					new Notice(i18n.t('sync.cancellingHint'), 3000)
 					return
 				}

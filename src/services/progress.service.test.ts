@@ -331,6 +331,24 @@ describe('progress service run snapshot', () => {
 		expect(service.run).toBe(last)
 	})
 
+	it('keeps the manual result visible while automatic rounds update the latest run', () => {
+		emitPreparingSync({ showNotice: true })
+		finished(1, 1, done(push('读书笔记📚.md')))
+		emitEndSync({ showNotice: true, failedCount: 0 })
+		const manual = service.run
+
+		emitPreparingSync({ showNotice: false })
+		expect(service.run?.status).toBe('preparing')
+		expect(service.modalRun).toBe(manual)
+		emitEndSync({ showNotice: false, failedCount: 0 })
+		expect(service.modalRun).toBe(manual)
+
+		emitPreparingSync({ showNotice: true })
+		expect(service.modalRun).toBe(service.run)
+		expect(service.modalRun?.status).toBe('preparing')
+		expect(modals).toHaveLength(1)
+	})
+
 	it('refreshes an open view on every change and drops it when closed', () => {
 		emitPreparingSync({ showNotice: true })
 		const modal = modals[0]
