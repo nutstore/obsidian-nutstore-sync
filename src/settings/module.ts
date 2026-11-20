@@ -6,7 +6,12 @@ import BaseSettings from './settings.base'
 
 export default class ModuleSettings extends BaseSettings {
 	module: FeatureModule = 'sync'
-	readonly name = () => i18n.t('settings.modules.heading')
+	readonly name = () =>
+		i18n.t(
+			this.module === 'sync'
+				? 'settings.modules.syncHeading'
+				: 'settings.modules.aiHeading',
+		)
 	readonly showGroupHeading = true
 
 	private label() {
@@ -16,7 +21,11 @@ export default class ModuleSettings extends BaseSettings {
 	}
 
 	getSearchTerms() {
-		return [this.label(), i18n.t('settings.modules.description')]
+		return [
+			i18n.t('settings.modules.heading'),
+			this.label(),
+			i18n.t('settings.modules.description'),
+		]
 	}
 
 	async display() {

@@ -5,6 +5,8 @@
 	"settings": {
 		"modules": {
 			"heading": "模块开关",
+			"syncHeading": "同步模块",
+			"aiHeading": "AI 模块",
 			"sync": "启用同步模块",
 			"ai": "启用 AI 模块",
 			"description": "关闭后停止该模块，会禁用相关代码，保留已有配置和数据。"

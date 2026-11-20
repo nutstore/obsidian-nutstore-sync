@@ -947,7 +947,7 @@ export async function rendersSearchableSettings(app: App) {
 						labels.settings.sections.transfer,
 						labels.settings.sections.interface,
 						labels.settings.sections.filters,
-						labels.settings.modules.heading,
+						labels.settings.modules.syncHeading,
 					],
 					[
 						labels.settings.sections.ai,
@@ -955,7 +955,7 @@ export async function rendersSearchableSettings(app: App) {
 						labels.settings.ai.subagents.heading,
 						labels.settings.ai.skills.heading,
 						labels.settings.ai.preferences,
-						labels.settings.modules.heading,
+						labels.settings.modules.aiHeading,
 					],
 					[labels.settings.troubleshooting.title],
 				]
@@ -982,9 +982,33 @@ export async function rendersSearchableSettings(app: App) {
 					buttons()[0].getAttribute('aria-selected') === 'true',
 					'Sync tab did not activate',
 				)
+				const groupHeadings = settingTab.settingItems.flatMap((item) =>
+					'type' in item && item.type === 'group' && item.heading
+						? [item.heading]
+						: [],
+				)
+				assert(
+					new Set(groupHeadings).size === groupHeadings.length,
+					`Duplicate group headings in ${locale}: ${JSON.stringify(groupHeadings)}`,
+				)
 				const definitions = settingTab.settingItems.flatMap((item) =>
 					'type' in item && item.type === 'group' ? (item.items ?? []) : [item],
 				)
+				for (const [heading, label] of [
+					[labels.settings.modules.syncHeading, labels.settings.modules.sync],
+					[labels.settings.modules.aiHeading, labels.settings.modules.ai],
+				] as const) {
+					const module = definitions.find(
+						(item) => 'name' in item && item.name === heading,
+					)
+					assert(
+						module &&
+							'aliases' in module &&
+							module.aliases?.includes(label) &&
+							module.aliases.includes(labels.settings.modules.heading),
+						`Module switch is absent from search metadata: ${heading}`,
+					)
+				}
 				assert(
 					!definitions.some((item) => 'type' in item && item.type === 'page'),
 					'Settings reverted to directory navigation',
@@ -1099,6 +1123,25 @@ export async function hotTogglesFeatureModules(app: App) {
 			[true, true],
 		]) {
 			await setModules(sync, ai)
+			const moduleHeadings = plugin.settingTab
+				.getSettingDefinitions()
+				.flatMap((item) =>
+					'type' in item &&
+					item.type === 'group' &&
+					item.items?.some(
+						(child) =>
+							'aliases' in child &&
+							[en.settings.modules.heading, zh.settings.modules.heading].some(
+								(heading) => child.aliases?.includes(heading),
+							),
+					)
+						? [item.heading]
+						: [],
+				)
+			assert(
+				moduleHeadings.length === 2 && moduleHeadings[0] !== moduleHeadings[1],
+				'Module groups must have distinct headings in every state',
+			)
 			assert(
 				plugin.sync.lifecycle.active === sync,
 				'Synchronization lifetime disagrees with its setting',
