@@ -306,10 +306,17 @@
 					"usage": "Credits"
 				},
 				"models": {
-					"title": "Available models",
 					"available": "Models available now",
 					"count": "{{count}} total",
 					"empty": "No available models.",
+					"modalities": {
+						"text": "Text",
+						"image": "Image",
+						"audio": "Audio",
+						"video": "Video",
+						"pdf": "PDF",
+						"file": "File"
+					},
 					"changes": "Model list changes",
 					"diffSummary": "+{{added}} added · −{{removed}} removed",
 					"refreshed": "Updated",
@@ -318,6 +325,7 @@
 				"usage": {
 					"button": "Overview",
 					"title": "Nutstore AI overview",
+					"overviewTitle": "Credits overview",
 					"description": "View quota usage or refresh the available model list.",
 					"refresh": "Refresh credits",
 					"refreshing": "Refreshing…",

@@ -149,10 +149,17 @@
 					"usage": "额度"
 				},
 				"models": {
-					"title": "可用模型",
 					"available": "当前可用模型",
 					"count": "共 {{count}} 个",
 					"empty": "当前暂无可用模型。",
+					"modalities": {
+						"text": "文本",
+						"image": "图像",
+						"audio": "音频",
+						"video": "视频",
+						"pdf": "PDF",
+						"file": "文件"
+					},
 					"changes": "模型列表变更",
 					"diffSummary": "+{{added}} 新增 · −{{removed}} 移除",
 					"refreshed": "已更新",
@@ -161,6 +168,7 @@
 				"usage": {
 					"button": "概览",
 					"title": "坚果云 AI 概览",
+					"overviewTitle": "额度概览",
 					"description": "查看额度用量，或更新可用模型列表。",
 					"refresh": "刷新额度",
 					"refreshing": "刷新中…",
