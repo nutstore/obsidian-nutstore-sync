@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import { MockLanguageModelV4 } from 'ai/test'
 import { createProviderConfig } from '~/ai/catalog/config'
 import { ModuleScope } from '~/modules/lifecycle'
@@ -430,7 +430,7 @@ describe('App AI SDK adapter', () => {
 		const rejected = expect(pending).rejects.toMatchObject({
 			code: 'LIMIT_EXCEEDED',
 		})
-		await vi.waitFor(() => expect(signal).toBeDefined())
+		await flushUntil(() => expect(signal).toBeDefined())
 		await vi.advanceTimersByTimeAsync(APP_AI_LIMITS.toolTimeoutMs)
 		await rejected
 		expect(signal!.aborted).toBe(true)
@@ -473,7 +473,7 @@ describe('App AI SDK adapter', () => {
 			const rejection = expect(promise).rejects.toMatchObject({
 				code: 'CANCELLED',
 			})
-			await vi.waitFor(() => expect(context).toBeDefined())
+			await flushUntil(() => expect(context).toBeDefined())
 			if (kind === 'cancel') controller.abort()
 			if (kind === 'runtime') h.bridge.close()
 			if (kind === 'module') h.scope.close()

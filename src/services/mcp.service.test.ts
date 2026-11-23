@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import type NutstorePlugin from '~/index'
 import { ModuleScope } from '~/modules/lifecycle'
 import type { McpServerConfig } from '~/ai/mcp/types'
@@ -139,7 +140,7 @@ describe('MCP background discovery', () => {
 		}))
 		expect(clients).toHaveLength(2)
 		clients[1].resolve(tools)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(service.getServerRuntimes()[1].status).toBe('connected'),
 		)
 		expect(service.getServerRuntimes()[0].status).toBe('connecting')
@@ -147,7 +148,7 @@ describe('MCP background discovery', () => {
 			tools.tools[0].description,
 		)
 		clients[0].resolve(tools)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(
 				service
 					.getServerRuntimes()
@@ -183,11 +184,11 @@ describe('MCP background discovery', () => {
 		await service.saveServers({})
 		await service.saveServers({ alpha: config('alpha') })
 		old.resolve(tools)
-		await vi.waitFor(() => expect(old.close).toHaveBeenCalled())
+		await flushUntil(() => expect(old.close).toHaveBeenCalled())
 		expect(service.getServerRuntimes()[0].status).toBe('connecting')
 		expect((await service.listMcpTools('alpha')).tools).toEqual([])
 		clients[1].resolve(tools)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(
 				service
 					.getServerRuntimes()
@@ -203,7 +204,7 @@ describe('MCP background discovery', () => {
 		const stop = service.onRuntimeChanged(update)
 		await service.saveServers({ alpha: config('alpha') })
 		clients[0].reject(new Error('Unavailable · 暂不可用 🌐'))
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(
 				service
 					.getServerRuntimes()
@@ -235,7 +236,7 @@ describe('MCP discovery and execution contract', () => {
 		const before = service.getToolsForSession('neutral-session')
 		await service.saveServers({ alpha: config('alpha') })
 		clients[0].resolve(tools)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(service.getServerRuntimes()[0].status).toBe('connected'),
 		)
 		const after = service.getToolsForSession('other-session', ['alpha'])
@@ -315,7 +316,7 @@ describe('MCP discovery and execution contract', () => {
 		}
 		await service.saveServers({ alpha: config('alpha') })
 		clients[0].resolve({ tools: [{ ...tools.tools[0], inputSchema }] })
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(service.getServerRuntimes()[0].status).toBe('connected'),
 		)
 		const overview = await service.listMcpServers()
@@ -389,7 +390,7 @@ describe('MCP discovery and execution contract', () => {
 		}
 		await service.saveServers({ alpha: config('alpha') })
 		clients[0].resolve({ tools: [{ ...tools.tools[0], inputSchema }] })
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(service.getServerRuntimes()[0].status).toBe('connected'),
 		)
 		await service.listMcpServers()
@@ -429,7 +430,7 @@ describe('MCP discovery and execution contract', () => {
 		const { service } = fixture()
 		await service.saveServers({ alpha: config('alpha') })
 		clients[0].resolve(tools)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(service.getServerRuntimes()[0].status).toBe('connected'),
 		)
 		const input = { server: 'alpha', tool: 'read_notes', args: {} }
@@ -475,7 +476,7 @@ describe('MCP discovery and execution contract', () => {
 		const { service, adapter } = fixture()
 		await service.saveServers({ alpha: config('alpha') })
 		clients[0].resolve(tools)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(service.getServerRuntimes()[0].status).toBe('connected'),
 		)
 		await adapter.write(
@@ -505,7 +506,7 @@ describe('MCP discovery and execution contract', () => {
 		const { service } = fixture()
 		await service.saveServers({ alpha: config('alpha'), beta: config('beta') })
 		for (const client of clients) client.resolve(tools)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(
 				service
 					.getServerRuntimes()

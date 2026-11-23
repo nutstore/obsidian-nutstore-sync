@@ -10,11 +10,9 @@ import {
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import esbuild from 'esbuild'
-import solid from 'unplugin-solid/esbuild'
 import { OBSIDIAN_E2E_RESULT_PATH } from '../test/obsidian/integration-protocol.mjs'
-import { compressedAssetsPlugin } from './esbuild/plugins/compressed-assets.mjs'
 import {
 	createObsidianSandbox,
 	startObsidian,
@@ -154,20 +152,53 @@ async function exists(path) {
 	}
 }
 
-async function buildHarness(outfile) {
-	await esbuild.build({
+const SRC_DIR = resolve(ROOT, 'src')
+
+/**
+ * Hard boundary guard: the Obsidian E2E harness must NEVER bundle runtime code
+ * from `src/` (`~/...`), because doing so creates a split-brain second copy of
+ * the plugin alongside `main.js`. Type-only imports (`import type`) are erased
+ * before resolution and remain allowed.
+ */
+function forbidProductionSourceImportsPlugin() {
+	return {
+		name: 'forbid-production-source-imports',
+		setup(build) {
+			build.onResolve({ filter: /^~\/.*/ }, (args) => ({
+				errors: [
+					{
+						text: `Obsidian E2E harness must not import runtime code from "${args.path}". Exercise the loaded production plugin via app.plugins.plugins['nutstore-sync'] instead (import type is allowed).`,
+					},
+				],
+			}))
+			build.onResolve({ filter: /^\.\.?\// }, (args) => {
+				const resolved = resolve(args.resolveDir, args.path)
+				if (resolved === SRC_DIR || resolved.startsWith(`${SRC_DIR}/`)) {
+					return {
+						errors: [
+							{
+								text: `Obsidian E2E harness must not import runtime code from src/ ("${args.path}").`,
+							},
+						],
+					}
+				}
+				return null
+			})
+		},
+	}
+}
+
+export async function buildHarness(outfile, extraOptions = {}) {
+	return esbuild.build({
 		entryPoints: [join(ROOT, 'test/obsidian/harness.ts')],
-		outfile,
+		...(outfile ? { outfile } : {}),
 		bundle: true,
 		format: 'cjs',
 		platform: 'browser',
 		target: 'es2018',
 		external: ['obsidian'],
-		alias: {
-			'~': join(ROOT, 'src'),
-			'node:zlib': join(ROOT, 'src/shims/node-zlib.ts'),
-		},
-		plugins: [compressedAssetsPlugin({ prod: false }), solid()],
+		plugins: [forbidProductionSourceImportsPlugin()],
+		...extraOptions,
 	})
 }
 
@@ -365,7 +396,12 @@ async function main() {
 	}
 }
 
-main().catch((error) => {
-	console.error(error)
-	process.exitCode = 1
-})
+if (
+	process.argv[1] &&
+	import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+	main().catch((error) => {
+		console.error(error)
+		process.exitCode = 1
+	})
+}

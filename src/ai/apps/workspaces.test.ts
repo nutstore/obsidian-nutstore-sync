@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import type { App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 import { ModuleScope } from '~/modules/lifecycle'
@@ -18,18 +19,6 @@ import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import type { RuntimeHost } from './runtime'
 import { readLocalText } from '~/utils/local-vault-io'
 import logger from '~/utils/logger'
-
-vi.mock('obsidian', () => ({
-	normalizePath: (path: string) =>
-		path
-			.normalize('NFC')
-			.replace(/\\/g, '/')
-			.replace(/\u00a0|\u202f/g, ' ')
-			.replace(/\/+/g, '/')
-			.replace(/^\/+|\/+$/g, ''),
-	TFile: class {},
-	TFolder: class {},
-}))
 
 const disk = vi.hoisted(() => new Map<string, string>())
 const binary = vi.hoisted(() => new Map<string, ArrayBuffer>())
@@ -414,7 +403,7 @@ describe('App workspaces over real App files', () => {
 		expect(text(sourcePath(created.id, APP_DATA_FILE))).not.toContain(
 			'临时 Temporary',
 		)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(text(sourcePath(created.id, APP_LOG_FILE))).toContain(
 				'启动失败 Startup failed 🌿',
 			),
@@ -434,7 +423,7 @@ describe('App workspaces over real App files', () => {
 		runtimeControl.gate = new Promise(() => {})
 		const controller = new AbortController()
 		const pending = service.validate(created.id, controller.signal)
-		await vi.waitFor(() => expect(runtimeControl.starts).toBe(1))
+		await flushUntil(() => expect(runtimeControl.starts).toBe(1))
 		controller.abort()
 		await expect(pending).rejects.toThrow()
 		expect(runtimeControl.active).toBe(0)
@@ -692,7 +681,7 @@ describe('App workspaces over real App files', () => {
 			{ recursive: true },
 		])
 		try {
-			await vi.waitFor(() =>
+			await flushUntil(() =>
 				expect(removeApp).toHaveBeenCalledWith(created.id, {
 					force: undefined,
 				}),

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Vault, FileManager } from 'obsidian'
 import type { WebDAVClient } from 'webdav'
 import type { SyncRecord } from '~/storage/sync-record'
@@ -19,11 +19,6 @@ import NoopTask from './tasks/noop.task'
 import CleanRecordTask from './tasks/clean-record.task'
 import SkippedTask, { SkipReason } from './tasks/skipped.task'
 import { mergeRemoveRemoteTasks } from './utils/merge-remove-remote-tasks'
-
-vi.mock('obsidian', () => ({
-	TFile: class {},
-	normalizePath: (path: string) => path,
-}))
 
 const options: BaseTaskOptions = {
 	vault: {} as Vault,

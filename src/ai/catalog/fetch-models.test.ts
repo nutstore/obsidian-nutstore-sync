@@ -1,16 +1,5 @@
-// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('obsidian', () => {
-	class HostClass {}
-	return {
-		Platform: { isWin: false, isMacOS: true, isLinux: false },
-		Notice: HostClass,
-		Modal: HostClass,
-		Setting: HostClass,
-		requestUrl: vi.fn(),
-	}
-})
 vi.mock('~/i18n', () => ({ default: { t: (key: string) => key } }))
 
 import { createProviderConfig } from './config'

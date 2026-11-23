@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import { JSDOM } from 'jsdom'
 import { InMemoryFs } from 'just-bash/browser'
 import { createAppFSDispatcher } from './capabilities/fs'
@@ -143,7 +144,7 @@ describe('App runtime and trusted SVG boundary', () => {
 		)
 		await timeout(20)
 		;(dom.window.document.querySelector('#add') as HTMLButtonElement).click()
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(
 				messages.filter((message) => message.method === 'kv.transact'),
 			).toHaveLength(2),
@@ -352,14 +353,14 @@ describe('App runtime and trusted SVG boundary', () => {
 		request(1, 'fs.writeFile', ['/Asset 素材 🌿.bin', bytes], window)
 		expect(dispatch).not.toHaveBeenCalled()
 		request(2, 'fs.writeFile', ['/Asset 素材 🌿.bin', bytes])
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(post).toHaveBeenCalledWith(
 				{ channel, id: 2, value: undefined },
 				'*',
 			),
 		)
 		request(3, 'fs.readFileBuffer', ['/Asset 素材 🌿.bin'])
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(post).toHaveBeenCalledWith({ channel, id: 3, value: bytes }, '*'),
 		)
 		runtime.destroy()

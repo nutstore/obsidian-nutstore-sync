@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import type { WorkspaceLeaf } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import type { AppContent } from '~/ai/apps/source'
@@ -9,61 +11,17 @@ import AppView from './app.view'
 import i18n from '~/i18n'
 import logger from '~/utils/logger'
 
-const diagnostics = vi.hoisted(() => ({
+const diagnostics = {
 	notice: vi.fn(),
 	icon: vi.fn(),
-}))
+}
 const errorSpy = vi.spyOn(logger, 'error')
 
-function element(
-	tag = 'div',
-	options: { cls?: string; text?: string; attr?: Record<string, string> } = {},
-) {
-	const el = document.createElement(tag)
-	if (options.cls) el.className = options.cls
-	if (options.text) el.textContent = options.text
-	for (const [key, value] of Object.entries(options.attr ?? {}))
-		el.setAttribute(key, value)
-	return Object.assign(el, {
-		createEl: (name: string, opts?: typeof options) =>
-			el.appendChild(element(name, opts)),
-		createDiv: (opts?: typeof options) => el.appendChild(element('div', opts)),
-		createSpan: (opts?: typeof options) =>
-			el.appendChild(element('span', opts)),
-		empty: () => el.replaceChildren(),
-		addClass: (name: string) => el.classList.add(name),
-	})
-}
-vi.mock('obsidian', () => ({
-	ItemView: class {
-		contentEl = element()
-		containerEl = element()
-		headerEl = this.containerEl.createDiv()
-		heading = this.headerEl.createDiv({
-			cls: 'view-header-title',
-			text: '打开 App',
-		})
-		addAction(icon: string, title: string, callback: EventListener) {
-			const action = this.headerEl.createEl('div', {
-				attr: { 'aria-label': title },
-			})
-			action.addEventListener('click', callback)
-			diagnostics.icon(action, icon)
-			return action
-		}
-		constructor(readonly leaf: WorkspaceLeaf) {}
-		async setState() {}
-		registerDomEvent(el: HTMLElement, name: string, handler: EventListener) {
-			el.addEventListener(name, handler)
-		}
-	},
-	Notice: class {
-		constructor(message: string) {
-			diagnostics.notice(message)
-		}
-	},
-	setIcon: diagnostics.icon,
-}))
+beforeEach(() => {
+	obsidianRuntime.reset()
+	obsidianRuntime.onNotice = ({ message }) => diagnostics.notice(message)
+	obsidianRuntime.onSetIcon = (el, iconId) => diagnostics.icon(el, iconId)
+})
 const runtimes = vi.hoisted(
 	() =>
 		[] as Array<{
@@ -475,7 +433,7 @@ describe('App view sandbox lifetime', () => {
 		await f.header
 			.querySelector<HTMLElement>(`[aria-label="${i18n.t('apps.pin')}"]`)!
 			.click()
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(f.apps.setPinned).toHaveBeenCalledWith('neutral-app', true),
 		)
 
@@ -492,7 +450,7 @@ describe('App view sandbox lifetime', () => {
 		await f.header
 			.querySelector<HTMLElement>(`[aria-label="${i18n.t('apps.modify')}"]`)!
 			.click()
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(f.editApp).toHaveBeenCalledWith('neutral-app'),
 		)
 
@@ -501,7 +459,7 @@ describe('App view sandbox lifetime', () => {
 		await f.header
 			.querySelector<HTMLElement>(`[aria-label="${i18n.t('apps.unpin')}"]`)!
 			.click()
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(errorSpy).toHaveBeenCalledWith(
 				'App action failed',
 				'neutral-app',

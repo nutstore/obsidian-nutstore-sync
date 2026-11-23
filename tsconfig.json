@@ -17,7 +17,8 @@
 		"moduleResolution": "bundler",
 		"paths": {
 			"~/*": ["./src/*"],
-			"~": ["./src"]
+			"~": ["./src"],
+			"@test/*": ["./test/*"]
 		},
 		"resolveJsonModule": true,
 		"allowImportingTsExtensions": true,

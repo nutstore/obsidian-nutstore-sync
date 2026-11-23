@@ -8,7 +8,6 @@ import { createVaultFileSystem } from './vault-filesystem'
 import { memoryTool } from './memory'
 
 // These tests use the real reversible filesystem and recorder, with no native app.
-vi.mock('obsidian', () => ({}))
 vi.mock('./vault-filesystem', () => ({ createVaultFileSystem: vi.fn() }))
 
 const PATH = '.agents/nutstore-sync/记忆 Memory 🧠.md'

@@ -7,10 +7,6 @@ import ConflictResolveTask, {
 } from '../tasks/conflict-resolve.task'
 import TwoWaySyncDecider from './two-way.decider'
 
-vi.mock('obsidian', () => ({
-	normalizePath: (path: string) => path,
-	TFile: class {},
-}))
 vi.mock('~/settings', () => ({
 	SyncMode: { LOOSE: 'loose', STRICT: 'strict' },
 }))

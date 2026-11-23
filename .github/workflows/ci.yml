@@ -51,8 +51,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm run build:plugin
 
-      - name: Run unit tests
-        run: pnpm run test:unit
+      - name: Run unit, simulation, and build tests
+        run: pnpm run test:unit && pnpm run test:sim && pnpm run test:build
 
       - name: Check build artifacts
         run: |

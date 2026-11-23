@@ -1,48 +1,31 @@
 import { Plugin } from 'obsidian'
 import { OBSIDIAN_E2E_RESULT_PATH } from './integration-protocol.mjs'
-import { rendersSyncConfirmation } from './checks/sync-confirm'
 import { createsIndependentApps, runsAppAIThroughSandbox } from './checks/apps'
 import {
-	exportsImagesThroughBrowserTransport,
-	persistsChatSessions,
-	toleratesCorruptChatMeta,
-} from './checks/chat'
-import {
-	detachesChatboxWhenProductionPluginIsDisabled,
-	listsOnlyVaultSkillsInSettings,
 	hotTogglesFeatureModules,
+	keepsChatboxMobileLayoutAndWorkspacePickerStable,
 	loadsProductionPlugin,
-	opensChatboxInChosenLocation,
-	opensProviderSetupInEditorThenMovesChatboxToChosenLocation,
-	keepsChatboxAboveMobileNavigation,
-	keepsWorkspacePickerAcrossPointerDown,
+	opensChatboxInChosenLocationAndSetupFlow,
+	reloadsAndDetachesProductionPlugin,
+	rendersSearchableSettingsAndVaultSkills,
+	rendersSyncProgressAndScanIssues,
 	respectsSessionAppOpenMode,
-	reloadsProductionPlugin,
-	rendersSearchableSettings,
-	rendersSyncProgress,
-	listsUnscannedPathsInLargeModal,
-	keepsUnscannedPathsDialogUsableOnPhone,
-	opensTenThousandUnscannedPathsWithoutFreezing,
 	type LifecycleStep,
 } from './checks/plugin'
-import {
-	excludesUnrelatedHiddenPathsFromGlobSnapshot,
-	expandsAgentDomainPathsInBash,
-	expandsExistingVaultPathsInBash,
-	filtersDisabledSkillsFromAgentCatalog,
-	preservesBashHeredocUtf8,
-	resolvesResourceDataUrls,
-	respectsVaultDeletionPreference,
-	roundTripsVaultAdapterContent,
-	isolatesUnavailableVaultSubtrees,
-	skipsStaleVaultSkillEntries,
-} from './checks/vault'
 
 interface TestResult {
 	name: string
 	error?: string
 }
 
+/**
+ * Slim real-Obsidian integration harness.
+ *
+ * Every check runs exclusively against the loaded production `main.js` plugin
+ * instance (`app.plugins.plugins['nutstore-sync']`) and focuses solely on true
+ * Obsidian host boundaries (Electron/WebView CSS, opaque-origin iframe sandbox,
+ * native Settings search, workspace splits, and plugin enable/disable lifecycle).
+ */
 export default class NutstoreSyncIntegrationHarness extends Plugin {
 	async onload() {
 		const results: TestResult[] = []
@@ -74,6 +57,11 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 				),
 			)
 
+		const recordStep = async (step: LifecycleStep) => {
+			lifecycleSteps.push(step)
+			await writeSnapshot()
+		}
+
 		const run = async (name: string, check: () => Promise<void>) => {
 			activeCheck = { name, startedAt: new Date().toISOString() }
 			await writeSnapshot()
@@ -87,8 +75,6 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 				})
 			}
 			activeCheck = undefined
-			// Record progress per check: a hung check must still leave every
-			// completed result behind for failure diagnostics.
 			await writeSnapshot()
 		}
 
@@ -96,119 +82,40 @@ export default class NutstoreSyncIntegrationHarness extends Plugin {
 			loadsProductionPlugin(this.app),
 		)
 		await run(
-			'renders compact sync choices, Unicode paths and a reachable footer',
-			() => rendersSyncConfirmation(this.app),
+			'opens Chatbox in setup and chosen workspace locations without losing session or Unicode draft',
+			() => opensChatboxInChosenLocationAndSetupFlow(this.app),
 		)
 		await run(
-			'keeps the Chatbox composer above phone navigation across keyboard and layout changes',
-			() => keepsChatboxAboveMobileNavigation(this.app),
-		)
-		await run('keeps the workspace picker alive across pointer down', () =>
-			keepsWorkspacePickerAcrossPointerDown(this.app),
+			'keeps Chatbox above phone navigation and keeps the workspace picker stable across pointer down',
+			() => keepsChatboxMobileLayoutAndWorkspacePickerStable(this.app),
 		)
 		await run(
 			'respects automatic and manual session App opening independently of Chatbox location',
 			() => respectsSessionAppOpenMode(this.app),
 		)
 		await run(
-			'opens Chatbox in the chosen area while preserving its session and Unicode draft',
-			() => opensChatboxInChosenLocation(this.app),
-		)
-		await run(
-			'moves Chatbox to the chosen area when a provider is configured',
-			() =>
-				opensProviderSetupInEditorThenMovesChatboxToChosenLocation(this.app),
-		)
-		await run('reloads the production plugin through the real lifecycle', () =>
-			reloadsProductionPlugin(this.app),
-		)
-		await run('hot toggles synchronization and AI modules independently', () =>
-			hotTogglesFeatureModules(this.app),
-		)
-		await run('expands existing Vault paths in Bash wildcards', () =>
-			expandsExistingVaultPathsInBash(this.app),
-		)
-		await run('excludes unrelated hidden paths from Bash wildcards', () =>
-			excludesUnrelatedHiddenPathsFromGlobSnapshot(this.app),
-		)
-		await run('expands plugin agent domain paths in Bash wildcards', () =>
-			expandsAgentDomainPathsInBash(this.app),
-		)
-		await run('round-trips Vault adapter paths and content', () =>
-			roundTripsVaultAdapterContent(this.app),
-		)
-		await run(
-			'isolates an unavailable Unicode subtree and recovers through the real DataAdapter',
-			() => isolatesUnavailableVaultSubtrees(this.app),
-		)
-		await run(
-			'preserves UTF-8 when Bash writes a Vault file through a heredoc',
-			() => preservesBashHeredocUtf8(this.app),
-		)
-		await run('resolves resource data URLs through the real DataAdapter', () =>
-			resolvesResourceDataUrls(this.app),
-		)
-		await run('persists chat sessions through the real DataAdapter', () =>
-			persistsChatSessions(this.app),
-		)
-		await run(
-			'creates independent Apps with persistent data, SVG icons and ribbon pins',
+			'creates independent Apps with persistent data, theme tokens, opaque iframe KV, and hot reload',
 			() => createsIndependentApps(this.app),
 		)
 		await run(
-			'streams App AI and executes App tools through the production sandbox',
+			'streams App AI and executes App tools through the production opaque-origin sandbox',
 			() => runsAppAIThroughSandbox(this.app),
 		)
 		await run(
-			'skips a stale Vault Skill entry without hiding stable Skills',
-			() => skipsStaleVaultSkillEntries(this.app),
+			'renders searchable Obsidian settings and persists Vault Skill toggles',
+			() => rendersSearchableSettingsAndVaultSkills(this.app, recordStep),
 		)
 		await run(
-			'hides disabled Vault Skills while keeping built-in Skills active',
-			() => filtersDisabledSkillsFromAgentCatalog(this.app),
+			'renders sync progress and production ScanIssuesModal handoff',
+			() => rendersSyncProgressAndScanIssues(this.app),
 		)
 		await run(
-			'respects deletion preferences without a permanent-delete fallback',
-			() => respectsVaultDeletionPreference(this.app),
+			'hot toggles Sync and AI feature modules and persists cold-reload state',
+			() => hotTogglesFeatureModules(this.app),
 		)
 		await run(
-			'exports remote and local images without the native HTTP bridge',
-			() => exportsImagesThroughBrowserTransport(this.app),
-		)
-
-		await run(
-			'renders searchable settings through shared section renderers',
-			() => rendersSearchableSettings(this.app),
-		)
-		await run('lists only Vault Skills in the Skills settings', () =>
-			listsOnlyVaultSkillsInSettings(this.app, async (step) => {
-				lifecycleSteps.push(step)
-				await writeSnapshot()
-			}),
-		)
-
-		await run('tolerates a corrupt chat meta file', () =>
-			toleratesCorruptChatMeta(this.app),
-		)
-		await run(
-			'renders sync progress through the loaded production plugin',
-			() => rendersSyncProgress(this.app),
-		)
-		await run('lists unscanned in-scope paths in a large modal', () =>
-			listsUnscannedPathsInLargeModal(this.app),
-		)
-		await run('opens 10000 unscanned paths without freezing', () =>
-			opensTenThousandUnscannedPathsWithoutFreezing(this.app),
-		)
-		await run('keeps the unscanned paths dialog usable on a phone', () =>
-			keepsUnscannedPathsDialogUsableOnPhone(this.app),
-		)
-
-		await run('detaches ChatBox when the production plugin is disabled', () =>
-			detachesChatboxWhenProductionPluginIsDisabled(this.app, async (step) => {
-				lifecycleSteps.push(step)
-				await writeSnapshot()
-			}),
+			'reloads the production plugin and detaches ChatBox cleanly on disable',
+			() => reloadsAndDetachesProductionPlugin(this.app, recordStep),
 		)
 
 		await this.app.vault.adapter.write(

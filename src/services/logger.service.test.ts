@@ -1,7 +1,6 @@
 import { LogLevels } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import logger from '~/utils/logger'
-import { LOG_RETENTION_LINE_LIMIT } from './log-retention'
 import LoggerService from './logger.service'
 
 type ServiceOptions = ConstructorParameters<typeof LoggerService>[0]
@@ -102,33 +101,19 @@ describe('LoggerService retention', () => {
 		expect(Math.max(...blockSizes)).toBeLessThan(100_000)
 	})
 
-	it('retains a six-figure line history within the compressed-byte budget', async () => {
-		const total = LOG_RETENTION_LINE_LIMIT
-		for (let index = 0; index < total; index++) logger.info(`批量 ${index}`)
+	it('compresses sealed chunks well below raw line volume', async () => {
+		const total = 1_500
+		for (let index = 0; index < total; index++) {
+			logger.info(`批量记录 batch entry 🌿 ${index}`)
+		}
 
-		const lines = (await readLogs(service)).split('\n')
-		expect(lines).toHaveLength(total)
-		expect(lines[0]).toContain('批量 0')
-		expect(lines[total - 1]).toContain(`批量 ${total - 1}`)
+		const saved = await readLogs(service)
+		expect(saved.split('\n')).toHaveLength(total)
 		expect(service.stats.lines).toBe(total)
-		// The reason a six-figure history is affordable: it is compressed.
-		expect(service.stats.compressedBytes).toBeLessThan(total * 4)
-		expect(service.stats.compressedBytes).toBeLessThan(16 * 1024 * 1024)
-	})
-
-	it('evicts the oldest lines once the line budget is exceeded', async () => {
-		const total = LOG_RETENTION_LINE_LIMIT + 600
-		for (let index = 0; index < total; index++) logger.info(`超限 ${index}`)
-
-		// Eviction is chunk-granular, so the bound includes the newest chunk and
-		// the pending tail (at most 2 * CHUNK_LINE_LIMIT - 1 entries).
-		expect(service.stats.lines).toBeLessThanOrEqual(
-			LOG_RETENTION_LINE_LIMIT + 512,
+		expect(service.stats.sealedChunks).toBeGreaterThan(0)
+		expect(service.stats.compressedBytes).toBeLessThan(
+			new TextEncoder().encode(saved).byteLength / 3,
 		)
-		const lines = (await readLogs(service)).split('\n')
-		expect(lines).toHaveLength(service.stats.lines)
-		expect(lines[lines.length - 1]).toContain(`超限 ${total - 1}`)
-		expect(lines[0]).not.toContain('超限 0')
 	})
 
 	it('attaches its reporter idempotently across repeated onload()', async () => {

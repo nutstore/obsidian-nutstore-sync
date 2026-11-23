@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import {
 	emitCancelSync,
 	emitEndSync,
@@ -53,14 +54,6 @@ const { notice, modals, outcomes, outcomeModal } = vi.hoisted(() => {
 		outcomeModal,
 	}
 })
-
-vi.mock('obsidian', () => ({
-	Notice: class {
-		constructor(message: string) {
-			notice(message)
-		}
-	},
-}))
 
 vi.mock('~/components/ScanIssuesModal', () => ({
 	default: outcomeModal('scanIssues'),
@@ -120,6 +113,8 @@ let running = true
 let active = true
 let service: ProgressService
 beforeEach(() => {
+	obsidianRuntime.reset()
+	obsidianRuntime.onNotice = ({ message }) => notice(message)
 	running = true
 	active = true
 	modals.length = 0
@@ -140,6 +135,7 @@ beforeEach(() => {
 afterEach(() => {
 	service.onunload()
 	notice.mockClear()
+	obsidianRuntime.reset()
 })
 
 describe('progress service run snapshot', () => {

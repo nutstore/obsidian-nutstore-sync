@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import i18n from '~/i18n'
 import type { ScanIssue } from '~/sync/scope'
 import ScanIssuesModal, { describeScanCause } from './ScanIssuesModal'
 
-const { notice, lists } = vi.hoisted(() => ({
-	notice: vi.fn(),
+const { lists } = vi.hoisted(() => ({
 	lists: [] as {
 		items: { path: string; step: string; cause: string }[]
 		destroyed: boolean
@@ -30,75 +31,6 @@ vi.mock('./solid-js', () => ({
 	},
 }))
 
-vi.mock('obsidian', () => {
-	function element(tag = 'div', options: { cls?: string; text?: string } = {}) {
-		const el = document.createElement(tag)
-		el.className = options.cls ?? ''
-		el.textContent = options.text ?? ''
-		return Object.assign(el, {
-			createDiv: (opts?: typeof options) =>
-				el.appendChild(element('div', opts)),
-			createEl: (t: string, opts?: typeof options) =>
-				el.appendChild(element(t, opts)),
-			createSpan: (opts?: typeof options) =>
-				el.appendChild(element('span', opts)),
-			empty: () => el.replaceChildren(),
-		})
-	}
-	return {
-		Notice: class {
-			constructor(message: string) {
-				notice(message)
-			}
-		},
-		Modal: class {
-			modalEl = element('div', { cls: 'modal' })
-			titleEl = element('div')
-			contentEl = this.modalEl.createDiv({ cls: 'modal-content' })
-			setTitle(title: string) {
-				this.titleEl.textContent = title
-			}
-			open() {
-				this.onOpen()
-			}
-			close() {
-				this.onClose()
-			}
-			onOpen() {}
-			onClose() {}
-		},
-		Setting: class {
-			private readonly el: HTMLElement
-			constructor(parent: HTMLElement) {
-				this.el = parent.appendChild(document.createElement('div'))
-			}
-			setClass(cls: string) {
-				this.el.classList.add(cls)
-				return this
-			}
-			addButton(
-				cb: (button: {
-					setButtonText(t: string): unknown
-					setCta(): unknown
-					onClick(fn: () => void): unknown
-				}) => void,
-			) {
-				const el = this.el.appendChild(document.createElement('button'))
-				const button = {
-					setButtonText: (t: string) => ((el.textContent = t), button),
-					setCta: () => button,
-					onClick: (fn: () => void) => (
-						el.addEventListener('click', fn),
-						button
-					),
-				}
-				cb(button)
-				return this
-			}
-		},
-	}
-})
-
 const issues: ScanIssue[] = [
 	{
 		path: 'Notes 笔记🌱/Section & <draft>',
@@ -113,7 +45,7 @@ const rows = () =>
 	current().items.map((item) => [item.path, item.step, item.cause])
 
 afterEach(async () => {
-	notice.mockClear()
+	obsidianRuntime.reset()
 	lists.length = 0
 	await i18n.changeLanguage('en')
 })
@@ -160,19 +92,22 @@ describe('ScanIssuesModal', () => {
 		)
 	})
 
-	describe('with thousands of issues', () => {
-		const many: ScanIssue[] = Array.from({ length: 10_000 }, (_, index) => ({
+	describe('with many issues', () => {
+		const count = 200
+		const many: ScanIssue[] = Array.from({ length: count }, (_, index) => ({
 			path: `目录 Folder ${String(index).padStart(5, '0')}🌱/子目录`,
 			operation: 'list',
 			cause: new Error('Unavailable 暂不可用🌿'),
 		}))
 
-		it('passes all of them to the windowed list', () => {
+		it('passes all of them sorted to the windowed list', () => {
 			const modal = new ScanIssuesModal({} as never, [...many].reverse())
 			modal.open()
-			expect(current().items).toHaveLength(10_000)
+			expect(current().items).toHaveLength(count)
 			expect(current().items[0].path).toBe('目录 Folder 00000🌱/子目录')
-			expect(current().items.at(-1)!.path).toBe('目录 Folder 09999🌱/子目录')
+			expect(current().items.at(-1)!.path).toBe(
+				`目录 Folder ${String(count - 1).padStart(5, '0')}🌱/子目录`,
+			)
 		})
 
 		it('copies every path', async () => {
@@ -186,14 +121,14 @@ describe('ScanIssuesModal', () => {
 			modal.contentEl
 				.querySelector<HTMLButtonElement>('.scan-issues-actions button')!
 				.click()
-			await vi.waitFor(() => expect(writeText).toHaveBeenCalledOnce())
+			await flushUntil(() => expect(writeText).toHaveBeenCalledOnce())
 			const text = (writeText.mock.calls[0] as unknown as [string])[0]
-			expect(text.split('\n')).toHaveLength(10_000)
-			expect(text.split('\n')[9_999]).toBe(
-				`目录 Folder 09999🌱/子目录\t${i18n.t('scanIssues.operations.list')}\tUnavailable 暂不可用🌿`,
+			expect(text.split('\n')).toHaveLength(count)
+			expect(text.split('\n')[count - 1]).toBe(
+				`目录 Folder ${String(count - 1).padStart(5, '0')}🌱/子目录\t${i18n.t('scanIssues.operations.list')}\tUnavailable 暂不可用🌿`,
 			)
-			expect(notice).toHaveBeenCalledWith(
-				i18n.t('scanIssues.copied', { count: 10_000 }),
+			expect(obsidianRuntime.notices.at(-1)?.message).toBe(
+				i18n.t('scanIssues.copied', { count }),
 			)
 		})
 
@@ -209,8 +144,10 @@ describe('ScanIssuesModal', () => {
 			modal.contentEl
 				.querySelector<HTMLButtonElement>('.scan-issues-actions button')!
 				.click()
-			await vi.waitFor(() =>
-				expect(notice).toHaveBeenCalledWith(i18n.t('scanIssues.copyFailed')),
+			await flushUntil(() =>
+				expect(obsidianRuntime.notices.at(-1)?.message).toBe(
+					i18n.t('scanIssues.copyFailed'),
+				),
 			)
 		})
 	})

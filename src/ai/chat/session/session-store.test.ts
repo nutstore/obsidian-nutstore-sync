@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { Notice } from 'obsidian'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import { ChatState } from '~/ai/chat/runtime/chat-state'
 import type { Selection } from '~/ai/chat/runtime/selection'
 import type { ChatSession } from '~/ai/chat/domain'
@@ -8,12 +8,11 @@ import { SessionsFileBackend } from './session-files'
 import { encodeChatSessionForStorage } from './session-persistence'
 import { SessionStore, SessionUnavailableError } from './session-store'
 
-vi.mock('obsidian', () => ({
-	Notice: vi.fn(),
-	normalizePath: (path: string) => path,
-	Platform: { isWin: false, isMacOS: true, isLinux: false },
-}))
 vi.mock('~/i18n', () => ({ default: { t: (key: string) => key } }))
+
+afterEach(() => {
+	obsidianRuntime.reset()
+})
 
 describe('session loading failures', () => {
 	it('checks the model selection when migrating a legacy session', () => {
@@ -86,7 +85,7 @@ describe('session loading failures', () => {
 	it.each([null, undefined, { mode: 'summary', preservedTurnCount: null }])(
 		'reports invalid checkpoint data through the unavailable-session boundary (%j)',
 		async (data) => {
-			vi.mocked(Notice).mockClear()
+			obsidianRuntime.reset()
 			const session: ChatSession = {
 				schemaVersion: 2,
 				id: 'neutral-中性-🌿',
@@ -123,10 +122,10 @@ describe('session loading failures', () => {
 			await expect(store.loadSessionById(session.id)).rejects.toBeInstanceOf(
 				SessionUnavailableError,
 			)
-			expect(Notice).toHaveBeenCalledWith(
-				'chatbox.errors.corruptSessionFile',
-				10000,
-			)
+			expect(obsidianRuntime.notices).toContainEqual({
+				message: 'chatbox.errors.corruptSessionFile',
+				timeout: 10000,
+			})
 			expect(state.loadedSessions.has(session.id)).toBe(false)
 		},
 	)

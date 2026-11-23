@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import { ModuleScope } from '~/modules/lifecycle'
 import type NutstorePlugin from '~/index'
 import type { SavedApp } from '~/ai/apps/store'
@@ -7,9 +9,13 @@ import type { AppStore } from '~/ai/apps/store'
 import AppRibbonManager from './AppRibbonManager'
 import logger from '~/utils/logger'
 
-const icons = vi.hoisted(() => ({ add: vi.fn(), remove: vi.fn() }))
+const icons = { add: vi.fn(), remove: vi.fn() }
 const errorSpy = vi.spyOn(logger, 'error')
-vi.mock('obsidian', () => ({ addIcon: icons.add, removeIcon: icons.remove }))
+beforeEach(() => {
+	obsidianRuntime.reset()
+	obsidianRuntime.onAddIcon = (id, svg) => icons.add(id, svg)
+	obsidianRuntime.onRemoveIcon = (id) => icons.remove(id)
+})
 
 function savedApp(
 	overrides: {
@@ -122,7 +128,7 @@ describe('independent App ribbon integration', () => {
 		expect(command.checkCallback(true)).toBe(true)
 
 		;(f.host.querySelector('button') as HTMLButtonElement).click()
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(f.openApp).toHaveBeenCalledWith('app-neutral'),
 		)
 	})
