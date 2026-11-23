@@ -907,6 +907,7 @@
 		"openCommand": "打开 Chatbox",
 		"addToContext": "添加到 AI 上下文",
 		"newChat": "新对话",
+		"alreadyInNewChat": "当前已是新对话",
 		"setup": {
 			"continueEyebrow": "继续配置 {{provider}}",
 			"progressLabel": "模型提供商配置进度",

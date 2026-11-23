@@ -907,6 +907,7 @@
 		"openCommand": "Open chatbox",
 		"addToContext": "Add to AI context",
 		"newChat": "New chat",
+		"alreadyInNewChat": "Already in a new chat",
 		"setup": {
 			"continueEyebrow": "Continue setting up {{provider}}",
 			"progressLabel": "Provider setup progress",

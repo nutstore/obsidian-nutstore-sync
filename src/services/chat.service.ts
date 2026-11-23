@@ -672,7 +672,7 @@ export default class ChatService extends BaseService {
 
 	private bindViewActions(): ChatboxActionHandlers {
 		return {
-			onNewSession: () => void this.createSession(),
+			onNewSession: () => void this.startNewSession(),
 			onCompressContext: () => this.compressContext(),
 			onSwitchSession: (sessionId: string) =>
 				void this.switchSession(sessionId),
@@ -788,6 +788,19 @@ export default class ChatService extends BaseService {
 		this.store.upsertSessionIndexItem(session)
 		await this.store.persistMetaAndIndex()
 		this.notify()
+	}
+
+	/**
+	 * UI entry for "new chat". Creating a session is idempotent, so an untouched
+	 * fresh chat stays active; the click still deserves an answer instead of
+	 * looking broken, so confirm the fresh chat is already there.
+	 */
+	async startNewSession() {
+		const previousSessionId = this.state.activeSessionId
+		const session = await this.createSession()
+		if (session.id === previousSessionId) {
+			new Notice(i18n.t('chatbox.alreadyInNewChat'))
+		}
 	}
 
 	async createSession() {
