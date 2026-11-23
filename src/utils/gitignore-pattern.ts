@@ -228,17 +228,18 @@ export default class GlobMatch {
 	test(path: string) {
 		if (this.patternBody === '') return false
 		const { normalized, segments, isDirPath } = normalizePath(path)
+		if (segments.length === 0) return false
 		if (this.isDirOnly) {
 			if (!isDirPath) return false
 			if (this.isRooted || this.hasSlash) {
 				return this.pathRegex?.test(normalized) ?? false
 			}
-			return segments.some((segment) => this.segmentRegex?.test(segment))
+			return this.segmentRegex?.test(segments[segments.length - 1]) ?? false
 		}
 		if (this.isRooted || this.hasSlash) {
 			return this.pathRegex?.test(normalized) ?? false
 		}
-		return segments.some((segment) => this.segmentRegex?.test(segment))
+		return this.segmentRegex?.test(segments[segments.length - 1]) ?? false
 	}
 }
 
