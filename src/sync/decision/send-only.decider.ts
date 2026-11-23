@@ -3,6 +3,11 @@ import { hasInvalidChar } from '~/utils/has-invalid-char'
 import { isSameTime } from '~/utils/is-same-time'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import {
+	AddedLocalFileCandidate,
+	RemovedRemoteFileCandidate,
+	resolveAndAppendMoveTasks,
+} from '../core/detect-local-moves'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
 import { getFileChanges } from '../core/file-changes'
@@ -76,6 +81,8 @@ export async function sendOnlyDecider(
 	const tasks: BaseTask[] = []
 	const removeRemoteFolderTasks: BaseTask[] = []
 	const mkdirRemoteTasks: BaseTask[] = []
+	const removedMoveCandidates: RemovedRemoteFileCandidate[] = []
+	const addedMoveCandidates: AddedLocalFileCandidate[] = []
 
 	const pushLocalFile = (
 		p: string,
@@ -213,7 +220,11 @@ export async function sendOnlyDecider(
 				localPath: p,
 				remotePath: remotePathToAbsolute(remoteBaseDir, p),
 			})
-			pushLocalFile(p, local.size)
+			if (local.size > maxFileSize || hasInvalidChar(p)) {
+				pushLocalFile(p, local.size)
+			} else {
+				addedMoveCandidates.push({ path: p, local })
+			}
 			continue
 		}
 
@@ -224,7 +235,15 @@ export async function sendOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				removeRemoteFile(p, remote.size)
+				if (
+					record &&
+					isSameTime(remote.mtime, record.remote.mtime) &&
+					remote.size <= maxFileSize
+				) {
+					removedMoveCandidates.push({ path: p, remote, record })
+				} else {
+					removeRemoteFile(p, remote.size)
+				}
 				continue
 			}
 			if (!record) {
@@ -242,7 +261,11 @@ export async function sendOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				removeRemoteFile(p, remote.size)
+				if (remote.size > maxFileSize) {
+					removeRemoteFile(p, remote.size)
+				} else {
+					removedMoveCandidates.push({ path: p, remote, record })
+				}
 			} else {
 				logger.debug({
 					reason:
@@ -260,6 +283,13 @@ export async function sendOnlyDecider(
 			continue
 		}
 	}
+
+	await resolveAndAppendMoveTasks(
+		input,
+		removedMoveCandidates,
+		addedMoveCandidates,
+		tasks,
+	)
 
 	// * clean orphaned records (both local and remote deleted)
 	for (const [recordPath] of syncRecords) {

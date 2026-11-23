@@ -486,4 +486,32 @@ describe('sync progress modal', () => {
 		modal.update()
 		expect(find('cache').style.display).toBe('none')
 	})
+
+	it.each(['zh', 'en'])(
+		'renders moveRemote tasks with source → destination path in %s',
+		async (language) => {
+			await i18n.changeLanguage(language)
+			const { modal, set, find } = mount()
+			const ref = {
+				kind: 'moveRemote' as const,
+				fromLocalPath: '旧目录 🌱/文档.md',
+				localPath: '新目录 📘/文档.md',
+			}
+			set({
+				status: 'syncing',
+				preparation: null,
+				total: 1,
+				current: ref,
+				currentInFlight: true,
+				completed: [],
+			})
+			modal.update()
+			const expectedPath = '旧目录 🌱/文档.md → 新目录 📘/文档.md'
+			expect(find('current-file').textContent).toContain(expectedPath)
+			expect(find('current-file').title).toBe(expectedPath)
+			const rowText = find('files-list').textContent ?? ''
+			expect(rowText).toContain(i18n.t('sync.fileOp.moveRemote'))
+			expect(rowText).toContain(expectedPath)
+		},
+	)
 })

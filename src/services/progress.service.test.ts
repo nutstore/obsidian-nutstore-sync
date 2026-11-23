@@ -11,6 +11,7 @@ import {
 	type CompletedTask,
 } from '~/events'
 import type NutstorePlugin from '~/index'
+import MoveRemoteTask from '~/sync/tasks/move-remote.task'
 import PullTask from '~/sync/tasks/pull.task'
 import PushTask from '~/sync/tasks/push.task'
 import SkippedTask, { SkipReason } from '~/sync/tasks/skipped.task'
@@ -86,6 +87,12 @@ const options = (localPath: string) =>
 	({ localPath, remotePath: localPath, remoteBaseDir: '/' }) as BaseTaskOptions
 const push = (path: string) => new PushTask(options(path))
 const pull = (path: string) => new PullTask({ ...options(path), remoteSize: 1 })
+const moveRemote = (from: string, to: string) =>
+	new MoveRemoteTask({
+		...options(to),
+		fromLocalPath: from,
+		fromRemotePath: from,
+	})
 const skipped = (path: string) =>
 	new SkippedTask({
 		...options(path),
@@ -224,6 +231,25 @@ describe('progress service run snapshot', () => {
 			'b 🌿.md',
 			'c 🌿.md',
 		])
+	})
+
+	it('captures fromLocalPath only for MoveRemoteTask descriptors', () => {
+		const move = moveRemote('旧位置 🌱/笔记.md', '新位置 📘/笔记.md')
+		emitPreparingSync({ showNotice: false })
+		started(1, 0, move)
+		expect(service.run?.current).toEqual({
+			kind: 'moveRemote',
+			fromLocalPath: '旧位置 🌱/笔记.md',
+			localPath: '新位置 📘/笔记.md',
+		})
+		finished(1, 1, done(move))
+		expect(service.run?.completed[0]).toEqual({
+			kind: 'moveRemote',
+			fromLocalPath: '旧位置 🌱/笔记.md',
+			localPath: '新位置 📘/笔记.md',
+			success: true,
+			error: undefined,
+		})
 	})
 
 	it('replaces the previous run when the next one starts, including its upload advice', () => {

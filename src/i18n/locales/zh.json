@@ -763,7 +763,8 @@
 			"failedToUploadMerged": "上传合并内容失败",
 			"requestsTooFrequent": "请求过于频繁，请等待几分钟后再试",
 			"accountNotConfigured": "尚未配置坚果云账号，请先在设置中配置账号信息",
-			"ssoTokenInvalid": "登录已失效，请在设置中重新登录。"
+			"ssoTokenInvalid": "登录已失效，请在设置中重新登录。",
+			"skippedRemoteRemovalAfterFailedMove": "由于此前从该路径移动文件失败，已跳过远程删除"
 		},
 		"requestsTooFrequent": "请求过于频繁，插件将在 {{time}} 后自动继续同步任务",
 		"preparing": "📋 准备同步",
@@ -820,6 +821,7 @@
 			"download": "下载",
 			"filenameError": "路径含无效字符",
 			"merge": "合并",
+			"moveRemote": "移动远程",
 			"removeLocal": "删除本地",
 			"removeRemote": "删除远程",
 			"removeRemoteRecursively": "递归删除远程",

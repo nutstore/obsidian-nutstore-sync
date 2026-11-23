@@ -33,6 +33,7 @@ function fixture(path: string, content: string, remoteChanged = false) {
 	const taskFactory = {
 		createPullTask: vi.fn<TaskFactory['createPullTask']>(),
 		createPushTask: vi.fn<TaskFactory['createPushTask']>(),
+		createMoveRemoteTask: vi.fn<TaskFactory['createMoveRemoteTask']>(),
 		createConflictResolveTask:
 			vi.fn<TaskFactory['createConflictResolveTask']>(),
 		createNoopTask: vi.fn<TaskFactory['createNoopTask']>(),
@@ -63,6 +64,7 @@ function fixture(path: string, content: string, remoteChanged = false) {
 		compareFileContent: vi.fn(async (_path: string, base: ArrayBuffer) =>
 			new Uint8Array(base).every((byte, index) => byte === bytes[index]),
 		),
+		getLocalContentHash: vi.fn(async () => null),
 		taskFactory,
 	} satisfies SyncDecisionInput
 	return { input, local, remote, record, taskFactory }

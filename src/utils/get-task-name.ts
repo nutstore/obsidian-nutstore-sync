@@ -5,6 +5,7 @@ import FilenameErrorTask from '~/sync/tasks/filename-error.task'
 import MkdirLocalTask from '~/sync/tasks/mkdir-local.task'
 import MkdirRemoteTask from '~/sync/tasks/mkdir-remote.task'
 import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
+import MoveRemoteTask from '~/sync/tasks/move-remote.task'
 import NoopTask from '~/sync/tasks/noop.task'
 import PullTask from '~/sync/tasks/pull.task'
 import PushTask from '~/sync/tasks/push.task'
@@ -21,6 +22,7 @@ export type TaskKind =
 	| 'createLocalDir'
 	| 'createRemoteDir'
 	| 'createRemoteDirs'
+	| 'moveRemote'
 	| 'noop'
 	| 'download'
 	| 'upload'
@@ -46,6 +48,7 @@ export function describeTask(task: BaseTask): TaskDescriptor {
 	if (task instanceof MkdirLocalTask) return { kind: 'createLocalDir' }
 	if (task instanceof MkdirRemoteTask) return { kind: 'createRemoteDir' }
 	if (task instanceof MkdirsRemoteTask) return { kind: 'createRemoteDirs' }
+	if (task instanceof MoveRemoteTask) return { kind: 'moveRemote' }
 	if (task instanceof NoopTask) return { kind: 'noop' }
 	if (task instanceof PullTask) return { kind: 'download' }
 	if (task instanceof PushTask) return { kind: 'upload' }
@@ -85,4 +88,13 @@ export function getTaskLabel({ kind, skipReason }: TaskDescriptor): string {
 
 export default function getTaskName(task: BaseTask) {
 	return getTaskLabel(describeTask(task))
+}
+
+export function formatTaskDisplayPath(ref: {
+	localPath: string
+	fromLocalPath?: string
+}): string {
+	return ref.fromLocalPath
+		? `${ref.fromLocalPath} → ${ref.localPath}`
+		: ref.localPath
 }

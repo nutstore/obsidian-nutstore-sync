@@ -1,7 +1,7 @@
 import { App, Modal, Setting } from 'obsidian'
 import i18n from '~/i18n'
 import type { SyncTaskRecord } from '~/services/progress.service'
-import { getTaskLabel } from '~/utils/get-task-name'
+import { formatTaskDisplayPath, getTaskLabel } from '~/utils/get-task-name'
 
 /** The failed tasks of a run, as recorded in its snapshot. */
 export default class FailedTasksModal extends Modal {
@@ -40,7 +40,7 @@ export default class FailedTasksModal extends Modal {
 		this.failedTasks.forEach((task) => {
 			const row = tbody.createEl('tr')
 			row.createEl('td', { text: getTaskLabel(task) })
-			row.createEl('td', { text: task.localPath })
+			row.createEl('td', { text: formatTaskDisplayPath(task) })
 			row.createEl('td', { text: task.error ?? '' })
 		})
 

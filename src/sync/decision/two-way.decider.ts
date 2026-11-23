@@ -4,6 +4,11 @@ import { isPluginSelfPath } from '~/utils/config-dir-rules'
 import { isSameTime } from '~/utils/is-same-time'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import {
+	AddedLocalFileCandidate,
+	RemovedRemoteFileCandidate,
+	resolveAndAppendMoveTasks,
+} from '../core/detect-local-moves'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
 import { getFileChanges } from '../core/file-changes'
@@ -64,6 +69,8 @@ export async function twoWayDecider(
 	const mkdirLocalTasks: BaseTask[] = []
 	const mkdirRemoteTasks: BaseTask[] = []
 	const noopFolderTasks: BaseTask[] = []
+	const removedMoveCandidates: RemovedRemoteFileCandidate[] = []
+	const addedMoveCandidates: AddedLocalFileCandidate[] = []
 
 	const removeRemoteFile = (p: string, remoteSize: number): boolean => {
 		const taskOptions = {
@@ -285,7 +292,11 @@ export async function twoWayDecider(
 								localExists: !!local,
 							},
 						})
-						removeRemoteFile(p, remote.size)
+						if (remote.size > maxFileSize) {
+							removeRemoteFile(p, remote.size)
+						} else {
+							removedMoveCandidates.push({ path: p, remote, record })
+						}
 						continue
 					}
 				}
@@ -450,13 +461,20 @@ export async function twoWayDecider(
 					if (hasInvalidChar(local.path)) {
 						tasks.push(taskFactory.createFilenameErrorTask(options))
 					} else {
-						tasks.push(taskFactory.createPushTask(options))
+						addedMoveCandidates.push({ path: p, local })
 					}
 					continue
 				}
 			}
 		}
 	}
+
+	await resolveAndAppendMoveTasks(
+		input,
+		removedMoveCandidates,
+		addedMoveCandidates,
+		tasks,
+	)
 
 	// * clean orphaned records (both local and remote deleted)
 	for (const [recordPath, record] of syncRecords) {

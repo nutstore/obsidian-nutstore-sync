@@ -6,6 +6,7 @@ import {
 	type TaskSelectionItem,
 	type TaskSelectionVirtualListController,
 } from '../components/solid-js'
+import MoveRemoteTask from '../sync/tasks/move-remote.task'
 import { BaseTask } from '../sync/tasks/task.interface'
 
 export default class TaskListConfirmModal extends Modal {
@@ -102,12 +103,23 @@ export default class TaskListConfirmModal extends Modal {
 	}
 
 	private buildListItems(): TaskSelectionItem[] {
-		return this.tasks.map((task, index) => ({
-			id: `${index}-${task.localPath}-${task.remotePath}`,
-			action: getTaskName(task),
-			localPath: task.localPath,
-			remotePath: task.remotePath,
-			checked: this.selectedTasks[index],
-		}))
+		return this.tasks.map((task, index) => {
+			if (task instanceof MoveRemoteTask) {
+				return {
+					id: `${index}-${task.fromLocalPath}-${task.localPath}-${task.remotePath}`,
+					action: getTaskName(task),
+					localPath: `${task.fromLocalPath} → ${task.localPath}`,
+					remotePath: `${task.fromRemotePath} → ${task.remotePath}`,
+					checked: this.selectedTasks[index],
+				}
+			}
+			return {
+				id: `${index}-${task.localPath}-${task.remotePath}`,
+				action: getTaskName(task),
+				localPath: task.localPath,
+				remotePath: task.remotePath,
+				checked: this.selectedTasks[index],
+			}
+		})
 	}
 }

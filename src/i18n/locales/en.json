@@ -763,7 +763,8 @@
 			"failedToUploadMerged": "Failed to upload merged content",
 			"requestsTooFrequent": "Requests too frequent, please wait a few minutes and try again",
 			"accountNotConfigured": "Nutstore account not configured. Please configure your account in settings first.",
-			"ssoTokenInvalid": "Login has expired. Please log in again in settings."
+			"ssoTokenInvalid": "Login has expired. Please log in again in settings.",
+			"skippedRemoteRemovalAfterFailedMove": "Skipped remote removal because a preceding move from this path failed"
 		},
 		"requestsTooFrequent": "Requests too frequent, plugin will resume sync at {{time}}",
 		"preparing": "📋 Preparing sync",
@@ -820,6 +821,7 @@
 			"download": "Download",
 			"filenameError": "Invalid path characters",
 			"merge": "Merge",
+			"moveRemote": "Move remote",
 			"removeLocal": "Remove local",
 			"removeRemote": "Remove remote",
 			"removeRemoteRecursively": "Remove remote recursively",

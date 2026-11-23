@@ -19,6 +19,7 @@ import i18n from '../i18n'
 import NutstorePlugin from '../index'
 import { describeTask, type TaskDescriptor } from '../utils/get-task-name'
 import { BaseService } from './service.interface'
+import MoveRemoteTask from '~/sync/tasks/move-remote.task'
 import type { BaseTask } from '~/sync/tasks/task.interface'
 
 /**
@@ -43,6 +44,7 @@ export const isSyncRunActive = (status: SyncRunStatus) =>
 /** A task as the user saw it, without the machinery needed to run it. */
 export interface SyncTaskRef extends TaskDescriptor {
 	localPath: string
+	fromLocalPath?: string
 }
 
 export interface SyncTaskRecord extends SyncTaskRef {
@@ -77,6 +79,9 @@ export interface SyncRunSnapshot {
 const toRef = (task: BaseTask): SyncTaskRef => ({
 	...describeTask(task),
 	localPath: task.localPath,
+	...(task instanceof MoveRemoteTask
+		? { fromLocalPath: task.fromLocalPath }
+		: {}),
 })
 
 export class ProgressService extends BaseService {

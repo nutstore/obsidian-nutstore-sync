@@ -21,6 +21,7 @@ import { LocalVaultFileSystem } from '~/fs/local-vault'
 import { NutstoreFileSystem } from '~/fs/nutstore'
 import i18n from '~/i18n'
 import { closeModalOnAbort } from '~/modules/modal-lifetime'
+import { MAX_MOBILE_HASH_BYTES } from '~/model/sync-record.model'
 import CacheService from '~/services/cache.service.v1'
 import { SyncPolicy } from '~/settings'
 import { syncRecordKV } from '~/storage'
@@ -37,6 +38,7 @@ import { describeSyncError } from '~/utils/describe-sync-error'
 import { getDBKey } from '~/utils/get-db-key'
 import getTaskName from '~/utils/get-task-name'
 import { is503Error } from '~/utils/is-503-error'
+import { isSub } from '~/utils/is-sub'
 import {
 	getNutstoreDavEndpoint,
 	getNutstoreNsdavEndpoint,
@@ -58,15 +60,16 @@ import ConflictResolveTask, {
 } from './tasks/conflict-resolve.task'
 import MkdirLocalTask from './tasks/mkdir-local.task'
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
+import MoveRemoteTask from './tasks/move-remote.task'
 import NoopTask from './tasks/noop.task'
 import PullTask from './tasks/pull.task'
 import PushTask from './tasks/push.task'
 import RemoveLocalTask from './tasks/remove-local.task'
+import RemoveRemoteRecursivelyTask from './tasks/remove-remote-recursively.task'
 import RemoveRemoteTask from './tasks/remove-remote.task'
 import SkippedTask from './tasks/skipped.task'
 import { BaseTask, TaskError, TaskResult } from './tasks/task.interface'
-import { mergeMkdirTasks } from './utils/merge-mkdir-tasks'
-import { mergeRemoveRemoteTasks } from './utils/merge-remove-remote-tasks'
+import { optimizeTasksForExecution } from './utils/optimize-tasks'
 import {
 	countRecordUpdateOperations,
 	updateMtimeInRecord as updateMtimeInRecordUtil,
@@ -310,6 +313,7 @@ export class NutstoreSync {
 			this.logger.info('[Sync] Decision:', {
 				push: tasks.filter((t) => t instanceof PushTask).length,
 				pull: tasks.filter((t) => t instanceof PullTask).length,
+				moveRemote: tasks.filter((t) => t instanceof MoveRemoteTask).length,
 				conflict: tasks.filter((t) => t instanceof ConflictResolveTask).length,
 				mkdirRemote: tasks.filter((t) => t instanceof MkdirRemoteTask).length,
 				mkdirLocal: tasks.filter((t) => t instanceof MkdirLocalTask).length,
@@ -352,11 +356,15 @@ export class NutstoreSync {
 				}
 			}
 
+			let cancelledMoveSources = new Set<string>()
 			if (
 				showNotice &&
 				settings.confirmBeforeSync &&
 				firstTaskIdxNeedingConfirmation > -1
 			) {
+				const initialMoveTasks = confirmedTasks.filter(
+					(t): t is MoveRemoteTask => t instanceof MoveRemoteTask,
+				)
 				this.plugin.sync.progress.closeProgressModal()
 				const confirmExec = await closeModalOnAbort(
 					new TaskListConfirmModal(this.app, confirmedTasks),
@@ -364,6 +372,12 @@ export class NutstoreSync {
 				).openAndWait()
 				if (confirmExec.confirm) {
 					confirmedTasks = confirmExec.tasks
+					const retainedMoves = new Set(confirmedTasks)
+					cancelledMoveSources = new Set(
+						initialMoveTasks
+							.filter((task) => !retainedMoves.has(task))
+							.map((task) => task.fromLocalPath),
+					)
 					this.plugin.sync.progress.showProgressModal()
 				} else {
 					emitSyncCancelled()
@@ -579,23 +593,9 @@ export class NutstoreSync {
 				new Set([...confirmedTasks, ...noopTasks, ...skippedTasks]),
 			)
 
-			// Merge mkdir tasks with parent-child relationships to reduce API calls
-			const mkdirTasks = confirmedTasksUniq.filter(
-				(t) => t instanceof MkdirRemoteTask,
-			)
-			const removeRemoteTasks = confirmedTasksUniq.filter(
-				(t) => t instanceof RemoveRemoteTask,
-			)
-			const otherTasks = confirmedTasksUniq.filter(
-				(t) => !(t instanceof MkdirRemoteTask || t instanceof RemoveRemoteTask),
-			)
-			const mergedMkdirTasks = mergeMkdirTasks(mkdirTasks)
-			const mergedRemoveRemoteTasks = mergeRemoveRemoteTasks(removeRemoteTasks)
-			const optimizedTasks = [
-				...mergedRemoveRemoteTasks,
-				...mergedMkdirTasks,
-				...otherTasks,
-			].filter((task) => this.scope.allowsTask(task))
+			const optimizedTasks = optimizeTasksForExecution(confirmedTasksUniq, {
+				cancelledMoveSources,
+			}).filter((task) => this.scope.allowsTask(task))
 
 			if (confirmedTasks.length > 500 && Platform.isDesktopApp) {
 				new Notice(i18n.t('sync.suggestUseClientForManyTasks'), 5000)
@@ -611,7 +611,7 @@ export class NutstoreSync {
 					? localStats
 							.filter(
 								({ stat }) =>
-									!stat.isDir && (stat.size ?? 0) > 20 * 1024 * 1024,
+									!stat.isDir && (stat.size ?? 0) > MAX_MOBILE_HASH_BYTES,
 							)
 							.map(({ stat }) => stat.path)
 					: [],
@@ -641,9 +641,14 @@ export class NutstoreSync {
 				total: countRecordUpdateOperations(optimizedTasks),
 				completed: 0,
 			}
+			const failedMoveSources = new Set<string>()
 
 			for (const taskChunk of taskChunks) {
-				const chunkResult = await this.execTasks(taskChunk, progress)
+				const chunkResult = await this.execTasks(
+					taskChunk,
+					progress,
+					failedMoveSources,
+				)
 				allTasksResult.push(...chunkResult)
 				shouldReloadSettings ||= taskChunk.some((task, index) =>
 					this.didTaskReloadPluginSettings(task, chunkResult[index]),
@@ -753,6 +758,7 @@ export class NutstoreSync {
 	private async execTasks(
 		tasks: BaseTask[],
 		progress: { total: number; completedCount: number },
+		failedMoveSources: Set<string>,
 	) {
 		const res: TaskResult[] = []
 		// Filter out NoopTask and CleanRecordTask from total count for progress display
@@ -787,7 +793,31 @@ export class NutstoreSync {
 
 			if (isDisplayable) emitSyncProgress({ ...progress, running: task })
 
-			const taskResult = await this.executeWithRetry(task)
+			let taskResult: TaskResult
+			if (
+				(task instanceof RemoveRemoteTask ||
+					task instanceof RemoveRemoteRecursivelyTask) &&
+				[...failedMoveSources].some(
+					(src) => src === task.localPath || isSub(task.localPath, src),
+				)
+			) {
+				this.logger.warn(
+					`[Sync] Skipping remote removal of ${task.localPath} because a preceding move from this path failed`,
+				)
+				taskResult = {
+					success: false,
+					skipRecord: true,
+					error: new TaskError(
+						i18n.t('sync.error.skippedRemoteRemovalAfterFailedMove'),
+						task,
+					),
+				}
+			} else {
+				taskResult = await this.executeWithRetry(task)
+				if (task instanceof MoveRemoteTask && !taskResult.success) {
+					failedMoveSources.add(task.fromLocalPath)
+				}
+			}
 
 			this.logger.debug(
 				`Task completed [${i + 1}/${tasks.length}] ${task.localPath}`,

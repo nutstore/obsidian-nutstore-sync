@@ -14,6 +14,7 @@ import ConflictResolveTask, {
 import MkdirRemoteTask from './tasks/mkdir-remote.task'
 import MkdirsRemoteTask from './tasks/mkdirs-remote.task'
 import MkdirLocalTask from './tasks/mkdir-local.task'
+import MoveRemoteTask from './tasks/move-remote.task'
 import NoopTask from './tasks/noop.task'
 import CleanRecordTask from './tasks/clean-record.task'
 import SkippedTask, { SkipReason } from './tasks/skipped.task'
@@ -108,6 +109,47 @@ describe.each(['Notes/Section', '笔记/小节', 'Notes 笔记🌱/Section 小�
 				})
 				expect(scope.allowsTask(task)).toBe(path === sibling)
 			}
+		})
+
+		it('blocks remote move when either source or destination lies inside a protected subtree', () => {
+			const scope = new SyncScope()
+			scope.protect(`/${root}/`)
+			const protectedPath = `${root}/Example 示例🌿.bin`
+			const safePath = sibling
+
+			expect(
+				scope.allowsTask(
+					new MoveRemoteTask({
+						...options,
+						fromLocalPath: protectedPath,
+						fromRemotePath: protectedPath,
+						localPath: safePath,
+						remotePath: safePath,
+					}),
+				),
+			).toBe(false)
+			expect(
+				scope.allowsTask(
+					new MoveRemoteTask({
+						...options,
+						fromLocalPath: safePath,
+						fromRemotePath: safePath,
+						localPath: protectedPath,
+						remotePath: protectedPath,
+					}),
+				),
+			).toBe(false)
+			expect(
+				scope.allowsTask(
+					new MoveRemoteTask({
+						...options,
+						fromLocalPath: safePath,
+						fromRemotePath: safePath,
+						localPath: `${root}-archive/Renamed 重命名📘.bin`,
+						remotePath: `${root}-archive/Renamed 重命名📘.bin`,
+					}),
+				),
+			).toBe(true)
 		})
 	},
 )

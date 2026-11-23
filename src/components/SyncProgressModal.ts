@@ -7,7 +7,11 @@ import {
 	toggleClassTokens,
 } from '~/utils/class-tokens'
 import { describeSyncError } from '~/utils/describe-sync-error'
-import { getTaskLabel, type TaskKind } from '~/utils/get-task-name'
+import {
+	formatTaskDisplayPath,
+	getTaskLabel,
+	type TaskKind,
+} from '~/utils/get-task-name'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
 import {
@@ -31,6 +35,7 @@ const TASK_ICONS: Record<TaskKind, string> = {
 	createLocalDir: 'folder-plus',
 	createRemoteDir: 'folder-plus',
 	createRemoteDirs: 'folder-plus',
+	moveRemote: 'arrow-right',
 	download: 'arrow-down-narrow-wide',
 	upload: 'arrow-up-narrow-wide',
 	removeLocal: 'trash',
@@ -269,12 +274,13 @@ export default class SyncProgressModal extends Modal {
 		}
 
 		if ((state === 'syncing' || state === 'cancelling') && run.current) {
+			const displayPath = formatTaskDisplayPath(run.current)
 			this.currentFile.setText(
 				i18n.t('sync.currentFile', {
-					path: run.current.localPath,
+					path: displayPath,
 				}),
 			)
-			this.currentFile.title = run.current.localPath
+			this.currentFile.title = displayPath
 		} else {
 			this.currentFile.setText('')
 			this.currentFile.title = ''
@@ -439,7 +445,7 @@ export default class SyncProgressModal extends Modal {
 		const detail = item.createDiv({ cls: ':uno: flex-1 min-w-0' })
 		detail
 			.createDiv({ cls: ':uno: break-all' })
-			.setText(i18n.t('sync.filePath', { path: file.localPath }))
+			.setText(i18n.t('sync.filePath', { path: formatTaskDisplayPath(file) }))
 		const error = 'error' in file ? file.error : undefined
 		if (status === 'failed' && error) {
 			detail

@@ -1,5 +1,6 @@
 import { FsWalkResult } from '~/fs/fs.interface'
 import { StatModel } from '~/model/stat.model'
+import type { SyncRecordModel } from '~/model/sync-record.model'
 import { SyncMode } from '~/settings'
 import type { SyncLogger } from '~/sync/log'
 import { ConflictStrategy } from '../tasks/conflict-resolve.task'
@@ -14,17 +15,20 @@ export interface SyncDecisionSettings {
 	configDir: string
 }
 
-export interface SyncRecordItem {
-	remote: StatModel
-	local: StatModel
-	base?: { key: string }
-}
+export type SyncRecordItem = SyncRecordModel
 
 export interface TaskOptions {
 	remotePath: string
 	localPath: string
 	remoteBaseDir: string
 	recursive?: boolean
+}
+
+export interface MoveRemoteTaskOptionsInput extends TaskOptions {
+	fromLocalPath: string
+	fromRemotePath: string
+	/** Verified local snapshot matching the moved remote bytes during planning. */
+	expectedLocalStat?: Extract<StatModel, { isDir: false }>
 }
 
 export interface ConflictTaskOptions extends TaskOptions {
@@ -45,6 +49,7 @@ export type SkippedTaskOptions = TaskOptions & SkippedTaskReasonOptions
 export interface TaskFactory {
 	createPullTask(options: PullTaskOptions): BaseTask
 	createPushTask(options: TaskOptions): BaseTask
+	createMoveRemoteTask(options: MoveRemoteTaskOptionsInput): BaseTask
 	createConflictResolveTask(options: ConflictTaskOptions): BaseTask
 	createNoopTask(options: TaskOptions): BaseTask
 	createRemoveLocalTask(options: TaskOptions): BaseTask
@@ -68,5 +73,9 @@ export interface SyncDecisionInput {
 		filePath: string,
 		baseContent: ArrayBuffer,
 	) => Promise<boolean>
+	getLocalContentHash: (
+		filePath: string,
+		size: number,
+	) => Promise<string | null>
 	taskFactory: TaskFactory
 }
