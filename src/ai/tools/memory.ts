@@ -61,6 +61,7 @@ export const memoryTool = tool({
 		const fs = await createVaultFileSystem(app, {
 			recorder,
 			fileSystemManager,
+			includePathIndex: false,
 		})
 		const result = await memory.edit(fs, edit)
 		recordMetadata?.(toolCallId, {

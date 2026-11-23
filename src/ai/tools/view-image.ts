@@ -82,6 +82,7 @@ export const viewImageTool = tool({
 		const fs = await createVaultFileSystem(context.app, {
 			fileSystemManager: context.fileSystemManager,
 			onRead: context.readTracker?.markRead.bind(context.readTracker),
+			includePathIndex: false,
 		})
 		let data: Uint8Array
 		try {

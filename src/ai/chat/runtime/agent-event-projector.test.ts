@@ -318,4 +318,61 @@ describe('AgentEventProjector', () => {
 			vi.useRealTimers()
 		}
 	})
+
+	it('backs off partial JSON reparsing as streamed tool input grows large', async () => {
+		vi.useFakeTimers()
+		try {
+			vi.setSystemTime(1_000)
+			const agent = createEmptyMasterAgent(1)
+			const session: ChatSession = {
+				schemaVersion: 2,
+				id: 'session',
+				createdAt: 1,
+				updatedAt: 1,
+				subagents: { master: agent },
+			}
+			const notify = vi.fn()
+			const projector = new AgentEventProjector({
+				session,
+				agent,
+				store: { persistSession: vi.fn(async () => undefined) } as never,
+				messageFactory: new MessageFactory({ app: {} } as never, vi.fn()),
+				notify,
+				assistantMeta: { providerId: 'provider', modelId: 'model' },
+				isTurnAlive: () => true,
+			})
+
+			await projector.project({
+				type: 'tool-input-start',
+				id: 'patch-1',
+				toolName: 'apply_patch',
+			})
+			await projector.project({
+				type: 'tool-input-delta',
+				id: 'patch-1',
+				delta: `{"purpose":"更新大文件 🌱","patch":"${'中性内容 line 🌿\\n'.repeat(1_500)}`,
+			})
+			expect(notify).toHaveBeenCalledTimes(2)
+
+			// 60ms later exceeds the 50ms baseline, but stays inside the large-payload backoff window.
+			vi.setSystemTime(1_060)
+			await projector.project({
+				type: 'tool-input-delta',
+				id: 'patch-1',
+				delta: '追加行 🚀',
+			})
+			expect(notify).toHaveBeenCalledTimes(2)
+
+			// Once the backoff window elapses, the next delta updates the streaming view.
+			vi.setSystemTime(1_600)
+			await projector.project({
+				type: 'tool-input-delta',
+				id: 'patch-1',
+				delta: '"}',
+			})
+			expect(notify).toHaveBeenCalledTimes(3)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
 })

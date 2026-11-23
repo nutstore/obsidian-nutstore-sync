@@ -134,10 +134,12 @@ export function toolCallDisplayTitle(
 }
 
 export function fencedCode(language: string, value: string) {
-	const longestBacktickRun = Math.max(
-		0,
-		...Array.from(value.matchAll(/`+/g), (match) => match[0].length),
-	)
+	let longestBacktickRun = 0
+	for (const match of value.matchAll(/`+/g)) {
+		if (match[0].length > longestBacktickRun) {
+			longestBacktickRun = match[0].length
+		}
+	}
 	const fence = '`'.repeat(Math.max(3, longestBacktickRun + 1))
 	return `${fence}${language}\n${value}\n${fence}`
 }

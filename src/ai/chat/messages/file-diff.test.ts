@@ -189,6 +189,67 @@ describe('buildLineDiff', () => {
 			{ kind: 'add', newLine: 2, text: 'beta' },
 		])
 	})
+
+	it('handles pure creations and deletions with CJK and Emoji directly', () => {
+		const [created] = buildLineDiff('', '第一行 🌱\n第二行 🌿\n')
+		expect(created).toMatchObject({
+			oldStart: 1,
+			oldCount: 0,
+			newStart: 1,
+			newCount: 2,
+		})
+		expect(created.lines).toEqual([
+			{ kind: 'add', newLine: 1, text: '第一行 🌱' },
+			{ kind: 'add', newLine: 2, text: '第二行 🌿' },
+		])
+
+		const [deleted] = buildLineDiff('旧内容 📘\n尾行 ✅', '')
+		expect(deleted).toMatchObject({
+			oldStart: 1,
+			oldCount: 2,
+			newStart: 1,
+			newCount: 0,
+		})
+		expect(deleted.lines).toEqual([
+			{ kind: 'remove', oldLine: 1, text: '旧内容 📘' },
+			{ kind: 'remove', oldLine: 2, text: '尾行 ✅' },
+		])
+	})
+
+	it('diffs large multi-section rewrites accurately without superlinear inline diffing', () => {
+		const before = Array.from(
+			{ length: 600 },
+			(_, index) => `旧章节 ${index}：中性段落说明与示例正文内容 🌱`,
+		)
+		const after = before.map((line, index) =>
+			index >= 100 && index < 500
+				? `新章节 ${index}：重写后的中性段落说明与示例正文内容 🚀`
+				: line,
+		)
+
+		const hunks = buildLineDiff(before.join('\n'), after.join('\n'))
+		expect(hunks).toHaveLength(1)
+		expect(hunks[0]).toMatchObject({
+			oldStart: 99,
+			oldCount: 404,
+			newStart: 99,
+			newCount: 404,
+		})
+		const removed = hunks[0].lines.filter((line) => line.kind === 'remove')
+		const added = hunks[0].lines.filter((line) => line.kind === 'add')
+		expect(removed).toHaveLength(400)
+		expect(added).toHaveLength(400)
+		expect(removed[0]).toEqual({
+			kind: 'remove',
+			oldLine: 101,
+			text: '旧章节 100：中性段落说明与示例正文内容 🌱',
+		})
+		expect(added[0]).toEqual({
+			kind: 'add',
+			newLine: 101,
+			text: '新章节 100：重写后的中性段落说明与示例正文内容 🚀',
+		})
+	})
 })
 
 describe('buildFileDiff', () => {

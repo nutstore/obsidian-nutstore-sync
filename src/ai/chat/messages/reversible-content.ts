@@ -12,22 +12,41 @@ function toArrayBuffer(content: Uint8Array) {
 	) as ArrayBuffer
 }
 
-export function createCompressedFileContent(
+/**
+ * Level 1 raw deflate runs synchronously on the main thread during file edits:
+ * text and JSON snapshots already compress to nearly the same size as level 9,
+ * while avoiding deep LZ77 hash-chain stalls on mobile WebViews.
+ */
+const SNAPSHOT_DEFLATE_LEVEL = 1
+
+export function encodeCompressedFileContent(
 	content: ArrayBuffer | Uint8Array | string,
-): ReversibleCompressedContent {
+): {
+	contentCompressed: ReversibleCompressedContent
+	compressedBytes: Uint8Array
+} {
 	const bytes =
 		typeof content === 'string'
 			? new TextEncoder().encode(content)
 			: content instanceof Uint8Array
 				? content
 				: new Uint8Array(content)
-	const compressed = deflate(bytes, { level: 9 })
+	const compressedBytes = deflate(bytes, { level: SNAPSHOT_DEFLATE_LEVEL })
 	return {
-		compress: 'deflate',
-		blob: new Blob([toArrayBuffer(compressed)], {
-			type: 'application/octet-stream',
-		}),
+		contentCompressed: {
+			compress: 'deflate',
+			blob: new Blob([toArrayBuffer(compressedBytes)], {
+				type: 'application/octet-stream',
+			}),
+		},
+		compressedBytes,
 	}
+}
+
+export function createCompressedFileContent(
+	content: ArrayBuffer | Uint8Array | string,
+): ReversibleCompressedContent {
+	return encodeCompressedFileContent(content).contentCompressed
 }
 
 export function hasCompressedFileContent(

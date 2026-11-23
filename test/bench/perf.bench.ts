@@ -1,4 +1,6 @@
 import { bench, describe } from 'vitest'
+import { buildLineDiff } from '~/ai/chat/messages/file-diff'
+import { applyHunks, parsePatch } from '~/ai/tools/apply-patch'
 import { LogRetention } from '~/services/log-retention'
 import { SyncScope } from '~/sync/scope'
 import {
@@ -77,5 +79,46 @@ describe('LogRetention chunk compression throughput', () => {
 		for (let i = 0; i < 10_000; i += 1) {
 			retention.append(`[2026-11-23 12:00:00] [info] 批量同步记录 🌱 ${i}`)
 		}
+	})
+})
+
+describe('apply-patch hunk application throughput', () => {
+	const lines = Array.from(
+		{ length: 10_000 },
+		(_, i) => `line-${i}: 中性笔记内容 Neutral content 🌱`,
+	)
+	const content = `${lines.join('\n')}\n`
+	const hunkParts = ['*** Begin Patch', '*** Update File: notes/大文档🌱.md']
+	for (let h = 0; h < 20; h += 1) {
+		const idx = h * 450 + 100
+		hunkParts.push(`@@ line-${idx - 1}: 中性笔记内容 Neutral content 🌱`)
+		hunkParts.push(` ${lines[idx]}`)
+		hunkParts.push(`-${lines[idx + 1]}`)
+		hunkParts.push(`+modified-${idx + 1}: 已更新内容 🚀`)
+		hunkParts.push(` ${lines[idx + 2]}`)
+	}
+	hunkParts.push('*** End Patch')
+	const parsed = parsePatch(hunkParts.join('\n'))
+	const hunks = parsed[0].kind === 'update' ? parsed[0].hunks : []
+
+	bench('applies 20 headered hunks to a 10,000-line file', () => {
+		applyHunks(content, hunks, 'notes/大文档🌱.md')
+	})
+})
+
+describe('FileDiff large rewrite throughput', () => {
+	const beforeLines = Array.from(
+		{ length: 2_000 },
+		(_, i) => `- 条目 ${i}: 中性段落说明与记录内容 🌱`,
+	)
+	const before = `${beforeLines.join('\n')}\n`
+	const after = `${beforeLines
+		.map((line, i) =>
+			i % 2 === 0 ? `## 章节 ${i} 📘\n重写后的中性段落内容 ${i} 🚀` : line,
+		)
+		.join('\n')}\n`
+
+	bench('diffs a 2,000-line 50% rewrite', () => {
+		buildLineDiff(before, after)
 	})
 })

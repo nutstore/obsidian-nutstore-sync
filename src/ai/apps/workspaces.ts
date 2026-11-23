@@ -129,7 +129,11 @@ export class AppWorkspaces implements AppLifecycle {
 					() =>
 						new VaultFileSystemManager(
 							guardAppIO(this.app, check, this.scope.track),
-						).create({ appLifecycle: this, readonlyApps: true }),
+						).create({
+							appLifecycle: this,
+							readonlyApps: true,
+							includePathIndex: false,
+						}),
 					check,
 					true,
 				),
@@ -191,6 +195,7 @@ export class AppWorkspaces implements AppLifecycle {
 					appLifecycle: this,
 					readonlyApps: true,
 					permissionGuard,
+					includePathIndex: false,
 				}),
 			check,
 			false,

@@ -8,8 +8,8 @@ import type {
 	RmOptions,
 } from 'just-bash/browser'
 import type { ReversibleFileSnapshot } from '~/ai/chat/types'
-import { createCompressedFileContent } from '~/ai/chat/messages/reversible-content'
-import type { ReversibleOpRecorder } from './fs'
+import { encodeCompressedFileContent } from '~/ai/chat/messages/reversible-content'
+import { isNotFoundError, type ReversibleOpRecorder } from './fs'
 import { normalizeVirtualPath } from './virtual-path'
 
 type Snapshot = ReversibleFileSnapshot | { kind: 'dir' }
@@ -54,22 +54,45 @@ export class ReversibleFs implements IFileSystem {
 		return normalized.slice(1)
 	}
 
-	private async snapshot(path: string, result = new Map<string, Snapshot>()) {
+	private async snapshot(
+		path: string,
+		result = new Map<string, Snapshot | undefined>(),
+		skipRecordedFiles = false,
+	) {
 		const normalized = normalizeVirtualPath(path)
-		if (!(await this.inner.exists(normalized))) return result
-		const stat = await this.inner.stat(normalized)
+		let stat: Awaited<ReturnType<IFileSystem['stat']>>
+		try {
+			stat = await this.inner.stat(normalized)
+		} catch (error) {
+			if (isNotFoundError(error)) return result
+			throw error
+		}
 		if (stat.isDirectory) {
 			result.set(normalized, { kind: 'dir' })
 			for (const child of await this.inner.readdir(normalized)) {
-				await this.snapshot(joinPath(normalized, child), result)
+				await this.snapshot(
+					joinPath(normalized, child),
+					result,
+					skipRecordedFiles,
+				)
 			}
 		} else {
-			result.set(normalized, {
+			const recordedPath = this.toRecordedPath(normalized)
+			if (skipRecordedFiles && this.recorder.hasInitial(recordedPath)) {
+				// Keep the path in `before` so a subsequent removal/move still records
+				// `after = undefined`, without re-reading and re-compressing bytes that
+				// `recordVirtualTransition` would discard.
+				result.set(normalized, this.recorder.getInitial(recordedPath))
+				return result
+			}
+			const { contentCompressed, compressedBytes } =
+				encodeCompressedFileContent(await this.inner.readFileBuffer(normalized))
+			const snapshot: ReversibleFileSnapshot = {
 				kind: 'file',
-				contentCompressed: createCompressedFileContent(
-					await this.inner.readFileBuffer(normalized),
-				),
-			})
+				contentCompressed,
+			}
+			this.recorder.registerCompressedBytes(snapshot, compressedBytes)
+			result.set(normalized, snapshot)
 		}
 		return result
 	}
@@ -78,10 +101,10 @@ export class ReversibleFs implements IFileSystem {
 		if (this.depth > 0) return action()
 		this.depth++
 		try {
-			const before = new Map<string, Snapshot>()
+			const before = new Map<string, Snapshot | undefined>()
 			this.recorder.beginCapture()
 			try {
-				for (const path of paths) await this.snapshot(path, before)
+				for (const path of paths) await this.snapshot(path, before, true)
 			} finally {
 				this.recorder.endCapture()
 			}
@@ -94,10 +117,10 @@ export class ReversibleFs implements IFileSystem {
 				failed = true
 				failure = error
 			}
-			const after = new Map<string, Snapshot>()
+			const after = new Map<string, Snapshot | undefined>()
 			this.recorder.beginCapture()
 			try {
-				for (const path of paths) await this.snapshot(path, after)
+				for (const path of paths) await this.snapshot(path, after, false)
 			} finally {
 				this.recorder.endCapture()
 			}
