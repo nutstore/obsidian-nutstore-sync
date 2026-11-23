@@ -1,3 +1,5 @@
+import { limitAsync } from 'es-toolkit'
+
 export interface AdapterDirectoryEntries {
 	files: string[]
 	folders: string[]
@@ -7,6 +9,9 @@ export interface DirectoryEntriesAdapter {
 	list(directory: string): Promise<AdapterDirectoryEntries>
 	stat(path: string): Promise<unknown>
 }
+
+/** Caps in-flight `adapter.stat` calls so large folders do not saturate mobile bridges. */
+const MAX_CONCURRENT_ADAPTER_STATS = 24
 
 /**
  * Returns only entries that remain addressable after a directory listing.
@@ -18,24 +23,16 @@ export async function listAvailableAdapterEntries(
 	directory: string,
 ): Promise<AdapterDirectoryEntries> {
 	const listed = await adapter.list(directory)
-	const available = async (path: string) => {
+	const probeEntry = limitAsync(async (path: string) => {
 		try {
-			return Boolean(await adapter.stat(path))
+			return (await adapter.stat(path)) ? path : undefined
 		} catch {
-			return false
+			return undefined
 		}
-	}
+	}, MAX_CONCURRENT_ADAPTER_STATS)
 	const [files, folders] = await Promise.all([
-		Promise.all(
-			listed.files.map(async (path) =>
-				(await available(path)) ? path : undefined,
-			),
-		),
-		Promise.all(
-			listed.folders.map(async (path) =>
-				(await available(path)) ? path : undefined,
-			),
-		),
+		Promise.all(listed.files.map(probeEntry)),
+		Promise.all(listed.folders.map(probeEntry)),
 	])
 	return {
 		files: files.filter((path): path is string => Boolean(path)),

@@ -226,7 +226,7 @@ class MutableVaultPathIndex implements VaultPathIndex {
 	}
 }
 
-export function isNotFoundError(error: unknown): boolean {
+export function isNotFoundError(error: unknown): error is Error {
 	if (!(error instanceof Error)) return false
 	const code = (error as { code?: unknown }).code
 	return code === 'ENOENT' || error.message.includes('ENOENT')
@@ -561,15 +561,17 @@ export class ObsidianVaultFs implements IFileSystem {
 		this.assertWritable(normalized)
 		await this.checkPermission({ kind: 'write', path: normalized })
 		await this.withBatch(async () => {
-			await this.mkdir(pathPosix.dirname(normalized), {
-				recursive: true,
-			})
+			const vaultPath = this.toVaultPath(normalized)
+			const existingVaultFile =
+				!isAdapterPath(this.vault, vaultPath) &&
+				this.vault.getAbstractFileByPath(vaultPath) instanceof TFile
+			if (!existingVaultFile) {
+				await this.mkdir(pathPosix.dirname(normalized), {
+					recursive: true,
+				})
+			}
 			const encoded = encodeContent(content, options)
-			await writeLocalBinary(
-				this.vault,
-				this.toVaultPath(normalized),
-				toArrayBuffer(encoded),
-			)
+			await writeLocalBinary(this.vault, vaultPath, toArrayBuffer(encoded))
 			this.recordPath(normalized)
 			this.notifyWrite(normalized)
 		})
@@ -697,7 +699,9 @@ export class ObsidianVaultFs implements IFileSystem {
 				isDirectory: true,
 				isSymbolicLink: false,
 			})),
-		].sort((left, right) => left.name.localeCompare(right.name))
+		].sort((left, right) =>
+			left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+		)
 	}
 
 	async rm(path: string, options?: RmOptions): Promise<void> {

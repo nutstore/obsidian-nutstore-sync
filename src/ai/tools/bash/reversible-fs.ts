@@ -9,7 +9,7 @@ import type {
 } from 'just-bash/browser'
 import type { ReversibleFileSnapshot } from '~/ai/chat/types'
 import { encodeCompressedFileContent } from '~/ai/chat/messages/reversible-content'
-import { isNotFoundError, type ReversibleOpRecorder } from './fs'
+import { encodeContent, isNotFoundError, type ReversibleOpRecorder } from './fs'
 import { normalizeVirtualPath } from './virtual-path'
 
 type Snapshot = ReversibleFileSnapshot | { kind: 'dir' }
@@ -34,10 +34,16 @@ export class ReversibleFs implements IFileSystem {
 
 	constructor(
 		private readonly inner: IFileSystem &
-			Required<Pick<IFileSystem, 'readdirWithFileTypes'>>,
+			Required<Pick<IFileSystem, 'readdirWithFileTypes'>> & {
+				transformsWritesAt?: (path: string) => boolean
+			},
 		private readonly recorder: ReversibleOpRecorder,
 		private readonly options: ReversibleFsOptions = {},
 	) {}
+
+	transformsWritesAt(path: string): boolean {
+		return this.inner.transformsWritesAt?.(path) === true
+	}
 
 	private toRecordedPath(path: string) {
 		const normalized = normalizeVirtualPath(path)
@@ -52,6 +58,48 @@ export class ReversibleFs implements IFileSystem {
 			return normalized
 		}
 		return normalized.slice(1)
+	}
+
+	private createFileSnapshot(bytes: Uint8Array): ReversibleFileSnapshot {
+		const { contentCompressed, compressedBytes } =
+			encodeCompressedFileContent(bytes)
+		const snapshot: ReversibleFileSnapshot = {
+			kind: 'file',
+			contentCompressed,
+		}
+		this.recorder.registerCompressedBytes(snapshot, compressedBytes)
+		return snapshot
+	}
+
+	private async captureFileBefore(
+		normalized: string,
+		result: Map<string, Snapshot | undefined>,
+	) {
+		const recordedPath = this.toRecordedPath(normalized)
+		if (this.recorder.hasInitial(recordedPath)) {
+			// Keep the path in `before` so a subsequent removal/move still records
+			// `after = undefined`, without re-reading and re-compressing bytes that
+			// `recordVirtualTransition` would discard.
+			result.set(normalized, this.recorder.getInitial(recordedPath))
+			return
+		}
+		result.set(
+			normalized,
+			this.createFileSnapshot(await this.inner.readFileBuffer(normalized)),
+		)
+	}
+
+	private recordTransitions(
+		before: Map<string, Snapshot | undefined>,
+		after: Map<string, Snapshot | undefined>,
+	) {
+		for (const path of new Set([...before.keys(), ...after.keys()])) {
+			this.recorder.recordVirtualTransition(
+				this.toRecordedPath(path),
+				before.get(path),
+				after.get(path),
+			)
+		}
 	}
 
 	private async snapshot(
@@ -76,23 +124,13 @@ export class ReversibleFs implements IFileSystem {
 					skipRecordedFiles,
 				)
 			}
+		} else if (skipRecordedFiles) {
+			await this.captureFileBefore(normalized, result)
 		} else {
-			const recordedPath = this.toRecordedPath(normalized)
-			if (skipRecordedFiles && this.recorder.hasInitial(recordedPath)) {
-				// Keep the path in `before` so a subsequent removal/move still records
-				// `after = undefined`, without re-reading and re-compressing bytes that
-				// `recordVirtualTransition` would discard.
-				result.set(normalized, this.recorder.getInitial(recordedPath))
-				return result
-			}
-			const { contentCompressed, compressedBytes } =
-				encodeCompressedFileContent(await this.inner.readFileBuffer(normalized))
-			const snapshot: ReversibleFileSnapshot = {
-				kind: 'file',
-				contentCompressed,
-			}
-			this.recorder.registerCompressedBytes(snapshot, compressedBytes)
-			result.set(normalized, snapshot)
+			result.set(
+				normalized,
+				this.createFileSnapshot(await this.inner.readFileBuffer(normalized)),
+			)
 		}
 		return result
 	}
@@ -124,13 +162,7 @@ export class ReversibleFs implements IFileSystem {
 			} finally {
 				this.recorder.endCapture()
 			}
-			for (const path of new Set([...before.keys(), ...after.keys()])) {
-				this.recorder.recordVirtualTransition(
-					this.toRecordedPath(path),
-					before.get(path),
-					after.get(path),
-				)
-			}
+			this.recordTransitions(before, after)
 			if (failed) throw failure
 			return result as T
 		} finally {
@@ -161,9 +193,72 @@ export class ReversibleFs implements IFileSystem {
 		content: FileContent,
 		options?: WriteOptions | BufferEncoding,
 	) {
-		return this.mutate(await this.writePaths(path), () =>
-			this.inner.writeFile(path, content, options),
-		)
+		if (this.depth > 0) return this.inner.writeFile(path, content, options)
+		const normalized = normalizeVirtualPath(path)
+		if (this.inner.transformsWritesAt?.(normalized)) {
+			return this.mutate(await this.writePaths(normalized), () =>
+				this.inner.writeFile(path, content, options),
+			)
+		}
+		this.depth++
+		try {
+			let existing: Awaited<ReturnType<IFileSystem['stat']>> | undefined
+			let trackedPaths: string[]
+			const before = new Map<string, Snapshot | undefined>()
+			this.recorder.beginCapture()
+			try {
+				try {
+					existing = await this.inner.stat(normalized)
+				} catch (error) {
+					if (!isNotFoundError(error)) throw error
+				}
+				if (existing && !existing.isDirectory) {
+					trackedPaths = [normalized]
+					await this.captureFileBefore(normalized, before)
+				} else {
+					trackedPaths = await this.writePaths(normalized)
+					if (existing?.isDirectory) {
+						await this.snapshot(normalized, before, true)
+					}
+				}
+			} finally {
+				this.recorder.endCapture()
+			}
+			let failure: unknown
+			let failed = false
+			try {
+				await this.inner.writeFile(path, content, options)
+			} catch (error) {
+				failed = true
+				failure = error
+			}
+			const after = new Map<string, Snapshot | undefined>()
+			if (failed) {
+				this.recorder.beginCapture()
+				try {
+					for (const tracked of trackedPaths) {
+						await this.snapshot(tracked, after, false)
+					}
+				} finally {
+					this.recorder.endCapture()
+				}
+			} else {
+				// Verbatim-write filesystems persist the exact encoded bytes we
+				// passed in, so we record the post-write snapshot directly without
+				// another stat + readFileBuffer round trip.
+				after.set(
+					normalized,
+					this.createFileSnapshot(encodeContent(content, options)),
+				)
+				for (let index = 1; index < trackedPaths.length; index += 1) {
+					after.set(trackedPaths[index], { kind: 'dir' })
+				}
+			}
+			this.recordTransitions(before, after)
+			if (failed) throw failure
+		} finally {
+			this.depth--
+		}
 	}
 
 	async appendFile(

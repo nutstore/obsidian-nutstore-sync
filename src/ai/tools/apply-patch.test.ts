@@ -213,4 +213,83 @@ describe('apply-patch correctness and performance', () => {
 			),
 		).rejects.toThrow(/notes\/不存在🌱\.md/)
 	})
+
+	it('adds, updates, moves, and deletes files inside hidden directories', async () => {
+		const mem = new MemoryVault({ name: 'HiddenDirPatchVault' })
+		mem.seedFile('.hidden/已有文档🌿.md', '第一行\n旧段落 🌱\n')
+		mem.seedFile('.hidden/待删文档🗑️.md', '临时草稿\n')
+		const app = mem.app as unknown as App
+		let recorded: ReversibleToolOp[] = []
+
+		const patch = [
+			'*** Begin Patch',
+			'*** Add File: .hidden/嵌套目录📁/新建笔记🌱.md',
+			'+标题：隐藏目录新建文档 🌱',
+			'+第二行中性内容',
+			'*** Update File: .hidden/已有文档🌿.md',
+			'*** Move to: .agents/归档目录📦/迁移文档🌿.md',
+			'@@',
+			' 第一行',
+			'-旧段落 🌱',
+			'+新段落 🚀',
+			'*** Delete File: .hidden/待删文档🗑️.md',
+			'*** End Patch',
+		].join('\n')
+
+		const result = await applyPatchTool.execute!(
+			{ purpose: '验证隐藏目录增删改迁', patch },
+			{
+				toolCallId: 'patch-hidden-dir',
+				messages: [],
+				context: {
+					app,
+					readTracker: createReadTracker([
+						'.hidden/已有文档🌿.md',
+						'.hidden/待删文档🗑️.md',
+					]),
+					recordMetadata: (_id, metadata) => {
+						recorded = metadata.reversibleOps ?? []
+					},
+				},
+			},
+		)
+
+		expect(result).toEqual({
+			applied: true,
+			files: [
+				'.hidden/嵌套目录📁/新建笔记🌱.md',
+				'.hidden/已有文档🌿.md',
+				'/.agents/归档目录📦/迁移文档🌿.md',
+				'.hidden/待删文档🗑️.md',
+			],
+		})
+		expect(mem.readTextDirect('.hidden/嵌套目录📁/新建笔记🌱.md')).toBe(
+			'标题：隐藏目录新建文档 🌱\n第二行中性内容\n',
+		)
+		expect(mem.readTextDirect('.hidden/已有文档🌿.md')).toBeUndefined()
+		expect(mem.readTextDirect('.agents/归档目录📦/迁移文档🌿.md')).toBe(
+			'第一行\n新段落 🚀\n',
+		)
+		expect(mem.readTextDirect('.hidden/待删文档🗑️.md')).toBeUndefined()
+		expect(
+			recorded.some(
+				(op) =>
+					op.operation === 'create' &&
+					op.vaultPath === '.hidden/嵌套目录📁/新建笔记🌱.md',
+			),
+		).toBe(true)
+		expect(
+			recorded.some(
+				(op) =>
+					op.operation === 'create' &&
+					op.vaultPath === '/.agents/归档目录📦/迁移文档🌿.md',
+			),
+		).toBe(true)
+		expect(
+			recorded.some(
+				(op) =>
+					op.operation === 'delete' && op.vaultPath === '.hidden/待删文档🗑️.md',
+			),
+		).toBe(true)
+	})
 })
