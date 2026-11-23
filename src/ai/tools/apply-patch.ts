@@ -5,9 +5,7 @@ import i18n from '~/i18n'
 import { ReversibleOpRecorder } from '~/ai/tools/bash/fs'
 import {
 	AGENTS_MOUNT_POINT,
-	BASH_TMP_MOUNT_POINT,
 	SETTINGS_FILE_PATH,
-	VAULT_MOUNT_POINT,
 } from '~/ai/tools/bash/mount-points'
 import {
 	assertCanonicalVirtualPathCharacters,
@@ -344,20 +342,12 @@ function assertUniqueVirtualPaths(paths: string[]) {
 
 export const applyPatchTool = tool({
 	description: [
-		'Apply a file-oriented patch against the virtual filesystem.',
-		'The required "purpose" field is a very short (up to 120 characters) plain-language summary of what this patch changes and why it is being applied, written in the same language as the user\'s request and safe for users who cannot read diffs — no code, no markdown, no newlines, no patch syntax.',
-		`Use a vault-relative path for files in the vault (relative paths resolve from ${VAULT_MOUNT_POINT}), or an absolute virtual path for any writable mounted filesystem. For example, scratch files live under ${BASH_TMP_MOUNT_POINT}, agent data under ${AGENTS_MOUNT_POINT}, and live plugin settings at ${SETTINGS_FILE_PATH}.`,
-		'Every patch, including one that only adds, deletes, updates, or moves a single file, MUST start with "*** Begin Patch" and end with "*** End Patch".',
-		'An Add patch has this complete form: "*** Begin Patch\\n*** Add File: notes/example.md\\n+Example line\\n+\\n+示例行 🌱\\n*** End Patch".',
-		'Every line in an Add File section, including blank lines, must start with +.',
-		'A Delete patch has this complete form: "*** Begin Patch\\n*** Delete File: notes/example.md\\n*** End Patch".',
-		'An Update patch has this complete form: "*** Begin Patch\\n*** Update File: notes/example.md\\n@@\\n-old text\\n+new text\\n*** End Patch".',
-		'File operation headers always use the colon syntax: "*** Add File: path", "*** Delete File: path", "*** Update File: path", and "*** Move to: path".',
-		'Update sections contain @@ hunks; unified numeric headers such as @@ -10,3 +10,4 @@ are also accepted.',
-		'Unchanged lines start with a space, removals with -, and additions with +.',
-		'Include *** Move to immediately after an Update File header only when renaming the file; its value must be the destination vault path, never a description of the edit.',
-		'Include enough unchanged context for every hunk to match exactly once.',
-		'Read existing files before updating, deleting, or moving them.',
+		'Apply a file-oriented patch to writable virtual filesystem paths (vault-relative or absolute virtual paths).',
+		"purpose (<=120 chars): plain-language summary in the user's language of what this patch changes and why — no code, markdown, newlines, or patch syntax.",
+		'Wrap every patch in "*** Begin Patch" and "*** End Patch".',
+		'Operations: "*** Add File: path" (every content line, including blank lines, starts with "+"); "*** Delete File: path"; "*** Update File: path" with optional immediately following "*** Move to: destPath" (destination path only) and "@@" hunks (unified "@@ -a,b +c,d @@" accepted; unchanged lines start with " ", removals "-", additions "+"; optional "*** End of File").',
+		'Add example: "*** Begin Patch\\n*** Add File: notes/example.md\\n+Example\\n+\\n+示例行 🌱\\n*** End Patch".',
+		'Include enough unchanged context for every hunk to match uniquely. Read existing files before updating, deleting, or moving them.',
 	].join(' '),
 	inputSchema: z.object({
 		purpose: textValue('purpose').check(

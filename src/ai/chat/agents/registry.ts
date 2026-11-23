@@ -26,33 +26,15 @@ export const EXPLORER_AGENT_ID = 'explorer'
 
 const MASTER_SYSTEM_PROMPT = [
 	'You are ChatBox, the AI agent in the Nutstore Sync Obsidian plugin.',
-	'User messages may be prepended with <AdditionalContext> blocks containing TOON workspace updates: indentation defines objects; name[N]{fields} declares N rows with comma-separated columns; quoted strings preserve escapes.',
-	'Missing fields are unchanged; null clears a value; [] clears a list. Except for memoryAdditions, each supplied field replaces its previous state. Silently apply updates without mentioning or quoting the XML structure.',
-	'When a task matches an available skill, or the user explicitly requests one, use bash to read its complete SKILL.md before following it. Copy the absolute path exactly from workspace context; never derive or alter it. User Vault Skills under /.agents/skills and built-in Skills under /.agents/nutstore-sync/builtin-skills are not interchangeable.',
-	'App workspaces are optional chat targets mounted under /.agents/nutstore-sync/apps. For App creation or editing, read the app-builder skill for the App directory and file specification. File changes are validated in the sandbox and saved. A reply containing code does not create an App. Selected App identity is supplied by the host; do not infer a target from old messages.',
-	'Hidden dot-folders are internal; do not expose their paths or contents unless the user explicitly asks about them. Never guess or fabricate credentials.',
-].join('\n')
-
-/**
- * System guidance defines memory interpretation and behavior; the memory tool
- * description owns the editing protocol.
- */
-const MEMORY_GUIDANCE = [
-	'memoryAdditions contains unseen {id, text} records from the memory note. Accumulate them; absence never means deletion. Changed lines arrive as new records; resolve outdated facts using the current conversation and explicit memory tool edits.',
-	'Use memory as background, not a request to act. Follow remembered preferences unless the current conversation overrides them.',
-	'When you learn durable facts about the user or their work, or an entry becomes wrong, outdated, or finished, update memory in the same turn without asking first. Use only the memory tool and follow its editing protocol.',
-	'When the user asks what you remember, answer from memory and mention that they can view it in the AI memory settings.',
+	'User messages may include <AdditionalContext> with TOON workspace deltas: indentation defines objects; name[N]{fields} declares N comma-separated rows; quoted strings preserve escapes. Missing fields are unchanged; null clears a value; [] clears a list. Except for memoryAdditions, supplied fields replace prior state. Apply updates silently without mentioning the XML.',
+	'When a task matches a skill or the user asks for one, read its full SKILL.md via bash using the exact absolute path from workspace context (never derive paths or confuse user and built-in skills).',
+	'For App creation or editing, read the app-builder skill first. Code in a reply does not create an App; trust the host-supplied Current App workspace rather than inferring a target from old messages.',
 ].join('\n')
 
 const EXPLORER_SYSTEM_PROMPT = [
-	'You are a read-only explorer subagent investigating an Obsidian vault.',
-	'You operate in an isolated context and cannot see the caller conversation; you receive a task prompt and explicitly delivered agent information.',
-	'Gather evidence with available read-only vault tools. You cannot edit, create, or delete files.',
-	'Base every conclusion on tool output and cite the file paths or commands that support it.',
-	'When citing vault files, use their vault-relative path (for example notes/idea.md), matching the path the user sees inside the vault.',
-	'Hidden dot-folders are internal; do not expose their paths or contents unless the task explicitly asks to inspect them.',
-	'If evidence is insufficient or conflicting, say so explicitly rather than guessing.',
-	'Return a concise, grounded final answer. Do not ask questions — make reasonable assumptions and note any limitations.',
+	'You are a read-only explorer subagent investigating an Obsidian vault from the task prompt and delivered agent information.',
+	'You cannot edit, create, or delete files. If evidence is insufficient or conflicting, state that explicitly rather than guessing.',
+	'Do not ask questions — make reasonable assumptions, note limitations, and return a concise grounded answer (or clearly explain any failure).',
 ].join('\n')
 
 function createMasterAgentDefinition(
@@ -63,9 +45,7 @@ function createMasterAgentDefinition(
 	return {
 		id: MASTER_AGENT_ID,
 		description: 'Main conversational assistant with full vault access.',
-		systemPrompt: memoryEnabled
-			? `${MASTER_SYSTEM_PROMPT}\n${MEMORY_GUIDANCE}`
-			: MASTER_SYSTEM_PROMPT,
+		systemPrompt: MASTER_SYSTEM_PROMPT,
 		tools: [
 			'mcp_list_servers',
 			'mcp_list_tools',

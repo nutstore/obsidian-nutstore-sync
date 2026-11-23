@@ -3,12 +3,14 @@ import { idAgent } from 'id-agent'
 import * as z from 'zod/mini'
 import {
 	AGENTS_MOUNT_POINT,
+	APPS_MOUNT_POINT,
+	BASH_TMP_MOUNT_POINT,
 	BUILTIN_SKILLS_MOUNT_POINT,
-	execVaultBash,
-	SETTINGS_MOUNT_POINT,
+	SETTINGS_FILE_PATH,
 	VAULT_MOUNT_POINT,
-} from '~/ai/tools/bash/runtime'
-import { BASH_TMP_MOUNT_POINT, writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
+} from '~/ai/tools/bash/mount-points'
+import { execVaultBash } from '~/ai/tools/bash/runtime'
+import { writeBashTmpText } from '~/ai/tools/bash/tmp-fs'
 import { normalizeVirtualPath } from '~/ai/tools/bash/virtual-path'
 import { withPermissionPurpose } from '~/ai/tools/permission-guard'
 import {
@@ -27,13 +29,11 @@ const MAX_INLINE_BASH_OUTPUT_CHARS = 20 * 1024
 
 export const bashTool = tool({
 	description: [
-		`Execute a browser-based bash subset against a virtual filesystem where the Obsidian vault is rooted at ${VAULT_MOUNT_POINT}, agent data is available at ${AGENTS_MOUNT_POINT}, built-in Skills are read-only under ${BUILTIN_SKILLS_MOUNT_POINT}, and plugin settings are editable at ${SETTINGS_MOUNT_POINT}/settings.json.`,
-		'This is not the host shell: node, python, xxd, and some command flags are unavailable.',
-		'Prefer supported commands such as ls, cat, rg, jq, sed, awk, od, gzip, gunzip, zcat, zip, unzip, mkdir, mv, cp, and rm. App files are ordinary files edited with these commands; the only App command is `app open [appId]`, which opens the App view immediately. zip and unzip support standard store/deflate archives, but not encrypted, Zip64, or uncommon compression formats.',
-		`Wildcards enumerate live directories in the virtual filesystem. Hidden dot-prefixed entries require a dot-prefixed pattern or shopt -s dotglob. When a glob or rg finds nothing, list the parent directory or read the explicit path directly before concluding a file is missing.`,
-		`Treat the filesystem root as the user's personal knowledge base — only write there for content the user intends to keep; use ${BASH_TMP_MOUNT_POINT} for intermediate or scratch work and remove it when the task ends. Host-style system paths such as /tmp, /dev/null, /etc or /proc do not exist here: writing or redirecting to one creates a real vault note.`,
-		`The plugin settings file ${SETTINGS_MOUNT_POINT}/settings.json is virtual and reflects live settings (whitelist only, never credentials). To change settings, write the complete file as valid JSON — prefer jq or a full-file rewrite; the plugin validates and applies it on save.`,
-		`The required "purpose" field is a very short (up to 120 characters) plain-language summary of what this command does and why it is being run, written in the same language as the user's request and safe for users who cannot read shell — no code, no markdown, no newlines, no shell syntax.`,
+		'Run a browser-sandboxed bash subset over the virtual filesystem. Not a host Linux shell: node, python, xxd, some flags, and OS paths (/bin, /dev, /etc, /home, /proc, /usr, /var, bare /tmp) do not exist — redirecting like "> /dev/null" or "> /tmp/x" creates real vault files.',
+		`Mounts (use vault-relative paths for notes, absolute paths for mounts): ${VAULT_MOUNT_POINT} is the Obsidian vault root (writes are real synced user data — keep only intended content); ${AGENTS_MOUNT_POINT} is hidden plugin/user-Skill data (inspect only when needed); ${APPS_MOUNT_POINT}/<appId>/ holds App source files (validated and hot-reloaded on save; data.json, logs.jsonl, state.json are host-owned read-only; run "app open [appId]" to show); ${BUILTIN_SKILLS_MOUNT_POINT} is read-only bundled Skills; ${BASH_TMP_MOUNT_POINT} is the only scratch folder (still real, hidden, and synced — delete temp files when done); ${SETTINGS_FILE_PATH} is virtual live settings JSON (whitelist only, never credentials; write complete valid JSON via jq or full rewrite to validate and apply).`,
+		'Supported commands: ls, cat, rg, jq, sed, awk, od, gzip, gunzip, zcat, zip, unzip (store/deflate only; no encrypted or Zip64), mkdir, mv, cp, and rm.',
+		'Globs enumerate live directories; dot-prefixed entries need a dot-prefixed pattern or "shopt -s dotglob". When a glob or rg finds nothing, list the parent directory or read the explicit path before concluding a file is missing.',
+		"purpose (<=120 chars): plain-language summary in the user's language of what this command does and why — no code, markdown, newlines, or shell syntax.",
 	].join(' '),
 	inputSchema: z.object({
 		purpose: textValue('purpose').check(
