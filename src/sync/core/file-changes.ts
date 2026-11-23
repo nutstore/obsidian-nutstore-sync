@@ -5,6 +5,21 @@ import type {
 	SyncRecordItem,
 } from '../decision/sync-decision.interface'
 
+/**
+ * Whether a file's stat metadata diverged from its recorded baseline.
+ * Checks both mtime and byte size so same-second edits or mtime-preserving
+ * moves onto an existing path are never mistaken for unchanged files.
+ */
+export function hasFileMetadataChanged(
+	current: Extract<StatModel, { isDir: false }>,
+	recorded: StatModel,
+): boolean {
+	return (
+		!isSameTime(current.mtime, recorded.mtime) ||
+		(!recorded.isDir && current.size !== recorded.size)
+	)
+}
+
 /** All policies use the same evidence: local snapshots can disprove mtime changes;
  * remote changes rely on metadata because planning does not download remote content.
  */
@@ -15,25 +30,23 @@ export async function getFileChanges(
 	record: SyncRecordItem,
 ): Promise<{ localChanged: boolean; remoteChanged: boolean }> {
 	const localMtimeChanged = !isSameTime(local.mtime, record.local.mtime)
-	const remoteChanged = !isSameTime(remote.mtime, record.remote.mtime)
-	let localChanged = localMtimeChanged
-	let contentCheck = 'mtime-unchanged'
-	if (localMtimeChanged) {
+	const localSizeChanged =
+		!record.local.isDir && local.size !== record.local.size
+	const remoteChanged = hasFileMetadataChanged(remote, record.remote)
+	let localChanged = localMtimeChanged || localSizeChanged
+	let contentCheck = localSizeChanged ? 'size-differs' : 'mtime-unchanged'
+	if (localMtimeChanged && !localSizeChanged) {
 		contentCheck = 'no-base'
 		if (record.base?.key && !record.local.isDir) {
-			if (local.size !== record.local.size) {
-				contentCheck = 'size-differs'
-			} else {
-				const base = await input.getBaseContent(record.base.key)
-				contentCheck = 'base-unavailable'
-				if (base) {
-					localChanged = !(await input.compareFileContent(local.path, base))
-					contentCheck = localChanged ? 'content-differs' : 'content-equal'
-				}
+			const base = await input.getBaseContent(record.base.key)
+			contentCheck = 'base-unavailable'
+			if (base) {
+				localChanged = !(await input.compareFileContent(local.path, base))
+				contentCheck = localChanged ? 'content-differs' : 'content-equal'
 			}
 		}
 	}
-	if (localMtimeChanged || remoteChanged) {
+	if (localMtimeChanged || localSizeChanged || remoteChanged) {
 		input.logger.debug({
 			reason: 'recorded file change evaluation',
 			localPath: local.path,
