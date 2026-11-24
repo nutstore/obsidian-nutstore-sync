@@ -165,10 +165,6 @@ export class ResumableWebDAVTraversal {
 		return getTraversalLock(this.kvKey)
 	}
 
-	get cursor(): string {
-		return this.rootCursor
-	}
-
 	private markDirty(): void {
 		this.dirty = true
 	}
@@ -824,22 +820,6 @@ export class ResumableWebDAVTraversal {
 		})
 		this.dirty = false
 		this.lastSavedAt = Date.now()
-	}
-
-	/**
-	 * Clear cache (force re-traversal)
-	 */
-	async clearCache(): Promise<void> {
-		await traverseWebDAVKV.unset(this.kvKey)
-		this.rootCursor = ''
-		this.queue = []
-		this.pendingVerification.clear()
-		this.nodes = {}
-		this.processedCount = 0
-		this.discoveredCount = 0
-		this.processedChanges = 0
-		this.dirty = false
-		this.lastSavedAt = 0
 	}
 
 	/**

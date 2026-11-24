@@ -116,25 +116,6 @@ export class MountableFs implements IFileSystem {
 		this.mounts.set(normalized, filesystem)
 	}
 
-	unmount(mountPoint: string) {
-		const normalized = normalizeVirtualPath(mountPoint)
-		if (!this.mounts.has(normalized)) {
-			throw new Error(`No filesystem mounted at '${mountPoint}'`)
-		}
-		this.mounts.delete(normalized)
-	}
-
-	getMounts(): Array<{ mountPoint: string; filesystem: IFileSystem }> {
-		return Array.from(this.mounts, ([mountPoint, filesystem]) => ({
-			mountPoint,
-			filesystem,
-		}))
-	}
-
-	isMountPoint(path: string): boolean {
-		return this.mounts.has(normalizeVirtualPath(path))
-	}
-
 	transformsWritesAt(path: string): boolean {
 		const { filesystem, relativePath } = this.route(path)
 		return (

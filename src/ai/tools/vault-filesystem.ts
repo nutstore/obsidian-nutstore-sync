@@ -231,9 +231,4 @@ export async function createVaultFileSystem(
 	return manager.create(options)
 }
 
-export {
-	AGENTS_MOUNT_POINT,
-	BUILTIN_SKILLS_MOUNT_POINT,
-	SETTINGS_MOUNT_POINT,
-	VAULT_MOUNT_POINT,
-} from './bash/mount-points'
+export { VAULT_MOUNT_POINT } from './bash/mount-points'

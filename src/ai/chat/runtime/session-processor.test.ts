@@ -60,7 +60,6 @@ function createHarness(
 	const messageFactory = {
 		getActiveAgent: () => master,
 		appendUserMessage,
-		appendAgentInput: vi.fn(() => true),
 		removeIncompleteToolCalls: vi.fn(() => false),
 		reportFatalError: vi.fn(),
 	}

@@ -244,12 +244,6 @@ export class MemoryVault {
 		return out
 	}
 
-	snapshotFolders(): Set<string> {
-		const out = new Set<string>()
-		for (const [p, n] of this.nodes) if (n.kind === 'folder') out.add(p)
-		return out
-	}
-
 	clearMutations(): void {
 		this.mutations.length = 0
 	}

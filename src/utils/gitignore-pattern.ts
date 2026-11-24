@@ -198,7 +198,6 @@ function buildRegExp(pattern: string, options: GlobMatchUserOptions) {
 }
 
 export default class GlobMatch {
-	re: RegExp
 	private readonly isRooted: boolean
 	private readonly isDirOnly: boolean
 	private readonly hasSlash: boolean
@@ -221,13 +220,9 @@ export default class GlobMatch {
 		if (this.patternBody !== '') {
 			if (this.isRooted || this.hasSlash) {
 				this.pathRegex = buildRegExp(this.patternBody, options)
-				this.re = this.pathRegex
 			} else {
 				this.segmentRegex = buildRegExp(this.patternBody, options)
-				this.re = this.segmentRegex
 			}
-		} else {
-			this.re = /^$/
 		}
 	}
 

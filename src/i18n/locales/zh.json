@@ -890,11 +890,6 @@
 		"errorMessage": "失败原因",
 		"close": "关闭"
 	},
-	"textAreaModal": {
-		"copy": "复制",
-		"close": "关闭",
-		"copied": "文本已复制到剪贴板"
-	},
 	"time": {
 		"justNow": "刚刚",
 		"minutesAgo": "{{count}}分钟前",

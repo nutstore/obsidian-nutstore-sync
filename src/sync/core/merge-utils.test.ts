@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer' // Import Buffer for explicit Buffer testing
 import { describe, expect, it } from 'vitest'
 import {
 	LatestTimestampResolution,
@@ -8,6 +7,9 @@ import {
 	type IntelligentMergeParams,
 	type LatestTimestampParams,
 } from './merge-utils'
+
+/** Byte-exact fixture; binary comparisons must not depend on Node's Buffer. */
+const bytes = (text: string) => new TextEncoder().encode(text)
 
 function expectAutoMerged(
 	result: { success: boolean; mergedText?: string },
@@ -85,8 +87,8 @@ describe('resolveByLatestTimestamp', () => {
 		const params: LatestTimestampParams = {
 			localMtime: 1000,
 			remoteMtime: 1000,
-			localContent: Buffer.from('abc'),
-			remoteContent: Buffer.from('abc'),
+			localContent: bytes('abc'),
+			remoteContent: bytes('abc'),
 		}
 		const result = resolveByLatestTimestamp(params)
 		expect(result.status).toBe(LatestTimestampResolution.NoChange)
@@ -96,8 +98,8 @@ describe('resolveByLatestTimestamp', () => {
 		const params: LatestTimestampParams = {
 			localMtime: 1000,
 			remoteMtime: 1001,
-			localContent: Buffer.from('abc'),
-			remoteContent: Buffer.from('abc'),
+			localContent: bytes('abc'),
+			remoteContent: bytes('abc'),
 		}
 		const result = resolveByLatestTimestamp(params)
 		expect(result.status).toBe(LatestTimestampResolution.NoChange)
@@ -107,8 +109,8 @@ describe('resolveByLatestTimestamp', () => {
 		const params: LatestTimestampParams = {
 			localMtime: 1001,
 			remoteMtime: 1000,
-			localContent: Buffer.from('abc'),
-			remoteContent: Buffer.from('abc'),
+			localContent: bytes('abc'),
+			remoteContent: bytes('abc'),
 		}
 		const result = resolveByLatestTimestamp(params)
 		expect(result.status).toBe(LatestTimestampResolution.NoChange)
@@ -119,27 +121,27 @@ describe('resolveByLatestTimestamp', () => {
 		const params: LatestTimestampParams = {
 			localMtime: 1000,
 			remoteMtime: 1001,
-			localContent: Buffer.from('abc'),
-			remoteContent: Buffer.from('abcd'),
+			localContent: bytes('abc'),
+			remoteContent: bytes('abcd'),
 		}
 		const result = resolveByLatestTimestamp(params)
 		expect(result.status).toBe(LatestTimestampResolution.UseRemote)
 		if (result.status === LatestTimestampResolution.UseRemote) {
-			expect(result.content).toEqual(Buffer.from('abcd'))
+			expect(result.content).toEqual(bytes('abcd'))
 		}
 	})
 
-	it('情况 2.2: 远程较新，Buffer 内容不同，应使用远程版本', () => {
+	it('情况 2.2: 远程较新，二进制内容不同，应使用远程版本', () => {
 		const params: LatestTimestampParams = {
 			localMtime: 1000,
 			remoteMtime: 1001,
-			localContent: Buffer.from('binarydata1'),
-			remoteContent: Buffer.from('binarydata2'),
+			localContent: bytes('binarydata1'),
+			remoteContent: bytes('binarydata2'),
 		}
 		const result = resolveByLatestTimestamp(params)
 		expect(result.status).toBe(LatestTimestampResolution.UseRemote)
 		if (result.status === LatestTimestampResolution.UseRemote) {
-			expect(result.content).toEqual(Buffer.from('binarydata2'))
+			expect(result.content).toEqual(bytes('binarydata2'))
 		}
 	})
 
@@ -148,27 +150,27 @@ describe('resolveByLatestTimestamp', () => {
 		const params: LatestTimestampParams = {
 			localMtime: 1001,
 			remoteMtime: 1000,
-			localContent: Buffer.from('xyz'),
-			remoteContent: Buffer.from('xy'),
+			localContent: bytes('xyz'),
+			remoteContent: bytes('xy'),
 		}
 		const result = resolveByLatestTimestamp(params)
 		expect(result.status).toBe(LatestTimestampResolution.UseLocal)
 		if (result.status === LatestTimestampResolution.UseLocal) {
-			expect(result.content).toEqual(Buffer.from('xyz'))
+			expect(result.content).toEqual(bytes('xyz'))
 		}
 	})
 
-	it('情况 3.2: 本地较新，Buffer 内容不同，应使用本地版本', () => {
+	it('情况 3.2: 本地较新，二进制内容不同，应使用本地版本', () => {
 		const params: LatestTimestampParams = {
 			localMtime: 1001,
 			remoteMtime: 1000,
-			localContent: Buffer.from('localbinary'),
-			remoteContent: Buffer.from('remotebinary'),
+			localContent: bytes('localbinary'),
+			remoteContent: bytes('remotebinary'),
 		}
 		const result = resolveByLatestTimestamp(params)
 		expect(result.status).toBe(LatestTimestampResolution.UseLocal)
 		if (result.status === LatestTimestampResolution.UseLocal) {
-			expect(result.content).toEqual(Buffer.from('localbinary'))
+			expect(result.content).toEqual(bytes('localbinary'))
 		}
 	})
 })

@@ -15,7 +15,6 @@ export type {
 	Diff3MergeParams,
 	IntelligentMergeParams,
 	IntelligentMergeResult,
-	MergeEngine,
 } from './merge-engines/types'
 
 // --- Logic for Latest Timestamp Resolution ---

@@ -98,13 +98,4 @@ export class DeterministicScheduler {
 		await flushMicrotasks()
 		return true
 	}
-
-	async drainWithChoices(choices: readonly number[]): Promise<number> {
-		let executed = 0
-		while (this.queue.length > 0) {
-			await this.stepAt(choices.length ? choices[executed % choices.length] : 0)
-			executed += 1
-		}
-		return executed
-	}
 }

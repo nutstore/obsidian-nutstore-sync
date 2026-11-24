@@ -268,19 +268,6 @@ export class MemoryWebDAV {
 		return out
 	}
 
-	snapshotFolders(remoteBaseDir: string): Set<string> {
-		const base = normalizeRemote(remoteBaseDir)
-		const prefix = base === '/' ? '/' : `${base}/`
-		const out = new Set<string>()
-		for (const [p, n] of this.nodes) {
-			if (n.kind === 'dir' && p.startsWith(prefix)) {
-				const rel = p.slice(prefix.length)
-				if (rel) out.add(rel)
-			}
-		}
-		return out
-	}
-
 	readBytesDirect(remotePath: string): Uint8Array | undefined {
 		const node = this.nodes.get(normalizeRemote(remotePath))
 		return node?.kind === 'file' ? new Uint8Array(node.bytes) : undefined

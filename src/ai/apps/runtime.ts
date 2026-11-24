@@ -10,8 +10,6 @@ import { bootstrap } from './sandbox'
 import { AppAIBridge } from './ai/bridge'
 import { AppAIError, type AppAIHost } from './ai/contract'
 
-export type { AppRuntimeAPI } from './sandbox'
-
 const requestSchema = z.object({
 	channel: z.string(),
 	id: z.number().check(z.int(), z.minimum(1)),

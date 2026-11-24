@@ -1,5 +1,4 @@
 import type {
-	AssistantModelMessage,
 	DynamicToolUIPart,
 	FilePart,
 	FinishReason,
@@ -8,25 +7,10 @@ import type {
 	UIMessage,
 	UIMessagePart,
 	UITools,
-	TextPart,
-	ToolCallPart,
 } from 'ai'
 
 import * as z from 'zod/mini'
 import type { UserContextItem } from '~/ai/chat/context/user-context'
-
-type AssistantContentArray = Extract<
-	AssistantModelMessage['content'],
-	readonly unknown[]
->
-
-export type ReasoningPart = Extract<
-	AssistantContentArray[number],
-	{ type: 'reasoning' }
->
-
-export type ChatMessageContentPart =
-	TextPart | FilePart | ReasoningPart | ToolCallPart
 
 export interface ContextCheckpointData {
 	mode: 'summary' | 'reset'

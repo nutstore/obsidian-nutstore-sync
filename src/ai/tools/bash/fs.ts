@@ -849,5 +849,3 @@ export class ObsidianVaultFs implements IFileSystem {
 		})
 	}
 }
-
-export { VAULT_MOUNT_POINT } from './mount-points'

@@ -1,7 +1,6 @@
 import path from 'path-browserify'
 import GlobMatch, {
 	type GlobMatchOptions,
-	type GlobMatchUserOptions,
 	isVoidGlobMatchOptions,
 } from './gitignore-pattern'
 
@@ -207,4 +206,4 @@ export function createPathInclusionChecker(
 	}
 }
 
-export type { GlobMatchOptions, GlobMatchUserOptions }
+export type { GlobMatchOptions }

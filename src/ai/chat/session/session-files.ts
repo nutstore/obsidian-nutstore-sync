@@ -160,10 +160,6 @@ export class SessionsFileBackend {
 			.filter((id) => id.length > 0)
 	}
 
-	async hasAnySessionFiles(): Promise<boolean> {
-		return (await this.listSessionIds()).length > 0
-	}
-
 	async writeMetaFile(meta: ChatMetaFile) {
 		await this.ensureSessionsDir()
 		await writeLocalTextAtomic(

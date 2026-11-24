@@ -890,11 +890,6 @@
 		"errorMessage": "Error",
 		"close": "Close"
 	},
-	"textAreaModal": {
-		"copy": "Copy",
-		"close": "Close",
-		"copied": "Text copied to clipboard"
-	},
 	"time": {
 		"justNow": "just now",
 		"minutesAgo": "{{count}}min ago",
