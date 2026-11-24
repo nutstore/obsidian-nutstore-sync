@@ -35,7 +35,13 @@ function generateFlags(options: GlobMatchUserOptions) {
 	return options.caseSensitive ? 'u' : 'ui'
 }
 
-function normalizePath(rawPath: string) {
+export interface NormalizedGlobPath {
+	normalized: string
+	lastSegment: string
+	isDirPath: boolean
+}
+
+function normalizePath(rawPath: string): NormalizedGlobPath {
 	const normalized = path.normalize(rawPath)
 	const trimmed = normalized.replace(/^\.+\//, '').replace(/^\/+/, '')
 	const isDirPath = trimmed.endsWith('/')
@@ -45,7 +51,7 @@ function normalizePath(rawPath: string) {
 		: []
 	return {
 		normalized: segments.join('/'),
-		segments,
+		lastSegment: segments[segments.length - 1] ?? '',
 		isDirPath,
 	}
 }
@@ -225,21 +231,22 @@ export default class GlobMatch {
 		}
 	}
 
-	test(path: string) {
-		if (this.patternBody === '') return false
-		const { normalized, segments, isDirPath } = normalizePath(path)
-		if (segments.length === 0) return false
-		if (this.isDirOnly) {
-			if (!isDirPath) return false
-			if (this.isRooted || this.hasSlash) {
-				return this.pathRegex?.test(normalized) ?? false
-			}
-			return this.segmentRegex?.test(segments[segments.length - 1]) ?? false
-		}
+	testNormalized({
+		normalized,
+		lastSegment,
+		isDirPath,
+	}: NormalizedGlobPath): boolean {
+		if (this.patternBody === '' || normalized === '') return false
+		if (this.isDirOnly && !isDirPath) return false
 		if (this.isRooted || this.hasSlash) {
 			return this.pathRegex?.test(normalized) ?? false
 		}
-		return this.segmentRegex?.test(segments[segments.length - 1]) ?? false
+		return this.segmentRegex?.test(lastSegment) ?? false
+	}
+
+	test(path: string) {
+		if (this.patternBody === '') return false
+		return this.testNormalized(normalizePath(path))
 	}
 }
 
