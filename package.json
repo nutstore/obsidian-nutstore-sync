@@ -58,7 +58,6 @@
 		"js-base64": "^3.9.3",
 		"just-bash": "^3.4.2",
 		"localforage": "^1.10.0",
-		"node-diff3": "^3.2.1",
 		"ohash": "^1.1.6",
 		"path-browserify": "^1.0.1",
 		"rxjs": "^7.8.2",

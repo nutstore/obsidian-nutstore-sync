@@ -290,4 +290,31 @@ describe('shared insertions in automatic text merge', () => {
 			}
 		}
 	})
+
+	it('retains a single shared note when a blank line moves across shared prose', async () => {
+		const repeated = '共享模板段落 🌱：保持记录结构一致。\n'
+		const uniqueProse = '唯一正文段落 📘：记录本次实验的关键观察数据。\n'
+		const cases = [
+			[
+				repeated + repeated + uniqueProse + '\n本地补充内容 🌿\n',
+				'\n' + repeated + repeated + uniqueProse + '远程补充内容 🧭\n',
+			],
+			[
+				'# 章节标题 🌱\n' + uniqueProse + '\n本地补充内容 🌿\n',
+				'# 章节标题 🌱\n\n' + uniqueProse + '远程补充内容 🧭\n',
+			],
+		] as const
+
+		for (const [first, second] of cases) {
+			for (const [local, remote] of [
+				[first, second],
+				[second, first],
+			]) {
+				const merged = await merge('', local, remote, false)
+				expect(merged.split(uniqueProse)).toHaveLength(2)
+				expect(merged).toContain('本地补充内容 🌿')
+				expect(merged).toContain('远程补充内容 🧭')
+			}
+		}
+	})
 })

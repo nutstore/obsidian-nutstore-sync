@@ -1,6 +1,6 @@
 import { diff_match_patch } from 'diff-match-patch'
-import { diffComm } from 'node-diff3'
 import * as Y from 'yjs'
+import { diffComm } from './line-diff3'
 import type {
 	IntelligentMergeParams,
 	IntelligentMergeResult,
@@ -265,11 +265,16 @@ function alignInsertedText(local: string, remote: string) {
 		localEnd--
 		remoteEnd--
 	}
+	const weights = new Map<string, number>()
+	for (const { key, weight } of localDescription) {
+		weights.set(key, Math.max(weights.get(key) ?? 0, weight))
+	}
 	// Most shared articles differ in a small middle section. Strip common edges
 	// before LCS so long unchanged text does not incur its quadratic search.
 	const regions = diffComm(
 		localKeys.slice(prefix, localEnd),
 		remoteKeys.slice(prefix, remoteEnd),
+		{ canAnchor: (key) => (weights.get(key) ?? 0) > 0 },
 	)
 	if (prefix) regions.unshift({ common: localKeys.slice(0, prefix) })
 	if (localEnd < localKeys.length)
@@ -281,9 +286,6 @@ function alignInsertedText(local: string, remote: string) {
 	}
 	const localCounts = occurrences(localKeys)
 	const remoteCounts = occurrences(remoteKeys)
-	const weights = new Map(
-		localDescription.map(({ key, weight }) => [key, weight]),
-	)
 	let supportedWeight = 0
 	for (const region of regions) {
 		if (

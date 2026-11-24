@@ -1,4 +1,4 @@
-import { mergeDiff3 as nodeMergeDiff3 } from 'node-diff3'
+import { mergeDiff3 } from './line-diff3'
 import type {
 	IntelligentMergeParams,
 	IntelligentMergeResult,
@@ -13,7 +13,7 @@ export const diff3MergeEngine: MergeEngine = {
 		remoteContentText,
 		baseContentText,
 	}: IntelligentMergeParams): IntelligentMergeResult {
-		const { result } = nodeMergeDiff3(
+		const { result } = mergeDiff3(
 			localContentText,
 			baseContentText,
 			remoteContentText,
