@@ -78,6 +78,7 @@ export class ResumableWebDAVTraversal {
 	private remoteBaseDir: string
 	private kvKey: string
 	private saveInterval: number
+	private saveIntervalMs: number
 	private settings: NutstoreSettings
 	private onProgress?: (progress: WebDAVTraversalProgress) => void
 	private throwIfCancelled?: () => void
@@ -90,6 +91,8 @@ export class ResumableWebDAVTraversal {
 	private processedCount: number = 0
 	private discoveredCount: number = 0
 	private processedChanges: number = 0
+	private dirty = false
+	private lastSavedAt = 0
 
 	/**
 	 * Normalize directory path for use as nodes key
@@ -116,6 +119,7 @@ export class ResumableWebDAVTraversal {
 		remoteBaseDir: string
 		kvKey: string
 		saveInterval?: number
+		saveIntervalMs?: number
 		onProgress?: (progress: WebDAVTraversalProgress) => void
 		throwIfCancelled?: () => void
 	}) {
@@ -123,7 +127,8 @@ export class ResumableWebDAVTraversal {
 		this.token = options.token
 		this.remoteBaseDir = options.remoteBaseDir
 		this.kvKey = options.kvKey
-		this.saveInterval = Math.max(options.saveInterval || 1, 1)
+		this.saveInterval = Math.max(options.saveInterval ?? 50, 1)
+		this.saveIntervalMs = Math.max(options.saveIntervalMs ?? 5_000, 1)
 		this.onProgress = options.onProgress
 		this.throwIfCancelled = options.throwIfCancelled
 	}
@@ -164,43 +169,80 @@ export class ResumableWebDAVTraversal {
 		return this.rootCursor
 	}
 
+	private markDirty(): void {
+		this.dirty = true
+	}
+
+	private shouldFlushThrottled(unsavedCount: number): boolean {
+		return (
+			this.dirty &&
+			(unsavedCount >= this.saveInterval ||
+				Date.now() - this.lastSavedAt >= this.saveIntervalMs)
+		)
+	}
+
+	private async syncLocked(): Promise<void> {
+		this.checkCancelled()
+		this.lastSavedAt = Date.now()
+		await this.loadState()
+
+		// Use incremental scan if already traversed once
+		const isIncrementalScan =
+			this.queue.length === 0 &&
+			this.pendingVerification.size === 0 &&
+			Object.keys(this.nodes).length > 0
+
+		try {
+			if (isIncrementalScan) {
+				await this.incrementalScan()
+			} else {
+				// Initial scan or resume: BFS traversal
+				if (this.queue.length === 0 && this.pendingVerification.size === 0) {
+					const { response } = await this.executeWithRetry(() =>
+						getLatestDeltaCursor({
+							token: this.token,
+							throwIfCancelled: this.throwIfCancelled,
+							settings: this.settings,
+							folderName: getRootFolderName(this.remoteBaseDir),
+						}),
+					)
+					this.rootCursor = response.cursor
+					this.queue = [this.remoteBaseDir]
+					this.markDirty()
+				}
+
+				await this.bfsTraverse()
+			}
+		} finally {
+			await this.saveState({ allowWhenCancelled: true })
+		}
+		this.emitProgress('complete')
+	}
+
 	async traverse(): Promise<StatModel[]> {
 		return await this.lock.runExclusive(async () => {
-			this.checkCancelled()
-			await this.loadState()
-
-			// Use incremental scan if already traversed once
-			const isIncrementalScan =
-				this.queue.length === 0 &&
-				this.pendingVerification.size === 0 &&
-				Object.keys(this.nodes).length > 0
-
-			try {
-				if (isIncrementalScan) {
-					await this.incrementalScan()
-				} else {
-					// Initial scan or resume: BFS traversal
-					if (this.queue.length === 0 && this.pendingVerification.size === 0) {
-						const { response } = await this.executeWithRetry(() =>
-							getLatestDeltaCursor({
-								token: this.token,
-								throwIfCancelled: this.throwIfCancelled,
-								settings: this.settings,
-								folderName: getRootFolderName(this.remoteBaseDir),
-							}),
-						)
-						this.rootCursor = response.cursor
-						this.queue = [this.remoteBaseDir]
-					}
-
-					await this.bfsTraverse()
-				}
-			} finally {
-				await this.saveState()
-			}
-			this.emitProgress('complete')
-
+			await this.syncLocked()
 			return this.getAllFromCache()
+		})
+	}
+
+	/**
+	 * Synchronizes the remote delta/traversal cache and returns only the entries
+	 * stored directly beneath the specified directories.
+	 */
+	async syncAndLookupDirs(dirPaths: Iterable<string>): Promise<StatModel[]> {
+		return await this.lock.runExclusive(async () => {
+			await this.syncLocked()
+			const seen = new Set<string>()
+			const results: StatModel[] = []
+			for (const dirPath of dirPaths) {
+				const key = this.normalizeDirPath(dirPath)
+				if (seen.has(key)) continue
+				seen.add(key)
+				const items = this.nodes[key]
+				if (items) results.push(...items)
+			}
+			return results
 		})
 	}
 
@@ -212,6 +254,7 @@ export class ResumableWebDAVTraversal {
 		// Normal scans may need any number of passes; the same unresolved directory
 		// must not cycle through verification -> BFS -> verification indefinitely.
 		const suspendedDirectories = new Set(this.pendingVerification)
+		let unsavedDirs = 0
 		while (true) {
 			const traverseStartCursor = this.rootCursor
 
@@ -256,11 +299,14 @@ export class ResumableWebDAVTraversal {
 
 					this.queue.shift()
 					this.pendingVerification.delete(normalizedPath)
+					this.markDirty()
 					this.processedCount++
+					unsavedDirs++
 					this.emitProgress('scanning', currentPath)
 
-					if (this.processedCount % this.saveInterval === 0) {
+					if (this.shouldFlushThrottled(unsavedDirs)) {
 						await this.saveState()
+						unsavedDirs = 0
 					}
 				} catch (err) {
 					if (
@@ -271,10 +317,10 @@ export class ResumableWebDAVTraversal {
 						this.queue.shift()
 						this.suspendDirectory(normalizedPath, suspendedDirectories)
 						await this.saveState()
+						unsavedDirs = 0
 						continue
 					}
 					logger.error(`Error processing ${currentPath}`, err)
-					await this.saveState()
 					throw err
 				}
 			}
@@ -292,8 +338,9 @@ export class ResumableWebDAVTraversal {
 			if (traverseStartCursor && traverseStartCursor !== traverseEndCursor) {
 				this.rootCursor =
 					await this.applyDeltaDuringTraversal(traverseStartCursor)
-			} else {
+			} else if (traverseEndCursor !== this.rootCursor) {
 				this.rootCursor = traverseEndCursor
+				this.markDirty()
 			}
 
 			const refreshed =
@@ -315,6 +362,7 @@ export class ResumableWebDAVTraversal {
 	): void {
 		const key = this.normalizeDirPath(path)
 		this.pendingVerification.add(key)
+		this.markDirty()
 		if (suspendedDirectories.has(key)) {
 			throw new Error(
 				`Remote directory returned 404 again after suspension: ${key}`,
@@ -330,21 +378,34 @@ export class ResumableWebDAVTraversal {
 			!this.queue.some((item) => this.normalizeDirPath(item) === key)
 		) {
 			this.queue.push(path)
+			this.markDirty()
 		}
 	}
 
 	/** Invalidate an absent or untrusted subtree, including its unfinished work. */
 	private removeSubtree(path: string): void {
 		const prefix = this.normalizeDirPath(path)
+		let changed = false
 		for (const key of Object.keys(this.nodes)) {
-			if (this.normalizeDirPath(key).startsWith(prefix)) delete this.nodes[key]
+			if (this.normalizeDirPath(key).startsWith(prefix)) {
+				delete this.nodes[key]
+				changed = true
+			}
 		}
-		this.queue = this.queue.filter(
+		const nextQueue = this.queue.filter(
 			(item) => !this.normalizeDirPath(item).startsWith(prefix),
 		)
-		for (const item of this.pendingVerification) {
-			if (item.startsWith(prefix)) this.pendingVerification.delete(item)
+		if (nextQueue.length !== this.queue.length) {
+			this.queue = nextQueue
+			changed = true
 		}
+		for (const item of this.pendingVerification) {
+			if (item.startsWith(prefix)) {
+				this.pendingVerification.delete(item)
+				changed = true
+			}
+		}
+		if (changed) this.markDirty()
 	}
 
 	/** Each ascent strictly reduces path depth and must remain inside the sync root. */
@@ -425,11 +486,13 @@ export class ResumableWebDAVTraversal {
 				}
 				this.nodes[parent] = contents
 				this.pendingVerification.delete(parent)
+				this.markDirty()
 				for (const path of directories) {
 					if (this.pendingVerification.has(path)) {
 						// An absent/recreated ancestor invalidates its entire old subtree.
 						this.removeSubtree(path)
 						this.pendingVerification.add(path)
+						this.markDirty()
 					}
 					this.enqueueDirectory(path)
 				}
@@ -519,25 +582,27 @@ export class ResumableWebDAVTraversal {
 					}),
 				)
 				this.rootCursor = cursorResponse.cursor
+				this.markDirty()
 				return this.rootCursor
 			}
 
 			if (entries.length > 0) {
 				processedEntries += this.applyDeltaEntries(entries)
 				this.rootCursor = cursor
+				this.markDirty()
 
 				// Save state periodically based on number of processed entries
-				if (processedEntries >= this.saveInterval) {
+				if (this.shouldFlushThrottled(processedEntries)) {
 					await this.saveState()
 					processedEntries = 0
 				}
+			} else if (cursor !== this.rootCursor) {
+				this.rootCursor = cursor
+				this.markDirty()
 			}
 
 			finalCursor = cursor
-			this.rootCursor = cursor
 		}
-
-		await this.saveState()
 
 		return finalCursor
 	}
@@ -726,6 +791,8 @@ export class ResumableWebDAVTraversal {
 				this.queue = []
 				this.pendingVerification.clear()
 				this.nodes = {}
+				this.dirty = false
+				this.lastSavedAt = Date.now()
 				return
 			}
 			this.rootCursor = cache.rootCursor || ''
@@ -734,20 +801,29 @@ export class ResumableWebDAVTraversal {
 			this.nodes = cache.nodes || {}
 			this.processedCount = Object.keys(this.nodes).length
 			this.discoveredCount = this.countDiscoveredItems()
+			this.dirty = false
+			this.lastSavedAt = Date.now()
 		}
 	}
 
 	/**
-	 * Save current state
+	 * Save current state when mutations have occurred since the last flush.
 	 */
-	private async saveState(): Promise<void> {
-		this.checkCancelled()
+	private async saveState(options?: {
+		allowWhenCancelled?: boolean
+	}): Promise<void> {
+		if (!this.dirty) return
+		if (!options?.allowWhenCancelled) {
+			this.checkCancelled()
+		}
 		await traverseWebDAVKV.set(this.kvKey, {
 			rootCursor: this.rootCursor,
 			queue: this.queue,
 			pendingVerification: [...this.pendingVerification],
 			nodes: this.nodes,
 		})
+		this.dirty = false
+		this.lastSavedAt = Date.now()
 	}
 
 	/**
@@ -762,6 +838,8 @@ export class ResumableWebDAVTraversal {
 		this.processedCount = 0
 		this.discoveredCount = 0
 		this.processedChanges = 0
+		this.dirty = false
+		this.lastSavedAt = 0
 	}
 
 	/**

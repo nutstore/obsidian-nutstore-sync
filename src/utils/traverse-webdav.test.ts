@@ -7,6 +7,7 @@ import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
 import { getDirectoryContents } from '~/api/webdav'
 import type { NutstoreSettings } from '~/settings'
 import { traverseWebDAVKV, type TraverseWebDAVCache } from '~/storage'
+import { fileStatToStatModel } from './file-stat-to-stat-model'
 import { RequestUrlError } from './request-url-error'
 import { ResumableWebDAVTraversal } from './traverse-webdav'
 
@@ -423,5 +424,139 @@ describe('remote traversal recovery', () => {
 		expect(getDelta).toHaveBeenCalledTimes(1)
 		expect(getDirectoryContents).toHaveBeenCalledTimes(4)
 		expect(cache?.pendingVerification).toEqual([folder])
+	})
+
+	it('skips IDB persistence on zero-change incremental scans while persisting cursor-only advances once', async () => {
+		cache = { rootCursor: 'start', queue: [], nodes: { [root]: [] } }
+		delta([], 'start')
+		await traversal().traverse()
+		expect(traverseWebDAVKV.set).not.toHaveBeenCalled()
+
+		delta([], 'advanced-cursor')
+		await traversal().traverse()
+		expect(traverseWebDAVKV.set).toHaveBeenCalledTimes(1)
+		expect(cache?.rootCursor).toBe('advanced-cursor')
+	})
+
+	it('throttles BFS state persistence across many directories and still persists full state on completion and mid-scan error', async () => {
+		const dirCount = 120
+		const dirs = Array.from(
+			{ length: dirCount },
+			(_, i) => `${root}分组 Dir ${i}🌱/`,
+		)
+		vi.mocked(getDirectoryContents).mockImplementation(async (_s, _t, path) => {
+			if (canonical(path) === canonical(root)) return dirs.map((d) => stat(d))
+			return [stat(`${path}笔记 Note 🌱.md`, false)]
+		})
+
+		const result = await traversal().traverse()
+		expect(result).toHaveLength(dirCount * 2)
+		expect(vi.mocked(traverseWebDAVKV.set).mock.calls.length).toBeLessThan(10)
+		expect(cache?.queue).toEqual([])
+		expect(Object.keys(cache?.nodes ?? {})).toHaveLength(dirCount + 1)
+
+		// Mid-scan error must still persist accumulated progress once via finally
+		cache = undefined
+		vi.mocked(traverseWebDAVKV.set).mockClear()
+		let visited = 0
+		vi.mocked(getDirectoryContents).mockImplementation(async (_s, _t, path) => {
+			if (canonical(path) === canonical(root)) return dirs.map((d) => stat(d))
+			visited += 1
+			if (visited === 25) throw new Error('Transient mid-scan failure')
+			return [stat(`${path}笔记 Note 🌱.md`, false)]
+		})
+
+		await expect(traversal().traverse()).rejects.toThrow(
+			'Transient mid-scan failure',
+		)
+		expect(traverseWebDAVKV.set).toHaveBeenCalledTimes(1)
+		const persistedCache = vi.mocked(traverseWebDAVKV.set).mock.calls[0]?.[1]
+		expect(Object.keys(persistedCache?.nodes ?? {})).toHaveLength(25)
+		expect(persistedCache?.queue.length).toBe(dirCount - 24)
+	})
+
+	it('syncAndLookupDirs returns only entries from requested directories while keeping full cache updated', async () => {
+		const targetNote = `${folder}目标笔记 🎯.md`
+		const otherNote = `${sibling}旁路笔记 📄.md`
+		cache = {
+			rootCursor: 'start',
+			queue: [],
+			nodes: {
+				[root]: [
+					fileStatToStatModel(stat(folder)),
+					fileStatToStatModel(stat(sibling)),
+				],
+				[folder]: [],
+				[sibling]: [fileStatToStatModel(stat(otherNote, false))],
+			},
+		}
+		delta([
+			{
+				path: targetNote,
+				isDeleted: false,
+				isDir: false,
+				size: 42,
+				modified: '2026-01-02T00:00:00Z',
+				revision: 2,
+			},
+		])
+
+		const lookedUp = await traversal().syncAndLookupDirs([folder])
+		expect(lookedUp.map((s) => s.path)).toEqual([targetNote])
+		expect(cache?.nodes[sibling]?.map((s) => s.path)).toEqual([otherNote])
+		expect(cache?.nodes[folder]?.map((s) => s.path)).toEqual([targetNote])
+	})
+
+	it('persists completed directory listings on cancellation under throttling and resumes remaining directories', async () => {
+		const dirs = Array.from(
+			{ length: 20 },
+			(_, i) => `${root}分组 Dir ${i} 🌿/`,
+		)
+		let cancelled = false
+		let reads = 0
+		const run = () =>
+			new ResumableWebDAVTraversal({
+				settings: {} as NutstoreSettings,
+				token: 'test-token',
+				remoteBaseDir: root,
+				kvKey: 'test-cache',
+				throwIfCancelled: () => {
+					if (cancelled) throw new Error('Traversal cancelled')
+				},
+			}).traverse()
+
+		vi.mocked(getDirectoryContents).mockImplementation(async (_s, _t, path) => {
+			reads += 1
+			if (reads === 12) cancelled = true
+			if (canonical(path) === canonical(root)) return dirs.map((d) => stat(d))
+			return [stat(`${path}笔记 Note 🌱.md`, false)]
+		})
+
+		await expect(run()).rejects.toThrow('Traversal cancelled')
+		expect(reads).toBe(12)
+		expect(Object.keys(cache?.nodes ?? {})).toHaveLength(12)
+		expect(cache?.queue).toHaveLength(9)
+
+		cancelled = false
+		vi.mocked(getDirectoryContents).mockClear()
+		const resumed = await run()
+		expect(getDirectoryContents).toHaveBeenCalledTimes(9)
+		expect(resumed).toHaveLength(40)
+	})
+
+	it('does not write KV on cancellation before any traversal mutation occurs', async () => {
+		const cancelBeforeStart = new ResumableWebDAVTraversal({
+			settings: {} as NutstoreSettings,
+			token: 'test-token',
+			remoteBaseDir: root,
+			kvKey: 'test-cache',
+			throwIfCancelled: () => {
+				throw new Error('Cancelled before start')
+			},
+		})
+		await expect(cancelBeforeStart.traverse()).rejects.toThrow(
+			'Cancelled before start',
+		)
+		expect(traverseWebDAVKV.set).not.toHaveBeenCalled()
 	})
 })
