@@ -1,10 +1,10 @@
-import { Mutex } from 'async-mutex'
 import { Notice } from 'obsidian'
 import { IN_DEV } from '~/consts'
 import { emitGcProgress } from '~/events/gc-progress'
 import { onStopGc } from '~/events/gc-stop'
 import i18n from '~/i18n'
 import { blobKV, syncRecordKV } from '~/storage/kv'
+import { AsyncMutex } from '~/utils/async-lock'
 import logger from '~/utils/logger'
 import { BaseService } from './service.interface'
 import type NutstorePlugin from '..'
@@ -20,7 +20,7 @@ export type GcRunResult =
 	  }
 
 export default class GcService extends BaseService {
-	private lock = new Mutex()
+	private lock = new AsyncMutex()
 	private stopRequested = false
 
 	constructor(private plugin: NutstorePlugin) {

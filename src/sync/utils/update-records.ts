@@ -1,4 +1,3 @@
-import { Mutex } from 'async-mutex'
 import type { SyncScope } from '../scope'
 import { chunk, debounce } from 'es-toolkit/compat'
 import { Platform, Vault } from 'obsidian'
@@ -18,6 +17,7 @@ import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
 import MoveRemoteTask from '~/sync/tasks/move-remote.task'
 import type { BaseTask, TaskResult } from '~/sync/tasks/task.interface'
 import { isMergeablePath } from '~/sync/utils/is-mergeable-path'
+import { AsyncMutex } from '~/utils/async-lock'
 import { getDBKey } from '~/utils/get-db-key'
 import { isSameTime } from '~/utils/is-same-time'
 import { isSub } from '~/utils/is-sub'
@@ -55,7 +55,7 @@ async function computeFileDigest(
 	localPath: string,
 	fileSize: number,
 	storeBase: boolean,
-	largeFileHashMutex: Mutex,
+	largeFileHashMutex: AsyncMutex,
 ): Promise<{ base?: { key: string }; contentHash?: string }> {
 	const shouldHash = storeBase || fileSize <= getMaxHashBytes(Platform.isMobile)
 	if (!shouldHash) {
@@ -164,7 +164,7 @@ export async function updateMtimeInRecord(
 		}
 	}
 
-	const largeFileHashMutex = new Mutex()
+	const largeFileHashMutex = new AsyncMutex()
 	const taskChunks = chunk(expandedTasks, batch_size)
 	progress.completed += operationCount - expandedTasks.length
 	emitSyncUpdateMtimeProgress(progress.total, progress.completed)

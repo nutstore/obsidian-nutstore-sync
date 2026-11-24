@@ -1,4 +1,3 @@
-import { Mutex } from 'async-mutex'
 import { dirname, normalize } from 'path-browserify'
 import { DeltaEntry, getDelta } from '~/api/delta'
 import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
@@ -7,6 +6,7 @@ import { StatModel } from '~/model/stat.model'
 import type { NutstoreSettings } from '~/settings'
 import { traverseWebDAVKV } from '~/storage'
 import { apiLimiter } from './api-limiter'
+import { AsyncMutex } from './async-lock'
 import { fileStatToStatModel } from './file-stat-to-stat-model'
 import { getRootFolderName } from './get-root-folder-name'
 import { is503Error } from './is-503-error'
@@ -26,11 +26,11 @@ const getContents = (
 	apiLimiter.schedule(() => getDirectoryContents(settings, token, path, check))
 
 // Global mutex map: one lock per kvKey
-const traversalLocks = new Map<string, Mutex>()
+const traversalLocks = new Map<string, AsyncMutex>()
 
-function getTraversalLock(kvKey: string): Mutex {
+function getTraversalLock(kvKey: string): AsyncMutex {
 	if (!traversalLocks.has(kvKey)) {
-		traversalLocks.set(kvKey, new Mutex())
+		traversalLocks.set(kvKey, new AsyncMutex())
 	}
 	return traversalLocks.get(kvKey)!
 }

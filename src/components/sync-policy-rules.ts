@@ -1,5 +1,5 @@
 import createId from '~/utils/create-id'
-import i18n from '~/i18n'
+import i18n, { resolveI18nTemplate } from '~/i18n'
 import {
 	getConflictStrategyI18nKey,
 	getSyncPolicyI18nKey,
@@ -14,15 +14,13 @@ export function renderSyncPolicyRules(
 	conflictStrategy?: ConflictStrategy,
 ) {
 	container.empty()
-	const definitions = i18n.t('settings.syncPolicy.rules', {
-		returnObjects: true,
-		strategy:
-			conflictStrategy === undefined
-				? i18n.t('sync.confirmModal.configuredStrategy')
-				: i18n.t(
-						`settings.conflictStrategy.${getConflictStrategyI18nKey(conflictStrategy)}`,
-					),
-	})
+	const strategy =
+		conflictStrategy === undefined
+			? i18n.t('sync.confirmModal.configuredStrategy')
+			: i18n.t(
+					`settings.conflictStrategy.${getConflictStrategyI18nKey(conflictStrategy)}`,
+				)
+	const definitions = i18n.t('settings.syncPolicy.rules')
 	const rules = definitions[getSyncPolicyI18nKey(policy)]
 	const table = container.createEl('table', {
 		cls: 'nutstore-sync-policy-rules',
@@ -54,7 +52,9 @@ export function renderSyncPolicyRules(
 			row.addClass('nutstore-sync-policy-rules__overwrite')
 		}
 		row.createEl('td', { text: rule.condition })
-		row.createEl('td', { text: rule.result })
+		row.createEl('td', {
+			text: resolveI18nTemplate(rule.result, { strategy }),
+		})
 	}
 	if (rules.note) {
 		container.createEl('p', {
