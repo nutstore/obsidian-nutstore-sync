@@ -1,8 +1,26 @@
-import { bench, describe } from 'vitest'
+import { bench, describe, vi } from 'vitest'
+
+vi.mock('~/settings', () => ({
+	SyncMode: { LOOSE: 'loose', STRICT: 'strict' },
+}))
 import { buildLineDiff } from '~/ai/chat/messages/file-diff'
 import { applyHunks, parsePatch } from '~/ai/tools/apply-patch'
+import type { FsWalkResult } from '~/fs/fs.interface'
+import type { StatModel } from '~/model/stat.model'
+import type { SyncRecordModel } from '~/model/sync-record.model'
 import { LogRetention } from '~/services/log-retention'
+import { SyncMode } from '~/settings'
+import { diff3MergeEngine } from '~/sync/core/merge-engines/diff3-merge'
+import { yjsTextMergeEngine } from '~/sync/core/merge-engines/yjs-text-merge'
+import type {
+	SyncDecisionInput,
+	TaskFactory,
+} from '~/sync/decision/sync-decision.interface'
+import { twoWayDecider } from '~/sync/decision/two-way.decider'
 import { SyncScope } from '~/sync/scope'
+import { ConflictStrategy } from '~/sync/tasks/conflict-resolve.task'
+import type { BaseTask } from '~/sync/tasks/task.interface'
+import { computeEffectiveFilterRulesFromParts } from '~/utils/config-dir-rules'
 import {
 	compileFilterRules,
 	isPathIncluded,
@@ -121,4 +139,136 @@ describe('FileDiff large rewrite throughput', () => {
 	bench('diffs a 2,000-line 50% rewrite', () => {
 		buildLineDiff(before, after)
 	})
+})
+
+describe('P0-1: Default filter rules & SyncScope multi-pass pipeline', () => {
+	const eff = computeEffectiveFilterRulesFromParts('.obsidian', 'none', {
+		rules: [],
+	})
+	const compiled = compileFilterRules(eff.rules)
+	const paths = Array.from(
+		{ length: 10_000 },
+		(_, i) => `notes/area-${i % 20}/sub-${i % 10}/文档-${i}🌱.md`,
+	)
+	const entries: FsWalkResult[] = paths.map((path, i) => ({
+		stat: {
+			path,
+			basename: `文档-${i}🌱.md`,
+			isDir: false,
+			isDeleted: false,
+			mtime: 1000,
+			size: 128,
+		},
+		ignored: false,
+	}))
+	const records = entries.map(
+		(e) =>
+			[e.stat.path, { local: e.stat, remote: e.stat }] as [
+				string,
+				SyncRecordModel,
+			],
+	)
+
+	bench('evaluates 10,000 paths against 15 default effective rules', () => {
+		for (const p of paths) {
+			isPathIncluded(p, compiled, false)
+		}
+	})
+
+	bench('runs SyncScope 5-pass pipeline across 10,000 entries', () => {
+		const scope = new SyncScope(eff.rules)
+		scope.observe(entries)
+		scope.observe(entries)
+		scope.apply(entries)
+		scope.apply(entries)
+		for (const [path, record] of records) {
+			scope.allowsRecord(path, record)
+		}
+	})
+})
+
+describe('P0-2: TwoWay decider orphan record cleanup', () => {
+	const count = 5_000
+	const stats: FsWalkResult[] = Array.from({ length: count }, (_, i) => {
+		const path = `folder-${i % 50}/笔记-${i}🌱.md`
+		const stat: StatModel = {
+			path,
+			basename: `笔记-${i}🌱.md`,
+			isDir: false,
+			isDeleted: false,
+			mtime: 1000,
+			size: 128,
+		}
+		return { stat, ignored: false }
+	})
+	const syncRecords = new Map<string, SyncRecordModel>(
+		stats.map((s) => [s.stat.path, { local: s.stat, remote: s.stat }]),
+	)
+	const stubTaskFactory = new Proxy({} as TaskFactory, {
+		get: () => () => ({}) as BaseTask,
+	})
+	const input: SyncDecisionInput = {
+		logger: { info() {}, debug() {}, warn() {}, error() {} },
+		settings: {
+			skipLargeFiles: { maxSize: '' },
+			mobileAppDownloadFileChunkSize: '',
+			conflictStrategy: ConflictStrategy.NoConflictMerge,
+			syncMode: SyncMode.STRICT,
+			configDir: '.obsidian',
+		},
+		localStats: stats,
+		remoteStats: stats,
+		syncRecords,
+		remoteBaseDir: '/remote/',
+		getBaseContent: async () => null,
+		compareFileContent: async () => true,
+		getLocalContentHash: async () => null,
+		taskFactory: stubTaskFactory,
+	}
+
+	bench('decides no-op sync on 5,000 synced files', async () => {
+		await twoWayDecider(input)
+	})
+})
+
+describe('P0-3: Diff3 & Yjs no-base large Markdown merge', () => {
+	const lineCount = 3_000
+	const baseLines = Array.from({ length: lineCount }, (_, i) =>
+		i % 4 === 0 ? '' : `Line ${i}: 中性段落说明 sample ${i} 🌱`,
+	)
+	const localLines = [...baseLines]
+	localLines[10] = 'Line 10: 本地编辑 local edit 🌿'
+	const remoteLines = [...baseLines]
+	remoteLines[lineCount - 10] = 'Line end: 远端编辑 remote edit 📘'
+	const baseText = baseLines.join('\n')
+	const localText = localLines.join('\n')
+	const remoteText = remoteLines.join('\n')
+
+	bench(
+		'diff3MergeEngine merges 3,000-line Markdown (25% blank, 2 edits)',
+		() => {
+			diff3MergeEngine.merge({
+				baseContentText: baseText,
+				localContentText: localText,
+				remoteContentText: remoteText,
+				filePath: '笔记/sample🌱.md',
+				hasBase: true,
+			})
+		},
+		{ iterations: 2, warmupIterations: 0 },
+	)
+
+	bench(
+		'yjsTextMergeEngine merges 3,000-line Markdown without base (2 edits)',
+		() => {
+			yjsTextMergeEngine.merge({
+				baseContentText: '',
+				localContentText: localText,
+				remoteContentText: remoteText,
+				filePath: '笔记/sample🌱.md',
+				hasBase: false,
+			})
+		},
+		{ iterations: 2, warmupIterations: 0 },
+	)
 })
