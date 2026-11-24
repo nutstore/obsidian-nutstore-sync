@@ -1,5 +1,6 @@
 import { Vault } from 'obsidian'
-import { isAbsolute, join, normalize } from 'path-browserify'
+import { dirname, isAbsolute, join, normalize } from 'path-browserify'
+import type { StatModel } from '~/model/stat.model'
 import type { NutstoreSettings } from '~/settings'
 import {
 	ConfigDirSyncMode,
@@ -8,8 +9,8 @@ import {
 import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import {
 	compileFilterRules,
+	createPathInclusionChecker,
 	GlobFilterRule,
-	isPathIncluded,
 } from '~/utils/glob-match'
 import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
@@ -35,6 +36,10 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				configDir?: string
 				configDirSyncMode?: ConfigDirSyncMode
 			}
+			/** Skip filter compilation/evaluation when caller only queries post-task metadata. */
+			skipFilter?: boolean
+			/** Limit returned stats to these vault-relative paths (implies targeted directory lookup). */
+			targetPaths?: ReadonlySet<string>
 			onTraversalProgress?: (progress: WebDAVTraversalProgress) => void
 			throwIfCancelled?: () => void
 		},
@@ -50,34 +55,46 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				getNutstoreDavEndpoint(this.options.settings),
 				this.options.remoteBaseDir,
 			),
-			saveInterval: 1,
 			onProgress: this.options.onTraversalProgress,
 			throwIfCancelled: this.options.throwIfCancelled,
 		})
-		const traversedStats = await traversal.traverse()
+		const base = normalizeRemotePath(stdRemotePath(this.options.remoteBaseDir))
+		const targetPaths = this.options.targetPaths
+
+		let traversedStats: StatModel[]
+		if (targetPaths) {
+			const parentDirs = new Set<string>()
+			for (const localPath of targetPaths) {
+				const absTarget = normalizeRemotePath(join(base, localPath))
+				if (!isSub(base, absTarget)) continue
+				const parent = normalizeRemotePath(dirname(absTarget))
+				parentDirs.add(stdRemotePath(parent))
+			}
+			traversedStats = await traversal.syncAndLookupDirs(parentDirs)
+		} else {
+			traversedStats = await traversal.traverse()
+		}
 
 		if (traversedStats.length === 0) {
 			return []
 		}
 
-		const base = normalizeRemotePath(stdRemotePath(this.options.remoteBaseDir))
-		const statsByLocalPath = new Map<string, (typeof traversedStats)[number]>()
+		const statsByLocalPath = new Map<string, StatModel>()
 		for (const stat of traversedStats) {
-			const absolutePath = normalizeRemotePath(
-				isAbsolute(stat.path) ? stat.path : join(base, stat.path),
-			)
-			if (!isSub(base, absolutePath)) {
+			const normalized = toLocalStat(base, stat)
+			if (!normalized) continue
+			if (targetPaths && !targetPaths.has(normalized.path)) {
 				continue
 			}
-
-			const localPath = absolutePath
-				.slice(base === '/' ? 1 : base.length)
-				.replace(/^\/+/, '')
-			if (!statsByLocalPath.has(localPath)) {
-				statsByLocalPath.set(localPath, { ...stat, path: localPath })
+			if (!statsByLocalPath.has(normalized.path)) {
+				statsByLocalPath.set(normalized.path, normalized)
 			}
 		}
 		const stats = [...statsByLocalPath.values()]
+
+		if (this.options.skipFilter) {
+			return stats.map((stat) => ({ stat, ignored: false }))
+		}
 
 		const settings = this.options.filterRules
 			? undefined
@@ -91,12 +108,14 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 						settings.filterRules,
 					)
 				: undefined)
-		const compiledRules = compileFilterRules(filterRules?.rules)
+		const checkIncluded = createPathInclusionChecker(
+			compileFilterRules(filterRules?.rules),
+		)
 
 		const includedStats = stats.filter(
 			(stat) =>
 				!isSyncCacheLocalPath(stat.path, this.options.vault.configDir) &&
-				isPathIncluded(stat.path, compiledRules, stat.isDir),
+				checkIncluded(stat.path, stat.isDir),
 		)
 		const completeStats = completeLossDir(stats, includedStats)
 		const completeStatPaths = new Set(completeStats.map((s) => s.path))
@@ -106,6 +125,19 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		}))
 		return results
 	}
+}
+
+function toLocalStat(base: string, stat: StatModel): StatModel | undefined {
+	const absolutePath = normalizeRemotePath(
+		isAbsolute(stat.path) ? stat.path : join(base, stat.path),
+	)
+	if (!isSub(base, absolutePath)) {
+		return undefined
+	}
+	const localPath = absolutePath
+		.slice(base === '/' ? 1 : base.length)
+		.replace(/^\/+/, '')
+	return { ...stat, path: localPath }
 }
 
 function normalizeRemotePath(path: string): string {

@@ -121,6 +121,21 @@ export async function updateMtimeInRecord(
 		return
 	}
 
+	// Expand MkdirsRemoteTask into multiple update operations before querying remote stats.
+	const expandedTasks: Array<{ task: BaseTask; localPath: string }> = []
+	for (const task of tasksNeedingUpdate) {
+		if (task instanceof MkdirsRemoteTask) {
+			// Add main path and all additional paths
+			const allPaths = task.getAllPaths()
+			for (const pathInfo of allPaths) {
+				expandedTasks.push({ task, localPath: pathInfo.localPath })
+			}
+		} else {
+			expandedTasks.push({ task, localPath: task.localPath })
+		}
+	}
+
+	const targetPaths = new Set(expandedTasks.map(({ localPath }) => localPath))
 	const token = await plugin.getToken()
 	const remoteFs = new NutstoreFileSystem({
 		settings: plugin.settings,
@@ -128,6 +143,8 @@ export async function updateMtimeInRecord(
 		token,
 		remoteAccountId: await plugin.getRemoteAccountId(),
 		remoteBaseDir: stdRemotePath(remoteBaseDir),
+		skipFilter: true,
+		targetPaths,
 	})
 
 	const latestRemoteEntities = await remoteFs.walk()
@@ -149,20 +166,6 @@ export async function updateMtimeInRecord(
 			leading: false,
 		},
 	)
-
-	// Expand MkdirsRemoteTask into multiple update operations
-	const expandedTasks: Array<{ task: BaseTask; localPath: string }> = []
-	for (const task of tasksNeedingUpdate) {
-		if (task instanceof MkdirsRemoteTask) {
-			// Add main path and all additional paths
-			const allPaths = task.getAllPaths()
-			for (const pathInfo of allPaths) {
-				expandedTasks.push({ task, localPath: pathInfo.localPath })
-			}
-		} else {
-			expandedTasks.push({ task, localPath: task.localPath })
-		}
-	}
 
 	const largeFileHashMutex = new AsyncMutex()
 	const taskChunks = chunk(expandedTasks, batch_size)

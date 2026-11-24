@@ -11,7 +11,10 @@ import {
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
 import { getFileChanges, hasFileMetadataChanged } from '../core/file-changes'
-import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
+import {
+	collectWalkPaths,
+	shouldCreateCleanRecordTask,
+} from '../core/record-cleanup'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 import {
@@ -476,8 +479,12 @@ export async function twoWayDecider(
 	)
 
 	// * clean orphaned records (both local and remote deleted)
+	const localAllPaths = collectWalkPaths(localStats)
+	const remoteAllPaths = collectWalkPaths(remoteStats)
 	for (const [recordPath, record] of syncRecords) {
-		if (shouldCreateCleanRecordTask(recordPath, localStats, remoteStats)) {
+		if (
+			shouldCreateCleanRecordTask(recordPath, localAllPaths, remoteAllPaths)
+		) {
 			logger.debug({
 				reason: 'cleaning orphaned sync record (both local and remote deleted)',
 				remotePath: remotePathToAbsolute(remoteBaseDir, recordPath),
