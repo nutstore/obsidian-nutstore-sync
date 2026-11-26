@@ -10,7 +10,11 @@ import {
 } from '~/storage'
 import type { SyncLogger } from '~/sync/log'
 import { shouldUseRemoteTraversalCache } from '~/utils/config-dir-rules'
-import { getTraversalWebDAVDBKey } from '~/utils/get-db-key'
+import {
+	getAccountHash,
+	getTraversalWebDAVDBKey,
+	TRAVERSAL_CACHE_SCHEMA,
+} from '~/utils/get-db-key'
 import globalLogger from '~/utils/logger'
 import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
 import { stdRemotePath } from '~/utils/std-remote-path'
@@ -25,6 +29,9 @@ import type NutstorePlugin from '..'
 import { BaseService } from './service.interface'
 
 export interface ExportedStorage {
+	schemaVersion?: number
+	accountHash?: string
+	remoteEndpoint?: string
 	exportedAt: string
 	remoteBaseDir?: string
 	traverseWebDAVCache?: TraverseWebDAVCache
@@ -43,8 +50,8 @@ export default class CacheServiceV1 extends BaseService {
 		}
 
 		try {
-			const kvKey = await this.getKVKey()
-			const localCache = await traverseWebDAVKV.get(kvKey)
+			const scope = await this.getCacheScope()
+			const localCache = await traverseWebDAVKV.get(scope.kvKey)
 			// Local progress, including suspended verification, must survive a restart.
 			if (localCache) {
 				return false
@@ -70,21 +77,26 @@ export default class CacheServiceV1 extends BaseService {
 				return false
 			}
 			if (
-				(exportedStorage.remoteBaseDir &&
-					stdRemotePath(exportedStorage.remoteBaseDir) !==
-						stdRemotePath(this.plugin.remoteBaseDir)) ||
+				exportedStorage.schemaVersion !== TRAVERSAL_CACHE_SCHEMA ||
+				exportedStorage.accountHash !== scope.accountHash ||
+				exportedStorage.remoteEndpoint !== scope.remoteEndpoint ||
+				!exportedStorage.remoteBaseDir ||
+				stdRemotePath(exportedStorage.remoteBaseDir) !== scope.remoteBaseDir ||
 				!isTraversalCacheCompatible(
 					exportedStorage.traverseWebDAVCache,
 					this.plugin.remoteBaseDir,
 				)
 			) {
 				logger.warn(
-					'Skipping remote traversal cache restore: cache belongs to a different remote directory',
+					'Skipping remote traversal cache restore: schema or scope mismatch',
 				)
 				return false
 			}
 
-			await traverseWebDAVKV.set(kvKey, exportedStorage.traverseWebDAVCache)
+			await traverseWebDAVKV.set(
+				scope.kvKey,
+				exportedStorage.traverseWebDAVCache,
+			)
 			logger.info('Restored remote traversal cache')
 			return true
 		} catch (error) {
@@ -105,20 +117,25 @@ export default class CacheServiceV1 extends BaseService {
 			if (isCancelled()) {
 				return false
 			}
-			const traverseWebDAVCache = await traverseWebDAVKV.get(
-				await this.getKVKey(),
-			)
+			const scope = await this.getCacheScope()
+			const traverseWebDAVCache = await traverseWebDAVKV.get(scope.kvKey)
 			if (
 				!traverseWebDAVCache ||
 				traverseWebDAVCache.queue.length > 0 ||
-				(traverseWebDAVCache.pendingVerification?.length ?? 0) > 0
+				(traverseWebDAVCache.pendingVerification?.length ?? 0) > 0 ||
+				!isTraversalCacheCompatible(
+					traverseWebDAVCache,
+					this.plugin.remoteBaseDir,
+				)
 			) {
 				return false
 			}
 
 			const filteredCache = this.withoutRemoteSyncCacheFile(traverseWebDAVCache)
-			const nodesHash = hashObject(filteredCache.nodes)
-			const metaKey = await this.getKVKey()
+			const nodesHash = hashObject({
+				nodes: filteredCache.nodes,
+				unreadablePaths: filteredCache.unreadablePaths ?? [],
+			})
 
 			const webdav = await this.plugin.sync.webdav.createWebDAVClient()
 			if (isCancelled()) {
@@ -129,7 +146,7 @@ export default class CacheServiceV1 extends BaseService {
 				.catch(() => false)
 
 			if (remoteExists) {
-				const meta = await cacheUploadMetaKV.get(metaKey)
+				const meta = await cacheUploadMetaKV.get(scope.kvKey)
 				if (meta?.nodesHash === nodesHash) {
 					logger.debug('Skipping remote cache upload: content unchanged')
 					return false
@@ -137,9 +154,12 @@ export default class CacheServiceV1 extends BaseService {
 			}
 
 			const encodedStorage = this.encodeStorage({
+				schemaVersion: TRAVERSAL_CACHE_SCHEMA,
+				accountHash: scope.accountHash,
+				remoteEndpoint: scope.remoteEndpoint,
 				traverseWebDAVCache: filteredCache,
 				exportedAt: new Date().toISOString(),
-				remoteBaseDir: stdRemotePath(this.plugin.remoteBaseDir),
+				remoteBaseDir: scope.remoteBaseDir,
 			})
 			if (isCancelled()) {
 				return false
@@ -158,7 +178,7 @@ export default class CacheServiceV1 extends BaseService {
 				throw new Error('Remote traversal cache upload failed')
 			}
 
-			await cacheUploadMetaKV.set(metaKey, { nodesHash })
+			await cacheUploadMetaKV.set(scope.kvKey, { nodesHash })
 			logger.info('Saved remote traversal cache')
 			return true
 		} catch (error) {
@@ -196,12 +216,20 @@ export default class CacheServiceV1 extends BaseService {
 		return exportedStorage
 	}
 
-	private async getKVKey() {
-		return getTraversalWebDAVDBKey(
-			await this.plugin.getRemoteAccountId(),
-			getNutstoreDavEndpoint(this.plugin.settings),
-			this.plugin.remoteBaseDir,
-		)
+	private async getCacheScope() {
+		const remoteAccountId = await this.plugin.getRemoteAccountId()
+		const remoteEndpoint = getNutstoreDavEndpoint(this.plugin.settings)
+		const remoteBaseDir = stdRemotePath(this.plugin.remoteBaseDir)
+		return {
+			accountHash: await getAccountHash(remoteAccountId),
+			remoteEndpoint,
+			remoteBaseDir,
+			kvKey: await getTraversalWebDAVDBKey(
+				remoteAccountId,
+				remoteEndpoint,
+				this.plugin.remoteBaseDir,
+			),
+		}
 	}
 
 	private withoutRemoteSyncCacheFile(
@@ -220,9 +248,18 @@ export default class CacheServiceV1 extends BaseService {
 			})
 		}
 
+		const unreadablePaths = (cache.unreadablePaths ?? []).filter((entry) => {
+			const path = normalize(entry.path)
+			return path !== remoteCacheFilePath && path !== localCacheFilePath
+		})
+
 		return {
+			schemaVersion: TRAVERSAL_CACHE_SCHEMA,
 			rootCursor: cache.rootCursor,
 			queue: [...cache.queue],
+			pendingVerification: [...(cache.pendingVerification ?? [])],
+			...(unreadablePaths.length > 0 ? { unreadablePaths } : {}),
+			lastFullScanAt: cache.lastFullScanAt,
 			nodes,
 		}
 	}

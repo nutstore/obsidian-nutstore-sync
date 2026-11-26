@@ -10,7 +10,11 @@ import {
 } from '../core/detect-local-moves'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
-import { getFileChanges, hasFileMetadataChanged } from '../core/file-changes'
+import {
+	evaluateRemoteFileChange,
+	getFileChanges,
+	hasFileMetadataChanged,
+} from '../core/file-changes'
 import {
 	collectWalkPaths,
 	shouldCreateCleanRecordTask,
@@ -131,21 +135,28 @@ export async function twoWayDecider(
 		}
 		if (record) {
 			if (remote) {
-				const remoteChanged = hasFileMetadataChanged(remote, record.remote)
 				if (local) {
-					const { localChanged } = await getFileChanges(
+					const { localChanged, remoteStatus } = await getFileChanges(
 						input,
 						local,
 						remote,
 						record,
 					)
-					if (remoteChanged) {
+					const remoteChanged = remoteStatus === 'changed'
+					if (
+						remoteChanged ||
+						(remoteStatus === 'unverified' && localChanged)
+					) {
 						if (localChanged) {
 							logger.debug({
-								reason: 'both local and remote files changed',
+								reason:
+									remoteStatus === 'unverified'
+										? 'local file changed against unverified legacy remote baseline'
+										: 'both local and remote files changed',
 								remotePath: remotePathToAbsolute(remoteBaseDir, p),
 								localPath: p,
 								conditions: {
+									remoteStatus,
 									remoteChanged,
 									localChanged,
 									recordExists: !!record,
@@ -189,6 +200,7 @@ export async function twoWayDecider(
 								remotePath: remotePathToAbsolute(remoteBaseDir, p),
 								localPath: p,
 								conditions: {
+									remoteStatus,
 									remoteChanged,
 									recordExists: !!record,
 									remoteExists: !!remote,
@@ -211,53 +223,64 @@ export async function twoWayDecider(
 								taskFactory.createPullTask({
 									...options,
 									remoteSize: remote.size,
+									expectedRemoteStat: remote,
 									mobileAppDownloadFileChunkSize:
 										settings.mobileAppDownloadFileChunkSize,
 								}),
 							)
 							continue
 						}
-					} else {
-						if (localChanged) {
-							logger.debug({
-								reason: 'local file changed',
-								remotePath: remotePathToAbsolute(remoteBaseDir, p),
-								localPath: p,
-								conditions: {
-									localChanged,
-									recordExists: !!record,
-									remoteExists: !!remote,
-									localExists: !!local,
-								},
-							})
-							if (local.size > maxFileSize || remote.size > maxFileSize) {
-								tasks.push(
-									taskFactory.createSkippedTask({
-										...options,
-										reason: SkipReason.FileTooLarge,
-										maxSize: maxFileSize,
-										remoteSize: remote.size,
-										localSize: local.size,
-									}),
-								)
-								continue
-							}
-							if (hasInvalidChar(local.path)) {
-								tasks.push(taskFactory.createFilenameErrorTask(options))
-							} else {
-								tasks.push(taskFactory.createPushTask(options))
-							}
-							continue
-						}
-					}
-				} else {
-					if (remoteChanged) {
+					} else if (remoteStatus === 'unchanged' && localChanged) {
 						logger.debug({
-							reason: 'remote file changed and local file does not exist',
+							reason: 'local file changed',
 							remotePath: remotePathToAbsolute(remoteBaseDir, p),
 							localPath: p,
 							conditions: {
-								remoteChanged,
+								localChanged,
+								recordExists: !!record,
+								remoteExists: !!remote,
+								localExists: !!local,
+							},
+						})
+						if (local.size > maxFileSize || remote.size > maxFileSize) {
+							tasks.push(
+								taskFactory.createSkippedTask({
+									...options,
+									reason: SkipReason.FileTooLarge,
+									maxSize: maxFileSize,
+									remoteSize: remote.size,
+									localSize: local.size,
+								}),
+							)
+							continue
+						}
+						if (hasInvalidChar(local.path)) {
+							tasks.push(taskFactory.createFilenameErrorTask(options))
+						} else {
+							tasks.push(
+								taskFactory.createPushTask({
+									...options,
+									expectedRemoteEtag: remote.etag,
+								}),
+							)
+						}
+						continue
+					} else {
+						continue
+					}
+				} else {
+					const remoteStatus = evaluateRemoteFileChange(remote, record.remote)
+					if (remoteStatus !== 'unchanged') {
+						logger.debug({
+							reason:
+								remoteStatus === 'unverified'
+									? 'unverified remote file kept/pulled when local is absent'
+									: 'remote file changed and local file does not exist',
+							remotePath: remotePathToAbsolute(remoteBaseDir, p),
+							localPath: p,
+							conditions: {
+								remoteStatus,
+								remoteChanged: remoteStatus === 'changed',
 								recordExists: !!record,
 								remoteExists: !!remote,
 								localExists: !!local,
@@ -278,6 +301,7 @@ export async function twoWayDecider(
 							taskFactory.createPullTask({
 								...options,
 								remoteSize: remote.size,
+								expectedRemoteStat: remote,
 								mobileAppDownloadFileChunkSize:
 									settings.mobileAppDownloadFileChunkSize,
 							}),
@@ -360,7 +384,13 @@ export async function twoWayDecider(
 			if (remote) {
 				if (local) {
 					if (areLooseEqualFiles(settings.syncMode, local, remote)) {
-						tasks.push(taskFactory.createNoopTask(options))
+						tasks.push(
+							taskFactory.createNoopTask({
+								...options,
+								localStat: local,
+								remoteStat: remote,
+							}),
+						)
 						continue
 					}
 					logger.debug({
@@ -430,6 +460,7 @@ export async function twoWayDecider(
 						taskFactory.createPullTask({
 							...options,
 							remoteSize: remote.size,
+							expectedRemoteStat: remote,
 							mobileAppDownloadFileChunkSize:
 								settings.mobileAppDownloadFileChunkSize,
 						}),
@@ -526,6 +557,8 @@ export async function twoWayDecider(
 						localPath: localPath,
 						remotePath: remote.path,
 						remoteBaseDir,
+						localStat: local,
+						remoteStat: remote,
 					}),
 				)
 				continue
@@ -640,6 +673,8 @@ export async function twoWayDecider(
 						localPath: local.path,
 						remotePath: remote.path,
 						remoteBaseDir,
+						localStat: local,
+						remoteStat: remote,
 					}),
 				)
 				continue

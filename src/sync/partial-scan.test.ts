@@ -88,15 +88,26 @@ async function fixture(policy: SyncPolicy) {
 			mtime?: number
 			mtimeMs?: number
 			bytes?: Uint8Array
+			etag?: string
 		},
-	): StatModel => ({
-		path,
-		basename: path.split('/').at(-1)!,
-		isDir: node.kind !== 'file',
-		isDeleted: false,
-		mtime: node.mtime ?? node.mtimeMs ?? 1000,
-		size: node.bytes?.byteLength ?? 0,
-	})
+	): StatModel =>
+		node.kind === 'file'
+			? {
+					path,
+					basename: path.split('/').at(-1)!,
+					isDir: false,
+					isDeleted: false,
+					mtime: node.mtime ?? node.mtimeMs ?? 1000,
+					size: node.bytes?.byteLength ?? 0,
+					etag: node.etag ?? null,
+				}
+			: {
+					path,
+					basename: path.split('/').at(-1)!,
+					isDir: true,
+					isDeleted: false,
+					mtime: node.mtime ?? node.mtimeMs ?? 1000,
+				}
 	const baseline = new Map(
 		[...local.nodes.entries()].map(([path, node]) => [
 			path,

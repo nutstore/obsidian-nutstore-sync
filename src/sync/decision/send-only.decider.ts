@@ -9,7 +9,7 @@ import {
 } from '../core/detect-local-moves'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
-import { getFileChanges, hasFileMetadataChanged } from '../core/file-changes'
+import { evaluateRemoteFileChange, getFileChanges } from '../core/file-changes'
 import {
 	collectWalkPaths,
 	shouldCreateCleanRecordTask,
@@ -90,6 +90,7 @@ export async function sendOnlyDecider(
 		p: string,
 		localSize: number,
 		remoteSize?: number,
+		expectedRemoteEtag?: string | null,
 	): boolean => {
 		const taskOptions = {
 			remotePath: p,
@@ -115,7 +116,12 @@ export async function sendOnlyDecider(
 			tasks.push(taskFactory.createFilenameErrorTask(taskOptions))
 			return false
 		}
-		tasks.push(taskFactory.createPushTask(taskOptions))
+		tasks.push(
+			taskFactory.createPushTask({
+				...taskOptions,
+				...(expectedRemoteEtag ? { expectedRemoteEtag } : {}),
+			}),
+		)
 		return true
 	}
 
@@ -157,7 +163,13 @@ export async function sendOnlyDecider(
 		if (local && remote) {
 			// In loose mode, same-path same-type same-size files are considered equal.
 			if (!record && areLooseEqualFiles(settings.syncMode, local, remote)) {
-				tasks.push(taskFactory.createNoopTask(taskOptions))
+				tasks.push(
+					taskFactory.createNoopTask({
+						...taskOptions,
+						localStat: local,
+						remoteStat: remote,
+					}),
+				)
 				continue
 			}
 			if (!record) {
@@ -166,15 +178,34 @@ export async function sendOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				pushLocalFile(p, local.size, remote.size)
+				pushLocalFile(p, local.size, remote.size, remote.etag)
 				continue
 			}
-			const { localChanged, remoteChanged } = await getFileChanges(
-				input,
-				local,
-				remote,
-				record,
-			)
+			const { localChanged, remoteStatus, remoteChanged } =
+				await getFileChanges(input, local, remote, record)
+			if (remoteStatus === 'unverified') {
+				if (mode.overrideChanges && localChanged) {
+					logger.debug({
+						reason: 'override unverified remote baseline with local change',
+						localPath: p,
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+					})
+					pushLocalFile(p, local.size, remote.size, remote.etag)
+				} else if (!mode.overrideChanges && localChanged) {
+					logger.debug({
+						reason: 'local changed against unverified legacy remote — skip',
+						localPath: p,
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+					})
+					tasks.push(
+						taskFactory.createSkippedTask({
+							...taskOptions,
+							reason: SkipReason.ConflictInSendOnlyMode,
+						}),
+					)
+				}
+				continue
+			}
 			const shouldPush = mode.overrideChanges
 				? localChanged || remoteChanged
 				: localChanged && !remoteChanged
@@ -184,7 +215,7 @@ export async function sendOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				pushLocalFile(p, local.size, remote.size)
+				pushLocalFile(p, local.size, remote.size, remote.etag)
 			} else if (localChanged && remoteChanged && !mode.overrideChanges) {
 				logger.debug({
 					reason: 'both local and remote changed — skip',
@@ -239,7 +270,7 @@ export async function sendOnlyDecider(
 				})
 				if (
 					record &&
-					!hasFileMetadataChanged(remote, record.remote) &&
+					evaluateRemoteFileChange(remote, record.remote) === 'unchanged' &&
 					remote.size <= maxFileSize
 				) {
 					removedMoveCandidates.push({ path: p, remote, record })
@@ -256,8 +287,8 @@ export async function sendOnlyDecider(
 				})
 				continue
 			}
-			const remoteChanged = hasFileMetadataChanged(remote, record.remote)
-			if (!remoteChanged) {
+			const remoteStatus = evaluateRemoteFileChange(remote, record.remote)
+			if (remoteStatus === 'unchanged') {
 				logger.debug({
 					reason: 'local deleted, remote unchanged — remove remote',
 					localPath: p,
@@ -271,7 +302,9 @@ export async function sendOnlyDecider(
 			} else {
 				logger.debug({
 					reason:
-						'local deleted, remote changed — skip to protect remote change',
+						remoteStatus === 'unverified'
+							? 'local deleted, legacy remote unverified — skip to protect remote'
+							: 'local deleted, remote changed — skip to protect remote change',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})

@@ -18,10 +18,11 @@ describe('per-run conflict selection', () => {
 			const stat = {
 				path: 'Notes/普通笔记🌱.md',
 				basename: '普通笔记🌱.md',
-				isDir: false,
+				isDir: false as const,
 				isDeleted: false,
 				mtime: 2,
 				size: 20,
+				etag: 'etag-v2',
 			}
 			const saved = {
 				conflictStrategy: ConflictStrategy.NoConflictMerge,
@@ -49,7 +50,10 @@ describe('per-run conflict selection', () => {
 					new Map([
 						[
 							stat.path,
-							{ local: { ...stat, mtime: 1 }, remote: { ...stat, mtime: 1 } },
+							{
+								local: { ...stat, mtime: 1 },
+								remote: { ...stat, mtime: 1, etag: 'etag-v1' },
+							},
 						],
 					]),
 			} as unknown as SyncRecord

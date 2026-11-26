@@ -1,6 +1,7 @@
 import type { Vault } from 'obsidian'
 import { isAbsolute, join } from 'path-browserify'
 import { WebDAVClient } from 'webdav'
+import type { StatModel } from '~/model/stat.model'
 import { SyncRecord } from '~/storage/sync-record'
 import type { SyncLogger } from '~/sync/log'
 import { MaybePromise } from '~/utils/types'
@@ -16,9 +17,32 @@ export interface BaseTaskOptions {
 	logger: SyncLogger
 }
 
+/**
+ * Witnessed execution outcome emitted by a task so baseline updates record only
+ * versions actually transferred and verified during execution.
+ */
+export type SyncReceipt =
+	| {
+			kind: 'synced'
+			local: StatModel
+			remote: StatModel
+			contentHash?: string
+			base?: { key: string }
+			movedFromLocalPath?: string
+	  }
+	| {
+			kind: 'deleted'
+			recursive?: boolean
+	  }
+	| {
+			kind: 'unverified'
+			movedFromLocalPath?: string
+	  }
+
 interface TaskSuccessResult {
 	success: true
 	skipRecord?: boolean
+	receipt?: SyncReceipt
 }
 
 interface TaskFailureResult {

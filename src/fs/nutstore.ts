@@ -1,5 +1,5 @@
 import { Vault } from 'obsidian'
-import { dirname, isAbsolute, join, normalize } from 'path-browserify'
+import { isAbsolute, join, normalize } from 'path-browserify'
 import type { StatModel } from '~/model/stat.model'
 import type { NutstoreSettings } from '~/settings'
 import {
@@ -16,6 +16,7 @@ import { isSub } from '~/utils/is-sub'
 import { stdRemotePath } from '~/utils/std-remote-path'
 import { isSyncCacheLocalPath } from '~/utils/sync-cache-file'
 import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
+import type { ScanIssue } from '~/sync/scope'
 import {
 	ResumableWebDAVTraversal,
 	type WebDAVTraversalProgress,
@@ -24,6 +25,8 @@ import AbstractFileSystem from './fs.interface'
 import completeLossDir from './utils/complete-loss-dir'
 
 export class NutstoreFileSystem implements AbstractFileSystem {
+	issues: ScanIssue[] = []
+
 	constructor(
 		private options: {
 			vault: Vault
@@ -36,16 +39,13 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 				configDir?: string
 				configDirSyncMode?: ConfigDirSyncMode
 			}
-			/** Skip filter compilation/evaluation when caller only queries post-task metadata. */
-			skipFilter?: boolean
-			/** Limit returned stats to these vault-relative paths (implies targeted directory lookup). */
-			targetPaths?: ReadonlySet<string>
 			onTraversalProgress?: (progress: WebDAVTraversalProgress) => void
 			throwIfCancelled?: () => void
 		},
 	) {}
 
 	async walk() {
+		this.issues = []
 		const traversal = new ResumableWebDAVTraversal({
 			settings: this.options.settings,
 			token: this.options.token,
@@ -59,20 +59,24 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 			throwIfCancelled: this.options.throwIfCancelled,
 		})
 		const base = normalizeRemotePath(stdRemotePath(this.options.remoteBaseDir))
-		const targetPaths = this.options.targetPaths
 
-		let traversedStats: StatModel[]
-		if (targetPaths) {
-			const parentDirs = new Set<string>()
-			for (const localPath of targetPaths) {
-				const absTarget = normalizeRemotePath(join(base, localPath))
-				if (!isSub(base, absTarget)) continue
-				const parent = normalizeRemotePath(dirname(absTarget))
-				parentDirs.add(stdRemotePath(parent))
+		const traversedStats = await traversal.traverse()
+
+		for (const entry of traversal.getUnreadableEntries()) {
+			const localPath = toLocalPath(base, entry.path)
+			if (localPath === undefined) continue
+			if (isSyncCacheLocalPath(localPath, this.options.vault.configDir)) {
+				continue
 			}
-			traversedStats = await traversal.syncAndLookupDirs(parentDirs)
-		} else {
-			traversedStats = await traversal.traverse()
+			this.issues.push({
+				path: localPath,
+				operation: entry.operation,
+				cause: new Error(
+					entry.status
+						? `Remote PROPFIND failed (${entry.status}): ${entry.path}`
+						: `Remote PROPFIND entry unreadable: ${entry.path}`,
+				),
+			})
 		}
 
 		if (traversedStats.length === 0) {
@@ -83,18 +87,11 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 		for (const stat of traversedStats) {
 			const normalized = toLocalStat(base, stat)
 			if (!normalized) continue
-			if (targetPaths && !targetPaths.has(normalized.path)) {
-				continue
-			}
 			if (!statsByLocalPath.has(normalized.path)) {
 				statsByLocalPath.set(normalized.path, normalized)
 			}
 		}
 		const stats = [...statsByLocalPath.values()]
-
-		if (this.options.skipFilter) {
-			return stats.map((stat) => ({ stat, ignored: false }))
-		}
 
 		const settings = this.options.filterRules
 			? undefined
@@ -127,16 +124,24 @@ export class NutstoreFileSystem implements AbstractFileSystem {
 	}
 }
 
-function toLocalStat(base: string, stat: StatModel): StatModel | undefined {
+function toLocalPath(base: string, remotePath: string): string | undefined {
 	const absolutePath = normalizeRemotePath(
-		isAbsolute(stat.path) ? stat.path : join(base, stat.path),
+		isAbsolute(remotePath) ? remotePath : join(base, remotePath),
 	)
+	if (absolutePath === base) {
+		return ''
+	}
 	if (!isSub(base, absolutePath)) {
 		return undefined
 	}
-	const localPath = absolutePath
-		.slice(base === '/' ? 1 : base.length)
-		.replace(/^\/+/, '')
+	return absolutePath.slice(base === '/' ? 1 : base.length).replace(/^\/+/, '')
+}
+
+function toLocalStat(base: string, stat: StatModel): StatModel | undefined {
+	const localPath = toLocalPath(base, stat.path)
+	if (!localPath) {
+		return undefined
+	}
 	return { ...stat, path: localPath }
 }
 

@@ -9,7 +9,7 @@ import {
 	type NutstoreLocalSettings,
 	type NutstoreSettings,
 } from '~/settings'
-import { syncRecordKV } from '~/storage'
+import { syncRecordKV, traverseWebDAVKV } from '~/storage'
 import { SyncRecord } from '~/storage/sync-record'
 import { onSyncError } from '~/events'
 import { NutstoreSync, SyncStartMode } from '~/sync'
@@ -18,18 +18,23 @@ import MoveRemoteTask from '~/sync/tasks/move-remote.task'
 import RemoveRemoteTask from '~/sync/tasks/remove-remote.task'
 import { optimizeTasksForExecution } from '~/sync/utils/optimize-tasks'
 import { apiLimiter } from '~/utils/api-limiter'
-import { getDBKey } from '~/utils/get-db-key'
+import { getDBKey, getTraversalWebDAVDBKey } from '~/utils/get-db-key'
 import {
 	compileFilterRules,
 	isPathIncluded,
 	type GlobFilterRule,
 } from '~/utils/glob-match'
+import { getNutstoreDavEndpoint } from '~/utils/nutstore-endpoints'
 import { sha256Base64 } from '~/utils/sha256'
 import type NutstorePlugin from '~/index'
 import { obsidianRuntime } from '../obsidian-runtime'
 import { clearAllPluginStorage } from '../harness/memory-storage'
 import { createMemoryClock, MemoryVault } from '../harness/memory-vault'
-import { MemoryWebDAV, type MoveSupportMode } from '../harness/memory-webdav'
+import {
+	computeContentEtag,
+	MemoryWebDAV,
+	type MoveSupportMode,
+} from '../harness/memory-webdav'
 import { simParams } from '../harness/sim-config'
 
 const REMOTE_BASE_DIR = '/SyncVault/'
@@ -83,6 +88,7 @@ function createSyncWorld(options?: {
 	moveSupport?: MoveSupportMode
 	filterRules?: GlobFilterRule[]
 	clockSkewMs?: number
+	deltaModifiedOffsetMs?: number
 }): SyncWorld {
 	const clock = createMemoryClock(1_730_000_000_000)
 	const vault = new MemoryVault({ name: 'SimVault', clock })
@@ -90,6 +96,7 @@ function createSyncWorld(options?: {
 		clock,
 		clockSkewMs: options?.clockSkewMs ?? 0,
 		moveSupport: options?.moveSupport ?? 'supported',
+		deltaModifiedOffsetMs: options?.deltaModifiedOffsetMs ?? 0,
 	})
 	remote.seedDir(REMOTE_BASE_DIR)
 
@@ -146,10 +153,11 @@ async function runSync(
 		mode?: SyncStartMode
 		signal?: AbortSignal
 		conflictStrategy?: ConflictStrategy
+		requestUrlHandler?: typeof obsidianRuntime.requestUrlHandler
 	},
 ) {
-	obsidianRuntime.requestUrlHandler = (req) =>
-		world.remote.handleRequestUrl(req)
+	obsidianRuntime.requestUrlHandler =
+		options?.requestUrlHandler ?? ((req) => world.remote.handleRequestUrl(req))
 	let syncError: Error | undefined
 	const sub = onSyncError().subscribe((err) => {
 		syncError = err
@@ -296,6 +304,13 @@ async function assertRecordsHonest(
 			`Record exists for missing remote file: ${path}`,
 		).toBeDefined()
 		expect(localBytes).toEqual(remoteBytes)
+		const remoteNode = world.remote.nodes.get(`${REMOTE_BASE_DIR}${path}`)
+		if (!record.remote.isDir && remoteNode?.kind === 'file') {
+			expect(
+				record.remote.etag,
+				`Record remote.etag mismatch for ${path}`,
+			).toBe(remoteNode.etag)
+		}
 		const copy = new Uint8Array(localBytes!.byteLength)
 		copy.set(localBytes!)
 		const expectedHash = await sha256Base64(copy.buffer)
@@ -631,19 +646,19 @@ describe('Sync engine deterministic simulation (DST)', () => {
 
 					const controller = new AbortController()
 					if (faultKind === 'abort') {
-						let calls = 0
-						world.remote.addFault({
-							onCall: failAtCall,
-							error: (() => {
-								calls += 1
-								const err = new Error('Aborted')
-								err.name = 'AbortError'
-								return err
-							})(),
-						})
-						// Abort on failure path
+						let seenOps = 0
+						world.remote.onAfterOp = () => {
+							seenOps += 1
+							if (seenOps === failAtCall) {
+								controller.abort()
+							}
+						}
 						const aborted = await runSync(world, { signal: controller.signal })
-						expect(aborted.completed || calls >= 0).toBe(true)
+						world.remote.onAfterOp = undefined
+						expect(seenOps > 0 || aborted.completed).toBe(true)
+						if (seenOps >= failAtCall) {
+							expect(controller.signal.aborted).toBe(true)
+						}
 					} else {
 						world.remote.addFault({
 							op: 'put',
@@ -819,5 +834,687 @@ describe('Sync engine deterministic simulation (DST)', () => {
 		).toBe('precious-content')
 		// Sanity check MoveRemoteTask class reference
 		expect(MoveRemoteTask).toBeDefined()
+	})
+
+	it('counterexample #1: persists downloaded version ETag rather than post-download mutated remote ETag and pulls B on next sync', async () => {
+		const world = createSyncWorld({ policy: SyncPolicy.TwoWay })
+		const relPath = 'notes/漂移 & 100% 📘.md'
+		const absPath = `${REMOTE_BASE_DIR}${relPath}`
+		const versionA = 'version-alpha-内容-A\n'
+		const versionB = 'version-beta-修订-B 🌱\n'
+		const encoder = new TextEncoder()
+		const etagA = computeContentEtag(encoder.encode(versionA))
+		const etagB = computeContentEtag(encoder.encode(versionB))
+
+		world.remote.seedFile(absPath, versionA)
+
+		let injected = false
+		world.remote.onAfterOp = (op) => {
+			if (
+				!injected &&
+				(op.op === 'get' || op.op === 'rangeGet') &&
+				op.path === absPath
+			) {
+				injected = true
+				world.clock.advance(2_000)
+				world.remote.seedFile(absPath, versionB)
+			}
+		}
+
+		const firstSync = await runSync(world)
+		expect(firstSync.completed).toBe(true)
+		expect(injected).toBe(true)
+
+		// Local received A and SyncRecord recorded witnessed etag(A) — never etag(B)
+		expect(world.vault.readTextDirect(relPath)).toBe(versionA)
+		const recAfterFirst = await world.syncRecord.getRecord(relPath)
+		expect(recAfterFirst).toBeDefined()
+		expect(recAfterFirst!.remote.isDir).toBe(false)
+		if (!recAfterFirst!.remote.isDir) {
+			expect(recAfterFirst!.remote.etag).toBe(etagA)
+			expect(recAfterFirst!.remote.etag).not.toBe(etagB)
+		}
+
+		// Next sync detects etag(B) != etag(A) and converges to B
+		world.remote.onAfterOp = undefined
+		const secondSync = await runSync(world)
+		expect(secondSync.completed).toBe(true)
+		expect(world.vault.readTextDirect(relPath)).toBe(versionB)
+		const recAfterSecond = await world.syncRecord.getRecord(relPath)
+		expect(
+			recAfterSecond &&
+				!recAfterSecond.remote.isDir &&
+				recAfterSecond.remote.etag,
+		).toBe(etagB)
+		await assertRecordsHonest(world)
+	})
+
+	it('counterexample #2: treats legacy unverified baselines cautiously without ETag backfill, blind overwrite, or remote deletion', async () => {
+		const world = createSyncWorld({
+			policy: SyncPolicy.TwoWay,
+			conflictStrategy: ConflictStrategy.NoConflictMerge,
+		})
+		const mergePath = 'notes/legacy-历史 & 100% 📘.md'
+		const protectPath = 'notes/legacy-protect 🌱.md'
+		const mergeAbs = `${REMOTE_BASE_DIR}${mergePath}`
+		const protectAbs = `${REMOTE_BASE_DIR}${protectPath}`
+
+		const baseMerge = 'line-1\nline-AAAA\n'
+		const remoteSameStatB = 'line-1\nline-BBBB\n'
+		const baseProtect = 'protect-AAAA-01'
+		const remoteProtectB = 'protect-BBBB-01'
+
+		expect(new TextEncoder().encode(baseMerge).byteLength).toBe(
+			new TextEncoder().encode(remoteSameStatB).byteLength,
+		)
+		expect(new TextEncoder().encode(baseProtect).byteLength).toBe(
+			new TextEncoder().encode(remoteProtectB).byteLength,
+		)
+
+		world.vault.seedFile(mergePath, baseMerge)
+		world.vault.seedFile(protectPath, baseProtect)
+		await runSync(world)
+
+		// Downgrade records to legacy shape (no remote.etag) and swap remote bytes at identical mtime & size
+		const records = await world.syncRecord.getRecords()
+		const legacyMerge = records.get(mergePath)!
+		const legacyProtect = records.get(protectPath)!
+		if (legacyMerge.remote.isDir || legacyProtect.remote.isDir) {
+			throw new Error('Expected file records')
+		}
+		const recordedMtimeMerge = legacyMerge.remote.mtime
+		const recordedMtimeProtect = legacyProtect.remote.mtime
+		delete legacyMerge.remote.etag
+		delete legacyProtect.remote.etag
+		await world.syncRecord.setRecords(records)
+
+		world.remote.seedFile(mergeAbs, remoteSameStatB, recordedMtimeMerge)
+		world.remote.seedFile(protectAbs, remoteProtectB, recordedMtimeProtect)
+
+		// 1. Sync with local unchanged must NOT backfill remote.etag when baseline is unverified
+		const idleRun = await runSync(world)
+		expect(idleRun.completed).toBe(true)
+		const afterIdle = await world.syncRecord.getRecord(mergePath)
+		expect(
+			afterIdle && !afterIdle.remote.isDir ? afterIdle.remote.etag : undefined,
+		).toBeUndefined()
+
+		// 2. Local edit against unverified remote merges instead of blindly overwriting B
+		world.clock.advance(2_000)
+		world.vault.seedFile(mergePath, 'line-1-local-🌿\nline-AAAA\n')
+
+		// 3. Local delete against unverified remote restores B instead of deleting remote B
+		world.vault.removeDirect(protectPath, false)
+
+		const divergeRun = await runSync(world)
+		expect(divergeRun.completed).toBe(true)
+
+		expect(world.vault.readTextDirect(mergePath)).toBe(
+			'line-1-local-🌿\nline-BBBB\n',
+		)
+		expect(decoder.decode(world.remote.readBytesDirect(mergeAbs)!)).toBe(
+			'line-1-local-🌿\nline-BBBB\n',
+		)
+		expect(world.vault.readTextDirect(protectPath)).toBe(remoteProtectB)
+		expect(decoder.decode(world.remote.readBytesDirect(protectAbs)!)).toBe(
+			remoteProtectB,
+		)
+		await assertRecordsHonest(world)
+	})
+
+	it('counterexample #3: purges stale mirror children on in-place directory DELETE then ADD within one delta window', async () => {
+		const world = createSyncWorld({ policy: SyncPolicy.TwoWay })
+		const dirRel = '文件夹 Dir 📁'
+		const oldFileRel = `${dirRel}/旧笔记 old & 100%.md`
+		const deepOldRel = `${dirRel}/sub/深层 #1.md`
+		const newFileRel = `${dirRel}/新笔记 new 🌱.md`
+
+		world.vault.seedFile(oldFileRel, 'old-content-1')
+		world.vault.seedFile(deepOldRel, 'deep-old-content')
+		expect((await runSync(world)).completed).toBe(true)
+
+		// In-place directory DELETE -> ADD on remote before next sync
+		world.clock.advance(2_000)
+		world.remote.deleteDirect(`${REMOTE_BASE_DIR}${dirRel}`)
+		world.clock.advance(2_000)
+		world.remote.seedFile(`${REMOTE_BASE_DIR}${newFileRel}`, 'new-content-2 🌟')
+
+		expect((await runSync(world)).completed).toBe(true)
+
+		expect(world.vault.readTextDirect(oldFileRel)).toBeUndefined()
+		expect(world.vault.readTextDirect(deepOldRel)).toBeUndefined()
+		expect(world.vault.readTextDirect(newFileRel)).toBe('new-content-2 🌟')
+
+		const kvKey = await getTraversalWebDAVDBKey(
+			await world.plugin.getRemoteAccountId(),
+			getNutstoreDavEndpoint(world.settings),
+			REMOTE_BASE_DIR,
+		)
+		const cachedMirror = await traverseWebDAVKV.get(kvKey)
+		const cachedPaths = Object.values(cachedMirror?.nodes ?? {})
+			.flat()
+			.map((item) => item.path)
+		expect(cachedPaths).not.toContain(`${REMOTE_BASE_DIR}${oldFileRel}`)
+		expect(cachedPaths).not.toContain(`${REMOTE_BASE_DIR}${deepOldRel}`)
+		expect(cachedPaths).toContain(`${REMOTE_BASE_DIR}${newFileRel}`)
+		await assertRecordsHonest(world)
+	})
+
+	it('rejects stale conditional PUT (412) when remote changes during ConflictResolveTask merge and recovers cleanly on retry', async () => {
+		const world = createSyncWorld({
+			policy: SyncPolicy.TwoWay,
+			conflictStrategy: ConflictStrategy.NoConflictMerge,
+		})
+		const relPath = 'notes/并发合并 & 100% 📘.md'
+		const absPath = `${REMOTE_BASE_DIR}${relPath}`
+
+		world.vault.seedFile(relPath, 'head\nbody-base\ntail\n')
+		expect((await runSync(world)).completed).toBe(true)
+
+		// Concurrent divergence: local edits line 1, remote edits line 3
+		world.clock.advance(2_000)
+		world.vault.seedFile(relPath, 'head-local 🌿\nbody-base\ntail\n')
+		world.remote.seedFile(absPath, 'head\nbody-base\ntail-remote-v1\n')
+
+		const remoteV2 = 'head\nbody-base\ntail-remote-v2-concurrent 🔥\n'
+		let concurrentMutated = false
+		world.remote.onAfterOp = (op) => {
+			if (
+				!concurrentMutated &&
+				(op.op === 'get' || op.op === 'rangeGet') &&
+				op.path === absPath
+			) {
+				concurrentMutated = true
+				world.clock.advance(2_000)
+				world.remote.seedFile(absPath, remoteV2)
+			}
+		}
+
+		// ConflictResolveTask reads remote-v1, then conditional PUT If-Match gets 412 -> remoteV2 preserved
+		await runSync(world)
+		expect(concurrentMutated).toBe(true)
+		expect(decoder.decode(world.remote.readBytesDirect(absPath)!)).toBe(
+			remoteV2,
+		)
+
+		// Next sync fetches remoteV2, merges cleanly with local edit, and converges
+		world.remote.onAfterOp = undefined
+		const recovered = await runSync(world)
+		expect(recovered.completed).toBe(true)
+		expect(world.vault.readTextDirect(relPath)).toBe(
+			'head-local 🌿\nbody-base\ntail-remote-v2-concurrent 🔥\n',
+		)
+		expect(decoder.decode(world.remote.readBytesDirect(absPath)!)).toBe(
+			'head-local 🌿\nbody-base\ntail-remote-v2-concurrent 🔥\n',
+		)
+		await assertRecordsHonest(world)
+	})
+
+	it('avoids redundant file transfers when delta.modified and PROPFIND.getlastmodified diverge while ETag matches', async () => {
+		const world = createSyncWorld({
+			policy: SyncPolicy.TwoWay,
+			deltaModifiedOffsetMs: 3_600_000,
+		})
+		const relPath = 'notes/偏移 测试 100% #1 🌱.md'
+		const absPath = `${REMOTE_BASE_DIR}${relPath}`
+		const content = 'immutable content 内容不变 📘\n'
+
+		world.vault.seedFile(relPath, content)
+		expect((await runSync(world)).completed).toBe(true)
+
+		// Touch remote with identical bytes at a shifted mtime + 1h delta offset: ETag stays identical
+		world.clock.advance(5_000)
+		world.remote.seedFile(absPath, content)
+		world.remote.clearOps()
+
+		const followUp = await runSync(world)
+		expect(followUp.completed).toBe(true)
+		const transferOps = world.remote.ops.filter(
+			(op) =>
+				op.op === 'get' ||
+				op.op === 'rangeGet' ||
+				op.op === 'put' ||
+				op.op === 'delete',
+		)
+		expect(transferOps).toHaveLength(0)
+		expect(world.vault.readTextDirect(relPath)).toBe(content)
+		await assertRecordsHonest(world)
+	})
+
+	it('persists witnessed SyncReceipts for completed tasks when cancelled mid-chunk', async () => {
+		const world = createSyncWorld({ policy: SyncPolicy.TwoWay })
+		const firstPath = 'notes/批次1 🌱.md'
+		const secondPath = 'notes/批次2 📘.md'
+		world.vault.seedFile(firstPath, 'payload-one-内容')
+		world.vault.seedFile(secondPath, 'payload-two-内容')
+
+		const controller = new AbortController()
+		let firstCompletedPath: string | undefined
+		world.remote.onAfterOp = (op) => {
+			if (op.op === 'put' && !firstCompletedPath) {
+				firstCompletedPath = op.path.slice(REMOTE_BASE_DIR.length)
+				controller.abort()
+			}
+		}
+
+		const cancelledRun = await runSync(world, { signal: controller.signal })
+		world.remote.onAfterOp = undefined
+		expect(cancelledRun.completed).toBe(false)
+		expect(firstCompletedPath).toBeDefined()
+
+		// The task that finished before abort MUST have its witnessed SyncRecord persisted
+		const completedRecord = await world.syncRecord.getRecord(
+			firstCompletedPath!,
+		)
+		expect(completedRecord).toBeDefined()
+		const completedRemote = world.remote.nodes.get(
+			`${REMOTE_BASE_DIR}${firstCompletedPath!}`,
+		)
+		expect(
+			completedRecord &&
+				!completedRecord.remote.isDir &&
+				completedRemote?.kind === 'file' &&
+				completedRecord.remote.etag === completedRemote.etag,
+		).toBe(true)
+
+		// Next sync uploads only the remaining file without re-uploading or conflicting on the first
+		world.remote.clearOps()
+		const resumed = await runSync(world)
+		expect(resumed.completed).toBe(true)
+		const putPaths = world.remote.ops
+			.filter((op) => op.op === 'put')
+			.map((op) => op.path)
+		expect(putPaths).not.toContain(`${REMOTE_BASE_DIR}${firstCompletedPath!}`)
+		expect(world.vault.readTextDirect(firstPath)).toBe('payload-one-内容')
+		expect(world.vault.readTextDirect(secondPath)).toBe('payload-two-内容')
+		await assertRecordsHonest(world)
+	})
+
+	it('does not swallow same-length local edit during ConflictResolveTask.execMerge and preserves UTF-8 BOM on remote-wins merge', async () => {
+		const world = createSyncWorld({
+			policy: SyncPolicy.TwoWay,
+			conflictStrategy: ConflictStrategy.NoConflictMerge,
+		})
+
+		// 1. Local-winning merge (`mergedText === localText`) with concurrent same-length local edit
+		const localWinsRel = 'notes/合并保留本地 & 100% 🌱.md'
+		const localWinsAbs = `${REMOTE_BASE_DIR}${localWinsRel}`
+		world.vault.seedFile(localWinsRel, 'line-a\n')
+		expect((await runSync(world)).completed).toBe(true)
+
+		world.clock.advance(2_000)
+		world.remote.seedFile(localWinsAbs, 'line-a\nline-b\n')
+		world.vault.seedFile(localWinsRel, 'line-a\nline-b\nline-c\n')
+
+		let mutatedLocalMidMerge = false
+		world.remote.onAfterOp = (op) => {
+			if (
+				!mutatedLocalMidMerge &&
+				(op.op === 'get' || op.op === 'rangeGet') &&
+				op.path === localWinsAbs
+			) {
+				mutatedLocalMidMerge = true
+				world.clock.advance(2_000)
+				// Same exact byte length as `line-a\nline-b\nline-c\n`!
+				world.vault.seedFile(localWinsRel, 'line-a\nline-b\nline-d\n')
+			}
+		}
+
+		expect((await runSync(world)).completed).toBe(true)
+		world.remote.onAfterOp = undefined
+		expect(mutatedLocalMidMerge).toBe(true)
+		// Next sync MUST detect the concurrent local edit `line-d` and push it to remote
+		expect((await runSync(world)).completed).toBe(true)
+		expect(decoder.decode(world.remote.readBytesDirect(localWinsAbs)!)).toBe(
+			'line-a\nline-b\nline-d\n',
+		)
+		expect(world.vault.readTextDirect(localWinsRel)).toBe(
+			'line-a\nline-b\nline-d\n',
+		)
+
+		// 2. Remote-wins merge (`mergedText === remoteText`) where remote carries a UTF-8 BOM
+		const bomRel = 'notes/bom-文档 📘.md'
+		const bomAbs = `${REMOTE_BASE_DIR}${bomRel}`
+		world.clock.advance(2_000)
+		world.vault.seedFile(bomRel, 'line-a\n')
+		expect((await runSync(world)).completed).toBe(true)
+
+		world.clock.advance(2_000)
+		world.vault.seedFile(bomRel, 'line-a\nline-b\n')
+		const bomRemoteBytes = new Uint8Array([
+			0xef,
+			0xbb,
+			0xbf,
+			...new TextEncoder().encode('line-a\nline-b\nline-remote\n'),
+		])
+		world.remote.seedFile(bomAbs, bomRemoteBytes)
+
+		expect((await runSync(world)).completed).toBe(true)
+		expect(world.vault.snapshotFiles().get(bomRel)).toEqual(bomRemoteBytes)
+		await assertRecordsHonest(world)
+	})
+
+	it('protects per-item PROPFIND 403 subtrees via SyncScope across full and incremental runs without deleting local files', async () => {
+		const world = createSyncWorld({ policy: SyncPolicy.TwoWay })
+		const protectedRel = 'notes/受限文档 & 权限 🔒.md'
+		const healthyRel = 'notes/正常笔记 🌱.md'
+		const protectedAbs = `${REMOTE_BASE_DIR}${protectedRel}`
+		const healthyAbs = `${REMOTE_BASE_DIR}${healthyRel}`
+
+		world.vault.seedFile(protectedRel, 'protected content 受限内容 🔒')
+		world.vault.seedFile(healthyRel, 'healthy v1 正常内容 🌱')
+		expect((await runSync(world)).completed).toBe(true)
+
+		// Force a full rescan where the 207 Multi-Status returns a per-item 403 for `protectedRel`
+		const traversalKey = await getTraversalWebDAVDBKey(
+			'sim-account',
+			getNutstoreDavEndpoint(world.settings),
+			REMOTE_BASE_DIR,
+		)
+		await traverseWebDAVKV.unset(traversalKey)
+
+		let injected403Count = 0
+		const encodedProtected = encodeURIComponent('受限文档 & 权限 🔒.md')
+		const propfind403Handler: typeof obsidianRuntime.requestUrlHandler = async (
+			req,
+		) => {
+			const res = await world.remote.handleRequestUrl(req)
+			const param = typeof req === 'string' ? { url: req } : req
+			if (
+				(param.method ?? 'GET').toUpperCase() === 'PROPFIND' &&
+				res.status === 207 &&
+				res.text.includes(encodedProtected)
+			) {
+				injected403Count++
+				const replaced = res.text.replace(
+					new RegExp(
+						`<D:response><D:href>[^<]*${encodedProtected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</D:href>[\\s\\S]*?</D:response>`,
+					),
+					`<D:response><D:href>/dav${REMOTE_BASE_DIR}notes/${encodedProtected}</D:href><D:propstat><D:prop><D:getetag/></D:prop><D:status>HTTP/1.1 403 Forbidden</D:status></D:propstat></D:response>`,
+				)
+				return { ...res, text: replaced }
+			}
+			return res
+		}
+
+		// Round 1 (full scan): protected file stays intact; healthy file updates sync normally
+		world.clock.advance(2_000)
+		world.vault.seedFile(healthyRel, 'healthy v2 正常更新 🌱')
+		expect(
+			(await runSync(world, { requestUrlHandler: propfind403Handler }))
+				.completed,
+		).toBe(true)
+		expect(injected403Count).toBe(1)
+		expect(world.vault.readTextDirect(protectedRel)).toBe(
+			'protected content 受限内容 🔒',
+		)
+		expect(decoder.decode(world.remote.readBytesDirect(healthyAbs)!)).toBe(
+			'healthy v2 正常更新 🌱',
+		)
+		expect(await world.syncRecord.getRecord(protectedRel)).toBeDefined()
+		const cachedAfterRound1 = await traverseWebDAVKV.get(traversalKey)
+		expect(cachedAfterRound1?.unreadablePaths).toEqual([
+			{
+				path: protectedAbs,
+				operation: 'stat',
+				status: 'HTTP/1.1 403 Forbidden',
+			},
+		])
+
+		// Round 2 (incremental delta scan): persisted unreadablePaths MUST keep protecting local file
+		world.clock.advance(2_000)
+		world.remote.seedFile(healthyAbs, 'healthy v3 远端更新 📘')
+		expect(
+			(await runSync(world, { requestUrlHandler: propfind403Handler }))
+				.completed,
+		).toBe(true)
+		expect(world.vault.readTextDirect(protectedRel)).toBe(
+			'protected content 受限内容 🔒',
+		)
+		expect(world.vault.readTextDirect(healthyRel)).toBe(
+			'healthy v3 远端更新 📘',
+		)
+		expect(await world.syncRecord.getRecord(protectedRel)).toBeDefined()
+
+		// Restore permissions on remote: next delta clears protection and converges cleanly
+		world.clock.advance(2_000)
+		world.remote.seedFile(protectedAbs, 'protected content 恢复可读 ✅')
+		expect((await runSync(world)).completed).toBe(true)
+		expect(world.vault.readTextDirect(protectedRel)).toBe(
+			'protected content 恢复可读 ✅',
+		)
+		expect(
+			(await traverseWebDAVKV.get(traversalKey))?.unreadablePaths,
+		).toBeUndefined()
+		await assertRecordsHonest(world)
+	})
+
+	it('aborts instead of authorizing remote deletion when /delta returns an HTTP 200 HTML error page', async () => {
+		const world = createSyncWorld({ policy: SyncPolicy.TwoWay })
+		const relPath = 'notes/关键档案 100% 📘.md'
+		const absPath = `${REMOTE_BASE_DIR}${relPath}`
+
+		world.vault.seedFile(relPath, 'version A 初始版本')
+		expect((await runSync(world)).completed).toBe(true)
+
+		// Local deletes A while remote updates to B
+		world.clock.advance(2_000)
+		world.vault.removeDirect(relPath)
+		world.remote.seedFile(absPath, 'version B 远端新版本 🌟')
+
+		let interceptedDelta = false
+		const htmlDeltaHandler: typeof obsidianRuntime.requestUrlHandler = async (
+			req,
+		) => {
+			const param = typeof req === 'string' ? { url: req } : req
+			if (param.url.endsWith('/delta')) {
+				interceptedDelta = true
+				return {
+					status: 200,
+					headers: { 'content-type': 'text/html; charset=utf-8' },
+					text: '<html><body>临时维护页 🚧</body></html>',
+					arrayBuffer: new ArrayBuffer(0),
+					json: null,
+				} as never
+			}
+			return world.remote.handleRequestUrl(req)
+		}
+
+		// Sync MUST fail rather than falling back to stale mirror and deleting remote B
+		const failedRun = await runSync(world, {
+			requestUrlHandler: htmlDeltaHandler,
+		})
+		expect(interceptedDelta).toBe(true)
+		expect(failedRun.completed).toBe(false)
+		expect(failedRun.error?.message).toContain('missing <response>')
+		expect(decoder.decode(world.remote.readBytesDirect(absPath)!)).toBe(
+			'version B 远端新版本 🌟',
+		)
+
+		// Once delta recovers, remote B is pulled to local
+		expect((await runSync(world)).completed).toBe(true)
+		expect(world.vault.readTextDirect(relPath)).toBe('version B 远端新版本 🌟')
+		await assertRecordsHonest(world)
+	})
+
+	it('preserves concurrent local edits during remote-wins and three-way ConflictResolveTask merges and aligns UTF-8 BOM on local-wins', async () => {
+		const world = createSyncWorld({
+			policy: SyncPolicy.TwoWay,
+			conflictStrategy: ConflictStrategy.NoConflictMerge,
+		})
+
+		// 1. Remote-wins merge where user appends a new local paragraph during remote GET
+		const remoteWinsRel = 'notes/下载期本地编辑 🌱.md'
+		const remoteWinsAbs = `${REMOTE_BASE_DIR}${remoteWinsRel}`
+		world.vault.seedFile(remoteWinsRel, 'line-1\nline-2\n')
+		expect((await runSync(world)).completed).toBe(true)
+
+		world.clock.advance(2_000)
+		// Local adds line-3, remote supersedes with line-3 + line-4 (initially remote-wins)
+		world.vault.seedFile(remoteWinsRel, 'line-1\nline-2\nline-3\n')
+		world.remote.seedFile(
+			remoteWinsAbs,
+			'line-1\nline-2\nline-3\nline-4-remote\n',
+		)
+
+		let editedDuringGet = false
+		world.remote.onAfterOp = (op) => {
+			if (
+				!editedDuringGet &&
+				(op.op === 'get' || op.op === 'rangeGet') &&
+				op.path === remoteWinsAbs
+			) {
+				editedDuringGet = true
+				world.clock.advance(2_000)
+				world.vault.seedFile(
+					remoteWinsRel,
+					'line-0-user-edit ✨\nline-1\nline-2\nline-3\n',
+				)
+			}
+		}
+
+		expect((await runSync(world)).completed).toBe(true)
+		world.remote.onAfterOp = undefined
+		expect(editedDuringGet).toBe(true)
+		// User's concurrent edit MUST survive (either re-merged immediately or preserved for next sync)
+		expect(world.vault.readTextDirect(remoteWinsRel)).toContain(
+			'line-0-user-edit ✨',
+		)
+		expect((await runSync(world)).completed).toBe(true)
+		expect(world.vault.readTextDirect(remoteWinsRel)).toBe(
+			'line-0-user-edit ✨\nline-1\nline-2\nline-3\nline-4-remote\n',
+		)
+		expect(decoder.decode(world.remote.readBytesDirect(remoteWinsAbs)!)).toBe(
+			'line-0-user-edit ✨\nline-1\nline-2\nline-3\nline-4-remote\n',
+		)
+
+		// 2. Local-wins merge where local carries UTF-8 BOM: remote must receive exact BOM bytes
+		const localBomRel = 'notes/本地BOM胜出 📘.md'
+		const localBomAbs = `${REMOTE_BASE_DIR}${localBomRel}`
+		world.clock.advance(2_000)
+		world.vault.seedFile(localBomRel, 'alpha\n')
+		expect((await runSync(world)).completed).toBe(true)
+
+		world.clock.advance(2_000)
+		const bomLocalBytes = new Uint8Array([
+			0xef,
+			0xbb,
+			0xbf,
+			...new TextEncoder().encode('alpha\nbeta\ngamma-本地 🌟\n'),
+		])
+		world.vault.seedFile(localBomRel, bomLocalBytes)
+		world.remote.seedFile(localBomAbs, 'alpha\nbeta\n')
+
+		expect((await runSync(world)).completed).toBe(true)
+		expect(world.remote.readBytesDirect(localBomAbs)).toEqual(bomLocalBytes)
+		expect(world.vault.snapshotFiles().get(localBomRel)).toEqual(bomLocalBytes)
+
+		// 3. BOM-only divergence (`isIdentical` on decoded text, different raw bytes) aligns bytes cleanly
+		const bomOnlyRel = 'notes/纯BOM差异 🌿.md'
+		const bomOnlyAbs = `${REMOTE_BASE_DIR}${bomOnlyRel}`
+		world.clock.advance(2_000)
+		world.vault.seedFile(bomOnlyRel, 'base-text\n')
+		expect((await runSync(world)).completed).toBe(true)
+
+		world.clock.advance(2_000)
+		const bomOnlyLocal = new Uint8Array([
+			0xef,
+			0xbb,
+			0xbf,
+			...new TextEncoder().encode('same-text 同步文本\n'),
+		])
+		const bomOnlyRemote = new TextEncoder().encode('same-text 同步文本\n')
+		world.vault.seedFile(bomOnlyRel, bomOnlyLocal)
+		world.remote.seedFile(bomOnlyAbs, bomOnlyRemote)
+
+		expect((await runSync(world)).completed).toBe(true)
+		expect(world.vault.snapshotFiles().get(bomOnlyRel)).toEqual(bomOnlyRemote)
+		expect(world.remote.readBytesDirect(bomOnlyAbs)).toEqual(bomOnlyRemote)
+		await assertRecordsHonest(world)
+	})
+
+	it('protects a previously cached subdirectory that returns per-item PROPFIND 403 during parent reconciliation without deleting local files', async () => {
+		const world = createSyncWorld({ policy: SyncPolicy.TwoWay })
+		const lockedDirRel = 'notes/受限目录 🔒'
+		const lockedFileRel = `${lockedDirRel}/受限子笔记 📘.md`
+		const triggerRel = 'notes/触发核验 🌱.md'
+		const triggerAbs = `${REMOTE_BASE_DIR}${triggerRel}`
+
+		world.vault.seedFile(lockedFileRel, 'protected subtree content 🔒')
+		world.vault.seedFile(triggerRel, 'trigger v1 🌱')
+		expect((await runSync(world)).completed).toBe(true)
+		// Second sync ensures `notes/` and `notes/受限目录 🔒/` are cached in the remote mirror
+		expect((await runSync(world)).completed).toBe(true)
+
+		world.clock.advance(2_000)
+		world.remote.seedFile(triggerAbs, 'trigger v2 🌱')
+
+		const encodedTrigger = encodeURIComponent('触发核验 🌱.md')
+		const encodedLockedDir = encodeURIComponent('受限目录 🔒')
+		let injected404 = false
+		let injected403 = false
+
+		const handler: typeof obsidianRuntime.requestUrlHandler = async (req) => {
+			const param = typeof req === 'string' ? { url: req } : req
+			const method = (param.method ?? 'GET').toUpperCase()
+			const depth = param.headers?.Depth ?? param.headers?.depth ?? ''
+			if (
+				method === 'PROPFIND' &&
+				depth === '0' &&
+				param.url.includes(encodedTrigger) &&
+				!injected404
+			) {
+				injected404 = true
+				return {
+					status: 404,
+					headers: {},
+					text: 'Not Found',
+					arrayBuffer: new ArrayBuffer(0),
+					json: null,
+				} as never
+			}
+			const res = await world.remote.handleRequestUrl(req)
+			if (
+				method === 'PROPFIND' &&
+				depth === '1' &&
+				res.status === 207 &&
+				res.text.includes(encodedLockedDir)
+			) {
+				injected403 = true
+				const replaced = res.text.replace(
+					new RegExp(
+						`<D:response><D:href>[^<]*${encodedLockedDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</D:href>[\\s\\S]*?</D:response>`,
+					),
+					`<D:response><D:href>/dav${REMOTE_BASE_DIR}notes/${encodedLockedDir}</D:href><D:propstat><D:prop><D:getetag/></D:prop><D:status>HTTP/1.1 403 Forbidden</D:status></D:propstat></D:response>`,
+				)
+				return { ...res, text: replaced }
+			}
+			return res
+		}
+
+		expect(
+			(await runSync(world, { requestUrlHandler: handler })).completed,
+		).toBe(true)
+		expect(injected404).toBe(true)
+		expect(injected403).toBe(true)
+
+		// Local files inside the 403 directory MUST survive and stay protected across runs
+		expect(world.vault.readTextDirect(lockedFileRel)).toBe(
+			'protected subtree content 🔒',
+		)
+		expect(world.vault.readTextDirect(triggerRel)).toBe('trigger v2 🌱')
+		const kvKey = await getTraversalWebDAVDBKey(
+			'sim-account',
+			getNutstoreDavEndpoint(world.settings),
+			REMOTE_BASE_DIR,
+		)
+		const cached = await traverseWebDAVKV.get(kvKey)
+		expect(cached?.unreadablePaths).toEqual([
+			{
+				path: `${REMOTE_BASE_DIR}${lockedDirRel}`,
+				operation: 'stat',
+				status: 'HTTP/1.1 403 Forbidden',
+			},
+		])
 	})
 })

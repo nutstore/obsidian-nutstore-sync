@@ -1,11 +1,26 @@
-const ERROR_MESSAGE = 'Invalid response: 503 Service Unavailable'
+import {
+	extractHttpStatus,
+	extractNutstoreDavException,
+} from './nutstore-dav-error'
 
-type ServiceUnavailableError =
-	(Error & { message: typeof ERROR_MESSAGE }) | typeof ERROR_MESSAGE
+const LEGACY_503_MESSAGE = 'Invalid response: 503 Service Unavailable'
 
-export function is503Error(error: unknown): error is ServiceUnavailableError {
-	if (error instanceof Error) {
-		return error.message === ERROR_MESSAGE
+/**
+ * Identifies transient Nutstore 503 / `ServiceUnAvailable` throttling across
+ * `webdav` client errors, `requestUrl` failures, and wrapped `TaskError`s.
+ */
+export function is503Error(error: unknown): boolean {
+	if (error === LEGACY_503_MESSAGE) {
+		return true
 	}
-	return error === ERROR_MESSAGE
+	if (error instanceof Error && error.message === LEGACY_503_MESSAGE) {
+		return true
+	}
+	if (extractHttpStatus(error) === 503) {
+		return true
+	}
+	if (extractNutstoreDavException(error) === 'ServiceUnAvailable') {
+		return true
+	}
+	return false
 }

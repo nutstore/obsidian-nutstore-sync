@@ -19,6 +19,10 @@ export default class RemoveLocalTask extends BaseTask {
 			if (!stat) {
 				return {
 					success: true,
+					receipt: {
+						kind: 'deleted',
+						recursive: this.options.recursive,
+					},
 				} as const
 			}
 			this.logger.info(`[RemoveLocal] ${this.localPath}`)
@@ -27,7 +31,13 @@ export default class RemoveLocalTask extends BaseTask {
 				this.localPath,
 				this.options.recursive,
 			)
-			return { success: true } as const
+			return {
+				success: true,
+				receipt: {
+					kind: 'deleted',
+					recursive: this.options.recursive,
+				},
+			} as const
 		} catch (e) {
 			this.logger.error(`[RemoveLocal] failed: ${this.localPath}`, e)
 			return { success: false, error: toTaskError(e, this) }

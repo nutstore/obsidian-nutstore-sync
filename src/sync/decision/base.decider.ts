@@ -1,3 +1,4 @@
+import { NutstoreFileSystem } from '~/fs/nutstore'
 import { Platform } from 'obsidian'
 import { getMaxHashBytes } from '~/model/sync-record.model'
 import { arrayBufferEquals } from '~/utils/array-buffer-equals'
@@ -23,7 +24,9 @@ import { BaseTask } from '../tasks/task.interface'
 import {
 	ConflictTaskOptions,
 	MoveRemoteTaskOptionsInput,
+	NoopTaskOptions,
 	PullTaskOptions,
+	PushTaskOptions,
 	SkippedTaskOptions,
 	SyncDecisionInput,
 	TaskFactory,
@@ -51,6 +54,21 @@ export default abstract class BaseSyncDecider {
 		])
 
 		const scope = this.sync.scope
+		if (this.sync.remoteFs instanceof NutstoreFileSystem) {
+			for (const issue of this.sync.remoteFs.issues) {
+				if (scope.matchesRules(issue.path, issue.operation === 'list')) {
+					scope.report(issue)
+					this.sync.logger.warn(
+						'Remote subtree unavailable:',
+						issue.path,
+						issue.operation,
+						issue.cause,
+					)
+				} else {
+					scope.protect(issue.path)
+				}
+			}
+		}
 		scope.observe(this.localStats)
 		scope.observe(remoteStats)
 
@@ -65,13 +83,13 @@ export default abstract class BaseSyncDecider {
 		const taskFactory: TaskFactory = {
 			createPullTask: (options: PullTaskOptions) =>
 				new PullTask({ ...commonTaskOptions, ...options }),
-			createPushTask: (options: TaskOptions) =>
+			createPushTask: (options: PushTaskOptions) =>
 				new PushTask({ ...commonTaskOptions, ...options }),
 			createMoveRemoteTask: (options: MoveRemoteTaskOptionsInput) =>
 				new MoveRemoteTask({ ...commonTaskOptions, ...options }),
 			createConflictResolveTask: (options: ConflictTaskOptions) =>
 				new ConflictResolveTask({ ...commonTaskOptions, ...options }),
-			createNoopTask: (options: TaskOptions) =>
+			createNoopTask: (options: NoopTaskOptions) =>
 				new NoopTask({ ...commonTaskOptions, ...options }),
 			createRemoveLocalTask: (options: TaskOptions) =>
 				new RemoveLocalTask({

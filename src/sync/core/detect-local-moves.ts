@@ -24,6 +24,8 @@ export interface MatchedLocalFileMove {
 	toPath: string
 	/** Verified local snapshot matching the moved remote bytes at decision time. */
 	expectedLocal: Extract<StatModel, { isDir: false }>
+	/** Verified remote snapshot whose ETag must remain unchanged after MOVE. */
+	expectedRemote: Extract<StatModel, { isDir: false }>
 }
 
 interface IndexedRemovedCandidate {
@@ -231,6 +233,7 @@ export async function resolveLocalFileMoves(
 			fromPath: src.path,
 			toPath: dst.path,
 			expectedLocal: dst.local,
+			expectedRemote: src.remote,
 		}
 	})
 
@@ -270,6 +273,7 @@ export async function resolveAndAppendMoveTasks(
 				remotePath: move.toPath,
 				remoteBaseDir,
 				expectedLocalStat: move.expectedLocal,
+				expectedRemoteStat: move.expectedRemote,
 			}),
 		)
 	}

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { decode as decodeHtmlEntities } from 'html-entities'
 import type { RequestUrlParam, RequestUrlResponse } from 'obsidian'
 import { basename, dirname, normalize } from 'path-browserify'
 import type { BufferLike, FileStat, WebDAVClient } from 'webdav'
@@ -37,7 +39,13 @@ export interface WebDAVFaultRule {
 }
 
 type RemoteNode =
-	| { kind: 'file'; bytes: Uint8Array; mtimeMs: number; etag: string }
+	| {
+			kind: 'file'
+			bytes: Uint8Array
+			mtimeMs: number
+			etag: string
+			version: number
+	  }
 	| { kind: 'dir'; mtimeMs: number }
 
 interface DeltaLogEntry {
@@ -47,6 +55,14 @@ interface DeltaLogEntry {
 	isDeleted: boolean
 	size: number
 	modified: string
+}
+
+export function computeContentEtag(bytes: Uint8Array): string {
+	return createHash('sha256')
+		.update(bytes)
+		.digest()
+		.subarray(0, 16)
+		.toString('base64url')
 }
 
 const escapeXml = (s: string) =>
@@ -82,6 +98,18 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
 
 const truncateSec = (ms: number) => Math.floor(ms / 1000) * 1000
 
+function getHeader(
+	headers: Record<string, string> | undefined,
+	name: string,
+): string | undefined {
+	if (!headers) return undefined
+	const target = name.toLowerCase()
+	for (const [k, v] of Object.entries(headers)) {
+		if (k.toLowerCase() === target) return v
+	}
+	return undefined
+}
+
 function httpError(status: number, message?: string): Error {
 	const err = new RequestUrlError({
 		status,
@@ -93,19 +121,38 @@ function httpError(status: number, message?: string): Error {
 	return Object.assign(err, { status, response: { status } })
 }
 
-function xmlResponse(text: string, status = 200): RequestUrlResponse {
+function xmlResponse(
+	text: string,
+	status = 200,
+	extraHeaders: Record<string, string> = {},
+): RequestUrlResponse {
 	return {
 		status,
-		headers:
-			status < 300 ? { 'content-type': 'application/xml; charset=utf-8' } : {},
+		headers: {
+			...(status < 300
+				? { 'content-type': 'application/xml; charset=utf-8' }
+				: {}),
+			...extraHeaders,
+		},
 		text,
 		arrayBuffer: toArrayBuffer(encoder.encode(text)),
 		json: null,
 	} as unknown as RequestUrlResponse
 }
 
+function notFoundXml(): string {
+	return '<?xml version="1.0" encoding="utf-8"?><d:error xmlns:d="DAV:" xmlns:s="http://ns.jianguoyun.com"><s:exception>ObjectNotFound</s:exception><s:message>The object does not exist</s:message></d:error>'
+}
+
+function preconditionFailedXml(): string {
+	return '<?xml version="1.0" encoding="utf-8"?><d:error xmlns:d="DAV:" xmlns:s="http://ns.jianguoyun.com"><s:exception>PreconditionFailed</s:exception><s:message>ETag doesn\'t match</s:message></d:error>'
+}
+
 /**
  * In-memory WebDAV + Nutstore Delta server shared by sync unit and DST tests.
+ * Mirrors live Nutstore contract details: content-addressed unquoted ETags,
+ * ETag preservation across MOVE, conditional `If-Match` / `If-Range`, and
+ * `PROPFIND` `Depth: 0` / `Depth: 1` `<getetag>` behavior.
  */
 export class MemoryWebDAV {
 	readonly clock: MemoryClock
@@ -114,7 +161,11 @@ export class MemoryWebDAV {
 	readonly ops: WebDAVOp[] = []
 	readonly client: WebDAVClient
 	moveSupport: MoveSupportMode
-	private etagSeq = 1
+	deltaModifiedOffsetMs: number
+	maxDeltaPageSize?: number
+	forceDeltaResetOnNextCall = false
+	injectStalledCursorOnNextCall = false
+	onAfterOp?: (op: WebDAVOp) => void
 	private revision = 0
 	private readonly deltaLog: DeltaLogEntry[] = []
 	private readonly faults: Array<{ rule: WebDAVFaultRule; hits: number }> = []
@@ -123,10 +174,14 @@ export class MemoryWebDAV {
 		clock?: MemoryClock
 		clockSkewMs?: number
 		moveSupport?: MoveSupportMode
+		deltaModifiedOffsetMs?: number
+		maxDeltaPageSize?: number
 	}) {
 		this.clock = options?.clock ?? createMemoryClock()
 		this.clockSkewMs = options?.clockSkewMs ?? 0
 		this.moveSupport = options?.moveSupport ?? 'supported'
+		this.deltaModifiedOffsetMs = options?.deltaModifiedOffsetMs ?? 0
+		this.maxDeltaPageSize = options?.maxDeltaPageSize
 		this.nodes.set('/', { kind: 'dir', mtimeMs: this.nowMs() })
 		this.client = this.buildClient()
 	}
@@ -173,13 +228,14 @@ export class MemoryWebDAV {
 		mtimeMs: number,
 	): void {
 		this.revision += 1
+		const serverModifiedMs = truncateSec(mtimeMs + this.deltaModifiedOffsetMs)
 		this.deltaLog.push({
 			revision: this.revision,
 			path,
 			isDir,
 			isDeleted,
 			size,
-			modified: new Date(mtimeMs).toUTCString(),
+			modified: new Date(serverModifiedMs).toUTCString(),
 		})
 	}
 
@@ -224,7 +280,8 @@ export class MemoryWebDAV {
 		if (abs === '/') throw new Error('Cannot seed remote file at /')
 		const ts = truncateSec(mtimeMs ?? this.nowMs())
 		this.ensureParents(abs, ts)
-		if (this.nodes.get(abs)?.kind === 'dir') {
+		const existing = this.nodes.get(abs)
+		if (existing?.kind === 'dir') {
 			throw new Error(`Cannot seed remote file over dir: ${abs}`)
 		}
 		const bytes = toBytes(content)
@@ -232,7 +289,8 @@ export class MemoryWebDAV {
 			kind: 'file',
 			bytes,
 			mtimeMs: ts,
-			etag: `"etag-${this.etagSeq++}"`,
+			etag: computeContentEtag(bytes),
+			version: existing?.kind === 'file' ? existing.version + 1 : 1,
 		})
 		this.logDelta(abs, false, false, bytes.byteLength, ts)
 	}
@@ -297,6 +355,46 @@ export class MemoryWebDAV {
 			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 	}
 
+	private renderPropfindXml(
+		abs: string,
+		node: RemoteNode,
+		serverBase: string,
+		depth: string,
+		body: string,
+	): string {
+		const base = serverBase === '/' ? '' : serverBase.replace(/\/+$/, '')
+		const includeEtag =
+			!body ||
+			/<(?:\w+:)?allprop\b/i.test(body) ||
+			/<(?:\w+:)?resourcetype\b/i.test(body) ||
+			/<(?:\w+:)?getcontenttype\b/i.test(body)
+		const render = (p: string, item: RemoteNode) => {
+			const encoded = p
+				.split('/')
+				.filter(Boolean)
+				.map(encodeURIComponent)
+				.join('/')
+			const href = encoded ? `${base}/${encoded}` : `${base}/`
+			const etagTag = !includeEtag
+				? ''
+				: item.kind === 'dir'
+					? '<D:getetag/>'
+					: `<D:getetag>${escapeXml(item.etag)}</D:getetag>`
+			const sizeAndType =
+				item.kind === 'file'
+					? `<D:getcontentlength>${item.bytes.byteLength}</D:getcontentlength><D:getcontenttype>application/octet-stream</D:getcontenttype>`
+					: ''
+			return `<D:response><D:href>${escapeXml(href)}</D:href><D:propstat><D:prop><D:displayname>${escapeXml(basename(p) || '')}</D:displayname><D:resourcetype>${item.kind === 'dir' ? '<D:collection/>' : ''}</D:resourcetype><D:getlastmodified>${escapeXml(new Date(item.mtimeMs).toUTCString())}</D:getlastmodified>${sizeAndType}${etagTag}</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`
+		}
+		const items = [
+			render(abs, node),
+			...(depth !== '0' && node.kind === 'dir'
+				? this.listChildren(abs).map(([p, c]) => render(p, c))
+				: []),
+		]
+		return `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">${items.join('')}</D:multistatus>`
+	}
+
 	async handleRequestUrl(
 		request: RequestUrlParam | string,
 	): Promise<RequestUrlResponse> {
@@ -317,27 +415,38 @@ export class MemoryWebDAV {
 			)
 			this.record({ op: 'propfind', path: abs, mutating: false })
 			const node = this.nodes.get(abs)
-			if (!node) return xmlResponse(`Not found: ${abs}`, 404)
-			const base = serverBase === '/' ? '' : serverBase.replace(/\/+$/, '')
-			const render = (p: string, item: RemoteNode) => {
-				const encoded = p
-					.split('/')
-					.filter(Boolean)
-					.map(encodeURIComponent)
-					.join('/')
-				const href = encoded ? `${base}/${encoded}` : `${base}/`
-				return `<D:response><D:href>${escapeXml(href)}</D:href><D:propstat><D:prop><D:displayname>${escapeXml(basename(p) || '')}</D:displayname><D:resourcetype>${item.kind === 'dir' ? '<D:collection/>' : ''}</D:resourcetype><D:getlastmodified>${escapeXml(new Date(item.mtimeMs).toUTCString())}</D:getlastmodified>${item.kind === 'file' ? `<D:getcontentlength>${item.bytes.byteLength}</D:getcontentlength>` : ''}</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`
-			}
-			const items = [
-				render(abs, node),
-				...(node.kind === 'dir'
-					? this.listChildren(abs).map(([p, c]) => render(p, c))
-					: []),
-			]
+			if (!node) return xmlResponse(notFoundXml(), 404)
+			const depth = getHeader(param.headers, 'depth') ?? '1'
+			const body = typeof param.body === 'string' ? param.body : ''
 			return xmlResponse(
-				`<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">${items.join('')}</D:multistatus>`,
+				this.renderPropfindXml(abs, node, serverBase, depth, body),
 				207,
 			)
+		}
+
+		if (method === 'HEAD') {
+			const idx = url.pathname.indexOf('/dav')
+			const subPath = idx >= 0 ? url.pathname.slice(idx + 4) : url.pathname
+			const abs = normalizeRemote(
+				subPath
+					.split('/')
+					.map((seg) => decodeURIComponent(seg))
+					.join('/') || '/',
+			)
+			this.record({ op: 'stat', path: abs, mutating: false })
+			const node = this.nodes.get(abs)
+			if (!node) return xmlResponse(notFoundXml(), 404)
+			const inm = getHeader(param.headers, 'if-none-match')
+			if (node.kind === 'file' && inm && inm === node.etag) {
+				return xmlResponse('', 304, {
+					'last-modified': new Date(node.mtimeMs).toUTCString(),
+				})
+			}
+			// Mirror live Nutstore: HEAD 200 omits ETag and reports Content-Length 0.
+			return xmlResponse('', 200, {
+				'last-modified': new Date(node.mtimeMs).toUTCString(),
+				'content-length': '0',
+			})
 		}
 
 		if (method === 'POST' && url.pathname.endsWith('/latestDeltaCursor')) {
@@ -353,28 +462,49 @@ export class MemoryWebDAV {
 
 		if (method === 'POST' && url.pathname.endsWith('/delta')) {
 			const body = typeof param.body === 'string' ? param.body : ''
-			const folder =
-				/<s:folderName>([\s\S]*?)<\/s:folderName>/.exec(body)?.[1]?.trim() ?? ''
+			const folder = decodeHtmlEntities(
+				/<s:folderName>([\s\S]*?)<\/s:folderName>/.exec(body)?.[1]?.trim() ??
+					'',
+				{ level: 'xml' },
+			)
 			const cursor =
 				Number.parseInt(
 					/<s:cursor>([\s\S]*?)<\/s:cursor>/.exec(body)?.[1]?.trim() ?? '0',
 					10,
 				) || 0
 			this.record({ op: 'delta', path: `/${folder}`, mutating: false })
-			const prefix = folder ? `/${folder}` : '/'
-			const entriesXml = this.deltaLog
-				.filter(
-					(e) =>
-						e.revision > cursor &&
-						(e.path === prefix || e.path.startsWith(`${prefix}/`)),
+			if (this.forceDeltaResetOnNextCall) {
+				this.forceDeltaResetOnNextCall = false
+				return xmlResponse(
+					'<?xml version="1.0" encoding="utf-8"?><response><reset>true</reset></response>',
 				)
+			}
+			if (this.injectStalledCursorOnNextCall) {
+				this.injectStalledCursorOnNextCall = false
+				return xmlResponse(
+					`<?xml version="1.0" encoding="utf-8"?><response><reset>false</reset><cursor>${cursor}</cursor><hasMore>true</hasMore></response>`,
+				)
+			}
+			const prefix = folder ? `/${folder}` : '/'
+			const matching = this.deltaLog.filter(
+				(e) =>
+					e.revision > cursor &&
+					(e.path === prefix || e.path.startsWith(`${prefix}/`)),
+			)
+			const pageLimit = this.maxDeltaPageSize
+			const hasMore = pageLimit !== undefined && matching.length > pageLimit
+			const pageEntries = hasMore ? matching.slice(0, pageLimit) : matching
+			const nextCursor = hasMore
+				? pageEntries[pageEntries.length - 1].revision
+				: this.revision
+			const entriesXml = pageEntries
 				.map(
 					(e) =>
 						`<entry><path>${escapeXml(e.path)}</path><size>${e.size}</size><isDeleted>${e.isDeleted}</isDeleted><isDir>${e.isDir}</isDir><modified>${escapeXml(e.modified)}</modified><revision>${e.revision}</revision></entry>`,
 				)
 				.join('')
 			return xmlResponse(
-				`<?xml version="1.0" encoding="utf-8"?><response><reset>false</reset><cursor>${this.revision}</cursor><hasMore>false</hasMore>${entriesXml ? `<delta>${entriesXml}</delta>` : ''}</response>`,
+				`<?xml version="1.0" encoding="utf-8"?><response><reset>false</reset><cursor>${nextCursor}</cursor><hasMore>${hasMore}</hasMore>${entriesXml ? `<delta>${entriesXml}</delta>` : ''}</response>`,
 			)
 		}
 
@@ -433,7 +563,8 @@ export class MemoryWebDAV {
 					kind: 'file',
 					bytes,
 					mtimeMs: ts,
-					etag: `"etag-${this.etagSeq++}"`,
+					etag: computeContentEtag(bytes),
+					version: existing?.kind === 'file' ? existing.version + 1 : 1,
 				})
 				this.logDelta(abs, false, false, bytes.byteLength, ts)
 				return true
@@ -495,7 +626,6 @@ export class MemoryWebDAV {
 									{
 										...node,
 										bytes: new Uint8Array(node.bytes),
-										etag: `"etag-${this.etagSeq++}"`,
 									},
 								],
 							]
@@ -535,29 +665,111 @@ export class MemoryWebDAV {
 			},
 			customRequest: async (path: string, requestOptions) => {
 				const abs = normalizeRemote(path)
-				this.record({ op: 'rangeGet', path: abs, mutating: false })
-				const node = this.nodes.get(abs)
-				if (!node || node.kind !== 'file') {
-					return new Response(null, { status: 404 }) as never
-				}
+				const method = (requestOptions?.method ?? 'GET').toUpperCase()
 				const headers = (requestOptions?.headers ?? {}) as Record<
 					string,
 					string
 				>
-				const match = /^bytes=(\d+)-(\d+)$/.exec(
-					headers.Range ?? headers.range ?? '',
-				)
-				if (match) {
+
+				if (method === 'PROPFIND') {
+					this.record({ op: 'propfind', path: abs, mutating: false })
+					const node = this.nodes.get(abs)
+					if (!node) throw httpError(404, notFoundXml())
+					const depth = getHeader(headers, 'depth') ?? '1'
+					const body =
+						typeof requestOptions?.data === 'string' ? requestOptions.data : ''
+					return new Response(
+						this.renderPropfindXml(abs, node, '/dav', depth, body),
+						{
+							status: 207,
+							headers: { 'content-type': 'application/xml; charset=utf-8' },
+						},
+					) as never
+				}
+
+				if (method === 'PUT') {
+					const op: WebDAVOp = { op: 'put', path: abs, mutating: true }
+					this.record(op)
+					const parent = normalizeRemote(dirname(abs))
+					if (this.nodes.get(parent)?.kind !== 'dir') {
+						throw httpError(409, `Parent directory missing: ${parent}`)
+					}
+					const existing = this.nodes.get(abs)
+					const ifMatch = getHeader(headers, 'if-match')
+					if (ifMatch) {
+						if (!existing) {
+							throw httpError(409, notFoundXml())
+						}
+						if (existing.kind === 'file' && ifMatch !== existing.etag) {
+							throw httpError(412, preconditionFailedXml())
+						}
+					}
+					if (existing?.kind === 'dir') {
+						throw httpError(409, `Cannot overwrite directory with file: ${abs}`)
+					}
+					const bytes = toBytes(requestOptions?.data as string | BufferLike)
+					const ts = this.nowMs()
+					const nextVersion =
+						existing?.kind === 'file' ? existing.version + 1 : 1
+					this.nodes.set(abs, {
+						kind: 'file',
+						bytes,
+						mtimeMs: ts,
+						etag: computeContentEtag(bytes),
+						version: nextVersion,
+					})
+					this.logDelta(abs, false, false, bytes.byteLength, ts)
+					const res = new Response(null, {
+						status: existing ? 204 : 201,
+						headers: { 'x-file-version': String(nextVersion) },
+					}) as never
+					this.onAfterOp?.(op)
+					return res
+				}
+
+				const rangeHeader = getHeader(headers, 'range')
+				const op: WebDAVOp = {
+					op: rangeHeader ? 'rangeGet' : 'get',
+					path: abs,
+					mutating: false,
+				}
+				this.record(op)
+				const node = this.nodes.get(abs)
+				if (!node) {
+					throw httpError(404, notFoundXml())
+				}
+				if (node.kind !== 'file') {
+					throw httpError(403, 'Can not download collection')
+				}
+				const match = /^bytes=(\d+)-(\d+)$/.exec(rangeHeader ?? '')
+				const ifRange = getHeader(headers, 'if-range')
+				if (match && (!ifRange || ifRange === node.etag)) {
 					const start = Number(match[1])
 					const end = Math.min(Number(match[2]), node.bytes.byteLength - 1)
-					return new Response(toArrayBuffer(node.bytes.slice(start, end + 1)), {
-						status: 206,
-						headers: {
-							'content-range': `bytes ${start}-${end}/${node.bytes.byteLength}`,
+					const res = new Response(
+						toArrayBuffer(node.bytes.slice(start, end + 1)),
+						{
+							status: 206,
+							headers: {
+								'content-range': `bytes ${start}-${end}/${node.bytes.byteLength}`,
+								etag: node.etag,
+								'last-modified': new Date(node.mtimeMs).toUTCString(),
+							},
 						},
-					}) as never
+					) as never
+					this.onAfterOp?.(op)
+					return res
 				}
-				return new Response(toArrayBuffer(node.bytes), { status: 200 }) as never
+				const res = new Response(toArrayBuffer(node.bytes), {
+					status: 200,
+					headers: {
+						etag: node.etag,
+						'last-modified': new Date(node.mtimeMs).toUTCString(),
+						'content-length': String(node.bytes.byteLength),
+					},
+				}) as never
+				this.onAfterOp?.(op)
+				return res
 			},
 		}
 		return client as WebDAVClient

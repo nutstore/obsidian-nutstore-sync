@@ -892,7 +892,6 @@ export class NutstoreSync {
 		progress: UpdateMtimeProgress,
 	) {
 		return updateMtimeInRecordUtil(
-			this.plugin,
 			this.vault,
 			this.remoteBaseDir,
 			tasks,
@@ -901,6 +900,7 @@ export class NutstoreSync {
 			this.logger,
 			progress,
 			this.scope,
+			() => this.isCancelled,
 		)
 	}
 

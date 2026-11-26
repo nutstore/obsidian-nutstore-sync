@@ -29,6 +29,8 @@ export interface MoveRemoteTaskOptionsInput extends TaskOptions {
 	fromRemotePath: string
 	/** Verified local snapshot matching the moved remote bytes during planning. */
 	expectedLocalStat?: Extract<StatModel, { isDir: false }>
+	/** Remote file snapshot whose ETag must still match after server-side MOVE. */
+	expectedRemoteStat?: Extract<StatModel, { isDir: false }>
 }
 
 export interface ConflictTaskOptions extends TaskOptions {
@@ -41,17 +43,28 @@ export interface ConflictTaskOptions extends TaskOptions {
 
 export interface PullTaskOptions extends TaskOptions {
 	remoteSize: number
+	expectedRemoteStat?: Extract<StatModel, { isDir: false }>
 	mobileAppDownloadFileChunkSize?: string
+}
+
+export interface PushTaskOptions extends TaskOptions {
+	/** Present only when overwriting a known existing remote file (`If-Match`). */
+	expectedRemoteEtag?: string | null
+}
+
+export interface NoopTaskOptions extends TaskOptions {
+	localStat?: StatModel
+	remoteStat?: StatModel
 }
 
 export type SkippedTaskOptions = TaskOptions & SkippedTaskReasonOptions
 
 export interface TaskFactory {
 	createPullTask(options: PullTaskOptions): BaseTask
-	createPushTask(options: TaskOptions): BaseTask
+	createPushTask(options: PushTaskOptions): BaseTask
 	createMoveRemoteTask(options: MoveRemoteTaskOptionsInput): BaseTask
 	createConflictResolveTask(options: ConflictTaskOptions): BaseTask
-	createNoopTask(options: TaskOptions): BaseTask
+	createNoopTask(options: NoopTaskOptions): BaseTask
 	createRemoveLocalTask(options: TaskOptions): BaseTask
 	createRemoveRemoteTask(options: TaskOptions): BaseTask
 	createMkdirLocalTask(options: TaskOptions): BaseTask
