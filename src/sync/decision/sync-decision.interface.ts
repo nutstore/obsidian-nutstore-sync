@@ -29,8 +29,8 @@ export interface MoveRemoteTaskOptionsInput extends TaskOptions {
 	fromRemotePath: string
 	/** Verified local snapshot matching the moved remote bytes during planning. */
 	expectedLocalStat?: Extract<StatModel, { isDir: false }>
-	/** Remote file snapshot whose ETag must still match after server-side MOVE. */
-	expectedRemoteStat?: Extract<StatModel, { isDir: false }>
+	/** Verbatim remote source ETag observed during planning; gates the MOVE. */
+	expectedRemoteEtag: string
 }
 
 export interface ConflictTaskOptions extends TaskOptions {

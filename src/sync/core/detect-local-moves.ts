@@ -24,13 +24,18 @@ export interface MatchedLocalFileMove {
 	toPath: string
 	/** Verified local snapshot matching the moved remote bytes at decision time. */
 	expectedLocal: Extract<StatModel, { isDir: false }>
-	/** Verified remote snapshot whose ETag must remain unchanged after MOVE. */
-	expectedRemote: Extract<StatModel, { isDir: false }>
+	/**
+	 * Verbatim remote ETag observed during planning; gates and verifies the MOVE.
+	 * Always present: a move source must have been observed unchanged against a
+	 * recorded ETag, which is what makes the pre-MOVE check meaningful.
+	 */
+	expectedRemoteEtag: string
 }
 
 interface IndexedRemovedCandidate {
 	candidate: RemovedRemoteFileCandidate
 	hash: string
+	etag: string
 }
 
 function getDirSegments(filePath: string): string[] {
@@ -74,6 +79,7 @@ function scoreMovePair(
 /**
  * Pairs remote-delete + local-add file candidates that share exact byte size
  * and SHA-256 content hash so local file moves/renames execute as remote MOVE.
+ * A candidate without a verbatim ETag is never paired: the MOVE is gated on it.
  */
 export async function resolveLocalFileMoves(
 	input: Pick<SyncDecisionInput, 'getLocalContentHash' | 'logger'>,
@@ -104,11 +110,15 @@ export async function resolveLocalFileMoves(
 		if (!hash) {
 			continue
 		}
+		const etag = candidate.remote.etag
+		if (!etag) {
+			continue
+		}
 		const bucket = removedBySize.get(candidate.remote.size)
 		if (bucket) {
-			bucket.push({ candidate, hash })
+			bucket.push({ candidate, hash, etag })
 		} else {
-			removedBySize.set(candidate.remote.size, [{ candidate, hash }])
+			removedBySize.set(candidate.remote.size, [{ candidate, hash, etag }])
 		}
 	}
 
@@ -120,14 +130,14 @@ export async function resolveLocalFileMoves(
 		}
 	}
 
-	const removedByHash = new Map<string, RemovedRemoteFileCandidate[]>()
+	const removedByHash = new Map<string, IndexedRemovedCandidate[]>()
 	for (const bucket of removedBySize.values()) {
-		for (const { candidate, hash } of bucket) {
-			const group = removedByHash.get(hash)
+		for (const indexed of bucket) {
+			const group = removedByHash.get(indexed.hash)
 			if (group) {
-				group.push(candidate)
+				group.push(indexed)
 			} else {
-				removedByHash.set(hash, [candidate])
+				removedByHash.set(indexed.hash, [indexed])
 			}
 		}
 	}
@@ -165,6 +175,7 @@ export async function resolveLocalFileMoves(
 	const rawMoves: Array<{
 		src: RemovedRemoteFileCandidate
 		dst: AddedLocalFileCandidate
+		etag: string
 	}> = []
 
 	for (const [hash, addedGroup] of addedByHash) {
@@ -172,19 +183,19 @@ export async function resolveLocalFileMoves(
 		if (!removedGroup || removedGroup.length === 0) continue
 
 		const pairs: Array<{
-			src: RemovedRemoteFileCandidate
+			src: IndexedRemovedCandidate
 			dst: AddedLocalFileCandidate
 			score: number
 			commonDepth: number
 		}> = []
 		for (const src of removedGroup) {
 			for (const dst of addedGroup) {
-				if (src.path === dst.path) continue
+				if (src.candidate.path === dst.path) continue
 				pairs.push({
 					src,
 					dst,
-					score: scoreMovePair(src, dst),
-					commonDepth: commonPrefixSegmentCount(src.path, dst.path),
+					score: scoreMovePair(src.candidate, dst),
+					commonDepth: commonPrefixSegmentCount(src.candidate.path, dst.path),
 				})
 			}
 		}
@@ -193,22 +204,24 @@ export async function resolveLocalFileMoves(
 			(a, b) =>
 				b.score - a.score ||
 				b.commonDepth - a.commonDepth ||
-				compareStrings(a.src.path, b.src.path) ||
+				compareStrings(a.src.candidate.path, b.src.candidate.path) ||
 				compareStrings(a.dst.path, b.dst.path),
 		)
 
 		const matchedRemoved = new Set<string>()
 		const matchedAdded = new Set<string>()
 		for (const pair of pairs) {
-			if (
-				matchedRemoved.has(pair.src.path) ||
-				matchedAdded.has(pair.dst.path)
-			) {
+			const sourcePath = pair.src.candidate.path
+			if (matchedRemoved.has(sourcePath) || matchedAdded.has(pair.dst.path)) {
 				continue
 			}
-			matchedRemoved.add(pair.src.path)
+			matchedRemoved.add(sourcePath)
 			matchedAdded.add(pair.dst.path)
-			rawMoves.push({ src: pair.src, dst: pair.dst })
+			rawMoves.push({
+				src: pair.src.candidate,
+				dst: pair.dst,
+				etag: pair.src.etag,
+			})
 		}
 	}
 
@@ -222,7 +235,7 @@ export async function resolveLocalFileMoves(
 	const finalRemovedSet = new Set(safeMoves.map(({ src }) => src.path))
 	const finalAddedSet = new Set(safeMoves.map(({ dst }) => dst.path))
 
-	const moves: MatchedLocalFileMove[] = safeMoves.map(({ src, dst }) => {
+	const moves: MatchedLocalFileMove[] = safeMoves.map(({ src, dst, etag }) => {
 		input.logger.debug({
 			reason: 'detected local file move',
 			fromPath: src.path,
@@ -233,7 +246,7 @@ export async function resolveLocalFileMoves(
 			fromPath: src.path,
 			toPath: dst.path,
 			expectedLocal: dst.local,
-			expectedRemote: src.remote,
+			expectedRemoteEtag: etag,
 		}
 	})
 
@@ -273,7 +286,7 @@ export async function resolveAndAppendMoveTasks(
 				remotePath: move.toPath,
 				remoteBaseDir,
 				expectedLocalStat: move.expectedLocal,
-				expectedRemoteStat: move.expectedRemote,
+				expectedRemoteEtag: move.expectedRemoteEtag,
 			}),
 		)
 	}

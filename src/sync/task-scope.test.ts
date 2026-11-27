@@ -120,6 +120,7 @@ describe.each(['Notes/Section', '笔记/小节', 'Notes 笔记🌱/Section 小�
 						fromRemotePath: protectedPath,
 						localPath: safePath,
 						remotePath: safePath,
+						expectedRemoteEtag: 'planned-etag',
 					}),
 				),
 			).toBe(false)
@@ -131,6 +132,7 @@ describe.each(['Notes/Section', '笔记/小节', 'Notes 笔记🌱/Section 小�
 						fromRemotePath: safePath,
 						localPath: protectedPath,
 						remotePath: protectedPath,
+						expectedRemoteEtag: 'planned-etag',
 					}),
 				),
 			).toBe(false)
@@ -142,6 +144,7 @@ describe.each(['Notes/Section', '笔记/小节', 'Notes 笔记🌱/Section 小�
 						fromRemotePath: safePath,
 						localPath: `${root}-archive/Renamed 重命名📘.bin`,
 						remotePath: `${root}-archive/Renamed 重命名📘.bin`,
+						expectedRemoteEtag: 'planned-etag',
 					}),
 				),
 			).toBe(true)

@@ -29,8 +29,6 @@ export interface WebDAVOp {
 	mutating: boolean
 }
 
-export type MoveSupportMode = 'supported' | 405 | 501
-
 export interface WebDAVFaultRule {
 	op?: WebDAVOp['op']
 	pathPattern?: RegExp
@@ -150,8 +148,11 @@ function preconditionFailedXml(): string {
 
 /**
  * In-memory WebDAV + Nutstore Delta server shared by sync unit and DST tests.
- * Mirrors live Nutstore contract details: content-addressed unquoted ETags,
- * ETag preservation across MOVE, conditional `If-Match` / `If-Range`, and
+ * Mirrors the live Nutstore contract documented in `src/api/webdav.ts`:
+ * content-addressed unquoted ETags, ETag preservation across `MOVE`,
+ * `MOVE Overwrite: F` → `409`, conditional `If-Match` (exact ETag only; `*`
+ * fails `412`) / `If-Range` on `PUT` / `GET` only (`PUT If-None-Match: *` and
+ * conditional headers on `MOVE`/`DELETE`/`COPY` are silently ignored), and
  * `PROPFIND` `Depth: 0` / `Depth: 1` `<getetag>` behavior.
  */
 export class MemoryWebDAV {
@@ -160,7 +161,6 @@ export class MemoryWebDAV {
 	readonly nodes = new Map<string, RemoteNode>()
 	readonly ops: WebDAVOp[] = []
 	readonly client: WebDAVClient
-	moveSupport: MoveSupportMode
 	deltaModifiedOffsetMs: number
 	maxDeltaPageSize?: number
 	forceDeltaResetOnNextCall = false
@@ -173,13 +173,11 @@ export class MemoryWebDAV {
 	constructor(options?: {
 		clock?: MemoryClock
 		clockSkewMs?: number
-		moveSupport?: MoveSupportMode
 		deltaModifiedOffsetMs?: number
 		maxDeltaPageSize?: number
 	}) {
 		this.clock = options?.clock ?? createMemoryClock()
 		this.clockSkewMs = options?.clockSkewMs ?? 0
-		this.moveSupport = options?.moveSupport ?? 'supported'
 		this.deltaModifiedOffsetMs = options?.deltaModifiedOffsetMs ?? 0
 		this.maxDeltaPageSize = options?.maxDeltaPageSize
 		this.nodes.set('/', { kind: 'dir', mtimeMs: this.nowMs() })
@@ -543,7 +541,7 @@ export class MemoryWebDAV {
 					? decoder.decode(node.bytes)
 					: toArrayBuffer(node.bytes)
 			},
-			putFileContents: async (filename: string, data, options) => {
+			putFileContents: async (filename: string, data) => {
 				const abs = normalizeRemote(filename)
 				this.record({ op: 'put', path: abs, mutating: true })
 				const parent = normalizeRemote(dirname(abs))
@@ -551,9 +549,7 @@ export class MemoryWebDAV {
 					throw httpError(409, `Parent directory missing: ${parent}`)
 				}
 				const existing = this.nodes.get(abs)
-				if (existing && options?.overwrite === false) {
-					throw httpError(412, `File already exists: ${abs}`)
-				}
+				// Live Nutstore ignores `If-None-Match: *` (sent by `overwrite: false`), overwriting with 204.
 				if (existing?.kind === 'dir') {
 					throw httpError(409, `Cannot overwrite directory with file: ${abs}`)
 				}
@@ -571,7 +567,8 @@ export class MemoryWebDAV {
 			},
 			createDirectory: async (path: string, options) => {
 				const abs = normalizeRemote(path)
-				this.record({ op: 'mkdir', path: abs, mutating: true })
+				const op: WebDAVOp = { op: 'mkdir', path: abs, mutating: true }
+				this.record(op)
 				if (abs === '/') return
 				const ts = this.nowMs()
 				if (options?.recursive) this.ensureParents(abs, ts)
@@ -588,6 +585,7 @@ export class MemoryWebDAV {
 					this.nodes.set(abs, { kind: 'dir', mtimeMs: ts })
 					this.logDelta(abs, true, false, 0, ts)
 				}
+				this.onAfterOp?.(op)
 			},
 			deleteFile: async (filename: string) => {
 				const abs = normalizeRemote(filename)
@@ -600,12 +598,6 @@ export class MemoryWebDAV {
 				const from = normalizeRemote(filename)
 				const to = normalizeRemote(dest)
 				this.record({ op: 'move', path: from, dest: to, mutating: true })
-				if (this.moveSupport !== 'supported') {
-					throw httpError(
-						this.moveSupport,
-						`Invalid response: ${this.moveSupport} Method Not Allowed`,
-					)
-				}
 				const node = this.nodes.get(from)
 				if (!node) throw httpError(404, `Source not found: ${from}`)
 				if (this.nodes.get(normalizeRemote(dirname(to)))?.kind !== 'dir') {
@@ -613,7 +605,8 @@ export class MemoryWebDAV {
 				}
 				const existingDest = this.nodes.get(to)
 				if (existingDest && options?.overwrite === false) {
-					throw httpError(412, `Destination exists: ${to}`)
+					// Live Nutstore answers 409 here (RFC 4918 says 412).
+					throw httpError(409, `Destination exists: ${to}`)
 				}
 				const ts = this.nowMs()
 				if (existingDest) this.deleteDirect(to)

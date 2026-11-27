@@ -1,3 +1,23 @@
+/**
+ * Nutstore WebDAV server contract (verified live; this plugin targets Nutstore
+ * only and does not carry generic WebDAV compatibility fallbacks):
+ *
+ * - ETags: unquoted, content-addressed; overwrite `PUT` always changes ETag
+ *   (even at identical byte length); `MOVE` preserves ETag verbatim (`src === dst`).
+ * - Conditional `PUT`: `If-Match: <exact-etag>` returns `412` on mismatch and
+ *   `409` when the target does not exist; `If-Match: *` is compared literally
+ *   (`412`); `If-None-Match: *` is silently ignored (`204`, overwrites).
+ * - Conditional `GET`: `If-None-Match: <etag>` returns `304`; `If-Range: <etag>`
+ *   with `Range` returns `206` on match and `200` (full body) on mismatch.
+ * - `MOVE` / `DELETE` / `COPY`: silently ignore `If-Match` and `If-Unmodified-Since`.
+ * - `MOVE`: natively supported; `Overwrite: F` rejects existing destinations
+ *   with `409` (not RFC 4918 `412`).
+ * - Metadata quirks: `PROPFIND` emits `<d:getetag>` only when `<resourcetype/>`
+ *   or `<getcontenttype/>` is requested; `HEAD 200` omits `ETag` and reports
+ *   `Content-Length: 0`; `PUT` returns `x-file-version` without `ETag`, whereas
+ *   `PROPFIND` returns `ETag` without `x-file-version`; single `GET` without
+ *   `Range` avoids server-side `DELTA_OBJECT` reconstruction overhead.
+ */
 import { isNil } from 'es-toolkit/compat'
 import { XMLParser } from 'fast-xml-parser'
 import { decode as decodeHtmlEntities } from 'html-entities'

@@ -30,11 +30,7 @@ import type NutstorePlugin from '~/index'
 import { obsidianRuntime } from '../obsidian-runtime'
 import { clearAllPluginStorage } from '../harness/memory-storage'
 import { createMemoryClock, MemoryVault } from '../harness/memory-vault'
-import {
-	computeContentEtag,
-	MemoryWebDAV,
-	type MoveSupportMode,
-} from '../harness/memory-webdav'
+import { computeContentEtag, MemoryWebDAV } from '../harness/memory-webdav'
 import { simParams } from '../harness/sim-config'
 
 const REMOTE_BASE_DIR = '/SyncVault/'
@@ -85,7 +81,6 @@ function createSyncWorld(options?: {
 	policy?: SyncPolicy
 	conflictStrategy?: ConflictStrategy
 	syncMode?: SyncMode
-	moveSupport?: MoveSupportMode
 	filterRules?: GlobFilterRule[]
 	clockSkewMs?: number
 	deltaModifiedOffsetMs?: number
@@ -95,7 +90,6 @@ function createSyncWorld(options?: {
 	const remote = new MemoryWebDAV({
 		clock,
 		clockSkewMs: options?.clockSkewMs ?? 0,
-		moveSupport: options?.moveSupport ?? 'supported',
 		deltaModifiedOffsetMs: options?.deltaModifiedOffsetMs ?? 0,
 	})
 	remote.seedDir(REMOTE_BASE_DIR)
@@ -399,18 +393,16 @@ describe('Sync engine deterministic simulation (DST)', () => {
 					minLength: 2,
 					maxLength: 4,
 				}),
-				fc.constantFrom<MoveSupportMode>('supported', 405, 501),
 				fc.constantFrom(
 					ConflictStrategy.NoConflictMerge,
 					ConflictStrategy.LocalPriority,
 					ConflictStrategy.ServerPriority,
 				),
-				async (rounds, moveSupport, conflictStrategy) => {
+				async (rounds, conflictStrategy) => {
 					await clearAllPluginStorage()
 					const world = createSyncWorld({
 						policy: SyncPolicy.TwoWay,
 						conflictStrategy,
-						moveSupport,
 					})
 
 					for (const ops of rounds) {
@@ -446,7 +438,7 @@ describe('Sync engine deterministic simulation (DST)', () => {
 		)
 	})
 
-	it('enforces strict MOVE equivalence: WebDAV MOVE vs 405/501 fallback reach byte-identical state including chains, swaps, and duplicates', async () => {
+	it('preserves byte-identical state and honest records across randomized MOVE scenarios including chains, swaps, and duplicates', async () => {
 		const moveScenarioArb = fc.record({
 			initialFiles: fc.array(
 				fc.tuple(
@@ -478,101 +470,69 @@ describe('Sync engine deterministic simulation (DST)', () => {
 
 		await fc.assert(
 			fc.asyncProperty(moveScenarioArb, async (scenario) => {
-				const runWithMode = async (moveSupport: MoveSupportMode) => {
-					await clearAllPluginStorage()
-					const world = createSyncWorld({
-						policy: SyncPolicy.TwoWay,
-						moveSupport,
-					})
-					for (const [path, content] of scenario.initialFiles) {
-						applyWorldOp(world, { kind: 'localWrite', path, content })
-					}
-					const baseline = await runSync(world)
-					expect(baseline.completed).toBe(true)
-
-					for (const op of scenario.mutations) {
-						applyWorldOp(world, op)
-					}
-					world.clock.advance(2_000)
-
-					const synced = await runSync(world)
-					expect(synced.completed).toBe(true)
-
-					const records = await world.syncRecord.getRecords()
-					const recordSummary = Object.fromEntries(
-						[...records.entries()]
-							.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-							.map(([k, v]) => [
-								k,
-								{
-									isDir: v.local.isDir,
-									hash: v.contentHash ?? v.base?.key ?? null,
-								},
-							]),
-					)
-					return {
-						local: toTextSnapshot(world.vault.snapshotFiles()),
-						remote: toTextSnapshot(world.remote.snapshotFiles(REMOTE_BASE_DIR)),
-						records: recordSummary,
-					}
+				await clearAllPluginStorage()
+				const world = createSyncWorld({
+					policy: SyncPolicy.TwoWay,
+				})
+				for (const [path, content] of scenario.initialFiles) {
+					applyWorldOp(world, { kind: 'localWrite', path, content })
 				}
+				const baseline = await runSync(world)
+				expect(baseline.completed).toBe(true)
 
-				const nativeMove = await runWithMode('supported')
-				const fallback405 = await runWithMode(405)
-				const fallback501 = await runWithMode(501)
+				for (const op of scenario.mutations) {
+					applyWorldOp(world, op)
+				}
+				world.clock.advance(2_000)
 
-				expect(nativeMove.local).toEqual(nativeMove.remote)
-				expect(fallback405).toEqual(nativeMove)
-				expect(fallback501).toEqual(nativeMove)
+				const synced = await runSync(world)
+				expect(synced.completed).toBe(true)
+
+				expect(toTextSnapshot(world.vault.snapshotFiles())).toEqual(
+					toTextSnapshot(world.remote.snapshotFiles(REMOTE_BASE_DIR)),
+				)
+				await assertRecordsHonest(world)
 			}),
 			simParams(6, 402),
 		)
 
 		// Targeted adversarial MOVE patterns: chain A→B, B→C; cyclic swap A↔B; duplicate-hash fan-out
 		for (const pattern of ['chain', 'swap', 'duplicates'] as const) {
-			const runPattern = async (moveSupport: MoveSupportMode) => {
-				await clearAllPluginStorage()
-				const world = createSyncWorld({ moveSupport })
-				if (pattern === 'chain') {
-					world.vault.seedFile('dir-a/one.md', 'content-one 中文 🌱')
-					world.vault.seedFile('dir-b/two.md', 'content-two 📘')
-					await runSync(world)
-					world.clock.advance(2_000)
-					world.vault.moveDirect('dir-b/two.md', 'dir-c/three.md')
-					world.vault.moveDirect('dir-a/one.md', 'dir-b/two.md')
-				} else if (pattern === 'swap') {
-					world.vault.seedFile('swap/a🌱.md', 'payload-A')
-					world.clock.advance(2_000)
-					world.vault.seedFile('swap/b📘.md', 'payload-B-longer')
-					await runSync(world)
-					world.clock.advance(2_000)
-					world.vault.moveDirect('swap/a🌱.md', 'swap/tmp.md')
-					world.vault.moveDirect('swap/b📘.md', 'swap/a🌱.md')
-					world.vault.moveDirect('swap/tmp.md', 'swap/b📘.md')
-				} else {
-					const dup = 'identical-bytes 相同字节 🔁'
-					world.vault.seedFile('dup/orig-1.md', dup)
-					world.vault.seedFile('dup/orig-2.md', dup)
-					await runSync(world)
-					world.clock.advance(2_000)
-					world.vault.removeDirect('dup/orig-1.md')
-					world.vault.seedFile('dup/copy-a.md', dup)
-					world.vault.seedFile('dup/copy-b.md', dup)
-				}
+			await clearAllPluginStorage()
+			const world = createSyncWorld()
+			if (pattern === 'chain') {
+				world.vault.seedFile('dir-a/one.md', 'content-one 中文 🌱')
+				world.vault.seedFile('dir-b/two.md', 'content-two 📘')
+				await runSync(world)
 				world.clock.advance(2_000)
-				const res = await runSync(world)
-				expect(res.completed).toBe(true)
-				await assertRecordsHonest(world)
-				return {
-					local: toTextSnapshot(world.vault.snapshotFiles()),
-					remote: toTextSnapshot(world.remote.snapshotFiles(REMOTE_BASE_DIR)),
-				}
+				world.vault.moveDirect('dir-b/two.md', 'dir-c/three.md')
+				world.vault.moveDirect('dir-a/one.md', 'dir-b/two.md')
+			} else if (pattern === 'swap') {
+				world.vault.seedFile('swap/a🌱.md', 'payload-A')
+				world.clock.advance(2_000)
+				world.vault.seedFile('swap/b📘.md', 'payload-B-longer')
+				await runSync(world)
+				world.clock.advance(2_000)
+				world.vault.moveDirect('swap/a🌱.md', 'swap/tmp.md')
+				world.vault.moveDirect('swap/b📘.md', 'swap/a🌱.md')
+				world.vault.moveDirect('swap/tmp.md', 'swap/b📘.md')
+			} else {
+				const dup = 'identical-bytes 相同字节 🔁'
+				world.vault.seedFile('dup/orig-1.md', dup)
+				world.vault.seedFile('dup/orig-2.md', dup)
+				await runSync(world)
+				world.clock.advance(2_000)
+				world.vault.removeDirect('dup/orig-1.md')
+				world.vault.seedFile('dup/copy-a.md', dup)
+				world.vault.seedFile('dup/copy-b.md', dup)
 			}
-
-			const nativeRes = await runPattern('supported')
-			const fallbackRes = await runPattern(405)
-			expect(nativeRes.local).toEqual(nativeRes.remote)
-			expect(fallbackRes).toEqual(nativeRes)
+			world.clock.advance(2_000)
+			const res = await runSync(world)
+			expect(res.completed).toBe(true)
+			await assertRecordsHonest(world)
+			expect(toTextSnapshot(world.vault.snapshotFiles())).toEqual(
+				toTextSnapshot(world.remote.snapshotFiles(REMOTE_BASE_DIR)),
+			)
 		}
 	})
 
@@ -804,7 +764,7 @@ describe('Sync engine deterministic simulation (DST)', () => {
 		world.vault.moveDirect('old-dir🌱/note.md', 'new-dir📘/note.md')
 		world.vault.removeDirect('old-dir🌱', true)
 
-		// Fail the MOVE RPC with a 500 (not 405/501 fallback) so MoveRemoteTask fails
+		// Fail the MOVE RPC with a 500 so MoveRemoteTask fails
 		world.remote.addFault({
 			op: 'move',
 			error: { status: 500, message: 'Injected MOVE server error' },
@@ -834,6 +794,58 @@ describe('Sync engine deterministic simulation (DST)', () => {
 		).toBe('precious-content')
 		// Sanity check MoveRemoteTask class reference
 		expect(MoveRemoteTask).toBeDefined()
+	})
+
+	it('preserves a post-planning remote edit when MoveRemoteTask detects source drift, blocks parent removal, and recovers on next sync', async () => {
+		const world = createSyncWorld({ policy: SyncPolicy.TwoWay })
+		const fromPath = 'old-dir🌱/笔记📘.md'
+		const toPath = 'new-dir🌿/笔记📘.md'
+		const original = 'initial-content 初始内容 🌱\n'
+		const remoteEdit = 'remote-edit-after-plan 远端并发修改 ✨\n'
+
+		world.vault.seedFile(fromPath, original)
+		expect((await runSync(world)).completed).toBe(true)
+
+		world.clock.advance(2_000)
+		world.vault.moveDirect(fromPath, toPath)
+		world.vault.removeDirect('old-dir🌱', true)
+
+		// Mutate the remote source right after MkdirRemote (after planning, before MoveRemote)
+		let drifted = false
+		world.remote.onAfterOp = (op) => {
+			if (!drifted && op.op === 'mkdir' && op.path.endsWith('/new-dir🌿')) {
+				drifted = true
+				world.clock.advance(2_000)
+				world.remote.seedFile(`${REMOTE_BASE_DIR}${fromPath}`, remoteEdit)
+			}
+		}
+
+		world.remote.clearOps()
+		const firstRun = await runSync(world)
+		expect(firstRun.completed).toBe(true)
+		expect(drifted).toBe(true)
+		expect(world.remote.ops.some((op) => op.op === 'move')).toBe(false)
+		// Source edit survived and old-dir🌱 was NOT removed; destination was not overwritten
+		expect(
+			decoder.decode(
+				world.remote.readBytesDirect(`${REMOTE_BASE_DIR}${fromPath}`)!,
+			),
+		).toBe(remoteEdit)
+		expect(
+			world.remote.readBytesDirect(`${REMOTE_BASE_DIR}${toPath}`),
+		).toBeUndefined()
+
+		// Next sync pulls the remote edit at old-dir🌱 and pushes the local renamed file at new-dir🌿
+		world.remote.onAfterOp = undefined
+		world.clock.advance(2_000)
+		const secondRun = await runSync(world)
+		expect(secondRun.completed).toBe(true)
+		expect(world.vault.readTextDirect(fromPath)).toBe(remoteEdit)
+		expect(world.vault.readTextDirect(toPath)).toBe(original)
+		expect(toTextSnapshot(world.vault.snapshotFiles())).toEqual(
+			toTextSnapshot(world.remote.snapshotFiles(REMOTE_BASE_DIR)),
+		)
+		await assertRecordsHonest(world)
 	})
 
 	it('counterexample #1: persists downloaded version ETag rather than post-download mutated remote ETag and pulls B on next sync', async () => {

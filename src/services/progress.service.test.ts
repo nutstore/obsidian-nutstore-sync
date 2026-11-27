@@ -85,6 +85,7 @@ const moveRemote = (from: string, to: string) =>
 		...options(to),
 		fromLocalPath: from,
 		fromRemotePath: from,
+		expectedRemoteEtag: 'planned-etag',
 	})
 const skipped = (path: string) =>
 	new SkippedTask({

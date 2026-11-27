@@ -217,8 +217,12 @@ export async function downloadRemoteFile(
 }
 
 /**
- * Uploads file contents, enforcing conditional `If-Match` when overwriting a known
- * remote version. Never pass `ifMatch` when creating a new file (returns `409`).
+ * Uploads file contents, enforcing conditional `If-Match` when overwriting a
+ * known remote version (see contract in `src/api/webdav.ts`):
+ * - `If-Match` requires an exact ETag (`*` is compared literally → `412`);
+ *   never pass it when creating a new file (returns `409`).
+ * - Nutstore silently ignores `If-None-Match: *` (`204`, overwrites), so
+ *   create-only uploads cannot rely on it to guard against concurrent creates.
  */
 export async function uploadRemoteFile(options: {
 	webdav: WebDAVClient

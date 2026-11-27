@@ -1,16 +1,16 @@
 import { isAbsolute, join } from 'path-browserify'
 import type { StatModel } from '~/model/stat.model'
-import { computeBufferDigest } from '~/sync/utils/file-digest'
-import { uploadRemoteFile } from '~/utils/chunked-download'
+import i18n from '~/i18n'
 import { extractHttpStatus } from '~/utils/nutstore-dav-error'
 import { isSameTime } from '~/utils/is-same-time'
-import { existsLocalPath, readLocalBinary } from '~/utils/local-vault-io'
+import { existsLocalPath } from '~/utils/local-vault-io'
 import { normalizeVaultPath } from '~/utils/normalize-vault-path'
 import { statVaultItem } from '~/utils/stat-vault-item'
 import { statWebDAVItem } from '~/utils/stat-webdav-item'
 import {
 	BaseTask,
 	BaseTaskOptions,
+	TaskError,
 	toTaskError,
 	type ScopeTarget,
 } from './task.interface'
@@ -20,13 +20,17 @@ export interface MoveRemoteTaskOptions extends BaseTaskOptions {
 	fromRemotePath: string
 	/** Verified local snapshot matching the moved remote bytes during planning. */
 	expectedLocalStat?: Extract<StatModel, { isDir: false }>
-	/** Remote file snapshot whose ETag must remain unchanged after server-side MOVE. */
-	expectedRemoteStat?: Extract<StatModel, { isDir: false }>
+	/**
+	 * Verbatim source ETag observed during planning. Gates the MOVE: a source
+	 * that no longer matches it is left untouched instead of being relocated.
+	 */
+	expectedRemoteEtag: string
 }
 
 /**
- * Moves or renames a remote file using WebDAV MOVE when supported, falling back
- * to upload-then-delete only when the server rejects MOVE itself (405/501).
+ * Moves or renames a remote file on Nutstore via WebDAV `MOVE` (`Overwrite: F`).
+ * Nutstore natively supports `MOVE`, so no 405/501 upload+delete fallback is
+ * kept; see the Nutstore WebDAV server contract in `src/api/webdav.ts`.
  */
 export default class MoveRemoteTask extends BaseTask {
 	constructor(readonly options: MoveRemoteTaskOptions) {
@@ -47,8 +51,33 @@ export default class MoveRemoteTask extends BaseTask {
 		return this.options.expectedLocalStat
 	}
 
-	get expectedRemoteStat(): Extract<StatModel, { isDir: false }> | undefined {
-		return this.options.expectedRemoteStat
+	get expectedRemoteEtag(): string {
+		return this.options.expectedRemoteEtag
+	}
+
+	/**
+	 * Reports why the planned source version is gone, or `null` when the server
+	 * still answers with the ETag observed during planning.
+	 *
+	 * Nutstore ignores `If-Match`/`If-Unmodified-Since` on `MOVE` (see contract
+	 * in `src/api/webdav.ts`), so a pre-MOVE `PROPFIND Depth: 0` narrows the
+	 * drift window to one RTT. Failing here also registers `fromLocalPath` in
+	 * `failedMoveSources` (`src/sync/index.ts`) so parent `RemoveRemoteTask`s
+	 * do not delete the drifted source.
+	 */
+	private async detectSourceDrift(plannedEtag: string): Promise<string | null> {
+		if (!plannedEtag) return 'planned ETag is empty'
+		try {
+			const current = await statWebDAVItem(this.webdav, this.fromRemotePath)
+			if (current.isDir) return 'source is now a directory'
+			if (!current.etag) return 'source has no ETag'
+			return current.etag === plannedEtag
+				? null
+				: `etag ${plannedEtag} → ${current.etag}`
+		} catch (error) {
+			if (extractHttpStatus(error) === 404) return 'source is missing'
+			throw error
+		}
 	}
 
 	/** Protects both the source and destination paths across partial-scan boundaries. */
@@ -69,92 +98,49 @@ export default class MoveRemoteTask extends BaseTask {
 			this.logger.info(
 				`[MoveRemote] ${this.fromRemotePath} → ${this.remotePath}`,
 			)
-			try {
-				await this.webdav.moveFile(this.fromRemotePath, this.remotePath, {
-					overwrite: false,
-				})
-				const localAfter = await statVaultItem(this.vault, this.localPath)
-				if (!localAfter || localAfter.isDir) {
-					return {
-						success: true,
-						receipt: {
-							kind: 'unverified',
-							movedFromLocalPath: this.fromLocalPath,
-						},
-					} as const
-				}
-				const expectedLocal = this.expectedLocalStat
-				const editedDuringMove =
-					expectedLocal !== undefined &&
-					(!isSameTime(localAfter.mtime, expectedLocal.mtime) ||
-						localAfter.size !== expectedLocal.size)
-				const recordedLocal = editedDuringMove ? expectedLocal : localAfter
 
-				try {
-					const remoteStat = await statWebDAVItem(this.webdav, this.remotePath)
-					const expectedRemote = this.expectedRemoteStat
-					if (
-						remoteStat.isDir ||
-						!remoteStat.etag ||
-						remoteStat.size !== recordedLocal.size ||
-						(expectedRemote &&
-							(!expectedRemote.etag || remoteStat.etag !== expectedRemote.etag))
-					) {
-						return {
-							success: true,
-							receipt: {
-								kind: 'unverified',
-								movedFromLocalPath: this.fromLocalPath,
-							},
-						} as const
-					}
-					return {
-						success: true,
-						receipt: {
-							kind: 'synced',
-							local: recordedLocal,
-							remote: { ...remoteStat, path: this.localPath },
-							movedFromLocalPath: this.fromLocalPath,
-						},
-					} as const
-				} catch {
-					return {
-						success: true,
-						receipt: {
-							kind: 'unverified',
-							movedFromLocalPath: this.fromLocalPath,
-						},
-					} as const
-				}
-			} catch (moveError) {
-				const status = extractHttpStatus(moveError)
-				if (status !== 405 && status !== 501) {
-					throw moveError
-				}
+			const drift = await this.detectSourceDrift(this.expectedRemoteEtag)
+			if (drift) {
 				this.logger.warn(
-					`[MoveRemote] MOVE unsupported (${status}), falling back to upload+delete: ${this.fromRemotePath} → ${this.remotePath}`,
+					`[MoveRemote] skipped, source drifted (${drift}): ${this.fromRemotePath}`,
 				)
-				const localBefore = await statVaultItem(this.vault, this.localPath)
-				if (!localBefore || localBefore.isDir) {
-					throw new Error(`cannot find file in local fs: ${this.localPath}`, {
-						cause: moveError,
-					})
-				}
-				const content = await readLocalBinary(this.vault, this.localPath)
-				const localAfterRead = await statVaultItem(this.vault, this.localPath)
-				const uploaded = await uploadRemoteFile({
-					webdav: this.webdav,
-					remotePath: this.remotePath,
-					content,
-				})
-				await this.webdav.deleteFile(this.fromRemotePath)
+				return {
+					success: false,
+					error: new TaskError(i18n.t('sync.error.moveSourceChanged'), this),
+				} as const
+			}
 
-				const localUnchanged =
-					localAfterRead &&
-					!localAfterRead.isDir &&
-					isSameTime(localAfterRead.mtime, localBefore.mtime) &&
-					localAfterRead.size === content.byteLength
-				if (!localUnchanged) {
+			// Nutstore returns 409 (not RFC 412) when `Overwrite: F` hits an existing target.
+			await this.webdav.moveFile(this.fromRemotePath, this.remotePath, {
+				overwrite: false,
+			})
+			const localAfter = await statVaultItem(this.vault, this.localPath)
+			if (!localAfter || localAfter.isDir) {
+				return {
+					success: true,
+					receipt: {
+						kind: 'unverified',
+						movedFromLocalPath: this.fromLocalPath,
+					},
+				} as const
+			}
+			const expectedLocal = this.expectedLocalStat
+			const editedDuringMove =
+				expectedLocal !== undefined &&
+				(!isSameTime(localAfter.mtime, expectedLocal.mtime) ||
+					localAfter.size !== expectedLocal.size)
+			const recordedLocal = editedDuringMove ? expectedLocal : localAfter
+
+			try {
+				// Nutstore preserves ETag across MOVE and changes it on any overwrite,
+				// so a mismatch here catches edits that landed in the 1-RTT window.
+				const remoteStat = await statWebDAVItem(this.webdav, this.remotePath)
+				if (
+					remoteStat.isDir ||
+					!remoteStat.etag ||
+					remoteStat.size !== recordedLocal.size ||
+					remoteStat.etag !== this.expectedRemoteEtag
+				) {
 					return {
 						success: true,
 						receipt: {
@@ -163,43 +149,23 @@ export default class MoveRemoteTask extends BaseTask {
 						},
 					} as const
 				}
-
-				try {
-					const remoteStat = await statWebDAVItem(this.webdav, this.remotePath)
-					if (
-						remoteStat.isDir ||
-						!remoteStat.etag ||
-						remoteStat.size !== content.byteLength ||
-						(uploaded.etag && remoteStat.etag !== uploaded.etag)
-					) {
-						return {
-							success: true,
-							receipt: {
-								kind: 'unverified',
-								movedFromLocalPath: this.fromLocalPath,
-							},
-						} as const
-					}
-					const digest = await computeBufferDigest(content, this.localPath)
-					return {
-						success: true,
-						receipt: {
-							kind: 'synced',
-							local: localBefore,
-							remote: { ...remoteStat, path: this.localPath },
-							movedFromLocalPath: this.fromLocalPath,
-							...digest,
-						},
-					} as const
-				} catch {
-					return {
-						success: true,
-						receipt: {
-							kind: 'unverified',
-							movedFromLocalPath: this.fromLocalPath,
-						},
-					} as const
-				}
+				return {
+					success: true,
+					receipt: {
+						kind: 'synced',
+						local: recordedLocal,
+						remote: { ...remoteStat, path: this.localPath },
+						movedFromLocalPath: this.fromLocalPath,
+					},
+				} as const
+			} catch {
+				return {
+					success: true,
+					receipt: {
+						kind: 'unverified',
+						movedFromLocalPath: this.fromLocalPath,
+					},
+				} as const
 			}
 		} catch (e) {
 			this.logger.error(
