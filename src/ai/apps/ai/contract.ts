@@ -257,6 +257,12 @@ export type AppAIEvent = {
 	| { chunk: AppAIStreamPart }
 	| { toolCall: { toolCallId: string; toolName: string; input: JsonValue } }
 )
+export interface AppAIDiagnosticDetail {
+	code: AppAIErrorCode
+	reason: string
+	toolName?: string
+	runId?: number
+}
 export interface AppAIExecution {
 	signal: AbortSignal
 	emit(chunk: AppAIStreamPart): void
@@ -265,6 +271,8 @@ export interface AppAIExecution {
 		input: JsonValue,
 		toolCallId: string,
 	): Promise<JsonValue>
+	/** Host-only, secret-free diagnostic details for `logs.jsonl` (never sent to the iframe). */
+	diagnose?: (detail: AppAIDiagnosticDetail) => void
 }
 export type AppAIHost = (
 	request: AppAIRequest,

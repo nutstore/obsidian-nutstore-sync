@@ -9,9 +9,16 @@ import type {
 } from '../ai/contract'
 import type { JsonValue } from './kv'
 
+export interface AppAIToolFailure {
+	toolName: string
+	toolCallId: string
+	error: unknown
+}
+
 /** Serialized into srcdoc: every runtime dependency must be inside this factory. */
 export function createAppAI(
 	rpc: (method: string, ...args: unknown[]) => Promise<unknown>,
+	onToolError?: (failure: AppAIToolFailure) => void,
 ): { api: AppAIAPI; receive(event: AppAIEvent): void; close(): void } {
 	let nextRun = 0
 	let closed = false
@@ -113,14 +120,28 @@ export function createAppAI(
 							if (!ended && !controller.signal.aborted)
 								return rpc('ai.toolResult', id, toolCallId, { output })
 						},
-						() => {
+						(reason: unknown) => {
+							if (onToolError) {
+								try {
+									onToolError({ toolName, toolCallId, error: reason })
+								} catch {
+									// Diagnostic hooks must never break tool settlement.
+								}
+							}
 							if (!ended && !controller.signal.aborted)
 								return rpc('ai.toolResult', id, toolCallId, {
 									error: 'App tool execution failed',
 								})
 						},
 					)
-					.catch(() => {
+					.catch((reason: unknown) => {
+						if (onToolError) {
+							try {
+								onToolError({ toolName, toolCallId, error: reason })
+							} catch {
+								// Diagnostic hooks must never break tool settlement.
+							}
+						}
 						// A non-cloneable tool result must settle the host call rather than leave it waiting.
 						if (!ended && !controller.signal.aborted)
 							void rpc('ai.toolResult', id, toolCallId, {

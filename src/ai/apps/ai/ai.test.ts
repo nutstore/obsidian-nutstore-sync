@@ -390,13 +390,45 @@ describe('App AI SDK adapter', () => {
 		resolve.mockReturnValue({
 			model: new MockLanguageModelV4({
 				doStream: async () => {
-					throw new Error('neutral provider detail 🌿')
+					throw Object.assign(
+						new Error('https://private.example/secret-token-should-never-leak'),
+						{
+							name: 'AI_APICallError',
+							statusCode: 429,
+							isRetryable: true,
+						},
+					)
 				},
 			}),
 		})
+		const diagnostics: Array<{ code: string; reason: string }> = []
+		const bridge = new AppAIBridge(
+			h.host,
+			() => {},
+			window,
+			(detail) => diagnostics.push(detail),
+		)
 		await expect(
-			h.client.api.createAgent().generate({ prompt: '问候 Greet 🌿' }),
+			bridge.dispatch('run', [
+				{
+					runId: 1,
+					streaming: false,
+					settings: {},
+					call: { prompt: '问候 Greet 🌿' },
+				},
+			]),
 		).rejects.toMatchObject({ code: 'AI_FAILED', message: 'AI_FAILED' })
+		expect(diagnostics).toContainEqual(
+			expect.objectContaining({
+				code: 'AI_FAILED',
+				reason: expect.stringContaining(
+					'AI_APICallError, status=429, retryable=true',
+				),
+			}),
+		)
+		expect(JSON.stringify(diagnostics)).not.toContain('secret-token')
+		expect(JSON.stringify(diagnostics)).not.toContain('private.example')
+		bridge.close()
 	})
 
 	it('aborts an overdue App tool instead of allowing another model step', async () => {

@@ -147,13 +147,43 @@ const adapter = {
 			[...disk.keys()].some((key) => key.startsWith(`${target}/`))
 		)
 	},
+	stat: async (path: string) => {
+		const target = normalize(path)
+		const value = disk.get(target)
+		if (value !== undefined) {
+			return {
+				type: 'file' as const,
+				ctime: 0,
+				mtime: 0,
+				size: new TextEncoder().encode(value).byteLength,
+			}
+		}
+		const bin = binary.get(target)
+		if (bin !== undefined) {
+			return { type: 'file' as const, ctime: 0, mtime: 0, size: bin.byteLength }
+		}
+		return null
+	},
 	read: async (path: string) => {
 		const target = normalize(path)
 		if (!disk.has(target)) throw new Error(`Missing file: ${target}`)
 		return disk.get(target)!
 	},
 	write: async (path: string, content: string) => {
-		disk.set(normalize(path), content)
+		const target = normalize(path)
+		if (target.endsWith(`/${APP_LOG_FILE}`)) {
+			logWrite.started?.()
+			await logWrite.gate
+		}
+		disk.set(target, content)
+	},
+	append: async (path: string, content: string) => {
+		const target = normalize(path)
+		if (target.endsWith(`/${APP_LOG_FILE}`)) {
+			logWrite.started?.()
+			await logWrite.gate
+		}
+		disk.set(target, (disk.get(target) ?? '') + content)
 	},
 	process: async (path: string, update: (content: string) => string) => {
 		const target = normalize(path)
@@ -410,6 +440,36 @@ describe('App workspaces over real App files', () => {
 		)
 	})
 
+	it('records assembly failures and distinguishes validation vs live diagnostic phases', async () => {
+		const { service } = fixture()
+		const created = await service.create(
+			'org.example.assembly_log',
+			'中性装配 Neutral assembly 🌿',
+		)
+		disk.set(
+			sourcePath(created.id, APP_ENTRY_FILE),
+			'<script src="https://example.test/remote.js"></script>',
+		)
+
+		await expect(service.load(created.id)).rejects.toThrow(
+			/Remote URL is not supported/,
+		)
+		await service.logs.flush(created.id)
+		const assemblyLine = JSON.parse(
+			text(sourcePath(created.id, APP_LOG_FILE)).trim().split('\n').at(-1)!,
+		) as Record<string, unknown>
+		expect(assemblyLine).toMatchObject({
+			level: 'error',
+			source: 'assembly',
+			phase: 'assembly',
+			filename: 'index.html',
+		})
+		expect(assemblyLine.fingerprint).toEqual(expect.any(String))
+
+		const liveHost = service.createRuntimeHost(created.id)
+		expect(liveHost.phase).toBe('live')
+	})
+
 	it('cancels validation when the signal aborts during candidate boot', async () => {
 		const { service } = fixture()
 		const created = await service.create(
@@ -492,7 +552,7 @@ describe('App workspaces over real App files', () => {
 		expect(errorSpy).toHaveBeenCalledWith('中性错误 Neutral failure 🌿')
 	})
 
-	it('retains long multilingual log diagnostics without truncation or pruning', async () => {
+	it('preserves long multilingual diagnostics while guarding runaway single fields', async () => {
 		const { service } = fixture()
 		const created = await service.create(
 			'org.example.diagnostics',
@@ -512,7 +572,12 @@ describe('App workspaces over real App files', () => {
 		await service.logs.flush(created.id)
 
 		const stored = JSON.parse(text(sourcePath(created.id, APP_LOG_FILE)).trim())
-		expect(stored.message).toBe(message)
+		expect(stored.message.startsWith('开始 Begin 🌿\n')).toBe(true)
+		expect(stored.message.endsWith('结束 End 🧭')).toBe(true)
+		expect(stored.message).toMatch(/\[truncated \d+ chars\]/)
+		expect(
+			new TextEncoder().encode(stored.message).byteLength,
+		).toBeLessThanOrEqual(64 * 1024)
 		expect(stored.stack).toBe(stack)
 		expect(stored.filename).toBe(filename)
 	})

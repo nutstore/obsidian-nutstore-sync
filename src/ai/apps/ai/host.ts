@@ -106,6 +106,48 @@ function streamPart(
 	}
 }
 
+/** Format safe, secret-free schema validation errors for App diagnostics. */
+function formatSchemaErrors(
+	errors: ReadonlyArray<{
+		instanceLocation: string
+		keyword: string
+		error: string
+	}>,
+): string {
+	return errors
+		.slice(0, 5)
+		.map(
+			(item) =>
+				`${item.instanceLocation || '$'} (${item.keyword}): ${item.error}`,
+		)
+		.join('; ')
+}
+
+/**
+ * Extract only safe diagnostic metadata from an arbitrary provider/SDK failure.
+ * Never includes raw error messages, URLs, headers, API keys or HTTP bodies
+ * because `logs.jsonl` is readable by App code via `app.fs`.
+ */
+function redactHostErrorReason(error: unknown): string {
+	if (!error || typeof error !== 'object') return 'Unexpected host AI error'
+	const rec = error as {
+		name?: unknown
+		statusCode?: unknown
+		isRetryable?: unknown
+		code?: unknown
+	}
+	const parts: string[] = []
+	if (typeof rec.name === 'string' && rec.name) parts.push(rec.name)
+	if (typeof rec.statusCode === 'number') parts.push(`status=${rec.statusCode}`)
+	if (typeof rec.isRetryable === 'boolean')
+		parts.push(`retryable=${rec.isRetryable}`)
+	if (typeof rec.code === 'string' && rec.code && rec.code !== rec.name)
+		parts.push(`code=${rec.code}`)
+	return parts.length
+		? `Provider/SDK failure (${parts.join(', ')})`
+		: 'Unexpected host AI error'
+}
+
 /**
  * AI SDK owns inference, schema validation and tool looping. This adapter owns
  * model selection and host policy; it has no chat/session or App business state.
@@ -117,8 +159,24 @@ export function createAppAIHost(
 	let active = 0
 	return async (request, execution) => {
 		scope.check()
-		if (active >= APP_AI_LIMITS.globalConcurrent)
+		const diagnose = (
+			code: AppAIError['code'],
+			reason: string,
+			toolName?: string,
+		) => {
+			execution.diagnose?.({
+				code,
+				reason,
+				...(toolName ? { toolName } : {}),
+			})
+		}
+		if (active >= APP_AI_LIMITS.globalConcurrent) {
+			diagnose(
+				'LIMIT_EXCEEDED',
+				`Global concurrent AI limit reached (${APP_AI_LIMITS.globalConcurrent})`,
+			)
 			throw new AppAIError('LIMIT_EXCEEDED')
+		}
 		active++
 		const controller = new AbortController()
 		const cancel = () => controller.abort(new AppAIError('CANCELLED'))
@@ -133,41 +191,108 @@ export function createAppAIHost(
 				selection?.providerId,
 			)
 			const model = getModelById(provider, selection?.modelId)
-			if (!provider || !model) throw new AppAIError('MODEL_UNAVAILABLE')
+			if (!provider || !model) {
+				diagnose(
+					'MODEL_UNAVAILABLE',
+					selection
+						? `Configured model not found (${selection.providerId}/${selection.modelId})`
+						: 'No default AI model is configured',
+				)
+				throw new AppAIError('MODEL_UNAVAILABLE')
+			}
 			try {
 				assertProviderUsable(provider)
 			} catch {
+				diagnose(
+					'MODEL_UNAVAILABLE',
+					`Provider "${provider.id}" is disabled or missing credentials`,
+				)
 				throw new AppAIError('MODEL_UNAVAILABLE')
 			}
 			const definitions = Object.entries(request.settings.tools ?? {})
-			if (definitions.length > 64) throw new AppAIError('LIMIT_EXCEEDED')
+			if (definitions.length > 64) {
+				diagnose(
+					'LIMIT_EXCEEDED',
+					`Too many tools (${definitions.length} > 64)`,
+				)
+				throw new AppAIError('LIMIT_EXCEEDED')
+			}
 			if (
 				!model.modalities.input.includes('text') ||
-				!model.modalities.output.includes('text') ||
-				(definitions.length && !model.tool_call) ||
-				(request.settings.output && model.structured_output === false)
-			)
+				!model.modalities.output.includes('text')
+			) {
+				diagnose(
+					'UNSUPPORTED_CAPABILITY',
+					`Model "${model.id}" does not support text input/output`,
+				)
 				throw new AppAIError('UNSUPPORTED_CAPABILITY')
-			const compile = (schema: Record<string, unknown>) => {
+			}
+			if (definitions.length && !model.tool_call) {
+				diagnose(
+					'UNSUPPORTED_CAPABILITY',
+					`Model "${model.id}" does not support tool calls`,
+				)
+				throw new AppAIError('UNSUPPORTED_CAPABILITY')
+			}
+			if (request.settings.output && model.structured_output === false) {
+				diagnose(
+					'UNSUPPORTED_CAPABILITY',
+					`Model "${model.id}" does not support structured output`,
+				)
+				throw new AppAIError('UNSUPPORTED_CAPABILITY')
+			}
+			let lastOutputSchemaError: string | undefined
+			const compile = (
+				schema: Record<string, unknown>,
+				label: { kind: 'tool'; toolName: string } | { kind: 'output' },
+			) => {
 				// Validation is mandatory: raw jsonSchema() alone does not validate tool/model output.
 				try {
-					if (schema.type !== 'object') throw new AppAIError('INVALID_REQUEST')
+					if (schema.type !== 'object') {
+						diagnose(
+							'INVALID_REQUEST',
+							label.kind === 'tool'
+								? `Tool "${label.toolName}" inputSchema root type must be "object"`
+								: 'Structured output schema root type must be "object"',
+							label.kind === 'tool' ? label.toolName : undefined,
+						)
+						throw new AppAIError('INVALID_REQUEST')
+					}
 					const validator = new Validator(schema, '2020-12')
 					return jsonSchema<JsonValue>(schema, {
 						validate: async (value) => {
 							const result = validator.validate(value)
-							return result.valid
-								? {
-										success: true,
-										value: boundedAIJSON(value, APP_AI_LIMITS.toolBytes),
-									}
-								: {
-										success: false,
-										error: new Error('Schema validation failed'),
-									}
+							if (result.valid) {
+								return {
+									success: true,
+									value: boundedAIJSON(value, APP_AI_LIMITS.toolBytes),
+								}
+							}
+							const summary = formatSchemaErrors(result.errors)
+							if (label.kind === 'tool') {
+								diagnose(
+									'INVALID_REQUEST',
+									`Model supplied invalid arguments for tool "${label.toolName}": ${summary}`,
+									label.toolName,
+								)
+							} else {
+								lastOutputSchemaError = summary
+							}
+							return {
+								success: false,
+								error: new Error('Schema validation failed'),
+							}
 						},
 					})
-				} catch {
+				} catch (error) {
+					if (error instanceof AppAIError) throw error
+					diagnose(
+						'INVALID_REQUEST',
+						label.kind === 'tool'
+							? `Invalid JSON Schema for tool "${label.toolName}"`
+							: 'Invalid JSON Schema for structured output',
+						label.kind === 'tool' ? label.toolName : undefined,
+					)
 					throw new AppAIError('INVALID_REQUEST')
 				}
 			}
@@ -176,13 +301,18 @@ export function createAppAIHost(
 					if (
 						!/^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$/.test(name) ||
 						['__proto__', 'constructor', 'prototype'].includes(name)
-					)
+					) {
+						diagnose('INVALID_REQUEST', `Invalid tool name "${name}"`)
 						throw new AppAIError('INVALID_REQUEST')
+					}
 					return [
 						name,
 						tool({
 							description: definition.description,
-							inputSchema: compile(definition.inputSchema),
+							inputSchema: compile(definition.inputSchema, {
+								kind: 'tool',
+								toolName: name,
+							}),
 							execute: (input, context) => {
 								controller.signal.throwIfAborted()
 								return execution.execute(name, input, context.toolCallId)
@@ -192,7 +322,9 @@ export function createAppAIHost(
 				}),
 			)
 			const output = request.settings.output
-				? Output.object({ schema: compile(request.settings.output.schema) })
+				? Output.object({
+						schema: compile(request.settings.output.schema, { kind: 'output' }),
+					})
 				: undefined
 			const agent = new ToolLoopAgent({
 				model: resolveLanguageModel(provider, model.id).model,
@@ -209,7 +341,13 @@ export function createAppAIHost(
 				maxRetries: 0,
 				// Even if a future message subset accepts attachments, model-side URL fetches remain denied.
 				experimental_download: async (assets) => {
-					if (assets.length) throw new AppAIError('UNSUPPORTED_CAPABILITY')
+					if (assets.length) {
+						diagnose(
+							'UNSUPPORTED_CAPABILITY',
+							'Model attempted to download external URL assets',
+						)
+						throw new AppAIError('UNSUPPORTED_CAPABILITY')
+					}
 					return []
 				},
 			})
@@ -224,8 +362,13 @@ export function createAppAIHost(
 					const chunk = streamPart(part)
 					if (!chunk) continue
 					bytes += jsonBytes(wireJSON(chunk))
-					if (bytes > APP_AI_LIMITS.responseBytes)
+					if (bytes > APP_AI_LIMITS.responseBytes) {
+						diagnose(
+							'LIMIT_EXCEEDED',
+							`Streamed response exceeded ${APP_AI_LIMITS.responseBytes} bytes`,
+						)
 						throw new AppAIError('LIMIT_EXCEEDED')
+					}
 					if (request.streaming) execution.emit(chunk)
 				}
 				const messages = await result.responseMessages
@@ -239,7 +382,13 @@ export function createAppAIHost(
 				if (output) {
 					try {
 						structured = await result.output
-					} catch {
+					} catch (error) {
+						diagnose(
+							'INVALID_OUTPUT',
+							lastOutputSchemaError
+								? `Structured output failed schema validation: ${lastOutputSchemaError}`
+								: `Structured output invalid (${redactHostErrorReason(error)})`,
+						)
 						throw new AppAIError('INVALID_OUTPUT')
 					}
 				}
@@ -257,6 +406,7 @@ export function createAppAIHost(
 		} catch (error) {
 			if (controller.signal.aborted) throw new AppAIError('CANCELLED')
 			if (error instanceof AppAIError) throw error
+			diagnose('AI_FAILED', redactHostErrorReason(error))
 			// Provider errors can contain request bodies, keys and endpoints. Keep them inside the host.
 			throw new AppAIError('AI_FAILED')
 		} finally {

@@ -104,7 +104,11 @@ function fixture() {
 	const workspaces = {
 		load: vi.fn(async () => structuredClone(loaded)),
 		validate: vi.fn(async () => structuredClone(loaded)),
+		logs: {
+			flush: vi.fn(async () => {}),
+		},
 		createRuntimeHost: vi.fn((): RuntimeHost => ({
+			phase: 'live',
 			ai: vi.fn(async () => {
 				throw new Error('中性模型 Neutral model 🌿')
 			}),
@@ -480,6 +484,8 @@ describe('App view sandbox lifetime', () => {
 
 		await f.view.onClose()
 		expect(runtimes[0].destroyed).toBe(true)
+		expect(runtimes[0].host.phase).toBe('live')
+		expect(f.workspaces.logs.flush).toHaveBeenCalledWith('neutral-app')
 		expect(f.themeListeners.size).toBe(0)
 		expect(f.storeListeners.size).toBe(0)
 	})

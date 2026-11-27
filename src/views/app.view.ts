@@ -190,6 +190,7 @@ export default class AppView extends ItemView {
 				this.output,
 				validated.content,
 				{
+					phase: host.phase,
 					fs: host.fs,
 					ai: host.ai,
 					readKV: async () => {
@@ -224,6 +225,9 @@ export default class AppView extends ItemView {
 	private clearRuntime() {
 		this.runtime?.destroy()
 		this.runtime = undefined
+		if (this.appId) {
+			void this.plugin.ai.workspaces.logs?.flush(this.appId).catch(() => {})
+		}
 		this.output?.empty()
 	}
 	private showError(error: unknown) {
@@ -239,6 +243,9 @@ export default class AppView extends ItemView {
 			this.refreshTimer = undefined
 		}
 		this.runtime?.destroy()
+		if (this.appId) {
+			await this.plugin.ai.workspaces.logs?.flush(this.appId).catch(() => {})
+		}
 		if (this.cssChangeEvent) {
 			this.plugin.app.workspace.offref(this.cssChangeEvent)
 			this.cssChangeEvent = undefined
