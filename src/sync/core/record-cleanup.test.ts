@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FsWalkResult } from '~/fs/fs.interface'
-import { shouldCreateCleanRecordTask } from './record-cleanup'
+import { collectWalkPaths, shouldCreateCleanRecordTask } from './record-cleanup'
 
 const recordPath = 'Notes 笔记🌿/Entry 记录.md'
 function entry(path: string, ignored: boolean): FsWalkResult {
@@ -51,5 +51,24 @@ describe('orphaned synchronization records', () => {
 		remote[0].ignored = false
 		expect(shouldCreateCleanRecordTask(recordPath, [], remote)).toBe(false)
 		expect(shouldCreateCleanRecordTask(recordPath, [], [])).toBe(true)
+	})
+
+	it('matches array behavior when passed pre-indexed Sets from collectWalkPaths including CJK/Emoji paths', () => {
+		const cjkEmojiPath = '资料库 Vault 🌱/笔记 Note 📘.md'
+		for (const local of states) {
+			for (const remote of states) {
+				const localWalk =
+					local === 'absent' ? [] : [entry(cjkEmojiPath, local === 'ignored')]
+				const remoteWalk =
+					remote === 'absent' ? [] : [entry(cjkEmojiPath, remote === 'ignored')]
+				expect(
+					shouldCreateCleanRecordTask(
+						cjkEmojiPath,
+						collectWalkPaths(localWalk),
+						collectWalkPaths(remoteWalk),
+					),
+				).toBe(local === 'absent' && remote === 'absent')
+			}
+		}
 	})
 })

@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import type { AIProviderConfig } from '~/ai/core/types'
 import type NutstorePlugin from '~/index'
 import { createProviderConfig } from '~/ai/catalog/config'
@@ -16,13 +18,6 @@ const { createAuthorization, poll, cancelDevice, fetchMock, notice } =
 		fetchMock: vi.fn(),
 		notice: vi.fn(),
 	}))
-vi.mock('obsidian', () => ({
-	Notice: class {
-		constructor(...args: unknown[]) {
-			notice(...args)
-		}
-	},
-}))
 vi.mock('~/consts', () => ({
 	LLM_GATEWAY_CLIENT_ID: 'neutral-client',
 	NUTSTORE_LLM_GATEWAY_PROVIDER_ID: 'gateway',
@@ -42,9 +37,18 @@ vi.mock('@nutstore/sso-js', () => ({
 }))
 vi.mock('~/ai/transport/obsidian-fetch', () => ({ obsidianFetch: fetchMock }))
 
+beforeEach(() => {
+	obsidianRuntime.reset()
+	obsidianRuntime.onNotice = ({ message, timeout }) => {
+		if (timeout !== undefined) notice(message, timeout)
+		else notice(message)
+	}
+})
+
 afterEach(() => {
 	vi.useRealTimers()
 	vi.clearAllMocks()
+	obsidianRuntime.reset()
 })
 
 function fixture() {
@@ -281,7 +285,7 @@ describe('gateway lifetime', () => {
 				}),
 		)
 		const request = f.service.refreshModels()
-		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(fetchMock).toHaveBeenCalledOnce())
 		const rejected = expect(request).rejects.toMatchObject({
 			name: 'AbortError',
 		})

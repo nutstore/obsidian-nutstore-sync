@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import type { ChatSession } from '~/ai/chat/domain'
 import { ChatState } from '~/ai/chat/runtime/chat-state'
 import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
@@ -59,7 +60,6 @@ function createHarness(
 	const messageFactory = {
 		getActiveAgent: () => master,
 		appendUserMessage,
-		appendAgentInput: vi.fn(() => true),
 		removeIncompleteToolCalls: vi.fn(() => false),
 		reportFatalError: vi.fn(),
 	}
@@ -145,7 +145,7 @@ describe('SessionProcessor master turn worker', () => {
 			text: TEXT_ONE,
 			userContext: [],
 		})
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		processor.enqueueUserSubmission('session', {
 			text: TEXT_TWO,
 			userContext: [],
@@ -190,7 +190,7 @@ describe('SessionProcessor master turn worker', () => {
 			text: 'Initial 初始 🌱',
 			userContext: [],
 		})
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		processor.enqueueUserSubmission('session', {
 			text: 'First queued 第一条 🌿',
 			userContext: [],
@@ -231,7 +231,7 @@ describe('SessionProcessor master turn worker', () => {
 			text: 'Initial 初始 🌱',
 			userContext: [],
 		})
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		processor.enqueueUserSubmission('session', {
 			text: 'First queued 第一条 🌿',
 			userContext: [],
@@ -281,7 +281,7 @@ describe('SessionProcessor master turn worker', () => {
 			text: TEXT_ONE,
 			userContext: [],
 		})
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		const firstWorker = runtime.processing
 
 		processor.enqueueUserSubmission('session', {
@@ -313,7 +313,7 @@ describe('SessionProcessor master turn worker', () => {
 			userContext: [],
 		})
 		await emptyWorker
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		await runtime.processing
 
 		expect(runtime.scheduler.queued).toEqual([])
@@ -338,7 +338,7 @@ describe('SessionProcessor master turn worker', () => {
 			text: TEXT_ONE,
 			userContext: [],
 		})
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		processor.enqueueUserSubmission('session', {
 			text: TEXT_TWO,
 			userContext: [],
@@ -352,7 +352,7 @@ describe('SessionProcessor master turn worker', () => {
 
 		releaseFirstTurn!({ status: 'completed', text: TEXT_ONE })
 
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(3))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(3))
 		await runtime.processing
 
 		expect(reportTransientError).not.toHaveBeenCalled()
@@ -413,7 +413,7 @@ describe('SessionProcessor master turn worker', () => {
 			text: TEXT_ONE,
 			userContext: [],
 		})
-		await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(prepare).toHaveBeenCalledTimes(1))
 		const worker = runtime.processing
 		await processor.stopActiveTurn('session')
 		releasePrepare!({ dedupedItems: [] })
@@ -443,7 +443,7 @@ describe('SessionProcessor master turn worker', () => {
 			text: TEXT_ONE,
 			userContext: [],
 		})
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		await processor.stopActiveTurn('session')
 		await runtime.processing
 
@@ -616,7 +616,7 @@ describe('SessionProcessor master turn worker', () => {
 		})
 
 		processor.enqueueRegenerate(session.id, target.id)
-		await vi.waitFor(() => expect(runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(runTurn).toHaveBeenCalledTimes(1))
 		await processor.stopActiveTurn(session.id)
 		await runtime.processing
 
@@ -685,7 +685,7 @@ describe('SessionProcessor master turn worker', () => {
 		)
 
 		processor.enqueueRegenerate(session.id, target.id)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(store.persistSession).toHaveBeenCalledTimes(1),
 		)
 		await processor.stopActiveTurn(session.id)

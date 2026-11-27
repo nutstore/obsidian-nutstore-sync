@@ -25,6 +25,20 @@ import type { AppToolMetadata } from '~/ai/core/types'
  * (step start, tool execution, assistant step) are never throttled.
  */
 const STREAM_UPDATE_INTERVAL_MS = 50
+/** Large streamed tool payloads (e.g. `apply_patch`) back off to cap partial JSON re-parsing. */
+const LARGE_TOOL_INPUT_BACKOFF_START_CHARS = 2_048
+const MAX_TOOL_INPUT_UPDATE_INTERVAL_MS = 500
+
+function toolInputUpdateIntervalMs(inputLength: number): number {
+	if (inputLength <= LARGE_TOOL_INPUT_BACKOFF_START_CHARS) {
+		return STREAM_UPDATE_INTERVAL_MS
+	}
+	return Math.min(
+		MAX_TOOL_INPUT_UPDATE_INTERVAL_MS,
+		STREAM_UPDATE_INTERVAL_MS +
+			Math.floor((inputLength - LARGE_TOOL_INPUT_BACKOFF_START_CHARS) / 128),
+	)
+}
 
 export type AgentProjectionEvent =
 	| { type: 'step-start' }
@@ -112,9 +126,15 @@ export class AgentEventProjector {
 				const nextInput = input + event.delta
 				this.toolInputs.set(event.id, nextInput)
 				// Partial JSON parsing walks the whole accumulated input, so it shares
-				// the frame budget with the notify it feeds. The authoritative input
-				// arrives as a discrete tool-execution-start event.
-				if (!this.takeStreamUpdateWindow()) return
+				// the frame budget with the notify it feeds and backs off as the
+				// payload grows (e.g. large `apply_patch` diffs). The authoritative
+				// input arrives as a discrete tool-execution-start event.
+				if (
+					!this.takeStreamUpdateWindow(
+						toolInputUpdateIntervalMs(nextInput.length),
+					)
+				)
+					return
 				const { value } = await parsePartialJson(nextInput)
 				if (!this.options.isTurnAlive()) return
 				const part = this.assistantMessage?.parts.find(
@@ -349,9 +369,9 @@ export class AgentEventProjector {
 	 * proportional to frames instead of tokens. Discrete lifecycle events still
 	 * notify immediately and carry the final state of a throttled stream.
 	 */
-	private takeStreamUpdateWindow() {
+	private takeStreamUpdateWindow(intervalMs = STREAM_UPDATE_INTERVAL_MS) {
 		const now = Date.now()
-		if (now - this.lastStreamUpdateAt < STREAM_UPDATE_INTERVAL_MS) return false
+		if (now - this.lastStreamUpdateAt < intervalMs) return false
 		this.lastStreamUpdateAt = now
 		return true
 	}

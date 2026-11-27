@@ -24,7 +24,8 @@ import { appError } from './error'
 import { validateAppIcon } from './icon'
 import { AppLogStore } from './logs'
 import { AppRuntime, type RuntimeHost } from './runtime'
-import { assembleAppContent, type AppContent } from './source'
+import { AppSourceError, assembleAppContent, type AppContent } from './source'
+import { computeErrorFingerprint } from './diagnostics'
 import { AppStore, type SavedApp } from './store'
 import type { AppAIHost } from './ai/contract'
 import {
@@ -76,13 +77,44 @@ export class AppWorkspaces implements AppLifecycle {
 	/** Read the real App files and inline every relative source reference. */
 	async load(appId: string): Promise<LoadedApp> {
 		this.scope.check()
-		const saved = await this.store.read(appId)
-		this.scope.check()
-		// The icon is host-rendered SVG; reject an invalid manifest at mount time.
-		this.validateIcon(saved.manifest.iconSvg)
-		const content = await this.assemble(appId)
-		this.scope.check()
-		return { ...saved, content }
+		try {
+			const saved = await this.store.read(appId)
+			this.scope.check()
+			// The icon is host-rendered SVG; reject an invalid manifest at mount time.
+			this.validateIcon(saved.manifest.iconSvg)
+			const content = await this.assemble(appId)
+			this.scope.check()
+			return { ...saved, content }
+		} catch (error) {
+			if (!isAbortError(error) && !this.scope.signal.aborted) {
+				const message = appError(error)
+				if (!message.includes('App no longer exists:')) {
+					const filename =
+						error instanceof AppSourceError ? error.path : undefined
+					const event = {
+						level: 'error' as const,
+						source: 'assembly' as const,
+						phase: 'assembly' as const,
+						name: error instanceof Error ? error.name : 'Error',
+						message,
+						...(filename ? { filename } : {}),
+						...(error instanceof Error && error.stack
+							? { stack: error.stack }
+							: {}),
+					}
+					try {
+						this.logs.append(appId, {
+							...event,
+							fingerprint: computeErrorFingerprint(event),
+						})
+						void this.logs.flush(appId).catch(() => {})
+					} catch {
+						// Invalid appId or best-effort logging must never mask load errors.
+					}
+				}
+			}
+			throw error
+		}
 	}
 
 	private async assemble(appId: string): Promise<AppContent> {
@@ -125,11 +157,16 @@ export class AppWorkspaces implements AppLifecycle {
 		let runtime: AppRuntime | undefined
 		try {
 			runtime = new AppRuntime(container, loaded.content, {
+				phase: 'validation',
 				fs: createAppFSDispatcher(
 					() =>
 						new VaultFileSystemManager(
 							guardAppIO(this.app, check, this.scope.track),
-						).create({ appLifecycle: this, readonlyApps: true }),
+						).create({
+							appLifecycle: this,
+							readonlyApps: true,
+							includePathIndex: false,
+						}),
 					check,
 					true,
 				),
@@ -191,11 +228,13 @@ export class AppWorkspaces implements AppLifecycle {
 					appLifecycle: this,
 					readonlyApps: true,
 					permissionGuard,
+					includePathIndex: false,
 				}),
 			check,
 			false,
 		)
 		return {
+			phase: 'live',
 			fs,
 			ai: this.ai
 				? async (request, execution) => {

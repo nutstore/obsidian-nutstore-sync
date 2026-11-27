@@ -111,10 +111,26 @@ anything that matters through `app.kv`.
 
 Before an App is shown, the host boots it in a hidden sandboxed iframe. If
 startup fails, the App view shows the error and points to
-`.agents/nutstore-sync/apps/<appId>/logs.jsonl`. Read that file from bash with
-`cat /.agents/nutstore-sync/apps/<appId>/logs.jsonl` to diagnose console
-output, startup errors, uncaught exceptions and unhandled rejections. It is a
-host-written JSONL log and cannot be edited.
+`.agents/nutstore-sync/apps/<appId>/logs.jsonl`. Read that file from bash (for
+example `tail -n 30 /.agents/nutstore-sync/apps/<appId>/logs.jsonl` or `jq`) to
+diagnose issues. It is a single host-written JSONL file (compacted in place
+from 2 MiB down to 512 KiB while prioritizing errors and the latest session,
+with per-field 64 KiB truncation guards) and cannot be edited.
+
+Each entry carries structured diagnostics:
+
+- `phase` (`assembly` | `validation` | `live`), `sessionId`, and `sourceHash`
+  separate the latest live session from hidden startup validation and older runs.
+- `source` identifies the failure channel: `console`, `startup`, `uncaught`,
+  `unhandled-rejection`, `csp`, `resource`, `rpc` (failed `app.fs`/`app.kv`/`app.ai`
+  calls and App tool errors), `assembly`, or `runtime`.
+- `frames` maps concatenated sandbox stack lines back to real App files and line
+  numbers with surrounding source `context`; `causes` unfolds `Error.cause` chains.
+- `breadcrumbs` captures up to 20 recent UI interactions, console entries and RPC
+  calls leading up to an error; `context` includes viewport, theme, WebView, CSP,
+  resource and RPC details.
+- `fingerprint` and `occurrences` fold burst crash-loop repeats without dropping
+  distinct errors.
 
 Startup validation does not exercise every interaction. Verify the main flows
 manually when possible, and describe verification accurately.

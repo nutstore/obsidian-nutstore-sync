@@ -19,6 +19,7 @@ import i18n from '../i18n'
 import NutstorePlugin from '../index'
 import { describeTask, type TaskDescriptor } from '../utils/get-task-name'
 import { BaseService } from './service.interface'
+import MoveRemoteTask from '~/sync/tasks/move-remote.task'
 import type { BaseTask } from '~/sync/tasks/task.interface'
 
 /**
@@ -43,6 +44,7 @@ export const isSyncRunActive = (status: SyncRunStatus) =>
 /** A task as the user saw it, without the machinery needed to run it. */
 export interface SyncTaskRef extends TaskDescriptor {
 	localPath: string
+	fromLocalPath?: string
 }
 
 export interface SyncTaskRecord extends SyncTaskRef {
@@ -77,10 +79,18 @@ export interface SyncRunSnapshot {
 const toRef = (task: BaseTask): SyncTaskRef => ({
 	...describeTask(task),
 	localPath: task.localPath,
+	...(task instanceof MoveRemoteTask
+		? { fromLocalPath: task.fromLocalPath }
+		: {}),
 })
 
 export class ProgressService extends BaseService {
 	private progressModal: SyncProgressModal | null = null
+	private retainedModalRun: SyncRunSnapshot | null = null
+
+	public get modalRun() {
+		return this.retainedModalRun ?? this.run
+	}
 	private scanIssuesModal: ScanIssuesModal | null = null
 	private failedTasksModal: FailedTasksModal | null = null
 
@@ -108,6 +118,9 @@ export class ProgressService extends BaseService {
 				this.patch({ status: 'cancelling' })
 			}),
 			onPreparingSync().subscribe(({ showNotice }) => {
+				if (!showNotice && this.progressModal) {
+					this.retainedModalRun ??= this.run
+				}
 				this.records = []
 				this.run = {
 					status: 'preparing',
@@ -198,7 +211,7 @@ export class ProgressService extends BaseService {
 	 * reported only for runs the user started.
 	 */
 	private presentOutcome(showNotice: boolean) {
-		if (this.progressModal || !this.run) return
+		if ((this.progressModal && !this.retainedModalRun) || !this.run) return
 		if (this.run.status === 'partialScan') this.showScanIssues()
 		else if (!showNotice) return
 		else if (this.run.status === 'failedTasks') this.showFailedTasks()
@@ -206,8 +219,7 @@ export class ProgressService extends BaseService {
 	}
 
 	/** One list at a time: a later run refreshes the open list instead of stacking. */
-	public showScanIssues() {
-		const issues = this.run?.scanIssues ?? []
+	public showScanIssues(issues = this.run?.scanIssues ?? []) {
 		if (this.scanIssuesModal?.modalEl.isConnected) {
 			this.scanIssuesModal.update(issues)
 			return
@@ -244,12 +256,14 @@ export class ProgressService extends BaseService {
 			new Notice(i18n.t('sync.noRunYet'))
 			return
 		}
+		this.retainedModalRun = null
 		if (this.progressModal) {
 			this.updateModal()
 			return
 		}
 		this.progressModal = new SyncProgressModal(this.plugin, () => {
 			this.progressModal = null
+			this.retainedModalRun = null
 		})
 		this.progressModal.open()
 	}

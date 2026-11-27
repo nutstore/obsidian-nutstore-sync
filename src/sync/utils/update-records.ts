@@ -1,23 +1,72 @@
 import type { SyncScope } from '../scope'
-import { chunk, debounce, isNil } from 'es-toolkit/compat'
-import { Vault } from 'obsidian'
+import { chunk, debounce } from 'es-toolkit/compat'
+import { Platform, Vault } from 'obsidian'
 import { emitSyncUpdateMtimeProgress } from '~/events'
-import { NutstoreFileSystem } from '~/fs/nutstore'
 import { syncRecordKV } from '~/storage'
-import { blobStore } from '~/storage/blob'
-import type { SyncRecordModel } from '~/model/sync-record.model'
+import {
+	getMaxHashBytes,
+	getRecordContentHash,
+	LARGE_HASH_SERIALIZE_BYTES,
+	type SyncRecordModel,
+} from '~/model/sync-record.model'
 import { SyncRecord } from '~/storage/sync-record'
 import type { SyncLogger } from '~/sync/log'
 import MkdirsRemoteTask from '~/sync/tasks/mkdirs-remote.task'
-import type { BaseTask, TaskResult } from '~/sync/tasks/task.interface'
+import type {
+	BaseTask,
+	SyncReceipt,
+	TaskResult,
+} from '~/sync/tasks/task.interface'
+import { computeBufferDigest } from '~/sync/utils/file-digest'
 import { isMergeablePath } from '~/sync/utils/is-mergeable-path'
+import { AsyncMutex } from '~/utils/async-lock'
 import { getDBKey } from '~/utils/get-db-key'
+import { isSameTime } from '~/utils/is-same-time'
 import { isSub } from '~/utils/is-sub'
 import { readLocalBinary } from '~/utils/local-vault-io'
 import { statVaultItem } from '~/utils/stat-vault-item'
-import { stdRemotePath } from '~/utils/std-remote-path'
-import type NutstorePlugin from '../..'
 import RemoveRemoteRecursivelyTask from '../tasks/remove-remote-recursively.task'
+
+type PreparedRecordUpdate =
+	| {
+			kind: 'move'
+			fromLocalPath: string
+			localPath: string
+			nextRecord?: SyncRecordModel
+	  }
+	| {
+			kind: 'removeRecursive'
+			localPath: string
+	  }
+	| {
+			kind: 'delete'
+			localPath: string
+	  }
+	| {
+			kind: 'set'
+			localPath: string
+			nextRecord: SyncRecordModel
+	  }
+
+async function computeFileDigest(
+	vault: Vault,
+	localPath: string,
+	fileSize: number,
+	largeFileHashMutex: AsyncMutex,
+): Promise<{ base?: { key: string }; contentHash?: string }> {
+	const shouldHash =
+		isMergeablePath(localPath) || fileSize <= getMaxHashBytes(Platform.isMobile)
+	if (!shouldHash) {
+		return {}
+	}
+	const run = async () => {
+		const buffer = await readLocalBinary(vault, localPath)
+		return await computeBufferDigest(buffer, localPath)
+	}
+	return fileSize >= LARGE_HASH_SERIALIZE_BYTES
+		? await largeFileHashMutex.runExclusive(run)
+		: await run()
+}
 
 export interface UpdateMtimeProgress {
 	total: number
@@ -34,10 +83,10 @@ export function countRecordUpdateOperations(tasks: BaseTask[]): number {
 }
 
 /**
- * 批量更新同步记录的工具函数
+ * Updates `SyncRecord` strictly from each task's witnessed `SyncReceipt`
+ * (and local directory stats for `mkdir` tasks), never from a post-task remote re-walk.
  */
 export async function updateMtimeInRecord(
-	plugin: NutstorePlugin,
 	vault: Vault,
 	remoteBaseDir: string,
 	tasks: BaseTask[],
@@ -46,19 +95,28 @@ export async function updateMtimeInRecord(
 	logger: SyncLogger,
 	progress: UpdateMtimeProgress,
 	scope?: SyncScope,
+	isCancelled?: () => boolean,
 ): Promise<void> {
 	if (tasks.length === 0) {
 		return
 	}
+
 	const operationCount = countRecordUpdateOperations(tasks)
-	// Filter out tasks that don't need record updates
-	const tasksNeedingUpdate = tasks.filter((_task, idx) => {
-		return (
-			results[idx]?.success &&
-			!results[idx]?.skipRecord &&
-			(!scope || scope.allows(_task.localPath))
+	const tasksNeedingUpdate = tasks
+		.map((task, idx) => ({ task, result: results[idx] }))
+		.filter(
+			(
+				item,
+			): item is {
+				task: BaseTask
+				result: Extract<TaskResult, { success: true }>
+			} =>
+				Boolean(
+					item.result?.success &&
+					!item.result.skipRecord &&
+					(!scope || scope.allowsTask(item.task)),
+				),
 		)
-	})
 
 	if (tasksNeedingUpdate.length === 0) {
 		progress.completed += operationCount
@@ -66,19 +124,29 @@ export async function updateMtimeInRecord(
 		return
 	}
 
-	const token = await plugin.getToken()
-	const remoteFs = new NutstoreFileSystem({
-		settings: plugin.settings,
-		vault,
-		token,
-		remoteAccountId: await plugin.getRemoteAccountId(),
-		remoteBaseDir: stdRemotePath(remoteBaseDir),
-	})
+	const expandedTasks: Array<{
+		task: BaseTask
+		localPath: string
+		receipt?: SyncReceipt
+	}> = []
+	for (const { task, result } of tasksNeedingUpdate) {
+		if (task instanceof MkdirsRemoteTask) {
+			for (const pathInfo of task.getAllPaths()) {
+				expandedTasks.push({
+					task,
+					localPath: pathInfo.localPath,
+					receipt: result.receipt,
+				})
+			}
+		} else {
+			expandedTasks.push({
+				task,
+				localPath: task.localPath,
+				receipt: result.receipt,
+			})
+		}
+	}
 
-	const latestRemoteEntities = await remoteFs.walk()
-	const remoteEntityMap = new Map(
-		latestRemoteEntities.map((e) => [e.stat.path, e]),
-	)
 	const syncRecord = new SyncRecord(
 		getDBKey(vault.getName(), remoteBaseDir),
 		syncRecordKV,
@@ -87,7 +155,8 @@ export async function updateMtimeInRecord(
 	const startAt = Date.now()
 
 	const debouncedSetRecords = debounce(
-		(records: Map<string, SyncRecordModel>) => syncRecord.setRecords(records),
+		(nextRecords: Map<string, SyncRecordModel>) =>
+			syncRecord.setRecords(nextRecords),
 		3000,
 		{
 			trailing: true,
@@ -95,85 +164,221 @@ export async function updateMtimeInRecord(
 		},
 	)
 
-	// Expand MkdirsRemoteTask into multiple update operations
-	const expandedTasks: Array<{ task: BaseTask; localPath: string }> = []
-	for (const task of tasksNeedingUpdate) {
-		if (task instanceof MkdirsRemoteTask) {
-			// Add main path and all additional paths
-			const allPaths = task.getAllPaths()
-			for (const pathInfo of allPaths) {
-				expandedTasks.push({ task, localPath: pathInfo.localPath })
-			}
-		} else {
-			expandedTasks.push({ task, localPath: task.localPath })
-		}
-	}
-
+	const largeFileHashMutex = new AsyncMutex()
 	const taskChunks = chunk(expandedTasks, batch_size)
 	progress.completed += operationCount - expandedTasks.length
 	emitSyncUpdateMtimeProgress(progress.total, progress.completed)
 
-	for (const taskChunk of taskChunks) {
-		const batch = taskChunk.map(async ({ task, localPath }) => {
-			try {
-				if (scope && !scope.allows(localPath)) return
-				const remote = remoteEntityMap.get(localPath)
-				const local = await statVaultItem(vault, localPath)
-
-				if (task instanceof RemoveRemoteRecursivelyTask) {
-					for (const k of records.keys()) {
-						if (isSub(localPath, k) && (!scope || scope.allows(k))) {
-							records.delete(k)
+	try {
+		for (const taskChunk of taskChunks) {
+			// Persist all already-witnessed receipts even after cancellation so
+			// completed tasks are not re-evaluated as conflicts on the next sync.
+			const cancelled = isCancelled?.() ?? false
+			// Phase 1: prepare mutations using only witnessed receipts + local reads.
+			const batch = taskChunk.map(
+				async ({
+					task,
+					localPath,
+					receipt,
+				}): Promise<PreparedRecordUpdate | null> => {
+					try {
+						if (scope && !scope.allowsTask(task)) {
+							return null
 						}
-					}
-					if (!local || !remote) {
-						records.delete(localPath)
-						return
-					}
-				}
 
-				if (!local && !remote) {
-					records.delete(localPath)
-					return
-				}
-				if (!local || !remote) {
-					return
-				}
-				// Calculate base for file content
-				const base: { key: string } | undefined = await (async () => {
-					let baseKey: string | undefined
-					if (!local.isDir && isMergeablePath(localPath)) {
-						const buffer = await readLocalBinary(vault, localPath)
-						const { key } = await blobStore.store(buffer)
-						baseKey = key
-					}
-					return isNil(baseKey) ? undefined : { key: baseKey }
-				})()
+						if (receipt?.kind === 'unverified') {
+							if (receipt.movedFromLocalPath) {
+								return {
+									kind: 'delete',
+									localPath: receipt.movedFromLocalPath,
+								}
+							}
+							return null
+						}
 
-				records.set(localPath, {
-					remote: remote.stat,
-					local,
-					base,
-				})
-			} catch (e) {
-				const normalizedError = e instanceof Error ? e : new Error(String(e))
-				logger.error(
-					'updateMtimeInRecord',
-					{
-						errorName: normalizedError.name,
-						errorMsg: normalizedError.message,
-					},
-					task.toJSON(),
-				)
+						if (receipt?.kind === 'deleted') {
+							if (
+								receipt.recursive ||
+								task instanceof RemoveRemoteRecursivelyTask
+							) {
+								return {
+									kind: 'removeRecursive',
+									localPath,
+								}
+							}
+							return {
+								kind: 'delete',
+								localPath,
+							}
+						}
+
+						if (receipt?.kind === 'synced') {
+							if (receipt.movedFromLocalPath) {
+								const previousRecord = records.get(receipt.movedFromLocalPath)
+								const localStat = receipt.local
+								let base = receipt.base
+								let contentHash =
+									receipt.contentHash ??
+									(previousRecord
+										? getRecordContentHash(previousRecord)
+										: undefined)
+
+								if (!localStat.isDir && isMergeablePath(localPath)) {
+									if (!base && previousRecord?.base) {
+										base = previousRecord.base
+										contentHash ??= base.key
+									} else if (!base && !cancelled) {
+										const currentLocal = await statVaultItem(vault, localPath)
+										const unchangedSinceReceipt =
+											currentLocal &&
+											!currentLocal.isDir &&
+											isSameTime(currentLocal.mtime, localStat.mtime) &&
+											currentLocal.size === localStat.size
+										if (unchangedSinceReceipt) {
+											const digest = await computeFileDigest(
+												vault,
+												localPath,
+												localStat.size,
+												largeFileHashMutex,
+											)
+											base = digest.base
+											contentHash = digest.contentHash
+										}
+									}
+								} else if (!localStat.isDir && !contentHash && !cancelled) {
+									const currentLocal = await statVaultItem(vault, localPath)
+									const unchangedSinceReceipt =
+										currentLocal &&
+										!currentLocal.isDir &&
+										isSameTime(currentLocal.mtime, localStat.mtime) &&
+										currentLocal.size === localStat.size
+									if (unchangedSinceReceipt) {
+										const digest = await computeFileDigest(
+											vault,
+											localPath,
+											localStat.size,
+											largeFileHashMutex,
+										)
+										contentHash = digest.contentHash
+									}
+								}
+
+								return {
+									kind: 'move',
+									fromLocalPath: receipt.movedFromLocalPath,
+									localPath,
+									nextRecord: {
+										local: localStat,
+										remote: receipt.remote,
+										base,
+										contentHash,
+									},
+								}
+							}
+
+							let base = receipt.base
+							let contentHash = receipt.contentHash
+							if (!receipt.local.isDir && !contentHash && !base && !cancelled) {
+								const currentLocal = await statVaultItem(vault, localPath)
+								const unchangedSinceReceipt =
+									currentLocal &&
+									!currentLocal.isDir &&
+									isSameTime(currentLocal.mtime, receipt.local.mtime) &&
+									currentLocal.size === receipt.local.size
+								if (unchangedSinceReceipt) {
+									const digest = await computeFileDigest(
+										vault,
+										localPath,
+										receipt.local.size,
+										largeFileHashMutex,
+									)
+									base = digest.base
+									contentHash = digest.contentHash
+								}
+							}
+
+							return {
+								kind: 'set',
+								localPath,
+								nextRecord: {
+									local: receipt.local,
+									remote: receipt.remote,
+									...(base ? { base } : {}),
+									...(contentHash ? { contentHash } : {}),
+								},
+							}
+						}
+
+						// Directory creation tasks (`MkdirRemoteTask`, `MkdirsRemoteTask`, `MkdirLocalTask`)
+						const local = await statVaultItem(vault, localPath)
+						if (!local || !local.isDir) {
+							return null
+						}
+						return {
+							kind: 'set',
+							localPath,
+							nextRecord: {
+								local,
+								remote: {
+									path: localPath,
+									basename: local.basename,
+									isDir: true,
+									isDeleted: false,
+									mtime: local.mtime,
+								},
+							},
+						}
+					} catch (e) {
+						const normalizedError =
+							e instanceof Error ? e : new Error(String(e))
+						logger.error(
+							'updateMtimeInRecord',
+							{
+								errorName: normalizedError.name,
+								errorMsg: normalizedError.message,
+							},
+							task.toJSON(),
+						)
+						return null
+					}
+				},
+			)
+
+			// Phase 2: apply mutations synchronously in exact task execution order.
+			const preparedUpdates = await Promise.all(batch)
+			for (const update of preparedUpdates) {
+				if (!update) continue
+				switch (update.kind) {
+					case 'move':
+						records.delete(update.fromLocalPath)
+						if (update.nextRecord) {
+							records.set(update.localPath, update.nextRecord)
+						}
+						break
+					case 'removeRecursive':
+						for (const k of records.keys()) {
+							if (isSub(update.localPath, k) && (!scope || scope.allows(k))) {
+								records.delete(k)
+							}
+						}
+						records.delete(update.localPath)
+						break
+					case 'delete':
+						records.delete(update.localPath)
+						break
+					case 'set':
+						records.set(update.localPath, update.nextRecord)
+						break
+				}
 			}
-		})
-		await Promise.all(batch)
-		progress.completed += taskChunk.length
-		emitSyncUpdateMtimeProgress(progress.total, progress.completed)
-		void debouncedSetRecords(records)
-	}
 
-	await debouncedSetRecords.flush()
+			progress.completed += taskChunk.length
+			emitSyncUpdateMtimeProgress(progress.total, progress.completed)
+			void debouncedSetRecords(records)
+		}
+	} finally {
+		await debouncedSetRecords.flush()
+	}
 
 	logger.debug(`Records saving completed`, {
 		recordsSize: records.size,

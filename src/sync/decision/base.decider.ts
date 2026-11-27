@@ -1,7 +1,11 @@
+import { NutstoreFileSystem } from '~/fs/nutstore'
+import { Platform } from 'obsidian'
+import { getMaxHashBytes } from '~/model/sync-record.model'
 import { arrayBufferEquals } from '~/utils/array-buffer-equals'
 import { blobStore } from '~/storage/blob'
 import { SyncRecord } from '~/storage/sync-record'
 import { existsLocalPath, readLocalBinary } from '~/utils/local-vault-io'
+import { sha256Base64 } from '~/utils/sha256'
 import { MaybePromise } from '~/utils/types'
 import { NutstoreSync } from '..'
 import CleanRecordTask from '../tasks/clean-record.task'
@@ -9,6 +13,7 @@ import ConflictResolveTask from '../tasks/conflict-resolve.task'
 import FilenameErrorTask from '../tasks/filename-error.task'
 import MkdirLocalTask from '../tasks/mkdir-local.task'
 import MkdirRemoteTask from '../tasks/mkdir-remote.task'
+import MoveRemoteTask from '../tasks/move-remote.task'
 import NoopTask from '../tasks/noop.task'
 import PullTask from '../tasks/pull.task'
 import PushTask from '../tasks/push.task'
@@ -18,7 +23,10 @@ import SkippedTask from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 import {
 	ConflictTaskOptions,
+	MoveRemoteTaskOptionsInput,
+	NoopTaskOptions,
 	PullTaskOptions,
+	PushTaskOptions,
 	SkippedTaskOptions,
 	SyncDecisionInput,
 	TaskFactory,
@@ -46,6 +54,21 @@ export default abstract class BaseSyncDecider {
 		])
 
 		const scope = this.sync.scope
+		if (this.sync.remoteFs instanceof NutstoreFileSystem) {
+			for (const issue of this.sync.remoteFs.issues) {
+				if (scope.matchesRules(issue.path, issue.operation === 'list')) {
+					scope.report(issue)
+					this.sync.logger.warn(
+						'Remote subtree unavailable:',
+						issue.path,
+						issue.operation,
+						issue.cause,
+					)
+				} else {
+					scope.protect(issue.path)
+				}
+			}
+		}
 		scope.observe(this.localStats)
 		scope.observe(remoteStats)
 
@@ -60,11 +83,13 @@ export default abstract class BaseSyncDecider {
 		const taskFactory: TaskFactory = {
 			createPullTask: (options: PullTaskOptions) =>
 				new PullTask({ ...commonTaskOptions, ...options }),
-			createPushTask: (options: TaskOptions) =>
+			createPushTask: (options: PushTaskOptions) =>
 				new PushTask({ ...commonTaskOptions, ...options }),
+			createMoveRemoteTask: (options: MoveRemoteTaskOptionsInput) =>
+				new MoveRemoteTask({ ...commonTaskOptions, ...options }),
 			createConflictResolveTask: (options: ConflictTaskOptions) =>
 				new ConflictResolveTask({ ...commonTaskOptions, ...options }),
-			createNoopTask: (options: TaskOptions) =>
+			createNoopTask: (options: NoopTaskOptions) =>
 				new NoopTask({ ...commonTaskOptions, ...options }),
 			createRemoveLocalTask: (options: TaskOptions) =>
 				new RemoveLocalTask({
@@ -102,6 +127,20 @@ export default abstract class BaseSyncDecider {
 			return await blob.arrayBuffer()
 		}
 
+		const getLocalContentHash = async (
+			filePath: string,
+			size: number,
+		): Promise<string | null> => {
+			if (size > getMaxHashBytes(Platform.isMobile)) {
+				return null
+			}
+			if (!(await existsLocalPath(this.vault, filePath))) {
+				return null
+			}
+			const content = await readLocalBinary(this.vault, filePath)
+			return await sha256Base64(content)
+		}
+
 		return {
 			logger: this.sync.logger,
 			settings: {
@@ -122,6 +161,7 @@ export default abstract class BaseSyncDecider {
 			remoteBaseDir: this.remoteBaseDir,
 			getBaseContent,
 			compareFileContent,
+			getLocalContentHash,
 			taskFactory,
 		}
 	}

@@ -135,18 +135,6 @@ export class MessageFactory {
 		return message
 	}
 
-	appendAgentInput(
-		agent: ChatAgentState,
-		input: AppUIMessage,
-		session?: ChatSession,
-		isCurrent?: () => boolean,
-	) {
-		if (isCurrent && !isCurrent()) return false
-		if (session) session.updatedAt = Date.now()
-		agent.timeline.push(input)
-		return true
-	}
-
 	removeIncompleteToolCalls(agent: ChatAgentState) {
 		return removeIncompleteToolCalls(agent)
 	}

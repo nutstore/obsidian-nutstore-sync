@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import type { App } from 'obsidian'
 import type { ChatSession } from '~/ai/chat/domain'
 import { ModuleScope } from '~/modules/lifecycle'
@@ -18,18 +19,6 @@ import { VaultFileSystemManager } from '~/ai/tools/vault-filesystem'
 import type { RuntimeHost } from './runtime'
 import { readLocalText } from '~/utils/local-vault-io'
 import logger from '~/utils/logger'
-
-vi.mock('obsidian', () => ({
-	normalizePath: (path: string) =>
-		path
-			.normalize('NFC')
-			.replace(/\\/g, '/')
-			.replace(/\u00a0|\u202f/g, ' ')
-			.replace(/\/+/g, '/')
-			.replace(/^\/+|\/+$/g, ''),
-	TFile: class {},
-	TFolder: class {},
-}))
 
 const disk = vi.hoisted(() => new Map<string, string>())
 const binary = vi.hoisted(() => new Map<string, ArrayBuffer>())
@@ -158,13 +147,43 @@ const adapter = {
 			[...disk.keys()].some((key) => key.startsWith(`${target}/`))
 		)
 	},
+	stat: async (path: string) => {
+		const target = normalize(path)
+		const value = disk.get(target)
+		if (value !== undefined) {
+			return {
+				type: 'file' as const,
+				ctime: 0,
+				mtime: 0,
+				size: new TextEncoder().encode(value).byteLength,
+			}
+		}
+		const bin = binary.get(target)
+		if (bin !== undefined) {
+			return { type: 'file' as const, ctime: 0, mtime: 0, size: bin.byteLength }
+		}
+		return null
+	},
 	read: async (path: string) => {
 		const target = normalize(path)
 		if (!disk.has(target)) throw new Error(`Missing file: ${target}`)
 		return disk.get(target)!
 	},
 	write: async (path: string, content: string) => {
-		disk.set(normalize(path), content)
+		const target = normalize(path)
+		if (target.endsWith(`/${APP_LOG_FILE}`)) {
+			logWrite.started?.()
+			await logWrite.gate
+		}
+		disk.set(target, content)
+	},
+	append: async (path: string, content: string) => {
+		const target = normalize(path)
+		if (target.endsWith(`/${APP_LOG_FILE}`)) {
+			logWrite.started?.()
+			await logWrite.gate
+		}
+		disk.set(target, (disk.get(target) ?? '') + content)
 	},
 	process: async (path: string, update: (content: string) => string) => {
 		const target = normalize(path)
@@ -414,11 +433,41 @@ describe('App workspaces over real App files', () => {
 		expect(text(sourcePath(created.id, APP_DATA_FILE))).not.toContain(
 			'临时 Temporary',
 		)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(text(sourcePath(created.id, APP_LOG_FILE))).toContain(
 				'启动失败 Startup failed 🌿',
 			),
 		)
+	})
+
+	it('records assembly failures and distinguishes validation vs live diagnostic phases', async () => {
+		const { service } = fixture()
+		const created = await service.create(
+			'org.example.assembly_log',
+			'中性装配 Neutral assembly 🌿',
+		)
+		disk.set(
+			sourcePath(created.id, APP_ENTRY_FILE),
+			'<script src="https://example.test/remote.js"></script>',
+		)
+
+		await expect(service.load(created.id)).rejects.toThrow(
+			/Remote URL is not supported/,
+		)
+		await service.logs.flush(created.id)
+		const assemblyLine = JSON.parse(
+			text(sourcePath(created.id, APP_LOG_FILE)).trim().split('\n').at(-1)!,
+		) as Record<string, unknown>
+		expect(assemblyLine).toMatchObject({
+			level: 'error',
+			source: 'assembly',
+			phase: 'assembly',
+			filename: 'index.html',
+		})
+		expect(assemblyLine.fingerprint).toEqual(expect.any(String))
+
+		const liveHost = service.createRuntimeHost(created.id)
+		expect(liveHost.phase).toBe('live')
 	})
 
 	it('cancels validation when the signal aborts during candidate boot', async () => {
@@ -434,7 +483,7 @@ describe('App workspaces over real App files', () => {
 		runtimeControl.gate = new Promise(() => {})
 		const controller = new AbortController()
 		const pending = service.validate(created.id, controller.signal)
-		await vi.waitFor(() => expect(runtimeControl.starts).toBe(1))
+		await flushUntil(() => expect(runtimeControl.starts).toBe(1))
 		controller.abort()
 		await expect(pending).rejects.toThrow()
 		expect(runtimeControl.active).toBe(0)
@@ -503,7 +552,7 @@ describe('App workspaces over real App files', () => {
 		expect(errorSpy).toHaveBeenCalledWith('中性错误 Neutral failure 🌿')
 	})
 
-	it('retains long multilingual log diagnostics without truncation or pruning', async () => {
+	it('preserves long multilingual diagnostics while guarding runaway single fields', async () => {
 		const { service } = fixture()
 		const created = await service.create(
 			'org.example.diagnostics',
@@ -523,7 +572,12 @@ describe('App workspaces over real App files', () => {
 		await service.logs.flush(created.id)
 
 		const stored = JSON.parse(text(sourcePath(created.id, APP_LOG_FILE)).trim())
-		expect(stored.message).toBe(message)
+		expect(stored.message.startsWith('开始 Begin 🌿\n')).toBe(true)
+		expect(stored.message.endsWith('结束 End 🧭')).toBe(true)
+		expect(stored.message).toMatch(/\[truncated \d+ chars\]/)
+		expect(
+			new TextEncoder().encode(stored.message).byteLength,
+		).toBeLessThanOrEqual(64 * 1024)
 		expect(stored.stack).toBe(stack)
 		expect(stored.filename).toBe(filename)
 	})
@@ -692,7 +746,7 @@ describe('App workspaces over real App files', () => {
 			{ recursive: true },
 		])
 		try {
-			await vi.waitFor(() =>
+			await flushUntil(() =>
 				expect(removeApp).toHaveBeenCalledWith(created.id, {
 					force: undefined,
 				}),

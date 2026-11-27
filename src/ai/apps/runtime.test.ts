@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import { JSDOM } from 'jsdom'
 import { InMemoryFs } from 'just-bash/browser'
 import { createAppFSDispatcher } from './capabilities/fs'
@@ -143,7 +144,7 @@ describe('App runtime and trusted SVG boundary', () => {
 		)
 		await timeout(20)
 		;(dom.window.document.querySelector('#add') as HTMLButtonElement).click()
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(
 				messages.filter((message) => message.method === 'kv.transact'),
 			).toHaveLength(2),
@@ -352,14 +353,14 @@ describe('App runtime and trusted SVG boundary', () => {
 		request(1, 'fs.writeFile', ['/Asset 素材 🌿.bin', bytes], window)
 		expect(dispatch).not.toHaveBeenCalled()
 		request(2, 'fs.writeFile', ['/Asset 素材 🌿.bin', bytes])
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(post).toHaveBeenCalledWith(
 				{ channel, id: 2, value: undefined },
 				'*',
 			),
 		)
 		request(3, 'fs.readFileBuffer', ['/Asset 素材 🌿.bin'])
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(post).toHaveBeenCalledWith({ channel, id: 3, value: bytes }, '*'),
 		)
 		runtime.destroy()
@@ -428,11 +429,15 @@ describe('App runtime and trusted SVG boundary', () => {
 				message: '提醒 Warning 中文 🌿',
 			},
 		})
-		expect(host.log).toHaveBeenCalledWith({
-			level: 'warn',
-			source: 'console',
-			message: '提醒 Warning 中文 🌿',
-		})
+		expect(host.log).toHaveBeenCalledWith(
+			expect.objectContaining({
+				level: 'warn',
+				source: 'console',
+				message: '提醒 Warning 中文 🌿',
+				sessionId: runtime.sessionId,
+				sourceHash: expect.any(String),
+			}),
+		)
 
 		const rejected = runtime.ready.catch((error: unknown) => error)
 		send({
@@ -452,16 +457,29 @@ describe('App runtime and trusted SVG boundary', () => {
 		const error = await rejected
 		expect(error).toBeInstanceOf(Error)
 		expect((error as Error).message).toContain('at nutstore-app.js:7:3')
-		expect(host.log).toHaveBeenLastCalledWith({
-			level: 'error',
-			source: 'uncaught',
-			message: '启动失败 Startup failed 🌿',
-			stack:
-				'TypeError: 启动失败 Startup failed 🌿\n    at nutstore-app.js:7:3',
-			filename: 'nutstore-app.js',
-			line: 7,
-			column: 3,
-		})
+		expect(host.log).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				level: 'error',
+				source: 'uncaught',
+				name: 'TypeError',
+				message: '启动失败 Startup failed 🌿',
+				stack:
+					'TypeError: 启动失败 Startup failed 🌿\n    at nutstore-app.js:7:3',
+				filename: 'nutstore-app.js',
+				line: 7,
+				column: 3,
+				sessionId: runtime.sessionId,
+				fingerprint: expect.any(String),
+				frames: [
+					expect.objectContaining({
+						filename: 'nutstore-app.js',
+						line: 7,
+						column: 3,
+						inApp: true,
+					}),
+				],
+			}),
+		)
 		expect(host.error).toHaveBeenCalledWith(
 			expect.stringContaining('nutstore-app.js:7:3'),
 		)
@@ -493,13 +511,16 @@ describe('App runtime and trusted SVG boundary', () => {
 			}),
 		)
 
-		expect(host.log).toHaveBeenCalledWith({
-			level: 'error',
-			source: 'runtime',
-			message,
-			stack,
-			filename,
-		})
+		expect(host.log).toHaveBeenCalledWith(
+			expect.objectContaining({
+				level: 'error',
+				source: 'runtime',
+				message,
+				stack,
+				filename,
+				sessionId: runtime.sessionId,
+			}),
+		)
 		runtime.destroy()
 	})
 
@@ -814,5 +835,375 @@ describe('App runtime and trusted SVG boundary', () => {
 		runtime.destroy()
 		document.body.className = ''
 		document.body.style.removeProperty('--text-normal')
+	})
+
+	it('captures breadcrumbs, cause chains, circular objects, resource errors and CSP violations in sandbox', async () => {
+		const messages: Record<string, unknown>[] = []
+		const runtimeContent: AppContent = {
+			html: '<button id="run">执行 Run 🌿</button><input id="field" type="text" name="note"><img id="pic" src="data:image/png;base64,AAAA">',
+			css: '',
+			javascript: `
+				const cyclic = { label: '循环 Cyclic 🌿' };
+				cyclic.self = cyclic;
+				console.error('对象日志 Object log 🧭', cyclic);
+				document.querySelector('#run').addEventListener('click', () => {
+					const inner = Object.assign(new Error('底层故障 Inner fault 🌱'), { code: 'E_INNER' });
+					const outer = Object.assign(new TypeError('外层故障 Outer fault 🌿', { cause: inner }), { code: 'E_OUTER' });
+					throw outer;
+				});
+			`,
+		}
+		const dom = new JSDOM(
+			runtimeDocument(runtimeContent, 'neutral', {
+				colorScheme: 'dark',
+				properties: {},
+			}),
+			{
+				runScripts: 'dangerously',
+				beforeParse(win) {
+					win.postMessage = (message: Record<string, unknown>) => {
+						messages.push(message)
+					}
+				},
+			},
+		)
+		try {
+			await timeout(20)
+			const input = dom.window.document.querySelector(
+				'#field',
+			) as HTMLInputElement
+			input.value = '不应泄露的输入 Private input 🌿'
+			input.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+			;(dom.window.document.querySelector('#run') as HTMLButtonElement).click()
+			await timeout(20)
+
+			// Circular object in console.error is safely serialized without throwing.
+			const consoleErr = messages.find(
+				(message) =>
+					message.event === 'log' &&
+					(message.log as { level?: string } | undefined)?.level === 'error',
+			)?.log as { message?: string; context?: { colorScheme?: string } }
+			expect(consoleErr?.message).toContain('循环 Cyclic 🌿')
+			expect(consoleErr?.message).toContain('[Circular]')
+			expect(consoleErr?.context?.colorScheme).toBe('dark')
+
+			// Uncaught error includes error code, cause chain, UI breadcrumbs (without input value), and viewport.
+			const uncaught = messages.find(
+				(message) =>
+					message.event === 'error' &&
+					(message.failure as { source?: string } | undefined)?.source ===
+						'uncaught',
+			)?.failure as {
+				name?: string
+				code?: string
+				message?: string
+				causes?: Array<{ name?: string; code?: string; message?: string }>
+				breadcrumbs?: Array<{ category: string; message: string }>
+				context?: { viewport?: { width: number; height: number } }
+			}
+			expect(uncaught).toMatchObject({
+				name: 'TypeError',
+				code: 'E_OUTER',
+				message: '外层故障 Outer fault 🌿',
+			})
+			expect(uncaught.causes).toEqual([
+				expect.objectContaining({
+					name: 'Error',
+					code: 'E_INNER',
+					message: '底层故障 Inner fault 🌱',
+				}),
+			])
+			expect(
+				uncaught.breadcrumbs?.some(
+					(crumb) =>
+						crumb.category === 'ui' &&
+						crumb.message.includes('click button#run'),
+				),
+			).toBe(true)
+			expect(JSON.stringify(uncaught.breadcrumbs)).not.toContain(
+				'不应泄露的输入',
+			)
+			expect(uncaught.context?.viewport).toEqual({
+				width: expect.any(Number),
+				height: expect.any(Number),
+			})
+
+			// Capture-phase resource load error on <img> (non-bubbling Event).
+			const img = dom.window.document.querySelector('#pic') as HTMLImageElement
+			img.dispatchEvent(new dom.window.Event('error', { bubbles: false }))
+			const resourceFailure = messages.find(
+				(message) =>
+					message.event === 'error' &&
+					(message.failure as { source?: string } | undefined)?.source ===
+						'resource',
+			)?.failure as {
+				name?: string
+				message?: string
+				context?: { resource?: { tagName?: string; selector?: string } }
+			}
+			expect(resourceFailure).toMatchObject({
+				name: 'ResourceError',
+				context: {
+					resource: {
+						tagName: 'img',
+						selector: 'img#pic',
+					},
+				},
+			})
+
+			// CSP violation event.
+			const cspEvent = new dom.window.Event('securitypolicyviolation')
+			Object.assign(cspEvent, {
+				violatedDirective: 'connect-src',
+				effectiveDirective: 'connect-src',
+				blockedURI: 'https://example.test/api',
+				disposition: 'enforce',
+				sourceFile: 'nutstore-app.js',
+				lineNumber: 4,
+				columnNumber: 2,
+			})
+			dom.window.dispatchEvent(cspEvent)
+			const cspFailure = messages.find(
+				(message) =>
+					message.event === 'error' &&
+					(message.failure as { source?: string } | undefined)?.source ===
+						'csp',
+			)?.failure as {
+				name?: string
+				message?: string
+				filename?: string
+				line?: number
+				context?: { csp?: { effectiveDirective?: string; blockedURI?: string } }
+			}
+			expect(cspFailure).toMatchObject({
+				name: 'SecurityPolicyViolation',
+				filename: 'nutstore-app.js',
+				line: 4,
+				context: {
+					csp: {
+						effectiveDirective: 'connect-src',
+						blockedURI: 'https://example.test/api',
+					},
+				},
+			})
+		} finally {
+			dom.window.close()
+		}
+	})
+
+	it('logs App AI tool execution errors with original stack while keeping model error redacted', async () => {
+		const messages: Record<string, unknown>[] = []
+		let receive!: (data: Record<string, unknown>) => void
+		const host: AppAIHost = async (_request, execution) => {
+			await expect(
+				execution.execute('brokenTool', { query: '测试 Test 🌿' }, 'call-1'),
+			).rejects.toThrow('App tool execution failed')
+			return {
+				text: '已恢复 Recovered 🌿',
+				responseMessages: [],
+				finishReason: 'stop',
+				usage: {
+					inputTokens: 1,
+					outputTokens: 1,
+					totalTokens: 2,
+					inputTokenDetails: {
+						noCacheTokens: 1,
+						cacheReadTokens: 0,
+						cacheWriteTokens: 0,
+					},
+					outputTokenDetails: { textTokens: 1, reasoningTokens: 0 },
+				},
+			}
+		}
+		const bridge = new AppAIBridge(host, (event) =>
+			receive({ ...structuredClone(event), channel: 'neutral' }),
+		)
+		const dom = new JSDOM(
+			runtimeDocument(
+				{
+					...content,
+					javascript: `
+						const agent = app.ai.createAgent({
+							tools: {
+								brokenTool: {
+									description: '故障工具 Faulty tool 🌿',
+									inputSchema: { type: 'object' },
+									async execute() {
+										throw new RangeError('工具内部异常 Tool failure 中文 🌿');
+									}
+								}
+							}
+						});
+						document.querySelector('#add').addEventListener('click', () => {
+							void agent.generate({ prompt: '触发 Trigger 🌿' });
+						});
+					`,
+				},
+				'neutral',
+			),
+			{
+				runScripts: 'dangerously',
+				beforeParse(win) {
+					receive = (data) =>
+						win.dispatchEvent(
+							new win.MessageEvent('message', {
+								source: win as unknown as Window,
+								data,
+							}),
+						)
+					win.postMessage = (message: Record<string, unknown>) => {
+						messages.push(message)
+						if (typeof message.id !== 'number') return
+						const method = String(message.method)
+						const promise = method.startsWith('ai.')
+							? bridge.dispatch(
+									method.slice(3),
+									structuredClone(message.args) as unknown[],
+								)
+							: Promise.resolve(null)
+						void promise.then(
+							(value) => receive({ channel: 'neutral', id: message.id, value }),
+							(err: unknown) =>
+								receive({
+									channel: 'neutral',
+									id: message.id,
+									error: err instanceof Error ? err.message : String(err),
+								}),
+						)
+					}
+				},
+			},
+		)
+		try {
+			await timeout(20)
+			;(dom.window.document.querySelector('#add') as HTMLButtonElement).click()
+			await flushUntil(() =>
+				expect(
+					messages.some(
+						(message) =>
+							message.event === 'log' &&
+							(message.log as { source?: string } | undefined)?.source ===
+								'rpc',
+					),
+				).toBe(true),
+			)
+			const toolLog = messages.find(
+				(message) =>
+					message.event === 'log' &&
+					(message.log as { source?: string } | undefined)?.source === 'rpc',
+			)?.log as {
+				level?: string
+				name?: string
+				message?: string
+				stack?: string
+				context?: { rpc?: { method?: string; toolName?: string } }
+			}
+			expect(toolLog).toMatchObject({
+				level: 'error',
+				name: 'RangeError',
+				message: '工具内部异常 Tool failure 中文 🌿',
+				context: {
+					rpc: {
+						method: 'ai.tool',
+						toolName: 'brokenTool',
+					},
+				},
+			})
+			expect(toolLog.stack).toContain('工具内部异常 Tool failure 中文 🌿')
+		} finally {
+			bridge.close()
+			dom.window.close()
+		}
+	})
+
+	it('logs host RPC failures and allows unlimited distinct runtime errors without silent drops', async () => {
+		const host = {
+			...createHost(),
+			phase: 'live' as const,
+			fs: vi.fn(async () => {
+				throw Object.assign(new Error('ENOENT: 路径不存在 Missing path 🌿'), {
+					code: 'ENOENT',
+				})
+			}),
+		}
+		const runtime = new AppRuntime(document.body, content, host)
+		const channel = runtime.frame.srcdoc.match(/"channel":"([^"]+)"/)![1]
+		const send = (data: unknown) =>
+			window.dispatchEvent(
+				new MessageEvent('message', {
+					source: runtime.frame.contentWindow,
+					data,
+				}),
+			)
+
+		send({ channel, event: 'ready' })
+		await runtime.ready
+
+		// Failed fs RPC is recorded as a structured `source: 'rpc'` diagnostic.
+		send({
+			channel,
+			id: 1,
+			method: 'fs.readFile',
+			args: ['/笔记/缺失 Missing 🌿.md'],
+		})
+		await flushUntil(() =>
+			expect(host.log).toHaveBeenCalledWith(
+				expect.objectContaining({
+					level: 'error',
+					source: 'rpc',
+					phase: 'live',
+					code: 'ENOENT',
+					context: expect.objectContaining({
+						rpc: expect.objectContaining({
+							method: 'fs.readFile',
+							argsSummary: '/笔记/缺失 Missing 🌿.md',
+							code: 'ENOENT',
+						}),
+					}),
+				}),
+			),
+		)
+
+		// Fire 15 distinct runtime errors (exceeding the old hard cap of 10).
+		host.log.mockClear()
+		host.error.mockClear()
+		for (let i = 0; i < 15; i++) {
+			send({
+				channel,
+				event: 'error',
+				failure: {
+					name: 'Error',
+					source: 'uncaught',
+					message: `运行错误 Runtime failure #${i} 🌿`,
+					line: i + 1,
+				},
+			})
+		}
+		expect(host.log).toHaveBeenCalledTimes(15)
+		expect(host.error).toHaveBeenCalledTimes(15)
+
+		// Identical burst repeats fold and flush exact occurrence counts on destroy.
+		host.log.mockClear()
+		for (let i = 0; i < 4; i++) {
+			send({
+				channel,
+				event: 'error',
+				failure: {
+					name: 'TypeError',
+					source: 'uncaught',
+					message: '重复故障 Repeated fault 🌿',
+					line: 99,
+				},
+			})
+		}
+		expect(host.log).toHaveBeenCalledTimes(1)
+		runtime.destroy()
+		expect(host.log).toHaveBeenCalledTimes(2)
+		expect(host.log).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				message: '重复故障 Repeated fault 🌿',
+				occurrences: 4,
+			}),
+		)
 	})
 })

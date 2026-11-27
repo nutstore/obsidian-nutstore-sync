@@ -35,7 +35,13 @@ function generateFlags(options: GlobMatchUserOptions) {
 	return options.caseSensitive ? 'u' : 'ui'
 }
 
-function normalizePath(rawPath: string) {
+export interface NormalizedGlobPath {
+	normalized: string
+	lastSegment: string
+	isDirPath: boolean
+}
+
+function normalizePath(rawPath: string): NormalizedGlobPath {
 	const normalized = path.normalize(rawPath)
 	const trimmed = normalized.replace(/^\.+\//, '').replace(/^\/+/, '')
 	const isDirPath = trimmed.endsWith('/')
@@ -45,7 +51,7 @@ function normalizePath(rawPath: string) {
 		: []
 	return {
 		normalized: segments.join('/'),
-		segments,
+		lastSegment: segments[segments.length - 1] ?? '',
 		isDirPath,
 	}
 }
@@ -192,7 +198,6 @@ function buildRegExp(pattern: string, options: GlobMatchUserOptions) {
 }
 
 export default class GlobMatch {
-	re: RegExp
 	private readonly isRooted: boolean
 	private readonly isDirOnly: boolean
 	private readonly hasSlash: boolean
@@ -215,30 +220,28 @@ export default class GlobMatch {
 		if (this.patternBody !== '') {
 			if (this.isRooted || this.hasSlash) {
 				this.pathRegex = buildRegExp(this.patternBody, options)
-				this.re = this.pathRegex
 			} else {
 				this.segmentRegex = buildRegExp(this.patternBody, options)
-				this.re = this.segmentRegex
 			}
-		} else {
-			this.re = /^$/
 		}
+	}
+
+	testNormalized({
+		normalized,
+		lastSegment,
+		isDirPath,
+	}: NormalizedGlobPath): boolean {
+		if (this.patternBody === '' || normalized === '') return false
+		if (this.isDirOnly && !isDirPath) return false
+		if (this.isRooted || this.hasSlash) {
+			return this.pathRegex?.test(normalized) ?? false
+		}
+		return this.segmentRegex?.test(lastSegment) ?? false
 	}
 
 	test(path: string) {
 		if (this.patternBody === '') return false
-		const { normalized, segments, isDirPath } = normalizePath(path)
-		if (this.isDirOnly) {
-			if (!isDirPath) return false
-			if (this.isRooted || this.hasSlash) {
-				return this.pathRegex?.test(normalized) ?? false
-			}
-			return segments.some((segment) => this.segmentRegex?.test(segment))
-		}
-		if (this.isRooted || this.hasSlash) {
-			return this.pathRegex?.test(normalized) ?? false
-		}
-		return segments.some((segment) => this.segmentRegex?.test(segment))
+		return this.testNormalized(normalizePath(path))
 	}
 }
 

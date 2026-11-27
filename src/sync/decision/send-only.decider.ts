@@ -1,12 +1,19 @@
 import { parse as bytesParse } from 'bytes-iec'
 import { hasInvalidChar } from '~/utils/has-invalid-char'
-import { isSameTime } from '~/utils/is-same-time'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
+import {
+	AddedLocalFileCandidate,
+	RemovedRemoteFileCandidate,
+	resolveAndAppendMoveTasks,
+} from '../core/detect-local-moves'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
-import { getFileChanges } from '../core/file-changes'
-import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
+import { evaluateRemoteFileChange, getFileChanges } from '../core/file-changes'
+import {
+	collectWalkPaths,
+	shouldCreateCleanRecordTask,
+} from '../core/record-cleanup'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 import {
@@ -76,11 +83,14 @@ export async function sendOnlyDecider(
 	const tasks: BaseTask[] = []
 	const removeRemoteFolderTasks: BaseTask[] = []
 	const mkdirRemoteTasks: BaseTask[] = []
+	const removedMoveCandidates: RemovedRemoteFileCandidate[] = []
+	const addedMoveCandidates: AddedLocalFileCandidate[] = []
 
 	const pushLocalFile = (
 		p: string,
 		localSize: number,
 		remoteSize?: number,
+		expectedRemoteEtag?: string | null,
 	): boolean => {
 		const taskOptions = {
 			remotePath: p,
@@ -106,7 +116,12 @@ export async function sendOnlyDecider(
 			tasks.push(taskFactory.createFilenameErrorTask(taskOptions))
 			return false
 		}
-		tasks.push(taskFactory.createPushTask(taskOptions))
+		tasks.push(
+			taskFactory.createPushTask({
+				...taskOptions,
+				...(expectedRemoteEtag ? { expectedRemoteEtag } : {}),
+			}),
+		)
 		return true
 	}
 
@@ -148,7 +163,13 @@ export async function sendOnlyDecider(
 		if (local && remote) {
 			// In loose mode, same-path same-type same-size files are considered equal.
 			if (!record && areLooseEqualFiles(settings.syncMode, local, remote)) {
-				tasks.push(taskFactory.createNoopTask(taskOptions))
+				tasks.push(
+					taskFactory.createNoopTask({
+						...taskOptions,
+						localStat: local,
+						remoteStat: remote,
+					}),
+				)
 				continue
 			}
 			if (!record) {
@@ -157,15 +178,34 @@ export async function sendOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				pushLocalFile(p, local.size, remote.size)
+				pushLocalFile(p, local.size, remote.size, remote.etag)
 				continue
 			}
-			const { localChanged, remoteChanged } = await getFileChanges(
-				input,
-				local,
-				remote,
-				record,
-			)
+			const { localChanged, remoteStatus, remoteChanged } =
+				await getFileChanges(input, local, remote, record)
+			if (remoteStatus === 'unverified') {
+				if (mode.overrideChanges && localChanged) {
+					logger.debug({
+						reason: 'override unverified remote baseline with local change',
+						localPath: p,
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+					})
+					pushLocalFile(p, local.size, remote.size, remote.etag)
+				} else if (!mode.overrideChanges && localChanged) {
+					logger.debug({
+						reason: 'local changed against unverified legacy remote — skip',
+						localPath: p,
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+					})
+					tasks.push(
+						taskFactory.createSkippedTask({
+							...taskOptions,
+							reason: SkipReason.ConflictInSendOnlyMode,
+						}),
+					)
+				}
+				continue
+			}
 			const shouldPush = mode.overrideChanges
 				? localChanged || remoteChanged
 				: localChanged && !remoteChanged
@@ -175,7 +215,7 @@ export async function sendOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				pushLocalFile(p, local.size, remote.size)
+				pushLocalFile(p, local.size, remote.size, remote.etag)
 			} else if (localChanged && remoteChanged && !mode.overrideChanges) {
 				logger.debug({
 					reason: 'both local and remote changed — skip',
@@ -213,7 +253,11 @@ export async function sendOnlyDecider(
 				localPath: p,
 				remotePath: remotePathToAbsolute(remoteBaseDir, p),
 			})
-			pushLocalFile(p, local.size)
+			if (local.size > maxFileSize || hasInvalidChar(p)) {
+				pushLocalFile(p, local.size)
+			} else {
+				addedMoveCandidates.push({ path: p, local })
+			}
 			continue
 		}
 
@@ -224,7 +268,15 @@ export async function sendOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				removeRemoteFile(p, remote.size)
+				if (
+					record &&
+					evaluateRemoteFileChange(remote, record.remote) === 'unchanged' &&
+					remote.size <= maxFileSize
+				) {
+					removedMoveCandidates.push({ path: p, remote, record })
+				} else {
+					removeRemoteFile(p, remote.size)
+				}
 				continue
 			}
 			if (!record) {
@@ -235,18 +287,24 @@ export async function sendOnlyDecider(
 				})
 				continue
 			}
-			const remoteChanged = !isSameTime(remote.mtime, record.remote.mtime)
-			if (!remoteChanged) {
+			const remoteStatus = evaluateRemoteFileChange(remote, record.remote)
+			if (remoteStatus === 'unchanged') {
 				logger.debug({
 					reason: 'local deleted, remote unchanged — remove remote',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				removeRemoteFile(p, remote.size)
+				if (remote.size > maxFileSize) {
+					removeRemoteFile(p, remote.size)
+				} else {
+					removedMoveCandidates.push({ path: p, remote, record })
+				}
 			} else {
 				logger.debug({
 					reason:
-						'local deleted, remote changed — skip to protect remote change',
+						remoteStatus === 'unverified'
+							? 'local deleted, legacy remote unverified — skip to protect remote'
+							: 'local deleted, remote changed — skip to protect remote change',
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
@@ -261,9 +319,20 @@ export async function sendOnlyDecider(
 		}
 	}
 
+	await resolveAndAppendMoveTasks(
+		input,
+		removedMoveCandidates,
+		addedMoveCandidates,
+		tasks,
+	)
+
 	// * clean orphaned records (both local and remote deleted)
+	const localAllPaths = collectWalkPaths(localStats)
+	const remoteAllPaths = collectWalkPaths(remoteStats)
 	for (const [recordPath] of syncRecords) {
-		if (shouldCreateCleanRecordTask(recordPath, localStats, remoteStats)) {
+		if (
+			shouldCreateCleanRecordTask(recordPath, localAllPaths, remoteAllPaths)
+		) {
 			tasks.push(
 				taskFactory.createCleanRecordTask({
 					remotePath: recordPath,

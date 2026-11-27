@@ -4,7 +4,10 @@ export default class RemoveRemoteRecursivelyTask extends BaseTask {
 	async exec() {
 		try {
 			await this.webdav.deleteFile(this.remotePath)
-			return { success: true } as const
+			return {
+				success: true,
+				receipt: { kind: 'deleted', recursive: true },
+			} as const
 		} catch (e) {
 			this.logger.error(e)
 			return { success: false, error: toTaskError(e, this) }

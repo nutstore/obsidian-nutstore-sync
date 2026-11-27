@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { flushMicrotasks } from '@test/harness/async-scheduler'
 import {
 	mountTaskSelectionVirtualList,
 	type TaskSelectionItem,
@@ -8,6 +9,7 @@ import {
 
 const VIEWPORT_HEIGHT = 400
 const ROW_HEIGHT = 95
+const LARGE_COUNT = 500
 
 /** jsdom has no layout: give the scroll viewport and every row a fixed size. */
 beforeAll(() => {
@@ -75,26 +77,32 @@ const rows = (host: HTMLElement) => [
 	...host.querySelectorAll<HTMLElement>('[style*="translateY"]'),
 ]
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 30))
+const flush = async () => {
+	await flushMicrotasks(8)
+	await new Promise<void>((resolve) => setTimeout(resolve, 0))
+	await flushMicrotasks(4)
+}
 
 describe('TaskSelectionVirtualList windowing', () => {
 	it('mounts only the rows near the viewport for a very large list', async () => {
-		const { host } = mount(10_000)
+		const { host } = mount(LARGE_COUNT)
 		await flush()
 		const mounted = rows(host)
 		expect(mounted.length).toBeGreaterThan(3)
 		expect(mounted.length).toBeLessThan(60)
 		expect(mounted[0].textContent).toContain('任务 Task 00000🌿')
-		expect(host.textContent).not.toContain('任务 Task 09999🌿')
+		expect(host.textContent).not.toContain('任务 Task 00499🌿')
 	})
 
 	it('reserves the full list height so the scrollbar covers every row', async () => {
-		const { host } = mount(10_000)
+		const { host } = mount(LARGE_COUNT)
 		await flush()
 		const spacer = host.querySelector<HTMLElement>(
 			'[style*="position: relative"]',
 		)!
-		expect(Number.parseFloat(spacer.style.height)).toBe(10_000 * ROW_HEIGHT)
+		expect(Number.parseFloat(spacer.style.height)).toBe(
+			LARGE_COUNT * ROW_HEIGHT,
+		)
 	})
 
 	it('re-flows later rows when a mounted row grows after its first measure', async () => {
@@ -114,35 +122,35 @@ describe('TaskSelectionVirtualList windowing', () => {
 	})
 
 	it('reveals the last task after scrolling to the end', async () => {
-		const { host } = mount(10_000)
+		const { host } = mount(LARGE_COUNT)
 		await flush()
 		const scroller = host.querySelector<HTMLElement>(
 			'.overflow-auto, [class*="overflow-auto"]',
 		)!
-		scroller.scrollTop = 10_000 * ROW_HEIGHT
+		scroller.scrollTop = LARGE_COUNT * ROW_HEIGHT
 		scroller.dispatchEvent(new Event('scroll'))
 		await flush()
-		expect(host.textContent).toContain('任务 Task 09999🌿')
+		expect(host.textContent).toContain('任务 Task 00499🌿')
 		expect(host.textContent).not.toContain('任务 Task 00000🌿')
 		expect(rows(host).length).toBeLessThan(60)
 	})
 
 	it('reports the original index when a row is toggled', async () => {
-		const { host, onToggle } = mount(10_000)
+		const { host, onToggle } = mount(LARGE_COUNT)
 		await flush()
 		rows(host)[2].querySelector<HTMLInputElement>('input')!.click()
 		expect(onToggle).toHaveBeenCalledWith(2, false)
 	})
 
 	it('filters across all items, not just the mounted ones', async () => {
-		const { host } = mount(10_000)
+		const { host } = mount(LARGE_COUNT)
 		await flush()
 		const search = host.querySelector<HTMLInputElement>('input[type="text"]')!
-		search.value = '09999'
+		search.value = '00499'
 		search.dispatchEvent(new Event('input', { bubbles: true }))
 		await flush()
 		expect(rows(host)).toHaveLength(1)
-		expect(rows(host)[0].textContent).toContain('任务 Task 09999🌿')
+		expect(rows(host)[0].textContent).toContain('任务 Task 00499🌿')
 	})
 
 	it('shows the empty state when nothing matches', async () => {

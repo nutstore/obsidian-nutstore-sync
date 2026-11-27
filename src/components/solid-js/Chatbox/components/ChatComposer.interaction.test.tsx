@@ -4,9 +4,8 @@ import { startCompletion, selectedCompletion } from '@codemirror/autocomplete'
 import { EditorView } from '@codemirror/view'
 import { render } from 'solid-js/web'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import { ChatComposer } from './ChatComposer'
-
-vi.mock('obsidian', () => ({ setIcon: vi.fn() }))
 
 class TestResizeObserver {
 	observe() {}
@@ -30,6 +29,7 @@ describe('composer keyboard interaction', () => {
 	let dispose: (() => void) | undefined
 
 	beforeEach(() => {
+		vi.useFakeTimers()
 		vi.stubGlobal('ResizeObserver', TestResizeObserver)
 		Range.prototype.getClientRects = () => [] as unknown as DOMRectList
 		Range.prototype.getBoundingClientRect = () => new DOMRect()
@@ -44,13 +44,16 @@ describe('composer keyboard interaction', () => {
 		dispose?.()
 		dispose = undefined
 		host.remove()
+		vi.useRealTimers()
 		vi.unstubAllGlobals()
 	})
 
-	async function waitForCompletion() {
-		await new Promise((resolve) => setTimeout(resolve, 100))
-		await new Promise((resolve) =>
-			window.requestAnimationFrame(() => resolve(undefined)),
+	async function waitForCompletion(editor: EditorView) {
+		await vi.advanceTimersByTimeAsync(120)
+		await flushUntil(
+			() =>
+				selectedCompletion(editor.state) !== null &&
+				host.querySelector('.cm-tooltip.ns-composer-completions') !== null,
 		)
 	}
 
@@ -99,7 +102,7 @@ describe('composer keyboard interaction', () => {
 			selection: { anchor: 3 },
 		})
 		startCompletion(editor)
-		await waitForCompletion()
+		await waitForCompletion(editor)
 
 		expect(selectedCompletion(editor.state)?.label).toBe('/file')
 		const layer = host.querySelector<HTMLElement>('.ns-completion-layer')!
@@ -125,7 +128,7 @@ describe('composer keyboard interaction', () => {
 			selection: { anchor: query.length },
 		})
 		startCompletion(editor)
-		await waitForCompletion()
+		await waitForCompletion(editor)
 
 		const option = host.querySelector<HTMLElement>(
 			'li.ns-completion-file-option',

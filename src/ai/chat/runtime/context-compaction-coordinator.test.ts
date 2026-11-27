@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import type { ChatSession } from '~/ai/chat/domain'
 import { MessageFactory } from '~/ai/chat/messages/message-factory'
 import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
@@ -158,7 +159,7 @@ describe('ContextCompactionCoordinator', () => {
 		const originalRequest = request(session, agent, 'neutral-old-revision')
 
 		expect(coordinator.inspect(originalRequest)).toBe('ready')
-		await vi.waitFor(() => expect(generateText).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(generateText).toHaveBeenCalledTimes(1))
 		await Promise.resolve()
 
 		await expect(
@@ -201,7 +202,7 @@ describe('ContextCompactionCoordinator', () => {
 
 		coordinator.inspect(compactionRequest)
 		const completion = coordinator.compact(compactionRequest)
-		await vi.waitFor(() => expect(finishProviderSetup).toBeDefined())
+		await flushUntil(() => expect(finishProviderSetup).toBeDefined())
 		cancelled = true
 		coordinator.cancel(session.id, agent.id)
 		finishProviderSetup!()

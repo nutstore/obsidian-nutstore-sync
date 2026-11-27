@@ -7,7 +7,11 @@ import { createBuiltinSkillsFs } from '~/ai/skills/builtin'
 import { listAvailableAdapterEntries } from '~/ai/tools/available-adapter-entries'
 import type { PermissionGuard } from '~/ai/tools/permission-guard'
 import { createAppCommands } from './bash/app'
-import { ObsidianVaultFs, ReversibleOpRecorder } from './bash/fs'
+import {
+	NOOP_VAULT_PATH_INDEX,
+	ObsidianVaultFs,
+	ReversibleOpRecorder,
+} from './bash/fs'
 import { MountableFs } from './bash/mountable-fs'
 import {
 	APPS_MOUNT_POINT,
@@ -32,6 +36,14 @@ export interface CreateVaultFileSystemOptions {
 	appLifecycle?: AppLifecycle
 	openApp?: AppOpenFn
 	readonlyApps?: boolean
+	/**
+	 * Seed the synchronous `getAllPaths()` index from the Vault and `.agents/`.
+	 * Defaults to `true` for callers that inspect `getAllPaths()`; direct-path
+	 * tools (`apply_patch`, `bash`, `view_image`, `memory`, etc.) pass `false`
+	 * because they never query `getAllPaths()` (Bash globs use live
+	 * `readdirWithFileTypes`).
+	 */
+	includePathIndex?: boolean
 }
 
 interface SharedVaultFileSystem {
@@ -51,23 +63,31 @@ async function getInitialVaultPaths(app: App) {
 
 async function listAgentDomainPaths(app: App) {
 	const paths: string[] = []
-	const directories = [AGENTS_VAULT_PATH]
-	while (directories.length > 0) {
-		const directory = directories.pop()!
-		try {
-			const listed = await listAvailableAdapterEntries(
-				app.vault.adapter,
-				directory,
-			)
-			for (const path of [...listed.files, ...listed.folders]) {
+	let frontier = [AGENTS_VAULT_PATH]
+	while (frontier.length > 0) {
+		const results = await Promise.all(
+			frontier.map(async (directory) => {
+				try {
+					return await listAvailableAdapterEntries(app.vault.adapter, directory)
+				} catch {
+					// A missing agent domain directory simply contributes nothing.
+					return undefined
+				}
+			}),
+		)
+		const nextFrontier: string[] = []
+		for (const listed of results) {
+			if (!listed) continue
+			for (const path of listed.files) {
 				paths.push(normalizePath(path))
 			}
 			for (const path of listed.folders) {
-				directories.push(normalizePath(path))
+				const normalized = normalizePath(path)
+				paths.push(normalized)
+				nextFrontier.push(normalized)
 			}
-		} catch {
-			// A missing agent domain directory simply contributes nothing.
 		}
+		frontier = nextFrontier
 	}
 	return paths
 }
@@ -114,7 +134,8 @@ export class VaultFileSystemManager {
 
 	/** Commands and filesystem share one invocation's defaults without wrapper identity. */
 	async createBashEnvironment(options: CreateVaultFileSystemOptions = {}) {
-		const scoped = { ...this.defaults, ...options }
+		// Bash globs enumerate live directories via `readdirWithFileTypes`, never `getAllPaths()`.
+		const scoped = { includePathIndex: false, ...this.defaults, ...options }
 		const fs = await this.create(scoped)
 		const { openApp, appWorkspaceBinding } = scoped
 		return {
@@ -150,9 +171,13 @@ async function createScopedVaultFileSystem(
 	const configDirMountPoint = getConfigDirMountPoint(
 		normalizePath(app.vault.configDir),
 	)
+	const initialPaths =
+		options.includePathIndex === false
+			? NOOP_VAULT_PATH_INDEX
+			: await getInitialVaultPaths(app)
 	const vaultFs = new ObsidianVaultFs(
 		app,
-		await getInitialVaultPaths(app),
+		initialPaths,
 		options.permissionGuard,
 		onRead,
 	)
@@ -206,9 +231,4 @@ export async function createVaultFileSystem(
 	return manager.create(options)
 }
 
-export {
-	AGENTS_MOUNT_POINT,
-	BUILTIN_SKILLS_MOUNT_POINT,
-	SETTINGS_MOUNT_POINT,
-	VAULT_MOUNT_POINT,
-} from './bash/mount-points'
+export { VAULT_MOUNT_POINT } from './bash/mount-points'

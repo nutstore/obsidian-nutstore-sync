@@ -46,18 +46,12 @@ const viewImageOutputSchema = z.object({
 })
 
 export const viewImageTool = tool({
-	description: [
-		'View an image stored in the Obsidian vault or agent temporary directory.',
-		'Use this tool when you need to inspect an image file visually.',
-		`Input an absolute virtual image path or a path relative to ${VAULT_MOUNT_POINT}, with a supported extension: avif, bmp, gif, ico, jpeg, jpg, png, svg, or webp.`,
-	].join(' '),
+	description:
+		'Visually inspect an image in the virtual filesystem (vault-relative or absolute virtual path; supported extensions: avif, bmp, gif, ico, jpeg, jpg, png, svg, webp).',
 	inputSchema: z.object({
 		path: z
 			.string()
 			.check(
-				z.describe(
-					`The image path in the virtual filesystem; relative paths resolve from ${VAULT_MOUNT_POINT}.`,
-				),
 				z.trim(),
 				z.minLength(
 					1,
@@ -88,6 +82,7 @@ export const viewImageTool = tool({
 		const fs = await createVaultFileSystem(context.app, {
 			fileSystemManager: context.fileSystemManager,
 			onRead: context.readTracker?.markRead.bind(context.readTracker),
+			includePathIndex: false,
 		})
 		let data: Uint8Array
 		try {

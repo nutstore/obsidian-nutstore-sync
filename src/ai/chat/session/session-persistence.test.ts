@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 import { createEmptyMasterAgent } from '~/ai/chat/messages/ui-message'
 import { normalizeRehydratedExecution } from '~/ai/chat/session/rehydration-execution'
@@ -637,5 +637,50 @@ describe('chat session persistence', () => {
 				},
 			],
 		})
+	})
+
+	it('reuses cached base64url payloads for unchanged Blobs across repeated saves', async () => {
+		const blob = new Blob([new TextEncoder().encode('中性快照内容 🌱')], {
+			type: 'application/octet-stream',
+		})
+		const arrayBufferSpy = vi.spyOn(blob, 'arrayBuffer')
+		const master = createEmptyMasterAgent(1)
+		master.operations['msg-1'] = [
+			{
+				vaultPath: 'notes/快照🌱.md',
+				operation: 'create',
+				before: { kind: 'file' },
+				after: {
+					kind: 'file',
+					contentCompressed: { compress: 'deflate', blob },
+				},
+			},
+		]
+		const session: ChatSession = {
+			schemaVersion: 2,
+			id: 'blob-cache-session',
+			createdAt: 1,
+			updatedAt: 1,
+			subagents: { master },
+		}
+
+		const first = await encodeChatSessionForStorage(session)
+		const second = await encodeChatSessionForStorage(session)
+		expect(second).toEqual(first)
+		expect(arrayBufferSpy).toHaveBeenCalledTimes(1)
+
+		// Decoded blobs also seed the cache so re-saving loaded history avoids re-reading.
+		const decoded = decodeChatSessionFromStorage(
+			JSON.parse(JSON.stringify(first)) as PersistedChatSession,
+		) as ChatSession
+		const restoredBlob = (
+			decoded.subagents.master.operations['msg-1'][0] as {
+				after: { contentCompressed: { blob: Blob } }
+			}
+		).after.contentCompressed.blob
+		const restoredSpy = vi.spyOn(restoredBlob, 'arrayBuffer')
+		const third = await encodeChatSessionForStorage(decoded)
+		expect(third).toEqual(first)
+		expect(restoredSpy).not.toHaveBeenCalled()
 	})
 })

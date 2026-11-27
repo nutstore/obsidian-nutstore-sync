@@ -17,8 +17,14 @@ export function getDBKey(vaultName: string, remoteBaseDir: string) {
  * and infer remote deletions. Bump on any incompatible cache change.
  *
  * - 2: `pendingVerification` makes an empty `queue` insufficient for completeness.
+ * - 3: atomic file `etag`/`revision`, `lastFullScanAt`, and scope-verified remote cache envelope.
  */
-export const TRAVERSAL_CACHE_SCHEMA = 2
+export const TRAVERSAL_CACHE_SCHEMA = 3
+
+/** Stable SHA-256 hex digest identifying a Nutstore account across cache envelopes. */
+export async function getAccountHash(remoteAccountId: string): Promise<string> {
+	return await sha256Hex(new TextEncoder().encode(remoteAccountId))
+}
 
 export async function getTraversalWebDAVDBKey(
 	remoteAccountId: string,
@@ -27,7 +33,7 @@ export async function getTraversalWebDAVDBKey(
 ) {
 	return objectHash({
 		remoteEndpoint,
-		accountHash: await sha256Hex(new TextEncoder().encode(remoteAccountId)),
+		accountHash: await getAccountHash(remoteAccountId),
 		remoteBaseDir: normalizeVaultPath(remoteBaseDir),
 		schema: TRAVERSAL_CACHE_SCHEMA,
 	})

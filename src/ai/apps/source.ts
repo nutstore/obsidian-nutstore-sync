@@ -1,10 +1,24 @@
 import { posix as pathPosix } from 'path-browserify'
 import { bytesToDataUrl } from '~/utils/data-url'
+/** Maps one authored script slice inside the concatenated App JavaScript program. */
+export interface AppScriptSegment {
+	path: string
+	/** 1-based line number in assembled `AppContent.javascript`. */
+	startLine: number
+	/** Number of lines in this script segment. */
+	lineCount: number
+	/** 1-based line number in the original source file (`1` for external files). */
+	sourceStartLine: number
+	/** 1-based ordinal for inline `<script>` blocks inside `index.html`. */
+	inlineIndex?: number
+}
+
 /** The assembled, sandbox-ready source of one App. */
 export interface AppContent {
 	html: string
 	css: string
 	javascript: string
+	scriptMap?: readonly AppScriptSegment[]
 }
 
 /**
@@ -304,6 +318,38 @@ async function processCss(
 	return result + css.slice(cursor)
 }
 
+function findInlineScriptStartLines(html: string): number[] {
+	const lines: number[] = []
+	const pattern = /<!--[\s\S]*?-->|<script\b([^>]*)>/gi
+	let match: RegExpExecArray | null
+	while ((match = pattern.exec(html)) !== null) {
+		const attrs = match[1]
+		if (attrs === undefined) continue
+		const bodyStart = match.index + match[0].length
+		const isExternal = /(?:^|[\s/])src\s*=/i.test(attrs)
+		if (!isExternal) {
+			let line = 1
+			for (let i = 0; i < bodyStart; i++) {
+				if (html.charCodeAt(i) === 10) line++
+			}
+			lines.push(line)
+		}
+		const closeMatch = /<\/script\s*>/i.exec(html.slice(bodyStart))
+		if (closeMatch) {
+			pattern.lastIndex = bodyStart + closeMatch.index + closeMatch[0].length
+		}
+	}
+	return lines
+}
+
+function countLines(text: string): number {
+	let count = 1
+	for (let i = 0; i < text.length; i++) {
+		if (text.charCodeAt(i) === 10) count++
+	}
+	return count
+}
+
 function assertScriptType(script: Element, fromPath: string) {
 	const type = script.getAttribute('type')?.trim().toLowerCase()
 	if (type === undefined) return
@@ -389,12 +435,30 @@ export async function assembleAppContent(input: {
 		)
 		element.remove()
 	}
+	const inlineStartLines = findInlineScriptStartLines(input.html)
+	let inlineCursor = 0
+	let nextLine = 1
 	const jsParts: string[] = []
+	const scriptMap: AppScriptSegment[] = []
 	for (const script of Array.from(doc.querySelectorAll('script'))) {
 		assertScriptType(script, fromPath)
 		const src = script.getAttribute('src')
 		if (src === null) {
-			jsParts.push(script.textContent ?? '')
+			const code = script.textContent ?? ''
+			const lineCount = countLines(code)
+			const inlineIndex = inlineCursor + 1
+			const sourceStartLine = inlineStartLines[inlineCursor] ?? 1
+			inlineCursor++
+			scriptMap.push({
+				path: fromPath,
+				startLine: nextLine,
+				lineCount,
+				sourceStartLine,
+				inlineIndex,
+			})
+			jsParts.push(code)
+			// `jsParts.join('\n;\n')` adds one separator line (`;`) between segments.
+			nextLine += lineCount + 1
 			script.remove()
 			continue
 		}
@@ -404,7 +468,16 @@ export async function assembleAppContent(input: {
 				fromPath,
 				`Script must reference an App file: '${src}'`,
 			)
-		jsParts.push(await readText(reader, resolved))
+		const code = await readText(reader, resolved)
+		const lineCount = countLines(code)
+		scriptMap.push({
+			path: resolved,
+			startLine: nextLine,
+			lineCount,
+			sourceStartLine: 1,
+		})
+		jsParts.push(code)
+		nextLine += lineCount + 1
 		script.remove()
 	}
 	for (const element of Array.from(
@@ -430,5 +503,6 @@ export async function assembleAppContent(input: {
 		html: doc.body.innerHTML,
 		css: cssParts.join('\n'),
 		javascript: jsParts.join('\n;\n'),
+		...(scriptMap.length ? { scriptMap } : {}),
 	}
 }

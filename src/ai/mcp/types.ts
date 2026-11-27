@@ -23,7 +23,6 @@ export const mcpServersFileSchema = z.object({
 
 export type HttpMcpServerConfig = z.infer<typeof httpMcpServerConfigSchema>
 export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>
-export type McpServersFile = z.infer<typeof mcpServersFileSchema>
 export type McpServerConfigs = Record<string, McpServerConfig>
 
 export function isValidMcpServerName(name: string) {

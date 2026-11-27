@@ -105,18 +105,13 @@ export const aiProviderInputSchema = z.extend(
 		models: z.optional(aiModelInputsSchema),
 	},
 )
-export const aiProviderConfigsSchema = z.record(
-	z.string(),
-	aiProviderConfigSchema,
-)
 export const aiProviderInputsSchema = z.record(
 	z.string(),
 	aiProviderInputSchema,
 )
 export type AIProviderConfig = z.infer<typeof aiProviderConfigSchema>
 export type AIProviderInput = z.infer<typeof aiProviderInputSchema>
-export type AIProviderConfigs = z.infer<typeof aiProviderConfigsSchema>
-export type AIProviderInputs = z.infer<typeof aiProviderInputsSchema>
+export type AIProviderConfigs = Record<string, AIProviderConfig>
 
 export interface AppToolMetadata {
 	reversibleOps?: ReversibleToolOp[]

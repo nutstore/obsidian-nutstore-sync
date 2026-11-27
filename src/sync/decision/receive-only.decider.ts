@@ -1,12 +1,15 @@
 import { parse as bytesParse } from 'bytes-iec'
+import type { StatModel } from '~/model/stat.model'
 import { isPluginSelfPath } from '~/utils/config-dir-rules'
-import { isSameTime } from '~/utils/is-same-time'
 import remotePathToAbsolute from '~/utils/remote-path-to-absolute'
 import { remotePathToLocalPath } from '~/utils/remote-path-to-local-path'
 import { hasFolderContentChanged } from '../core/has-folder-content-changed'
 import { areLooseEqualFiles } from '../core/loose-equality'
-import { getFileChanges } from '../core/file-changes'
-import { shouldCreateCleanRecordTask } from '../core/record-cleanup'
+import { getFileChanges, hasFileMetadataChanged } from '../core/file-changes'
+import {
+	collectWalkPaths,
+	shouldCreateCleanRecordTask,
+} from '../core/record-cleanup'
 import { SkipReason } from '../tasks/skipped.task'
 import { BaseTask } from '../tasks/task.interface'
 import {
@@ -79,7 +82,7 @@ export async function receiveOnlyDecider(
 
 	const pullRemoteFile = (
 		p: string,
-		remoteSize: number,
+		remote: Extract<StatModel, { isDir: false }>,
 		localSize?: number,
 	): boolean => {
 		const taskOptions = {
@@ -88,7 +91,7 @@ export async function receiveOnlyDecider(
 			remoteBaseDir,
 		}
 		if (
-			remoteSize > maxFileSize ||
+			remote.size > maxFileSize ||
 			(localSize !== undefined && localSize > maxFileSize)
 		) {
 			tasks.push(
@@ -96,7 +99,7 @@ export async function receiveOnlyDecider(
 					...taskOptions,
 					reason: SkipReason.FileTooLarge,
 					maxSize: maxFileSize,
-					remoteSize,
+					remoteSize: remote.size,
 					...(localSize === undefined ? {} : { localSize }),
 				}),
 			)
@@ -105,7 +108,8 @@ export async function receiveOnlyDecider(
 		tasks.push(
 			taskFactory.createPullTask({
 				...taskOptions,
-				remoteSize,
+				remoteSize: remote.size,
+				expectedRemoteStat: remote,
 				mobileAppDownloadFileChunkSize: settings.mobileAppDownloadFileChunkSize,
 			}),
 		)
@@ -150,7 +154,13 @@ export async function receiveOnlyDecider(
 		if (local && remote) {
 			// In loose mode, same-path same-type same-size files are considered equal.
 			if (!record && areLooseEqualFiles(settings.syncMode, local, remote)) {
-				tasks.push(taskFactory.createNoopTask(taskOptions))
+				tasks.push(
+					taskFactory.createNoopTask({
+						...taskOptions,
+						localStat: local,
+						remoteStat: remote,
+					}),
+				)
 				continue
 			}
 			if (!record) {
@@ -159,15 +169,28 @@ export async function receiveOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				pullRemoteFile(p, remote.size, local.size)
+				pullRemoteFile(p, remote, local.size)
 				continue
 			}
-			const { localChanged, remoteChanged } = await getFileChanges(
-				input,
-				local,
-				remote,
-				record,
-			)
+			const { localChanged, remoteStatus, remoteChanged } =
+				await getFileChanges(input, local, remote, record)
+			if (remoteStatus === 'unverified') {
+				if (mode.revertLocalChanges && localChanged) {
+					logger.debug({
+						reason: 'revert local change against unverified remote',
+						localPath: p,
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+					})
+					pullRemoteFile(p, remote, local.size)
+				} else if (!mode.revertLocalChanges && localChanged) {
+					logger.debug({
+						reason: 'preserve local change until revert',
+						localPath: p,
+						remotePath: remotePathToAbsolute(remoteBaseDir, p),
+					})
+				}
+				continue
+			}
 			const shouldPull = mode.revertLocalChanges
 				? remoteChanged || localChanged
 				: remoteChanged && !localChanged
@@ -177,7 +200,7 @@ export async function receiveOnlyDecider(
 					localPath: p,
 					remotePath: remotePathToAbsolute(remoteBaseDir, p),
 				})
-				pullRemoteFile(p, remote.size, local.size)
+				pullRemoteFile(p, remote, local.size)
 			} else if (localChanged && remoteChanged && !mode.revertLocalChanges) {
 				logger.debug({
 					reason: 'both local and remote changed — skip',
@@ -215,7 +238,7 @@ export async function receiveOnlyDecider(
 				localPath: p,
 				remotePath: remotePathToAbsolute(remoteBaseDir, p),
 			})
-			pullRemoteFile(p, remote.size)
+			pullRemoteFile(p, remote)
 			continue
 		}
 
@@ -247,7 +270,7 @@ export async function receiveOnlyDecider(
 				})
 				continue
 			}
-			const localChanged = !isSameTime(local.mtime, record.local.mtime)
+			const localChanged = hasFileMetadataChanged(local, record.local)
 			if (!localChanged) {
 				logger.debug({
 					reason: 'remote deleted, local unchanged — remove local',
@@ -274,8 +297,12 @@ export async function receiveOnlyDecider(
 	}
 
 	// * clean orphaned records (both local and remote deleted)
+	const localAllPaths = collectWalkPaths(localStats)
+	const remoteAllPaths = collectWalkPaths(remoteStats)
 	for (const [recordPath] of syncRecords) {
-		if (shouldCreateCleanRecordTask(recordPath, localStats, remoteStats)) {
+		if (
+			shouldCreateCleanRecordTask(recordPath, localAllPaths, remoteAllPaths)
+		) {
 			tasks.push(
 				taskFactory.createCleanRecordTask({
 					remotePath: recordPath,
@@ -491,7 +518,7 @@ export async function receiveOnlyDecider(
 						localPath: local.path,
 						remotePath: remotePathToAbsolute(remoteBaseDir, local.path),
 					})
-					if (pullRemoteFile(local.path, remote.size)) {
+					if (pullRemoteFile(local.path, remote)) {
 						removeLocalFolderTasks.push(
 							taskFactory.createRemoveLocalTask({
 								localPath: local.path,

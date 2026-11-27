@@ -174,10 +174,23 @@ async function copyRecursive(
 	await fs.writeFile(dest, content)
 }
 
-interface VaultPathIndex {
+export interface VaultPathIndex {
 	getAllPaths(): string[]
 	recordPath(path: string): void
 	forgetPath(path: string): void
+}
+
+/**
+ * Shared empty index for direct-path callers (`apply_patch`, `bash`, etc.) that
+ * never read `getAllPaths()`. Avoids scanning the entire vault and `.agents/`
+ * tree or tracking path mutations in a Set that is never queried.
+ */
+export const NOOP_VAULT_PATH_INDEX: VaultPathIndex = {
+	getAllPaths() {
+		return ['/']
+	},
+	recordPath() {},
+	forgetPath() {},
 }
 
 class MutableVaultPathIndex implements VaultPathIndex {
@@ -199,8 +212,9 @@ class MutableVaultPathIndex implements VaultPathIndex {
 
 	forgetPath(inputPath: string) {
 		const normalized = normalizeVirtualPath(inputPath)
-		for (const path of [...this.paths]) {
-			if (path === normalized || path.startsWith(`${normalized}/`)) {
+		const prefix = `${normalized}/`
+		for (const path of this.paths) {
+			if (path === normalized || path.startsWith(prefix)) {
 				this.paths.delete(path)
 			}
 		}
@@ -210,6 +224,20 @@ class MutableVaultPathIndex implements VaultPathIndex {
 	getAllPaths() {
 		return [...this.paths].sort()
 	}
+}
+
+export function isNotFoundError(error: unknown): error is Error {
+	if (!(error instanceof Error)) return false
+	const code = (error as { code?: unknown }).code
+	return code === 'ENOENT' || error.message.includes('ENOENT')
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+	if (left.length !== right.length) return false
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) return false
+	}
+	return true
 }
 
 export class ReversibleOpRecorder {
@@ -222,6 +250,14 @@ export class ReversibleOpRecorder {
 		string,
 		ReversibleFileSnapshot | { kind: 'dir' } | undefined
 	>()
+	/**
+	 * Scoped to one tool invocation: compares freshly deflated snapshots without
+	 * reading Blobs back or running `inflateSync` in `getNetOperations()`.
+	 */
+	private readonly compressedBytesBySnapshot = new WeakMap<
+		ReversibleFileSnapshot,
+		Uint8Array
+	>()
 
 	get isCapturing() {
 		return this.captureDepth > 0
@@ -231,6 +267,21 @@ export class ReversibleOpRecorder {
 	}
 	endCapture() {
 		this.captureDepth--
+	}
+
+	hasInitial(path: string) {
+		return this.virtualInitial.has(path)
+	}
+
+	getInitial(path: string) {
+		return this.virtualInitial.get(path)
+	}
+
+	registerCompressedBytes(
+		snapshot: ReversibleFileSnapshot,
+		compressedBytes: Uint8Array,
+	) {
+		this.compressedBytesBySnapshot.set(snapshot, compressedBytes)
 	}
 
 	recordVirtualTransition(
@@ -246,16 +297,16 @@ export class ReversibleOpRecorder {
 		left: Extract<ReversibleToolOp, { operation: 'update' }>['before'],
 		right: Extract<ReversibleToolOp, { operation: 'update' }>['before'],
 	) {
+		const leftCompressed = this.compressedBytesBySnapshot.get(left)
+		const rightCompressed = this.compressedBytesBySnapshot.get(right)
+		if (leftCompressed && rightCompressed) {
+			return bytesEqual(leftCompressed, rightCompressed)
+		}
 		const [leftBuffer, rightBuffer] = await Promise.all([
 			decodeReversibleFileSnapshot(left),
 			decodeReversibleFileSnapshot(right),
 		])
-		const leftBytes = new Uint8Array(leftBuffer)
-		const rightBytes = new Uint8Array(rightBuffer)
-		return (
-			leftBytes.length === rightBytes.length &&
-			leftBytes.every((byte, index) => byte === rightBytes[index])
-		)
+		return bytesEqual(new Uint8Array(leftBuffer), new Uint8Array(rightBuffer))
 	}
 
 	async getNetOperations(): Promise<ReversibleToolOp[]> {
@@ -510,15 +561,17 @@ export class ObsidianVaultFs implements IFileSystem {
 		this.assertWritable(normalized)
 		await this.checkPermission({ kind: 'write', path: normalized })
 		await this.withBatch(async () => {
-			await this.mkdir(pathPosix.dirname(normalized), {
-				recursive: true,
-			})
+			const vaultPath = this.toVaultPath(normalized)
+			const existingVaultFile =
+				!isAdapterPath(this.vault, vaultPath) &&
+				this.vault.getAbstractFileByPath(vaultPath) instanceof TFile
+			if (!existingVaultFile) {
+				await this.mkdir(pathPosix.dirname(normalized), {
+					recursive: true,
+				})
+			}
 			const encoded = encodeContent(content, options)
-			await writeLocalBinary(
-				this.vault,
-				this.toVaultPath(normalized),
-				toArrayBuffer(encoded),
-			)
+			await writeLocalBinary(this.vault, vaultPath, toArrayBuffer(encoded))
 			this.recordPath(normalized)
 			this.notifyWrite(normalized)
 		})
@@ -646,7 +699,9 @@ export class ObsidianVaultFs implements IFileSystem {
 				isDirectory: true,
 				isSymbolicLink: false,
 			})),
-		].sort((left, right) => left.name.localeCompare(right.name))
+		].sort((left, right) =>
+			left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+		)
 	}
 
 	async rm(path: string, options?: RmOptions): Promise<void> {
@@ -794,5 +849,3 @@ export class ObsidianVaultFs implements IFileSystem {
 		})
 	}
 }
-
-export { VAULT_MOUNT_POINT } from './mount-points'

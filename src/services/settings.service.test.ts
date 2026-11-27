@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import type NutstorePlugin from '~/index'
 import type { NutstoreLocalSettings } from '~/settings'
@@ -6,23 +5,6 @@ import { ChatboxLocation, SessionAppOpenMode } from '~/settings'
 import { ModuleState } from '~/modules/lifecycle'
 import SettingsService from './settings.service'
 
-// Settings defaults share a module with the settings UI; stub its host classes.
-vi.mock('obsidian', () => {
-	class HostClass {}
-	return {
-		normalizePath: (path: string) => path,
-		Notice: HostClass,
-		Modal: HostClass,
-		PluginSettingTab: HostClass,
-		Setting: HostClass,
-		Component: HostClass,
-		ItemView: HostClass,
-		MarkdownView: HostClass,
-		Platform: {},
-		setIcon: () => {},
-		requestUrl: async () => ({}),
-	}
-})
 vi.mock('~/i18n', () => ({ default: { t: (key: string) => key } }))
 
 const LOCAL_PATH = '插件/nutstore-sync 🌱/data.local.json'

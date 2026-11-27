@@ -17,7 +17,8 @@
 		"moduleResolution": "bundler",
 		"paths": {
 			"~/*": ["./src/*"],
-			"~": ["./src"]
+			"~": ["./src"],
+			"@test/*": ["./test/*"]
 		},
 		"resolveJsonModule": true,
 		"allowImportingTsExtensions": true,
@@ -40,5 +41,6 @@
 		"**/*.js",
 		"**/*.mjs",
 		"**/*.cjs"
-	]
+	],
+	"exclude": ["node_modules", "dist", "main.js"]
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
 import { tool, type ToolSet } from 'ai'
 import { MockLanguageModelV4 } from 'ai/test'
 import * as z from 'zod'
@@ -202,7 +203,7 @@ describe('AgentRunner input handoff', () => {
 			const view = harness(tools)
 			const shouldYield = vi.fn(() => true)
 			const result = view.run(shouldYield)
-			await vi.waitFor(() =>
+			await flushUntil(() =>
 				expect(view.agent.toolTimings.lookup?.finishedAt).toBeDefined(),
 			)
 			expect(view.agent.toolTimings.inspect?.finishedAt).toBeUndefined()
@@ -267,7 +268,7 @@ describe('AgentRunner input handoff', () => {
 			}),
 		})
 		const running = view.run(() => false)
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(view.agent.toolTimings.lookup?.finishedAt).toBeDefined(),
 		)
 		view.agent.pendingInputs.push({
@@ -322,7 +323,7 @@ describe('AgentRunner input handoff', () => {
 			}),
 		})
 		const running = view.run(() => false)
-		await vi.waitFor(() => expect(output).toBeDefined())
+		await flushUntil(() => expect(output).toBeDefined())
 		view.agent.pendingInputs.push({
 			id: 'agent-mail',
 			role: 'user',

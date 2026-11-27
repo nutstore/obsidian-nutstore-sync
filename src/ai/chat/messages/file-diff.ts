@@ -10,6 +10,19 @@ const CONTEXT_LINES = 2
  * change is summarized instead of diffed and stays inspectable in the editor.
  */
 const MAX_DIFF_TEXT_CHARS = 200_000
+/**
+ * Character-level inline highlighting only runs on localized changed blocks
+ * returned by the line diff. Beyond this budget, lines still diff accurately
+ * without paying superlinear character-diff time.
+ */
+const MAX_INLINE_DIFF_CHARS = 8_000
+const LINE_DIFF_TIMEOUT_SECONDS = 0.25
+const INLINE_DIFF_TIMEOUT_SECONDS = 0.05
+
+function splitDiffLines(text: string): string[] {
+	if (!text) return []
+	return (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n')
+}
 
 export interface FileDiffLine {
 	kind: 'context' | 'add' | 'remove'
@@ -64,16 +77,22 @@ function appendSegment(line: ProjectedLine, text: string, changed: boolean) {
 	}
 }
 
-function projectDiffLines(beforeText: string, afterText: string) {
+function projectCharDiffBlock(
+	beforeText: string,
+	afterText: string,
+	startOldLine: number,
+	startNewLine: number,
+	lines: FileDiffLine[],
+): { oldLine: number; newLine: number } {
 	const dmp = new diff_match_patch()
+	dmp.Diff_Timeout = INLINE_DIFF_TIMEOUT_SECONDS
 	const diffs = dmp.diff_main(beforeText, afterText)
 	dmp.diff_cleanupSemantic(diffs)
 
-	const lines: FileDiffLine[] = []
 	const pendingOld: ProjectedLine[] = []
 	const pendingNew: ProjectedLine[] = []
-	let oldLineNumber = 1
-	let newLineNumber = 1
+	let oldLineNumber = startOldLine
+	let newLineNumber = startNewLine
 	let oldLine = createProjectedLine(oldLineNumber)
 	let newLine = createProjectedLine(newLineNumber)
 
@@ -177,6 +196,104 @@ function projectDiffLines(beforeText: string, afterText: string) {
 		if (newTail) pendingNew.push(newTail)
 		flushChanges()
 	}
+
+	return { oldLine: oldLineNumber, newLine: newLineNumber }
+}
+
+/**
+ * Diffs line-by-line first so unchanged context never enters character-level
+ * Myers diffing, then computes inline highlights only for bounded changed
+ * blocks. Pure creates/deletes skip diffing altogether.
+ */
+function projectDiffLines(beforeText: string, afterText: string) {
+	if (!beforeText) {
+		return splitDiffLines(afterText).map((text, index) => ({
+			kind: 'add' as const,
+			newLine: index + 1,
+			text,
+		}))
+	}
+	if (!afterText) {
+		return splitDiffLines(beforeText).map((text, index) => ({
+			kind: 'remove' as const,
+			oldLine: index + 1,
+			text,
+		}))
+	}
+
+	const dmp = new diff_match_patch()
+	dmp.Diff_Timeout = LINE_DIFF_TIMEOUT_SECONDS
+	const { chars1, chars2, lineArray } = dmp.diff_linesToChars_(
+		beforeText,
+		afterText,
+	)
+	const lineDiffs = dmp.diff_main(chars1, chars2, false)
+	dmp.diff_charsToLines_(lineDiffs, lineArray)
+
+	const lines: FileDiffLine[] = []
+	let oldLineNumber = 1
+	let newLineNumber = 1
+	let pendingRemoved = ''
+	let pendingAdded = ''
+
+	const flushChangedBlock = () => {
+		if (!pendingRemoved && !pendingAdded) return
+		const removed = pendingRemoved
+		const added = pendingAdded
+		pendingRemoved = ''
+		pendingAdded = ''
+		if (
+			removed &&
+			added &&
+			removed.length + added.length <= MAX_INLINE_DIFF_CHARS
+		) {
+			const next = projectCharDiffBlock(
+				removed,
+				added,
+				oldLineNumber,
+				newLineNumber,
+				lines,
+			)
+			oldLineNumber = next.oldLine
+			newLineNumber = next.newLine
+			return
+		}
+		if (removed) {
+			for (const text of splitDiffLines(removed)) {
+				lines.push({ kind: 'remove', oldLine: oldLineNumber, text })
+				oldLineNumber += 1
+			}
+		}
+		if (added) {
+			for (const text of splitDiffLines(added)) {
+				lines.push({ kind: 'add', newLine: newLineNumber, text })
+				newLineNumber += 1
+			}
+		}
+	}
+
+	for (const [operation, text] of lineDiffs) {
+		if (operation === diff_match_patch.DIFF_DELETE) {
+			pendingRemoved += text
+			continue
+		}
+		if (operation === diff_match_patch.DIFF_INSERT) {
+			pendingAdded += text
+			continue
+		}
+		flushChangedBlock()
+		for (const lineText of splitDiffLines(text)) {
+			lines.push({
+				kind: 'context',
+				oldLine: oldLineNumber,
+				newLine: newLineNumber,
+				text: lineText,
+			})
+			oldLineNumber += 1
+			newLineNumber += 1
+		}
+	}
+	flushChangedBlock()
 
 	return lines
 }

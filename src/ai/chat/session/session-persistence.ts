@@ -1,4 +1,5 @@
 import { limitAsync } from 'es-toolkit'
+import { fromUint8Array } from 'js-base64'
 import type { ChatSession, LegacyChatSession } from '~/ai/chat/domain'
 
 // V1 (IndexedDB era) kept binary payloads as ArrayBuffers, which IndexedDB
@@ -80,20 +81,12 @@ export type PersistedChatSession = PersistedValue<
 	ChatSession | LegacyChatSession
 >
 
-/** A multiple of 3 keeps every chunk's base64 padding-free. */
-const BASE64_CHUNK_BYTES = 3 * 0x2000
-
-function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
-	const bytes = new Uint8Array(buffer)
-	let base64 = ''
-	for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
-		const chunk = bytes.subarray(offset, offset + BASE64_CHUNK_BYTES)
-		base64 += btoa(String.fromCharCode(...chunk))
-			.replace(/\+/g, '-')
-			.replace(/\//g, '_')
-	}
-	return base64.replace(/=+$/g, '')
-}
+/**
+ * Blobs are immutable; caching their base64url encoding weakly turns repeated
+ * whole-session persists across long `apply_patch` conversations from O(k^2)
+ * Blob reads into O(k).
+ */
+const encodedBlobCache = new WeakMap<Blob, string>()
 
 function base64UrlToArrayBuffer(value: string): ArrayBuffer {
 	const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
@@ -107,13 +100,6 @@ function base64UrlToArrayBuffer(value: string): ArrayBuffer {
 	return buffer
 }
 
-function viewBytes(view: Uint8Array): ArrayBuffer {
-	return view.buffer.slice(
-		view.byteOffset,
-		view.byteOffset + view.byteLength,
-	) as ArrayBuffer
-}
-
 function createBinaryRecord(
 	value: ArrayBuffer | Uint8Array,
 ): WritablePersistedBinaryRecord {
@@ -121,13 +107,13 @@ function createBinaryRecord(
 		return {
 			[BINARY_RECORD_MARKER_V2]: true,
 			kind: 'arraybuffer',
-			data: arrayBufferToBase64Url(value),
+			data: fromUint8Array(new Uint8Array(value), true),
 		}
 	}
 	return {
 		[BINARY_RECORD_MARKER_V2]: true,
 		kind: 'Uint8Array',
-		data: arrayBufferToBase64Url(viewBytes(value)),
+		data: fromUint8Array(value, true),
 	}
 }
 
@@ -187,12 +173,15 @@ interface BlobEncoding {
  */
 function encodeBlobs(value: unknown, blobs: BlobEncoding[]): unknown {
 	if (value instanceof Blob) {
+		const cached = encodedBlobCache.get(value)
 		const record: PersistedBlobRecord = {
 			[BLOB_RECORD_MARKER_V2]: true,
 			type: value.type,
-			data: '',
+			data: cached ?? '',
 		}
-		blobs.push({ blob: value, record })
+		if (cached === undefined) {
+			blobs.push({ blob: value, record })
+		}
 		return record
 	}
 	if (value instanceof URL) {
@@ -226,7 +215,9 @@ function encodeBlobs(value: unknown, blobs: BlobEncoding[]): unknown {
 
 /** Blob reads are memory-heavy; keep only a few buffers alive at once. */
 const encodeBlob = limitAsync(async ({ blob, record }: BlobEncoding) => {
-	record.data = arrayBufferToBase64Url(await blob.arrayBuffer())
+	const encoded = fromUint8Array(new Uint8Array(await blob.arrayBuffer()), true)
+	encodedBlobCache.set(blob, encoded)
+	record.data = encoded
 }, 3)
 
 function decodeBinaryRecord(
@@ -260,9 +251,13 @@ function decodeBinaryRecord(
  */
 function decodeBlobs(value: unknown): unknown {
 	if (isPersistedBlobRecord(value)) {
-		return new Blob([base64UrlToArrayBuffer(value.data)], {
+		const blob = new Blob([base64UrlToArrayBuffer(value.data)], {
 			type: value.type,
 		})
+		if (/^[A-Za-z0-9_-]*$/.test(value.data)) {
+			encodedBlobCache.set(blob, value.data)
+		}
+		return blob
 	}
 	if (isLegacyPersistedBlobRecord(value)) {
 		return new Blob([value.data], { type: value.type })

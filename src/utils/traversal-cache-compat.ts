@@ -1,5 +1,6 @@
 import { isAbsolute } from 'path-browserify'
 import type { TraverseWebDAVCache } from '~/storage'
+import { TRAVERSAL_CACHE_SCHEMA } from './get-db-key'
 import { stdRemotePath } from './std-remote-path'
 
 function normalizeAbsolutePrefix(path: string): string {
@@ -23,9 +24,14 @@ export function isTraversalCacheCompatible(
 	cache: TraverseWebDAVCache,
 	remoteBaseDir: string,
 ): boolean {
+	if (cache.schemaVersion !== TRAVERSAL_CACHE_SCHEMA) {
+		return false
+	}
+
 	for (const path of [
 		...(cache.queue ?? []),
 		...(cache.pendingVerification ?? []),
+		...(cache.unreadablePaths ?? []).map((entry) => entry.path),
 	]) {
 		if (!belongsToRemoteBaseDir(path, remoteBaseDir)) {
 			return false

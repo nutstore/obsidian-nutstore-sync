@@ -56,6 +56,14 @@ export class SettingsFs implements IFileSystem {
 
 	constructor(private readonly input: SettingsInput) {}
 
+	/**
+	 * Writes normalize and filter JSON against the settings whitelist, so
+	 * snapshot wrappers must read back after writing instead of reusing raw input.
+	 */
+	transformsWritesAt() {
+		return true
+	}
+
 	private isFileRoot(path: string) {
 		return toRelativePath(path) === SettingsFs.FILE
 	}

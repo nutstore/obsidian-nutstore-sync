@@ -208,6 +208,7 @@ function CollapsibleToolCallBlock(props: {
 	iconLabel: string
 	params: unknown
 	result?: string
+	streaming?: boolean
 	fileChanges?: ChatDisplayToolCallBlock['fileChanges']
 	onOpenFileChange?: (vaultPath: string, line?: number) => Promise<void> | void
 	headerActions?: JSX.Element
@@ -225,6 +226,7 @@ function CollapsibleToolCallBlock(props: {
 					<ToolCallDetails
 						params={props.params}
 						result={props.result}
+						streaming={props.streaming}
 						renderMarkdown={props.renderMarkdown}
 					/>
 				)}
@@ -240,6 +242,7 @@ function CollapsibleToolCallBlock(props: {
 function ToolCallDetails(props: {
 	params: unknown
 	result?: string
+	streaming?: boolean
 	renderMarkdown?: ChatboxProps['renderMarkdown']
 }) {
 	const resultText = () => props.result?.trim()
@@ -254,6 +257,7 @@ function ToolCallDetails(props: {
 						<MarkdownContent
 							markdown={formatToolParamsMarkdown(props.params)}
 							renderMarkdown={props.renderMarkdown}
+							streaming={props.streaming}
 							compact
 							details
 						/>
@@ -326,6 +330,7 @@ function TaskToolCallBlock(props: {
 			iconLabel={visual().label}
 			params={toolCall().input}
 			result={formatToolResult(toolCall())}
+			streaming={toolCall().state === 'input-streaming'}
 			fileChanges={props.block.fileChanges}
 			onOpenFileChange={props.onOpenFileChange}
 			renderMarkdown={props.renderMarkdown}
@@ -369,6 +374,7 @@ function PurposeToolCallBlock(props: {
 			iconLabel={visual().label}
 			params={props.block.toolCall.input}
 			result={formatToolResult(props.block.toolCall)}
+			streaming={props.block.toolCall.state === 'input-streaming'}
 			fileChanges={props.block.fileChanges}
 			onOpenFileChange={props.onOpenFileChange}
 			renderMarkdown={props.renderMarkdown}
@@ -395,6 +401,7 @@ function GenericToolCallBlock(props: {
 			iconLabel={visual().label}
 			params={props.block.toolCall.input}
 			result={formatToolResult(props.block.toolCall)}
+			streaming={props.block.toolCall.state === 'input-streaming'}
 			fileChanges={props.block.fileChanges}
 			onOpenFileChange={props.onOpenFileChange}
 			renderMarkdown={props.renderMarkdown}

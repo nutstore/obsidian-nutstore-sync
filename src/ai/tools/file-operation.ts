@@ -1,14 +1,5 @@
-export const AI_FILE_OPERATIONS = [
-	'copy',
-	'delete',
-	'edit',
-	'mkdir',
-	'move',
-	'read',
-	'write',
-] as const
-
-export type AIFileOperation = (typeof AI_FILE_OPERATIONS)[number]
+export type AIFileOperation =
+	'copy' | 'delete' | 'edit' | 'mkdir' | 'move' | 'read' | 'write'
 export type AISinglePathFileOperation = Exclude<
 	AIFileOperation,
 	'copy' | 'move'

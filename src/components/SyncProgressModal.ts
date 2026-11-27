@@ -7,7 +7,11 @@ import {
 	toggleClassTokens,
 } from '~/utils/class-tokens'
 import { describeSyncError } from '~/utils/describe-sync-error'
-import { getTaskLabel, type TaskKind } from '~/utils/get-task-name'
+import {
+	formatTaskDisplayPath,
+	getTaskLabel,
+	type TaskKind,
+} from '~/utils/get-task-name'
 import { getSyncPreparationText } from '~/utils/sync-preparation-text'
 import NutstorePlugin from '..'
 import {
@@ -31,6 +35,7 @@ const TASK_ICONS: Record<TaskKind, string> = {
 	createLocalDir: 'folder-plus',
 	createRemoteDir: 'folder-plus',
 	createRemoteDirs: 'folder-plus',
+	moveRemote: 'arrow-right',
 	download: 'arrow-down-narrow-wide',
 	upload: 'arrow-up-narrow-wide',
 	removeLocal: 'trash',
@@ -167,7 +172,7 @@ export default class SyncProgressModal extends Modal {
 
 		// The modal is only opened once a run exists; a late tick after the
 		// service dropped it has nothing left to show.
-		const run = this.plugin.sync.progress.run
+		const run = this.plugin.sync.progress.modalRun
 		if (!run) return
 		const { preparation, status: state } = run
 		const preparationText = preparation
@@ -269,12 +274,13 @@ export default class SyncProgressModal extends Modal {
 		}
 
 		if ((state === 'syncing' || state === 'cancelling') && run.current) {
+			const displayPath = formatTaskDisplayPath(run.current)
 			this.currentFile.setText(
 				i18n.t('sync.currentFile', {
-					path: run.current.localPath,
+					path: displayPath,
 				}),
 			)
-			this.currentFile.title = run.current.localPath
+			this.currentFile.title = displayPath
 		} else {
 			this.currentFile.setText('')
 			this.currentFile.title = ''
@@ -439,7 +445,7 @@ export default class SyncProgressModal extends Modal {
 		const detail = item.createDiv({ cls: ':uno: flex-1 min-w-0' })
 		detail
 			.createDiv({ cls: ':uno: break-all' })
-			.setText(i18n.t('sync.filePath', { path: file.localPath }))
+			.setText(i18n.t('sync.filePath', { path: formatTaskDisplayPath(file) }))
 		const error = 'error' in file ? file.error : undefined
 		if (status === 'failed' && error) {
 			detail
@@ -501,7 +507,9 @@ export default class SyncProgressModal extends Modal {
 		// The list is opened on demand while this modal is up, so it never stacks
 		// on top of the progress the user is watching.
 		this.scanIssuesButton = new ButtonComponent(scanIssuesSummary).onClick(() =>
-			this.plugin.sync.progress.showScanIssues(),
+			this.plugin.sync.progress.showScanIssues(
+				this.plugin.sync.progress.modalRun?.scanIssues ?? [],
+			),
 		)
 
 		const progressCard = container.createDiv({
@@ -629,7 +637,9 @@ export default class SyncProgressModal extends Modal {
 		const stopButton = new ButtonComponent(footerButtons)
 			.setButtonText(i18n.t('sync.stopButton'))
 			.onClick(() => {
-				if (this.plugin.sync.progress.run?.status === 'cancelling') {
+				const status = this.plugin.sync.progress.modalRun?.status
+				if (!status || !isSyncRunActive(status)) return
+				if (status === 'cancelling') {
 					new Notice(i18n.t('sync.cancellingHint'), 3000)
 					return
 				}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { SyncScope } from '~/sync/scope'
 import {
 	compileFilterRules,
+	createPathInclusionChecker,
 	type GlobFilterRule,
 	isPathIncluded,
 } from './glob-match'
@@ -238,5 +240,28 @@ describe('gitignore compatibility: path normalization', () => {
 	it('an empty rule has no effect', () => {
 		expect(decide('note.md', [rule(''), rule('   ')])).toBe(true)
 		expect(decide('笔记.md', [rule('\t')])).toBe(true)
+	})
+
+	it('keeps createPathInclusionChecker and SyncScope consistent with isPathIncluded on dot-segment aliases', () => {
+		const rules = [rule('/草稿📘/'), rule('/归档🌿')]
+		const compiled = compileFilterRules(rules)
+		const checker = createPathInclusionChecker(compiled)
+		const scope = new SyncScope(rules)
+
+		for (const [candidate, isDir] of [
+			['草稿📘/.', true],
+			['./草稿📘/.', true],
+			['草稿📘/./记录.md', false],
+			['笔记🌱/草稿📘/.', true],
+			['归档🌿/.', false],
+			['.', true],
+		] as const) {
+			const expected = isPathIncluded(candidate, compiled, isDir)
+			expect(checker(candidate, isDir), `checker(${candidate})`).toBe(expected)
+			expect(scope.allows(candidate, { isDir }), `scope(${candidate})`).toBe(
+				expected,
+			)
+		}
+		expect(scope.allows('草稿📘/.', { isDir: true })).toBe(false)
 	})
 })

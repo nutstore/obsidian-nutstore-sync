@@ -1,6 +1,7 @@
 import createId from '~/utils/create-id'
-import { ButtonComponent, Modal } from 'obsidian'
+import { ButtonComponent, Modal, setIcon } from 'obsidian'
 import { listModels } from '~/ai/catalog/config'
+import type { AIModelModality } from '~/ai/core/types'
 import { NUTSTORE_LLM_GATEWAY_PROVIDER_ID } from '~/consts'
 import i18n from '~/i18n'
 import type {
@@ -19,7 +20,20 @@ const GATEWAY_PANEL_ID = 'nutstore-llm-gateway-panel'
 interface ModelSummary {
 	id: string
 	name: string
+	inputModalities: AIModelModality[]
 }
+
+// Model cards describe what the model accepts, so each modality gets a stable
+// icon and a localized label instead of the raw schema token.
+const INPUT_MODALITY_ICONS: Record<AIModelModality, string> = {
+	text: 'type',
+	image: 'image',
+	audio: 'music',
+	video: 'video',
+	pdf: 'file-text',
+	file: 'paperclip',
+}
+
 interface ModelListDiff {
 	beforeCount: number
 	afterCount: number
@@ -117,7 +131,7 @@ export default class NutstoreLlmGatewayModal extends Modal {
 	onOpen() {
 		this.active = true
 		this.titleEl.setText(i18n.t('settings.ai.nutstoreLlmGateway.usage.title'))
-		this.modalEl.addClass('nutstore-llm-gateway-modal')
+		this.modalEl.addClass('nutstore-llm-gateway-modal', 'mod-lg')
 		this.contentEl.addClass('nutstore-llm-gateway-modal__content')
 		void this.loadUsage()
 	}
@@ -133,6 +147,7 @@ export default class NutstoreLlmGatewayModal extends Modal {
 			.map((model) => ({
 				id: model.id,
 				name: model.name.trim() || model.id,
+				inputModalities: [...model.modalities.input],
 			}))
 			.sort((left, right) => left.id.localeCompare(right.id))
 	}
@@ -303,20 +318,15 @@ export default class NutstoreLlmGatewayModal extends Modal {
 	}
 
 	private renderModels(parent: HTMLElement) {
+		const models = this.getCurrentModels()
 		const toolbar = parent.createDiv({ cls: 'nutstore-llm-models__toolbar' })
-		const heading = toolbar.createDiv({ cls: 'nutstore-llm-models__heading' })
-		heading.createDiv({
-			cls: 'nutstore-llm-models__title',
-			text: i18n.t('settings.ai.nutstoreLlmGateway.models.title'),
-		})
-		if (this.modelsUpdatedAt) {
-			heading.createDiv({
-				cls: 'nutstore-llm-usage__updated-at',
-				text: i18n.t('settings.ai.nutstoreLlmGateway.models.updatedAt', {
-					time: new Date(this.modelsUpdatedAt).toLocaleTimeString(),
-				}),
-			})
-		}
+		this.renderPanelHeading(
+			toolbar,
+			i18n.t('settings.ai.nutstoreLlmGateway.models.available'),
+			this.modelsUpdatedAt,
+			'settings.ai.nutstoreLlmGateway.models.updatedAt',
+			models.length,
+		)
 		const actions = toolbar.createDiv({ cls: 'nutstore-llm-usage__actions' })
 		const refreshButton = new ButtonComponent(actions)
 			.setButtonText(this.getModelRefreshButtonText())
@@ -337,20 +347,6 @@ export default class NutstoreLlmGatewayModal extends Modal {
 			this.renderModelDiff(parent, this.modelDiff)
 		}
 
-		const models = this.getCurrentModels()
-		const listHeading = parent.createDiv({
-			cls: 'nutstore-llm-models__list-heading',
-		})
-		listHeading.createEl('h3', {
-			cls: 'nutstore-llm-usage__section-title',
-			text: i18n.t('settings.ai.nutstoreLlmGateway.models.available'),
-		})
-		listHeading.createDiv({
-			cls: 'nutstore-llm-models__count',
-			text: i18n.t('settings.ai.nutstoreLlmGateway.models.count', {
-				count: models.length,
-			}),
-		})
 		if (!models.length) {
 			parent.createDiv({
 				cls: 'nutstore-llm-usage__state',
@@ -358,21 +354,60 @@ export default class NutstoreLlmGatewayModal extends Modal {
 			})
 			return
 		}
-		const list = parent.createDiv({ cls: 'nutstore-llm-models__list' })
-		list.setAttribute('role', 'list')
+		const grid = parent.createDiv({ cls: 'nutstore-llm-models__grid' })
+		grid.setAttribute('role', 'list')
 		for (const model of models) {
-			const item = list.createDiv({ cls: 'nutstore-llm-models__item' })
-			item.setAttribute('role', 'listitem')
-			item.createDiv({
-				cls: 'nutstore-llm-models__name',
-				text: model.name,
+			this.renderModelCard(grid, model)
+		}
+	}
+
+	private renderModelCard(parent: HTMLElement, model: ModelSummary) {
+		const card = parent.createDiv({ cls: 'nutstore-llm-models__card' })
+		card.setAttribute('role', 'listitem')
+
+		const identity = card.createDiv({ cls: 'nutstore-llm-models__identity' })
+		identity.createDiv({
+			cls: 'nutstore-llm-models__name',
+			text: model.name,
+		})
+		identity
+			.createEl('code', {
+				cls: 'nutstore-llm-models__id',
+				text: model.id,
 			})
-			if (model.name !== model.id) {
-				item.createEl('code', {
-					cls: 'nutstore-llm-models__id',
-					text: model.id,
-				})
-			}
+			.setAttribute('title', model.id)
+
+		const modalities = card.createDiv({
+			cls: 'nutstore-llm-models__modalities',
+		})
+		modalities.setAttribute(
+			'aria-label',
+			i18n.t('settings.ai.model.inputModalities'),
+		)
+		if (!model.inputModalities.length) {
+			modalities.createSpan({
+				cls: 'nutstore-llm-models__modality-empty',
+				text: '—',
+			})
+			return
+		}
+		// Render from the least common capability to text so the primary
+		// text chip anchors the card's trailing edge.
+		for (let index = model.inputModalities.length - 1; index >= 0; index--) {
+			const modality = model.inputModalities[index]
+			const chip = modalities.createSpan({
+				cls: `nutstore-llm-models__modality nutstore-llm-models__modality--${modality}`,
+			})
+			const icon = chip.createSpan({
+				cls: 'nutstore-llm-models__modality-icon',
+			})
+			icon.setAttribute('aria-hidden', 'true')
+			setIcon(icon, INPUT_MODALITY_ICONS[modality])
+			chip.createSpan({
+				text: i18n.t(
+					`settings.ai.nutstoreLlmGateway.models.modalities.${modality}`,
+				),
+			})
 		}
 	}
 
@@ -473,18 +508,44 @@ export default class NutstoreLlmGatewayModal extends Modal {
 		})
 	}
 
-	private renderUsage(parent: HTMLElement) {
-		const toolbar = parent.createDiv({ cls: 'nutstore-llm-usage__toolbar' })
-		if (this.usageUpdatedAt) {
-			toolbar.createDiv({
-				cls: 'nutstore-llm-usage__updated-at',
-				text: i18n.t('settings.ai.nutstoreLlmGateway.usage.updatedAt', {
-					time: new Date(this.usageUpdatedAt).toLocaleTimeString(),
+	private renderPanelHeading(
+		toolbar: HTMLElement,
+		title: string,
+		updatedAt: number | null,
+		updatedAtKey:
+			| 'settings.ai.nutstoreLlmGateway.usage.updatedAt'
+			| 'settings.ai.nutstoreLlmGateway.models.updatedAt',
+		count?: number,
+	) {
+		const heading = toolbar.createDiv({ cls: 'nutstore-llm-panel__heading' })
+		const titleRow = heading.createDiv({ cls: 'nutstore-llm-panel__title-row' })
+		titleRow.createDiv({ cls: 'nutstore-llm-panel__title', text: title })
+		if (count !== undefined) {
+			titleRow.createDiv({
+				cls: 'nutstore-llm-panel__count',
+				text: i18n.t('settings.ai.nutstoreLlmGateway.models.count', {
+					count,
 				}),
 			})
-		} else {
-			toolbar.createDiv({ cls: 'nutstore-llm-usage__updated-at' })
 		}
+		if (updatedAt) {
+			heading.createDiv({
+				cls: 'nutstore-llm-panel__updated-at',
+				text: i18n.t(updatedAtKey, {
+					time: new Date(updatedAt).toLocaleTimeString(),
+				}),
+			})
+		}
+	}
+
+	private renderUsage(parent: HTMLElement) {
+		const toolbar = parent.createDiv({ cls: 'nutstore-llm-usage__toolbar' })
+		this.renderPanelHeading(
+			toolbar,
+			i18n.t('settings.ai.nutstoreLlmGateway.usage.overviewTitle'),
+			this.usageUpdatedAt,
+			'settings.ai.nutstoreLlmGateway.usage.updatedAt',
+		)
 		const actions = toolbar.createDiv({ cls: 'nutstore-llm-usage__actions' })
 		const refreshButton = new ButtonComponent(actions)
 			.setButtonText(this.getUsageRefreshButtonText())
@@ -701,6 +762,6 @@ export default class NutstoreLlmGatewayModal extends Modal {
 		this.active = false
 		this.contentEl.empty()
 		this.contentEl.removeClass('nutstore-llm-gateway-modal__content')
-		this.modalEl.removeClass('nutstore-llm-gateway-modal')
+		this.modalEl.removeClass('nutstore-llm-gateway-modal', 'mod-lg')
 	}
 }

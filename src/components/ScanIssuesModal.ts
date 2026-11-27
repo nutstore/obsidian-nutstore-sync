@@ -36,11 +36,6 @@ const toRow = (issue: ScanIssue): ScanIssueRow => ({
 const formatRows = (rows: readonly ScanIssueRow[]) =>
 	rows.map(({ path, step, cause }) => [path, step, cause].join('\t')).join('\n')
 
-/** Tab-separated `path / step / cause` lines, ready to paste into a note or report. */
-export function formatScanIssues(issues: readonly ScanIssue[]): string {
-	return formatRows(issues.map(toRow))
-}
-
 /**
  * Lists in-scope paths that could not be scanned in the last sync. Rule-excluded
  * paths never become issues, so everything shown here was meant to sync but was

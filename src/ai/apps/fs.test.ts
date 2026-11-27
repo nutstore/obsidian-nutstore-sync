@@ -5,18 +5,6 @@ import { MountableFs } from '~/ai/tools/bash/mountable-fs'
 import { AppFs } from './fs'
 import { APP_ROOT_DIR, appDirectoryPath } from './paths'
 
-vi.mock('obsidian', () => ({
-	normalizePath: (path: string) =>
-		path
-			.normalize('NFC')
-			.replace(/\\/g, '/')
-			.replace(/\u00a0|\u202f/g, ' ')
-			.replace(/\/+/g, '/')
-			.replace(/^\/+|\/+$/g, ''),
-	TFile: class {},
-	TFolder: class {},
-}))
-
 function fixture(readonlyApps = false) {
 	const disk = new InMemoryFs()
 	const adapter = {

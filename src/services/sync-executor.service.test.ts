@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushUntil } from '@test/harness/async-scheduler'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import type NutstorePlugin from '~/index'
 import type { SyncSelection } from '~/settings'
 import { ModuleLifecycle } from '~/modules/lifecycle'
@@ -10,13 +12,6 @@ const { start, construct, notice } = vi.hoisted(() => ({
 	start: vi.fn(),
 	construct: vi.fn(),
 	notice: vi.fn(),
-}))
-vi.mock('obsidian', () => ({
-	Notice: class {
-		constructor(message: string) {
-			notice(message)
-		}
-	},
 }))
 vi.mock('~/sync', () => ({
 	SyncStartMode: { AUTO_SYNC: 'auto', MANUAL_SYNC: 'manual' },
@@ -34,11 +29,17 @@ vi.mock('~/sync/log', () => ({
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	obsidianRuntime.reset()
+	obsidianRuntime.onNotice = ({ message }) => notice(message)
 	start.mockResolvedValue({
 		completed: true,
 		ranTasks: true,
 		shouldReloadSettings: false,
 	})
+})
+
+afterEach(() => {
+	obsidianRuntime.reset()
 })
 
 function fixture(configDir = '.settings-设置-🌿') {
@@ -86,7 +87,7 @@ describe('synchronization execution gate', () => {
 		)
 		await f.plugin.sync.lifecycle.update(true)
 		const work = f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
-		await vi.waitFor(() => expect(f.getToken).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(f.getToken).toHaveBeenCalledOnce())
 		emitCancelSync()
 		finish('neutral-token')
 		expect(await work).toBe(false)
@@ -108,7 +109,7 @@ describe('synchronization execution gate', () => {
 		)
 		await f.plugin.sync.lifecycle.update(true)
 		const work = f.executor.executeSync({ mode: SyncStartMode.MANUAL_SYNC })
-		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(start).toHaveBeenCalledOnce())
 		const options = construct.mock.calls[0][1] as { signal: AbortSignal }
 		emitCancelSync()
 		expect(options.signal.aborted).toBe(true)
@@ -251,7 +252,7 @@ describe('synchronization execution gate', () => {
 		)
 		await f.plugin.sync.lifecycle.update(true)
 		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
-		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(start).toHaveBeenCalledOnce())
 		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 		finish({
 			completed: false,
@@ -320,7 +321,7 @@ describe('synchronization execution gate', () => {
 		)
 		await f.plugin.sync.lifecycle.update(true)
 		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
-		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(start).toHaveBeenCalledOnce())
 
 		finish({
 			completed: true,
@@ -344,7 +345,7 @@ describe('synchronization execution gate', () => {
 		)
 		await f.plugin.sync.lifecycle.update(true)
 		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
-		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(start).toHaveBeenCalledOnce())
 		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 
 		finishes[0]({
@@ -352,7 +353,7 @@ describe('synchronization execution gate', () => {
 			ranTasks: false,
 			shouldReloadSettings: false,
 		})
-		await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2))
+		await flushUntil(() => expect(start).toHaveBeenCalledTimes(2))
 		expect(await running).toBe(true)
 
 		finishes[1]({
@@ -360,7 +361,7 @@ describe('synchronization execution gate', () => {
 			ranTasks: false,
 			shouldReloadSettings: false,
 		})
-		await vi.waitFor(() => expect(f.executor.isRunning()).toBe(false))
+		await flushUntil(() => expect(f.executor.isRunning()).toBe(false))
 		expect(f.runBlobGc).not.toHaveBeenCalled()
 	})
 
@@ -385,7 +386,7 @@ describe('synchronization execution gate', () => {
 		)
 		await f.plugin.sync.lifecycle.update(true)
 		const work = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
-		await vi.waitFor(() => expect(f.getToken).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(f.getToken).toHaveBeenCalledOnce())
 		await f.plugin.sync.lifecycle.update(false)
 		token('test-only-late-token')
 		expect(await work).toBe(false)
@@ -404,7 +405,7 @@ describe('synchronization execution gate', () => {
 		)
 		await f.plugin.sync.lifecycle.update(true)
 		const running = f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
-		await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+		await flushUntil(() => expect(start).toHaveBeenCalledOnce())
 		await f.executor.executeSync({ mode: SyncStartMode.AUTO_SYNC })
 		const stopping = f.plugin.sync.lifecycle.update(false)
 		finish({

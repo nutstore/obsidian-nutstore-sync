@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import {
 	emitCancelSync,
 	emitEndSync,
@@ -11,6 +12,7 @@ import {
 	type CompletedTask,
 } from '~/events'
 import type NutstorePlugin from '~/index'
+import MoveRemoteTask from '~/sync/tasks/move-remote.task'
 import PullTask from '~/sync/tasks/pull.task'
 import PushTask from '~/sync/tasks/push.task'
 import SkippedTask, { SkipReason } from '~/sync/tasks/skipped.task'
@@ -53,14 +55,6 @@ const { notice, modals, outcomes, outcomeModal } = vi.hoisted(() => {
 	}
 })
 
-vi.mock('obsidian', () => ({
-	Notice: class {
-		constructor(message: string) {
-			notice(message)
-		}
-	},
-}))
-
 vi.mock('~/components/ScanIssuesModal', () => ({
 	default: outcomeModal('scanIssues'),
 }))
@@ -86,6 +80,13 @@ const options = (localPath: string) =>
 	({ localPath, remotePath: localPath, remoteBaseDir: '/' }) as BaseTaskOptions
 const push = (path: string) => new PushTask(options(path))
 const pull = (path: string) => new PullTask({ ...options(path), remoteSize: 1 })
+const moveRemote = (from: string, to: string) =>
+	new MoveRemoteTask({
+		...options(to),
+		fromLocalPath: from,
+		fromRemotePath: from,
+		expectedRemoteEtag: 'planned-etag',
+	})
 const skipped = (path: string) =>
 	new SkippedTask({
 		...options(path),
@@ -113,6 +114,8 @@ let running = true
 let active = true
 let service: ProgressService
 beforeEach(() => {
+	obsidianRuntime.reset()
+	obsidianRuntime.onNotice = ({ message }) => notice(message)
 	running = true
 	active = true
 	modals.length = 0
@@ -133,6 +136,7 @@ beforeEach(() => {
 afterEach(() => {
 	service.onunload()
 	notice.mockClear()
+	obsidianRuntime.reset()
 })
 
 describe('progress service run snapshot', () => {
@@ -224,6 +228,25 @@ describe('progress service run snapshot', () => {
 			'b 🌿.md',
 			'c 🌿.md',
 		])
+	})
+
+	it('captures fromLocalPath only for MoveRemoteTask descriptors', () => {
+		const move = moveRemote('旧位置 🌱/笔记.md', '新位置 📘/笔记.md')
+		emitPreparingSync({ showNotice: false })
+		started(1, 0, move)
+		expect(service.run?.current).toEqual({
+			kind: 'moveRemote',
+			fromLocalPath: '旧位置 🌱/笔记.md',
+			localPath: '新位置 📘/笔记.md',
+		})
+		finished(1, 1, done(move))
+		expect(service.run?.completed[0]).toEqual({
+			kind: 'moveRemote',
+			fromLocalPath: '旧位置 🌱/笔记.md',
+			localPath: '新位置 📘/笔记.md',
+			success: true,
+			error: undefined,
+		})
 	})
 
 	it('replaces the previous run when the next one starts, including its upload advice', () => {
@@ -329,6 +352,24 @@ describe('progress service run snapshot', () => {
 		emitSyncError(new Error('Unavailable 暂不可用'))
 		emitSyncCancelled()
 		expect(service.run).toBe(last)
+	})
+
+	it('keeps the manual result visible while automatic rounds update the latest run', () => {
+		emitPreparingSync({ showNotice: true })
+		finished(1, 1, done(push('读书笔记📚.md')))
+		emitEndSync({ showNotice: true, failedCount: 0 })
+		const manual = service.run
+
+		emitPreparingSync({ showNotice: false })
+		expect(service.run?.status).toBe('preparing')
+		expect(service.modalRun).toBe(manual)
+		emitEndSync({ showNotice: false, failedCount: 0 })
+		expect(service.modalRun).toBe(manual)
+
+		emitPreparingSync({ showNotice: true })
+		expect(service.modalRun).toBe(service.run)
+		expect(service.modalRun?.status).toBe('preparing')
+		expect(modals).toHaveLength(1)
 	})
 
 	it('refreshes an open view on every change and drops it when closed', () => {

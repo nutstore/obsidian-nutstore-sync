@@ -45,7 +45,7 @@ const messageSchema = z.object({
 export const agentCommunicationTools = {
 	list_agents: tool({
 		description:
-			'List agent IDs, types, parents and execution states in this session. Contexts remain isolated.',
+			'List agent IDs, types, parents, and statuses in this session.',
 		inputSchema: z.object({}),
 		contextSchema,
 		execute: (_, { context }) =>
@@ -53,7 +53,7 @@ export const agentCommunicationTools = {
 	}),
 	send_message: tool({
 		description:
-			'Queue a message for another agent in this session. A running agent receives it at the next safe model boundary. This does not start a turn for an idle agent or restart a completed, failed or cancelled agent; the durable message remains in its inbox until a later turn.',
+			"Queue a durable message for another agent (delivered at a running agent's next safe boundary; does not start an idle agent or restart a completed, failed, or cancelled agent). Include all facts the recipient needs.",
 		inputSchema: messageSchema,
 		contextSchema,
 		execute: ({ target, message }, { context }) =>
@@ -61,7 +61,7 @@ export const agentCommunicationTools = {
 	}),
 	followup_task: tool({
 		description:
-			'Queue an instruction and ensure an existing subagent runs. A running agent receives it at the next safe model boundary, a waiting or idle agent resumes, and a completed, failed or cancelled agent starts a new execution. The subagent keeps its existing context and model. The master cannot be targeted.',
+			'Queue a message and ensure an existing subagent runs (delivers to running, resumes waiting/idle, or starts a new run for completed/failed/cancelled, keeping its context and model; cannot target master).',
 		inputSchema: messageSchema,
 		contextSchema,
 		execute: ({ target, message }, { context }) =>

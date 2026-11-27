@@ -1,67 +1,39 @@
-import { Mutex } from 'async-mutex'
 import { dirname, normalize } from 'path-browserify'
 import { DeltaEntry, getDelta } from '~/api/delta'
 import { getLatestDeltaCursor } from '~/api/latestDeltaCursor'
-import { getDirectoryContents } from '~/api/webdav'
+import {
+	getDirectoryContents,
+	statRemotePath,
+	type UnreadablePropfindItem,
+} from '~/api/webdav'
 import { StatModel } from '~/model/stat.model'
 import type { NutstoreSettings } from '~/settings'
-import { traverseWebDAVKV } from '~/storage'
-import { apiLimiter } from './api-limiter'
+import { traverseWebDAVKV, type RemoteUnreadableEntry } from '~/storage'
+import { AsyncMutex } from './async-lock'
 import { fileStatToStatModel } from './file-stat-to-stat-model'
+import { TRAVERSAL_CACHE_SCHEMA } from './get-db-key'
 import { getRootFolderName } from './get-root-folder-name'
-import { is503Error } from './is-503-error'
 import logger from './logger'
 import { RequestUrlError } from './request-url-error'
-import sleep from './sleep'
+import { retryWith503Backoff } from './retry-503'
 import { stdRemotePath } from './std-remote-path'
 import { isTraversalCacheCompatible } from './traversal-cache-compat'
 import { MaybePromise } from './types'
 
-const getContents = (
-	settings: NutstoreSettings,
-	token: string,
-	path: string,
-	check?: () => void,
-) =>
-	apiLimiter.schedule(() => getDirectoryContents(settings, token, path, check))
+export const FULL_RESCAN_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 // Global mutex map: one lock per kvKey
-const traversalLocks = new Map<string, Mutex>()
+const traversalLocks = new Map<string, AsyncMutex>()
 
-function getTraversalLock(kvKey: string): Mutex {
+function getTraversalLock(kvKey: string): AsyncMutex {
 	if (!traversalLocks.has(kvKey)) {
-		traversalLocks.set(kvKey, new Mutex())
+		traversalLocks.set(kvKey, new AsyncMutex())
 	}
 	return traversalLocks.get(kvKey)!
 }
 
-async function executeWithRetry<T>(
-	func: () => MaybePromise<T>,
-	options: {
-		onRetry?: () => void
-		throwIfCancelled?: () => void
-	} = {},
-): Promise<T> {
-	while (true) {
-		options.throwIfCancelled?.()
-		try {
-			return await func()
-		} catch (err) {
-			const normalizedError =
-				err instanceof Error || typeof err === 'string'
-					? err
-					: new Error(String(err))
-			if (is503Error(normalizedError)) {
-				options.onRetry?.()
-				for (let waited = 0; waited < 30_000; waited += 500) {
-					options.throwIfCancelled?.()
-					await sleep(500)
-				}
-			} else {
-				throw err
-			}
-		}
-	}
+function pathDepth(normalizedPath: string): number {
+	return normalizedPath.split('/').filter(Boolean).length
 }
 
 export interface WebDAVTraversalProgress {
@@ -73,11 +45,28 @@ export interface WebDAVTraversalProgress {
 	processedChanges: number
 }
 
+interface MergedDeltaItem {
+	key: string
+	entry: DeltaEntry
+	invalidatedSubtree: boolean
+	isSelf: boolean
+}
+
+type ResolvedFileWrite =
+	| { kind: 'keep-existing'; stat: Extract<StatModel, { isDir: false }> }
+	| { kind: 'file'; stat: Extract<StatModel, { isDir: false }> }
+	| { kind: 'dir-flip'; stat: Extract<StatModel, { isDir: true }> }
+	| { kind: 'missing-verify'; path: string }
+	| { kind: 'unreadable'; path: string; status?: string }
+
 export class ResumableWebDAVTraversal {
 	private token: string
 	private remoteBaseDir: string
 	private kvKey: string
 	private saveInterval: number
+	private saveIntervalMs: number
+	private fullRescanIntervalMs: number
+	private now: () => number
 	private settings: NutstoreSettings
 	private onProgress?: (progress: WebDAVTraversalProgress) => void
 	private throwIfCancelled?: () => void
@@ -86,10 +75,17 @@ export class ResumableWebDAVTraversal {
 	private queue: string[] = []
 	// A 404 is incomplete observation, never proof of deletion. Persist until reconciled.
 	private pendingVerification = new Set<string>()
+	// PROPFIND entries lacking a 200 propstat (e.g., per-item 403). Persisted so
+	// subsequent incremental runs keep protecting their subtrees via SyncScope.
+	private unreadablePaths = new Map<string, RemoteUnreadableEntry>()
 	private nodes: Record<string, StatModel[]> = {}
+	private lastFullScanAt?: number
+	private fullScanFromRoot = false
 	private processedCount: number = 0
 	private discoveredCount: number = 0
 	private processedChanges: number = 0
+	private dirty = false
+	private lastSavedAt = 0
 
 	/**
 	 * Normalize directory path for use as nodes key
@@ -116,6 +112,9 @@ export class ResumableWebDAVTraversal {
 		remoteBaseDir: string
 		kvKey: string
 		saveInterval?: number
+		saveIntervalMs?: number
+		fullRescanIntervalMs?: number
+		now?: () => number
 		onProgress?: (progress: WebDAVTraversalProgress) => void
 		throwIfCancelled?: () => void
 	}) {
@@ -123,7 +122,13 @@ export class ResumableWebDAVTraversal {
 		this.token = options.token
 		this.remoteBaseDir = options.remoteBaseDir
 		this.kvKey = options.kvKey
-		this.saveInterval = Math.max(options.saveInterval || 1, 1)
+		this.saveInterval = Math.max(options.saveInterval ?? 50, 1)
+		this.saveIntervalMs = Math.max(options.saveIntervalMs ?? 5_000, 1)
+		this.fullRescanIntervalMs = Math.max(
+			options.fullRescanIntervalMs ?? FULL_RESCAN_INTERVAL_MS,
+			1,
+		)
+		this.now = options.now ?? (() => Date.now())
 		this.onProgress = options.onProgress
 		this.throwIfCancelled = options.throwIfCancelled
 	}
@@ -150,7 +155,7 @@ export class ResumableWebDAVTraversal {
 		func: () => MaybePromise<T>,
 		currentPath?: string,
 	): Promise<T> {
-		return executeWithRetry(func, {
+		return retryWith503Backoff(func, {
 			throwIfCancelled: this.throwIfCancelled,
 			onRetry: () => this.emitProgress('retrying', currentPath),
 		})
@@ -160,48 +165,138 @@ export class ResumableWebDAVTraversal {
 		return getTraversalLock(this.kvKey)
 	}
 
-	get cursor(): string {
-		return this.rootCursor
+	private markDirty(): void {
+		this.dirty = true
+	}
+
+	private shouldFlushThrottled(unsavedCount: number): boolean {
+		return (
+			this.dirty &&
+			(unsavedCount >= this.saveInterval ||
+				this.now() - this.lastSavedAt >= this.saveIntervalMs)
+		)
+	}
+
+	private async syncLocked(): Promise<void> {
+		this.checkCancelled()
+		this.lastSavedAt = this.now()
+		await this.loadState()
+
+		const hasCompleteCache =
+			this.queue.length === 0 &&
+			this.pendingVerification.size === 0 &&
+			Boolean(this.rootCursor) &&
+			Object.keys(this.nodes).length > 0
+
+		// ACL/sharing changes never emit delta events, so periodic full scans re-verify the tree.
+		const needsPeriodicRescan =
+			hasCompleteCache &&
+			(this.lastFullScanAt === undefined ||
+				this.now() - this.lastFullScanAt >= this.fullRescanIntervalMs)
+
+		try {
+			if (hasCompleteCache && !needsPeriodicRescan) {
+				await this.incrementalScan()
+			} else {
+				if (
+					needsPeriodicRescan ||
+					(this.queue.length === 0 && this.pendingVerification.size === 0)
+				) {
+					// Fetch the fresh cursor before clearing local state so an error or
+					// cancellation never persists an empty mirror over a valid cache.
+					const { response } = await this.executeWithRetry(() =>
+						getLatestDeltaCursor({
+							token: this.token,
+							throwIfCancelled: this.throwIfCancelled,
+							settings: this.settings,
+							folderName: getRootFolderName(this.remoteBaseDir),
+						}),
+					)
+					if (needsPeriodicRescan) {
+						this.nodes = {}
+						this.pendingVerification.clear()
+						this.unreadablePaths.clear()
+						this.processedCount = 0
+						this.discoveredCount = 0
+					}
+					this.rootCursor = response.cursor
+					this.queue = [this.remoteBaseDir]
+					this.lastFullScanAt = undefined
+					this.fullScanFromRoot = true
+					this.markDirty()
+				} else if (this.lastFullScanAt === undefined) {
+					// Resuming an incomplete initial, reset, or periodic full scan.
+					this.fullScanFromRoot = true
+				}
+
+				await this.bfsTraverse()
+			}
+		} finally {
+			await this.saveState({ allowWhenCancelled: true })
+		}
+		this.emitProgress('complete')
 	}
 
 	async traverse(): Promise<StatModel[]> {
 		return await this.lock.runExclusive(async () => {
-			this.checkCancelled()
-			await this.loadState()
-
-			// Use incremental scan if already traversed once
-			const isIncrementalScan =
-				this.queue.length === 0 &&
-				this.pendingVerification.size === 0 &&
-				Object.keys(this.nodes).length > 0
-
-			try {
-				if (isIncrementalScan) {
-					await this.incrementalScan()
-				} else {
-					// Initial scan or resume: BFS traversal
-					if (this.queue.length === 0 && this.pendingVerification.size === 0) {
-						const { response } = await this.executeWithRetry(() =>
-							getLatestDeltaCursor({
-								token: this.token,
-								throwIfCancelled: this.throwIfCancelled,
-								settings: this.settings,
-								folderName: getRootFolderName(this.remoteBaseDir),
-							}),
-						)
-						this.rootCursor = response.cursor
-						this.queue = [this.remoteBaseDir]
-					}
-
-					await this.bfsTraverse()
-				}
-			} finally {
-				await this.saveState()
-			}
-			this.emitProgress('complete')
-
+			await this.syncLocked()
 			return this.getAllFromCache()
 		})
+	}
+
+	getUnreadableEntries(): RemoteUnreadableEntry[] {
+		return [...this.unreadablePaths.values()]
+	}
+
+	private recordUnreadable(
+		path: string,
+		operation: 'list' | 'stat',
+		status?: string,
+	): void {
+		const key = this.normalizeForComparison(path)
+		if (!this.isWithinRemoteScope(key)) return
+		const next: RemoteUnreadableEntry = {
+			path: key,
+			operation,
+			...(status ? { status } : {}),
+		}
+		const prev = this.unreadablePaths.get(key)
+		if (
+			!prev ||
+			prev.operation !== next.operation ||
+			prev.status !== next.status
+		) {
+			this.unreadablePaths.set(key, next)
+			this.markDirty()
+		}
+	}
+
+	private clearUnreadable(path: string): void {
+		const key = this.normalizeForComparison(path)
+		if (this.unreadablePaths.delete(key)) {
+			this.markDirty()
+		}
+	}
+
+	private clearDirectUnreadableChildren(parentDir: string): void {
+		const parentKey = this.normalizeDirPath(parentDir)
+		for (const key of [...this.unreadablePaths.keys()]) {
+			if (this.normalizeDirPath(dirname(key)) === parentKey) {
+				this.unreadablePaths.delete(key)
+				this.markDirty()
+			}
+		}
+	}
+
+	private clearUnreadableSubtree(path: string): void {
+		const targetCmp = this.normalizeForComparison(path)
+		const prefix = this.normalizeDirPath(path)
+		for (const key of [...this.unreadablePaths.keys()]) {
+			if (key === targetCmp || this.normalizeDirPath(key).startsWith(prefix)) {
+				this.unreadablePaths.delete(key)
+				this.markDirty()
+			}
+		}
 	}
 
 	/**
@@ -212,6 +307,7 @@ export class ResumableWebDAVTraversal {
 		// Normal scans may need any number of passes; the same unresolved directory
 		// must not cycle through verification -> BFS -> verification indefinitely.
 		const suspendedDirectories = new Set(this.pendingVerification)
+		let unsavedDirs = 0
 		while (true) {
 			const traverseStartCursor = this.rootCursor
 
@@ -228,19 +324,44 @@ export class ResumableWebDAVTraversal {
 					if (cachedItems) {
 						resultItems.push(...cachedItems)
 					} else {
-						const contents = await this.executeWithRetry(
-							() =>
-								getContents(
-									this.settings,
-									this.token,
-									currentPath,
-									this.throwIfCancelled,
-								),
+						const unreadableItems: UnreadablePropfindItem[] = []
+						const contents = await getDirectoryContents(
+							this.settings,
+							this.token,
 							currentPath,
+							this.throwIfCancelled,
+							() => this.emitProgress('retrying', currentPath),
+							(item) => unreadableItems.push(item),
 						)
+
+						const currentCmp = this.normalizeForComparison(currentPath)
+						const selfUnreadable = unreadableItems.find(
+							(item) => this.normalizeForComparison(item.path) === currentCmp,
+						)
+						if (selfUnreadable) {
+							if (
+								normalizedPath === this.normalizeDirPath(this.remoteBaseDir)
+							) {
+								throw new Error(
+									`Remote sync root is unreadable (${selfUnreadable.status ?? 'unknown status'}): ${currentCmp}`,
+								)
+							}
+							this.recordUnreadable(currentCmp, 'list', selfUnreadable.status)
+						} else {
+							this.clearUnreadable(currentCmp)
+						}
+
+						this.clearDirectUnreadableChildren(normalizedPath)
+						for (const item of unreadableItems) {
+							const itemCmp = this.normalizeForComparison(item.path)
+							if (itemCmp !== currentCmp) {
+								this.recordUnreadable(itemCmp, 'stat', item.status)
+							}
+						}
 
 						for (const item of contents) {
 							const stat = fileStatToStatModel(item)
+							this.clearUnreadable(stat.path)
 							resultItems.push(stat)
 						}
 						this.discoveredCount += resultItems.length
@@ -256,11 +377,14 @@ export class ResumableWebDAVTraversal {
 
 					this.queue.shift()
 					this.pendingVerification.delete(normalizedPath)
+					this.markDirty()
 					this.processedCount++
+					unsavedDirs++
 					this.emitProgress('scanning', currentPath)
 
-					if (this.processedCount % this.saveInterval === 0) {
+					if (this.shouldFlushThrottled(unsavedDirs)) {
 						await this.saveState()
+						unsavedDirs = 0
 					}
 				} catch (err) {
 					if (
@@ -271,29 +395,19 @@ export class ResumableWebDAVTraversal {
 						this.queue.shift()
 						this.suspendDirectory(normalizedPath, suspendedDirectories)
 						await this.saveState()
+						unsavedDirs = 0
 						continue
 					}
 					logger.error(`Error processing ${currentPath}`, err)
-					await this.saveState()
 					throw err
 				}
 			}
 
-			const { response: endResponse } = await this.executeWithRetry(() =>
-				getLatestDeltaCursor({
-					token: this.token,
-					throwIfCancelled: this.throwIfCancelled,
-					settings: this.settings,
-					folderName: getRootFolderName(this.remoteBaseDir),
-				}),
-			)
-			const traverseEndCursor = endResponse.cursor
-
-			if (traverseStartCursor && traverseStartCursor !== traverseEndCursor) {
+			// Directly replay delta from the pre-scan cursor without re-querying latestDeltaCursor,
+			// ensuring no modifications made during BFS can be missed.
+			if (traverseStartCursor) {
 				this.rootCursor =
 					await this.applyDeltaDuringTraversal(traverseStartCursor)
-			} else {
-				this.rootCursor = traverseEndCursor
 			}
 
 			const refreshed =
@@ -303,6 +417,11 @@ export class ResumableWebDAVTraversal {
 				this.queue.length === 0 &&
 				this.pendingVerification.size === 0
 			) {
+				if (this.fullScanFromRoot) {
+					this.lastFullScanAt = this.now()
+					this.fullScanFromRoot = false
+					this.markDirty()
+				}
 				return this.getAllFromCache()
 			}
 		}
@@ -315,6 +434,7 @@ export class ResumableWebDAVTraversal {
 	): void {
 		const key = this.normalizeDirPath(path)
 		this.pendingVerification.add(key)
+		this.markDirty()
 		if (suspendedDirectories.has(key)) {
 			throw new Error(
 				`Remote directory returned 404 again after suspension: ${key}`,
@@ -330,21 +450,35 @@ export class ResumableWebDAVTraversal {
 			!this.queue.some((item) => this.normalizeDirPath(item) === key)
 		) {
 			this.queue.push(path)
+			this.markDirty()
 		}
 	}
 
 	/** Invalidate an absent or untrusted subtree, including its unfinished work. */
 	private removeSubtree(path: string): void {
 		const prefix = this.normalizeDirPath(path)
+		let changed = false
 		for (const key of Object.keys(this.nodes)) {
-			if (this.normalizeDirPath(key).startsWith(prefix)) delete this.nodes[key]
+			if (this.normalizeDirPath(key).startsWith(prefix)) {
+				delete this.nodes[key]
+				changed = true
+			}
 		}
-		this.queue = this.queue.filter(
+		const nextQueue = this.queue.filter(
 			(item) => !this.normalizeDirPath(item).startsWith(prefix),
 		)
-		for (const item of this.pendingVerification) {
-			if (item.startsWith(prefix)) this.pendingVerification.delete(item)
+		if (nextQueue.length !== this.queue.length) {
+			this.queue = nextQueue
+			changed = true
 		}
+		for (const item of this.pendingVerification) {
+			if (this.normalizeDirPath(item).startsWith(prefix)) {
+				this.pendingVerification.delete(item)
+				changed = true
+			}
+		}
+		this.clearUnreadableSubtree(path)
+		if (changed) this.markDirty()
 	}
 
 	/** Each ascent strictly reduces path depth and must remain inside the sync root. */
@@ -378,17 +512,16 @@ export class ResumableWebDAVTraversal {
 			while (!refreshed.has(parent)) {
 				this.checkCancelled()
 				let contents: StatModel[]
+				const unreadableItems: UnreadablePropfindItem[] = []
 				try {
 					contents = (
-						await this.executeWithRetry(
-							() =>
-								getContents(
-									this.settings,
-									this.token,
-									parent,
-									this.throwIfCancelled,
-								),
+						await getDirectoryContents(
+							this.settings,
+							this.token,
 							parent,
+							this.throwIfCancelled,
+							() => this.emitProgress('retrying', parent),
+							(item) => unreadableItems.push(item),
 						)
 					).map(fileStatToStatModel)
 				} catch (error) {
@@ -401,6 +534,18 @@ export class ResumableWebDAVTraversal {
 					this.suspendDirectory(parent, suspendedDirectories)
 					parent = this.getRecoveryParent(parent)
 					continue
+				}
+				const parentCmp = this.normalizeForComparison(parent)
+				const parentSelfUnreadable = unreadableItems.find(
+					(item) => this.normalizeForComparison(item.path) === parentCmp,
+				)
+				if (
+					parentSelfUnreadable &&
+					parent === this.normalizeDirPath(this.remoteBaseDir)
+				) {
+					throw new Error(
+						`Remote sync root is unreadable (${parentSelfUnreadable.status ?? 'unknown status'}): ${parentCmp}`,
+					)
 				}
 				refreshed.add(parent)
 				const directories = new Set(
@@ -420,18 +565,38 @@ export class ResumableWebDAVTraversal {
 							dirname(this.normalizeForComparison(path)),
 						) === parent &&
 						!directories.has(this.normalizeDirPath(path))
-					)
+					) {
 						this.removeSubtree(path)
+					}
 				}
 				this.nodes[parent] = contents
 				this.pendingVerification.delete(parent)
+				this.markDirty()
 				for (const path of directories) {
 					if (this.pendingVerification.has(path)) {
 						// An absent/recreated ancestor invalidates its entire old subtree.
 						this.removeSubtree(path)
 						this.pendingVerification.add(path)
+						this.markDirty()
 					}
 					this.enqueueDirectory(path)
+				}
+				// Apply fresh unreadable entries after subtree cleanup so per-item
+				// errors (e.g., 403 on a previously cached subdir) are preserved.
+				if (parentSelfUnreadable) {
+					this.recordUnreadable(parentCmp, 'list', parentSelfUnreadable.status)
+				} else {
+					this.clearUnreadable(parentCmp)
+				}
+				this.clearDirectUnreadableChildren(parent)
+				for (const item of unreadableItems) {
+					const itemCmp = this.normalizeForComparison(item.path)
+					if (itemCmp !== parentCmp) {
+						this.recordUnreadable(itemCmp, 'stat', item.status)
+					}
+				}
+				for (const item of contents) {
+					this.clearUnreadable(item.path)
 				}
 				await this.saveState()
 				break
@@ -451,6 +616,7 @@ export class ResumableWebDAVTraversal {
 		hasMore: boolean
 	}> {
 		let currentCursor = startCursor
+		const seenCursors = new Set<string>(currentCursor ? [currentCursor] : [])
 
 		while (true) {
 			const { response } = await this.executeWithRetry(() =>
@@ -473,6 +639,19 @@ export class ResumableWebDAVTraversal {
 				return
 			}
 
+			if (!response.cursor) {
+				logger.error('Delta response missing cursor while reset=false')
+				throw new Error('Delta response missing cursor while reset is false')
+			}
+
+			if (response.hasMore && seenCursors.has(response.cursor)) {
+				logger.error(
+					`Delta cursor stalled at "${response.cursor}" while hasMore=true`,
+				)
+				throw new Error('Delta cursor stalled while hasMore is true')
+			}
+
+			seenCursors.add(response.cursor)
 			currentCursor = response.cursor
 
 			yield {
@@ -506,10 +685,8 @@ export class ResumableWebDAVTraversal {
 				logger.warn(
 					'Delta reset during traversal, clearing cache and will trigger full re-scan',
 				)
-				this.nodes = {}
-				this.pendingVerification.clear()
-				this.queue = [this.remoteBaseDir]
-				this.processedCount = 0
+				// Fetch the fresh cursor before clearing local state so an interruption
+				// never persists an empty mirror paired with an expired cursor.
 				const { response: cursorResponse } = await this.executeWithRetry(() =>
 					getLatestDeltaCursor({
 						token: this.token,
@@ -518,26 +695,33 @@ export class ResumableWebDAVTraversal {
 						folderName: getRootFolderName(this.remoteBaseDir),
 					}),
 				)
+				this.nodes = {}
+				this.pendingVerification.clear()
+				this.unreadablePaths.clear()
+				this.queue = [this.remoteBaseDir]
+				this.lastFullScanAt = undefined
+				this.fullScanFromRoot = true
+				this.processedCount = 0
 				this.rootCursor = cursorResponse.cursor
+				this.markDirty()
 				return this.rootCursor
 			}
 
 			if (entries.length > 0) {
-				processedEntries += this.applyDeltaEntries(entries)
-				this.rootCursor = cursor
+				processedEntries += await this.applyDeltaPage(entries, cursor)
 
 				// Save state periodically based on number of processed entries
-				if (processedEntries >= this.saveInterval) {
+				if (this.shouldFlushThrottled(processedEntries)) {
 					await this.saveState()
 					processedEntries = 0
 				}
+			} else if (cursor !== this.rootCursor) {
+				this.rootCursor = cursor
+				this.markDirty()
 			}
 
 			finalCursor = cursor
-			this.rootCursor = cursor
 		}
-
-		await this.saveState()
 
 		return finalCursor
 	}
@@ -553,136 +737,272 @@ export class ResumableWebDAVTraversal {
 		return this.getAllFromCache()
 	}
 
-	/**
-	 * Apply delta changes to nodes
-	 */
-	private applyDeltaToNodes(entries: Array<DeltaEntry>): void {
-		// Prepare baseDir prefix for filtering
-		const baseDirPrefix = this.remoteBaseDir.endsWith('/')
-			? this.remoteBaseDir
-			: this.remoteBaseDir + '/'
-
-		// Sort by path length to process parents first
-		const sortedEntries = [...entries].sort(
-			(a, b) => a.path.length - b.path.length,
+	private getCachedNodeKind(normalizedPath: string): 'dir' | 'file' | 'none' {
+		const dirKey = this.normalizeDirPath(normalizedPath)
+		if (this.nodes[dirKey]) {
+			return 'dir'
+		}
+		const parentPath = dirname(normalizedPath)
+		if (!parentPath || parentPath === normalizedPath) {
+			return 'none'
+		}
+		const parentItems = this.nodes[this.normalizeDirPath(parentPath)]
+		if (!parentItems) {
+			return 'none'
+		}
+		const existing = parentItems.find(
+			(item) => this.normalizeForComparison(item.path) === normalizedPath,
 		)
+		if (!existing) return 'none'
+		return existing.isDir ? 'dir' : 'file'
+	}
 
-		for (const entry of sortedEntries) {
-			// Filter out changes that don't belong to remoteBaseDir scope
-			const normalizedBaseDir = this.normalizeDirPath(this.remoteBaseDir)
-			const normalizedEntryPath = this.normalizeDirPath(entry.path)
-			const isSelf = normalizedEntryPath === normalizedBaseDir
-			const isChild = entry.path.startsWith(baseDirPrefix)
+	private isWithinRemoteScope(normalizedPath: string): boolean {
+		const base = this.normalizeForComparison(this.remoteBaseDir)
+		if (normalizedPath === base) return true
+		const prefix = base === '/' ? '/' : `${base}/`
+		return normalizedPath.startsWith(prefix)
+	}
 
-			if (!isSelf && !isChild) {
+	private upsertChildInParent(parentKey: string, stat: StatModel): void {
+		const parentItems = this.nodes[parentKey]
+		if (!parentItems) return
+		const targetCmp = this.normalizeForComparison(stat.path)
+		this.nodes[parentKey] = [
+			...parentItems.filter(
+				(item) => this.normalizeForComparison(item.path) !== targetCmp,
+			),
+			stat,
+		]
+	}
+
+	private removeChildFromParent(parentKey: string, targetCmp: string): void {
+		const parentItems = this.nodes[parentKey]
+		if (!parentItems) return
+		this.nodes[parentKey] = parentItems.filter(
+			(item) => this.normalizeForComparison(item.path) !== targetCmp,
+		)
+	}
+
+	/**
+	 * Atomically validates and commits one delta page:
+	 * 1) Merges events per path while preserving whether any old subtree was invalidated;
+	 * 2) Pre-resolves file writes via `PROPFIND Depth: 0` before any cache/cursor mutation;
+	 * 3) Commits invalidated subtrees + reverse-depth deletes + forward-depth writes + next cursor.
+	 */
+	private async applyDeltaPage(
+		entries: Array<DeltaEntry>,
+		nextCursor: string,
+	): Promise<number> {
+		const baseComparison = this.normalizeForComparison(this.remoteBaseDir)
+		const merged = new Map<string, MergedDeltaItem>()
+		const sawDirectoryEvent = new Set<string>()
+
+		for (const entry of entries) {
+			const key = this.normalizeForComparison(entry.path)
+			if (!this.isWithinRemoteScope(key)) {
 				continue
 			}
 			if (entry.isDir) {
-				if (entry.isDeleted) {
-					const parentPath = dirname(this.normalizeForComparison(entry.path))
-					if (parentPath) {
-						const normalizedParentPath = this.normalizeDirPath(parentPath)
-						const parentItems = this.nodes[normalizedParentPath]
-						if (parentItems) {
-							const normalizedEntryPathForCmp = this.normalizeForComparison(
-								entry.path,
-							)
-							this.nodes[normalizedParentPath] = parentItems.filter(
-								(item) =>
-									this.normalizeForComparison(item.path) !==
-									normalizedEntryPathForCmp,
-							)
-						}
-					}
+				sawDirectoryEvent.add(key)
+			}
+			const prev = merged.get(key)
+			const existingKind = this.getCachedNodeKind(key)
+			const typeFlippedFromBatch =
+				prev !== undefined && prev.entry.isDir !== entry.isDir
+			const typeFlippedFromCache =
+				(existingKind === 'dir' && !entry.isDir) ||
+				(existingKind === 'file' && entry.isDir)
+			const invalidatedSubtree =
+				(prev?.invalidatedSubtree ?? false) ||
+				entry.isDeleted ||
+				typeFlippedFromBatch ||
+				typeFlippedFromCache
+			merged.set(key, {
+				key,
+				entry,
+				invalidatedSubtree,
+				isSelf: key === baseComparison,
+			})
+		}
 
-					this.removeSubtree(entry.path)
-					if (isSelf) this.enqueueDirectory(this.remoteBaseDir)
-				} else {
-					const parentPath = dirname(this.normalizeForComparison(entry.path))
+		const items = [...merged.values()]
+		const deletes = items
+			.filter((item) => item.entry.isDeleted)
+			.sort((a, b) => pathDepth(b.key) - pathDepth(a.key))
+		const writes = items
+			.filter((item) => !item.entry.isDeleted)
+			.sort((a, b) => pathDepth(a.key) - pathDepth(b.key))
 
-					// Only update parent's children list if parent already exists
-					// (Avoid creating incomplete parent records)
-					if (parentPath) {
-						const normalizedParentPath = this.normalizeDirPath(parentPath)
-						const parentItems = this.nodes[normalizedParentPath]
+		const invalidatedDirPrefixes: string[] = []
+		for (const item of items) {
+			const mightHaveOldDir =
+				item.entry.isDir ||
+				sawDirectoryEvent.has(item.key) ||
+				this.getCachedNodeKind(item.key) === 'dir'
+			if (item.invalidatedSubtree && mightHaveOldDir) {
+				invalidatedDirPrefixes.push(this.normalizeDirPath(item.key))
+			}
+		}
 
-						if (parentItems) {
-							const dirStat: StatModel = {
-								path: entry.path,
-								basename: entry.path.split('/').pop() || '',
-								isDir: true,
-								isDeleted: false,
-								mtime: entry.modified
-									? new Date(entry.modified).getTime()
-									: undefined,
-							}
+		const isCoveredByInvalidation = (dirKey: string) =>
+			invalidatedDirPrefixes.some((prefix) => dirKey.startsWith(prefix))
 
-							const normalizedEntryPathForCmp = this.normalizeForComparison(
-								entry.path,
-							)
-							this.nodes[normalizedParentPath] = [
-								...parentItems.filter(
-									(item) =>
-										this.normalizeForComparison(item.path) !==
-										normalizedEntryPathForCmp,
-								),
-								dirStat,
-							]
-						}
-					}
+		// Phase A: resolve file metadata via PROPFIND Depth: 0 without mutating cache or cursor.
+		const resolvedFiles = new Map<string, ResolvedFileWrite>()
+		for (const item of writes) {
+			if (item.entry.isDir || item.isSelf) continue
+			const parentKey = this.normalizeDirPath(dirname(item.key))
+			if (!this.nodes[parentKey] || isCoveredByInvalidation(parentKey)) {
+				continue
+			}
 
-					this.enqueueDirectory(entry.path)
-				}
+			const existing = this.nodes[parentKey].find(
+				(node) => this.normalizeForComparison(node.path) === item.key,
+			)
+			if (
+				!item.invalidatedSubtree &&
+				existing &&
+				!existing.isDir &&
+				item.entry.revision !== undefined &&
+				existing.revision !== undefined &&
+				existing.revision === item.entry.revision &&
+				existing.etag
+			) {
+				resolvedFiles.set(item.key, {
+					kind: 'keep-existing',
+					stat: existing,
+				})
+				continue
+			}
+
+			const result = await statRemotePath(
+				this.settings,
+				this.token,
+				item.key,
+				this.throwIfCancelled,
+				() => this.emitProgress('retrying', item.key),
+			)
+			if (result.status === 'not-found') {
+				resolvedFiles.set(item.key, {
+					kind: 'missing-verify',
+					path: item.key,
+				})
+			} else if (result.status === 'unreadable') {
+				resolvedFiles.set(item.key, {
+					kind: 'unreadable',
+					path: item.key,
+					status: result.statusText,
+				})
+			} else if (result.stat.isDir) {
+				resolvedFiles.set(item.key, {
+					kind: 'dir-flip',
+					stat: result.stat,
+				})
 			} else {
-				// is file
-				const parentPath = dirname(this.normalizeForComparison(entry.path))
+				resolvedFiles.set(item.key, {
+					kind: 'file',
+					stat: {
+						...result.stat,
+						...(item.entry.revision !== undefined
+							? { revision: item.entry.revision }
+							: {}),
+					},
+				})
+			}
+		}
 
-				// Only update parent's children list if parent exists
-				if (parentPath) {
-					const normalizedParentPath = this.normalizeDirPath(parentPath)
-					if (entry.isDeleted) {
-						const parentItems = this.nodes[normalizedParentPath]
-						if (parentItems) {
-							const normalizedEntryPathForCmp = this.normalizeForComparison(
-								entry.path,
-							)
-							this.nodes[normalizedParentPath] = parentItems.filter(
-								(item) =>
-									this.normalizeForComparison(item.path) !==
-									normalizedEntryPathForCmp,
-							)
-						}
-					} else {
-						// Only update if parent directory already exists in cache
-						// (Avoid creating incomplete parent records that would hide other files)
-						const parentItems = this.nodes[normalizedParentPath]
+		// Phase B: commit everything synchronously once all network calls succeeded.
+		for (const prefix of invalidatedDirPrefixes) {
+			this.removeSubtree(prefix)
+		}
+		for (const resolved of resolvedFiles.values()) {
+			if (resolved.kind === 'dir-flip') {
+				this.removeSubtree(resolved.stat.path)
+			}
+		}
 
-						if (parentItems) {
-							const stat: StatModel = {
-								path: entry.path,
-								basename: entry.path.split('/').pop() || '',
-								isDir: false,
-								isDeleted: false,
-								mtime: new Date(entry.modified).getTime(),
-								size: entry.size,
-							}
-
-							const normalizedEntryPathForCmp = this.normalizeForComparison(
-								entry.path,
-							)
-							this.nodes[normalizedParentPath] = [
-								...parentItems.filter(
-									(item) =>
-										this.normalizeForComparison(item.path) !==
-										normalizedEntryPathForCmp,
-								),
-								stat,
-							]
-						}
-					}
+		for (const item of deletes) {
+			if (!item.isSelf) {
+				const parentKey = this.normalizeDirPath(dirname(item.key))
+				this.removeChildFromParent(parentKey, item.key)
+			}
+			this.clearUnreadableSubtree(item.key)
+			if (item.entry.isDir) {
+				this.removeSubtree(item.key)
+				if (item.isSelf) {
+					this.enqueueDirectory(this.remoteBaseDir)
 				}
 			}
 		}
+
+		for (const item of writes) {
+			const resolved = resolvedFiles.get(item.key)
+			if (item.entry.isDir || resolved?.kind === 'dir-flip') {
+				this.clearUnreadable(item.key)
+				if (!item.isSelf) {
+					const parentKey = this.normalizeDirPath(dirname(item.key))
+					const dirStat: StatModel =
+						resolved?.kind === 'dir-flip'
+							? resolved.stat
+							: {
+									path: item.key,
+									basename: item.key.split('/').pop() || '',
+									isDir: true,
+									isDeleted: false,
+								}
+					this.upsertChildInParent(parentKey, dirStat)
+				}
+				this.enqueueDirectory(item.key)
+				continue
+			}
+
+			if (item.isSelf) {
+				continue
+			}
+
+			const parentKey = this.normalizeDirPath(dirname(item.key))
+			if (!this.nodes[parentKey]) {
+				const parentCoveredByQueue = this.queue.some((queued) =>
+					parentKey.startsWith(this.normalizeDirPath(queued)),
+				)
+				if (!parentCoveredByQueue) {
+					if (parentKey === this.normalizeDirPath(this.remoteBaseDir)) {
+						this.enqueueDirectory(this.remoteBaseDir)
+					} else {
+						this.pendingVerification.add(parentKey)
+						this.markDirty()
+					}
+				}
+				continue
+			}
+
+			if (!resolved) {
+				continue
+			}
+
+			if (resolved.kind === 'missing-verify') {
+				this.pendingVerification.add(this.normalizeDirPath(resolved.path))
+				this.markDirty()
+				continue
+			}
+
+			if (resolved.kind === 'unreadable') {
+				this.removeChildFromParent(parentKey, item.key)
+				this.recordUnreadable(resolved.path, 'stat', resolved.status)
+				continue
+			}
+
+			this.clearUnreadable(item.key)
+			this.upsertChildInParent(parentKey, resolved.stat)
+		}
+
+		this.rootCursor = nextCursor
+		this.processedChanges += entries.length
+		this.discoveredCount = this.countDiscoveredItems()
+		this.markDirty()
+		this.emitProgress('incremental')
+		return entries.length
 	}
 
 	/**
@@ -703,14 +1023,6 @@ export class ResumableWebDAVTraversal {
 		)
 	}
 
-	private applyDeltaEntries(entries: DeltaEntry[]): number {
-		this.applyDeltaToNodes(entries)
-		this.processedChanges += entries.length
-		this.discoveredCount = this.countDiscoveredItems()
-		this.emitProgress('incremental')
-		return entries.length
-	}
-
 	/**
 	 * Load state
 	 */
@@ -725,43 +1037,56 @@ export class ResumableWebDAVTraversal {
 				this.rootCursor = ''
 				this.queue = []
 				this.pendingVerification.clear()
+				this.unreadablePaths.clear()
 				this.nodes = {}
+				this.lastFullScanAt = undefined
+				this.fullScanFromRoot = false
+				this.dirty = false
+				this.lastSavedAt = this.now()
 				return
 			}
 			this.rootCursor = cache.rootCursor || ''
 			this.queue = cache.queue || []
 			this.pendingVerification = new Set(cache.pendingVerification ?? [])
+			this.unreadablePaths = new Map(
+				(cache.unreadablePaths ?? []).map((entry) => [
+					this.normalizeForComparison(entry.path),
+					entry,
+				]),
+			)
 			this.nodes = cache.nodes || {}
+			this.lastFullScanAt = cache.lastFullScanAt
+			this.fullScanFromRoot = false
 			this.processedCount = Object.keys(this.nodes).length
 			this.discoveredCount = this.countDiscoveredItems()
+			this.dirty = false
+			this.lastSavedAt = this.now()
 		}
 	}
 
 	/**
-	 * Save current state
+	 * Save current state when mutations have occurred since the last flush.
 	 */
-	private async saveState(): Promise<void> {
-		this.checkCancelled()
+	private async saveState(options?: {
+		allowWhenCancelled?: boolean
+	}): Promise<void> {
+		if (!this.dirty) return
+		if (!options?.allowWhenCancelled) {
+			this.checkCancelled()
+		}
 		await traverseWebDAVKV.set(this.kvKey, {
+			schemaVersion: TRAVERSAL_CACHE_SCHEMA,
 			rootCursor: this.rootCursor,
 			queue: this.queue,
 			pendingVerification: [...this.pendingVerification],
+			...(this.unreadablePaths.size > 0
+				? { unreadablePaths: [...this.unreadablePaths.values()] }
+				: {}),
 			nodes: this.nodes,
+			lastFullScanAt: this.lastFullScanAt,
 		})
-	}
-
-	/**
-	 * Clear cache (force re-traversal)
-	 */
-	async clearCache(): Promise<void> {
-		await traverseWebDAVKV.unset(this.kvKey)
-		this.rootCursor = ''
-		this.queue = []
-		this.pendingVerification.clear()
-		this.nodes = {}
-		this.processedCount = 0
-		this.discoveredCount = 0
-		this.processedChanges = 0
+		this.dirty = false
+		this.lastSavedAt = this.now()
 	}
 
 	/**
@@ -769,7 +1094,7 @@ export class ResumableWebDAVTraversal {
 	 */
 	async isCacheValid(): Promise<boolean> {
 		const cache = await traverseWebDAVKV.get(this.kvKey)
-		if (!cache) {
+		if (!cache || !isTraversalCacheCompatible(cache, this.remoteBaseDir)) {
 			return false
 		}
 

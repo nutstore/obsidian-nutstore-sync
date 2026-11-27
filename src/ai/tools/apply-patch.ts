@@ -2,12 +2,10 @@ import { posix as pathPosix } from 'path-browserify'
 import { tool } from 'ai'
 import * as z from 'zod/mini'
 import i18n from '~/i18n'
-import { ReversibleOpRecorder } from '~/ai/tools/bash/fs'
+import { isNotFoundError, ReversibleOpRecorder } from '~/ai/tools/bash/fs'
 import {
 	AGENTS_MOUNT_POINT,
-	BASH_TMP_MOUNT_POINT,
 	SETTINGS_FILE_PATH,
-	VAULT_MOUNT_POINT,
 } from '~/ai/tools/bash/mount-points'
 import {
 	assertCanonicalVirtualPathCharacters,
@@ -80,8 +78,13 @@ function parseHunkHeader(line: string) {
 	return unifiedHeader ? (unifiedHeader[1]?.trim() ?? '') : header
 }
 
+const utf8Decoder = new TextDecoder('utf-8')
+
 export function parsePatch(patch: string): PatchOperation[] {
-	const lines = patch.replace(/\r\n/g, '\n').split('\n')
+	const normalizedPatch = patch.includes('\r\n')
+		? patch.replace(/\r\n/g, '\n')
+		: patch
+	const lines = normalizedPatch.split('\n')
 	if (lines[0] !== '*** Begin Patch') {
 		invalidPatch('the first line must be "*** Begin Patch"')
 	}
@@ -193,10 +196,6 @@ export function parsePatch(patch: string): PatchOperation[] {
 	return operations
 }
 
-function readBinaryText(buffer: Uint8Array): string {
-	return new TextDecoder('utf-8').decode(buffer)
-}
-
 function resolveVirtualPath(rawPath: string): string {
 	const trimmed = rawPath.trim()
 	if (!trimmed) {
@@ -243,93 +242,171 @@ function toDisplayKey(virtualPath: string): string {
 	return normalized.startsWith('/') ? normalized.slice(1) : normalized
 }
 
-function findMatchingBlock(
-	lines: string[],
-	block: string[],
+function buildLineFailureTable(block: readonly string[]): Int32Array {
+	const lps = new Int32Array(block.length)
+	let prefixLength = 0
+	for (let index = 1; index < block.length; index += 1) {
+		while (prefixLength > 0 && block[index] !== block[prefixLength]) {
+			prefixLength = lps[prefixLength - 1]
+		}
+		if (block[index] === block[prefixLength]) {
+			prefixLength += 1
+			lps[index] = prefixLength
+		}
+	}
+	return lps
+}
+
+function blockMatchesAt(
+	lines: readonly string[],
+	block: readonly string[],
+	start: number,
+) {
+	if (start < 0 || start + block.length > lines.length) return false
+	for (let offset = 0; offset < block.length; offset += 1) {
+		if (lines[start + offset] !== block[offset]) return false
+	}
+	return true
+}
+
+function findUniqueHunkHeader(
+	lines: readonly string[],
+	header: string,
 	start: number,
 	path: string,
 ) {
-	if (block.length === 0) {
+	let firstMatch = -1
+	for (let index = start; index < lines.length; index += 1) {
+		if (!lines[index].includes(header)) continue
+		if (firstMatch !== -1) {
+			invalidPatch(`hunk header "${header}" is not unique in "${path}"`)
+		}
+		firstMatch = index
+	}
+	if (firstMatch === -1) {
+		invalidPatch(`hunk header "${header}" was not found in "${path}"`)
+	}
+	return firstMatch
+}
+
+/**
+ * Finds the unique occurrence of `block` in `lines` at or after `start` in
+ * linear O(n + m) time using KMP, preserving exact overlapping match counts.
+ */
+function findMatchingBlock(
+	lines: readonly string[],
+	block: readonly string[],
+	start: number,
+	path: string,
+) {
+	const blockLength = block.length
+	if (blockLength === 0) {
 		return start
 	}
-	const matches: number[] = []
-	for (let index = start; index <= lines.length - block.length; index += 1) {
-		if (block.every((line, offset) => lines[index + offset] === line)) {
-			matches.push(index)
+	let matchCount = 0
+	let firstMatch = -1
+	if (blockLength === 1) {
+		const target = block[0]
+		for (let index = start; index < lines.length; index += 1) {
+			if (lines[index] === target) {
+				if (matchCount === 0) firstMatch = index
+				matchCount += 1
+			}
+		}
+	} else if (start + blockLength <= lines.length) {
+		const lps = buildLineFailureTable(block)
+		let matched = 0
+		for (let index = start; index < lines.length; index += 1) {
+			const line = lines[index]
+			while (matched > 0 && line !== block[matched]) {
+				matched = lps[matched - 1]
+			}
+			if (line === block[matched]) {
+				matched += 1
+				if (matched === blockLength) {
+					if (matchCount === 0) firstMatch = index - blockLength + 1
+					matchCount += 1
+					matched = lps[matched - 1]
+				}
+			}
 		}
 	}
-	if (matches.length === 0) {
+	if (matchCount === 0) {
 		invalidPatch(`hunk context was not found in "${path}"`)
 	}
-	if (matches.length > 1) {
+	if (matchCount > 1) {
 		invalidPatch(
-			`hunk context matched ${matches.length} locations in "${path}"; include more context`,
+			`hunk context matched ${matchCount} locations in "${path}"; include more context`,
 		)
 	}
-	return matches[0]
+	return firstMatch
 }
 
 export function applyHunks(content: string, hunks: PatchHunk[], path: string) {
-	const newline = content.includes('\r\n') ? '\r\n' : '\n'
+	const hasCrLf = content.includes('\r\n')
+	const newline = hasCrLf ? '\r\n' : '\n'
 	const hasFinalNewline = content.endsWith('\n')
+	const normalizedContent = hasCrLf ? content.replace(/\r\n/g, '\n') : content
 	const lines =
-		content === ''
+		normalizedContent === ''
 			? []
-			: content
-					.replace(/\r\n/g, '\n')
-					.split('\n')
-					.slice(0, hasFinalNewline ? -1 : undefined)
-	let cursor = 0
+			: hasFinalNewline
+				? normalizedContent.slice(0, -1).split('\n')
+				: normalizedContent.split('\n')
+	// Hunks advance strictly forward over original lines; assembling into a fresh
+	// output array stays O(n + inserted) instead of O(hunks * n) splicing and
+	// avoids call-stack overflow on large `splice(..., ...newLines)` spreads.
+	const resultLines: string[] = []
+	let sourceCursor = 0
 
 	for (const hunk of hunks) {
-		const oldLines = hunk.lines
-			.filter((line) => line.kind !== 'add')
-			.map((line) => line.text)
-		const newLines = hunk.lines
-			.filter((line) => line.kind !== 'delete')
-			.map((line) => line.text)
+		const oldLines: string[] = []
+		const newLines: string[] = []
+		for (const line of hunk.lines) {
+			if (line.kind !== 'add') oldLines.push(line.text)
+			if (line.kind !== 'delete') newLines.push(line.text)
+		}
 
-		let searchStart = cursor
+		let searchStart = sourceCursor
 		if (hunk.header) {
-			const headerMatches = lines
-				.map((line, index) => ({ line, index }))
-				.filter(
-					(entry) =>
-						entry.index >= cursor &&
-						(entry.line === hunk.header || entry.line.includes(hunk.header)),
-				)
-			if (headerMatches.length === 0) {
-				invalidPatch(`hunk header "${hunk.header}" was not found in "${path}"`)
-			}
-			if (headerMatches.length > 1) {
-				invalidPatch(`hunk header "${hunk.header}" is not unique in "${path}"`)
-			}
-			searchStart = headerMatches[0].index
+			searchStart = findUniqueHunkHeader(lines, hunk.header, sourceCursor, path)
 		}
 
 		if (oldLines.length === 0 && !hunk.endOfFile && !hunk.header) {
-			if (lines.length !== 0) {
+			const remainingLength = resultLines.length + (lines.length - sourceCursor)
+			if (remainingLength !== 0) {
 				invalidPatch(
 					`insertion in "${path}" needs context, a @@ header, or "*** End of File"`,
 				)
 			}
-			searchStart = 0
+			searchStart = sourceCursor
 		}
 		const matchIndex = hunk.endOfFile
 			? lines.length - oldLines.length
 			: findMatchingBlock(lines, oldLines, searchStart, path)
 		if (
 			matchIndex < searchStart ||
-			!oldLines.every((line, offset) => lines[matchIndex + offset] === line)
+			!blockMatchesAt(lines, oldLines, matchIndex)
 		) {
 			invalidPatch(`end-of-file hunk context was not found in "${path}"`)
 		}
-		lines.splice(matchIndex, oldLines.length, ...newLines)
-		cursor = matchIndex + newLines.length
+		for (let index = sourceCursor; index < matchIndex; index += 1) {
+			resultLines.push(lines[index])
+		}
+		for (let index = 0; index < newLines.length; index += 1) {
+			resultLines.push(newLines[index])
+		}
+		sourceCursor = matchIndex + oldLines.length
 	}
 
-	const result = lines.join(newline)
-	return hasFinalNewline && lines.length > 0 ? `${result}${newline}` : result
+	for (let index = sourceCursor; index < lines.length; index += 1) {
+		resultLines.push(lines[index])
+	}
+
+	const result = resultLines.join(newline)
+	return hasFinalNewline && resultLines.length > 0
+		? `${result}${newline}`
+		: result
 }
 
 function assertUniqueVirtualPaths(paths: string[]) {
@@ -344,20 +421,12 @@ function assertUniqueVirtualPaths(paths: string[]) {
 
 export const applyPatchTool = tool({
 	description: [
-		'Apply a file-oriented patch against the virtual filesystem.',
-		'The required "purpose" field is a very short (up to 120 characters) plain-language summary of what this patch changes and why it is being applied, written in the same language as the user\'s request and safe for users who cannot read diffs — no code, no markdown, no newlines, no patch syntax.',
-		`Use a vault-relative path for files in the vault (relative paths resolve from ${VAULT_MOUNT_POINT}), or an absolute virtual path for any writable mounted filesystem. For example, scratch files live under ${BASH_TMP_MOUNT_POINT}, agent data under ${AGENTS_MOUNT_POINT}, and live plugin settings at ${SETTINGS_FILE_PATH}.`,
-		'Every patch, including one that only adds, deletes, updates, or moves a single file, MUST start with "*** Begin Patch" and end with "*** End Patch".',
-		'An Add patch has this complete form: "*** Begin Patch\\n*** Add File: notes/example.md\\n+Example line\\n+\\n+示例行 🌱\\n*** End Patch".',
-		'Every line in an Add File section, including blank lines, must start with +.',
-		'A Delete patch has this complete form: "*** Begin Patch\\n*** Delete File: notes/example.md\\n*** End Patch".',
-		'An Update patch has this complete form: "*** Begin Patch\\n*** Update File: notes/example.md\\n@@\\n-old text\\n+new text\\n*** End Patch".',
-		'File operation headers always use the colon syntax: "*** Add File: path", "*** Delete File: path", "*** Update File: path", and "*** Move to: path".',
-		'Update sections contain @@ hunks; unified numeric headers such as @@ -10,3 +10,4 @@ are also accepted.',
-		'Unchanged lines start with a space, removals with -, and additions with +.',
-		'Include *** Move to immediately after an Update File header only when renaming the file; its value must be the destination vault path, never a description of the edit.',
-		'Include enough unchanged context for every hunk to match exactly once.',
-		'Read existing files before updating, deleting, or moving them.',
+		'Apply a file-oriented patch to writable virtual filesystem paths (vault-relative or absolute virtual paths).',
+		"purpose (<=120 chars): plain-language summary in the user's language of what this patch changes and why — no code, markdown, newlines, or patch syntax.",
+		'Wrap every patch in "*** Begin Patch" and "*** End Patch".',
+		'Operations: "*** Add File: path" (every content line, including blank lines, starts with "+"); "*** Delete File: path"; "*** Update File: path" with optional immediately following "*** Move to: destPath" (destination path only) and "@@" hunks (unified "@@ -a,b +c,d @@" accepted; unchanged lines start with " ", removals "-", additions "+"; optional "*** End of File").',
+		'Add example: "*** Begin Patch\\n*** Add File: notes/example.md\\n+Example\\n+\\n+示例行 🌱\\n*** End Patch".',
+		'Include enough unchanged context for every hunk to match uniquely. Read existing files before updating, deleting, or moving them.',
 	].join(' '),
 	inputSchema: z.object({
 		purpose: textValue('purpose').check(
@@ -410,6 +479,7 @@ export const applyPatchTool = tool({
 			getSettingsSnapshot,
 			updateSettings,
 			fileSystemManager,
+			includePathIndex: false,
 		})
 
 		const planned: PlannedOperation[] = []
@@ -432,12 +502,19 @@ export const applyPatchTool = tool({
 					i18n.t('chatbox.errors.fileNotRead', { path: operation.path }),
 				)
 			}
-			if (!(await mountable.exists(path))) {
-				throw new Error(
-					i18n.t('chatbox.errors.fileNotFound', { path: operation.path }),
-				)
+			let rawBefore: Uint8Array
+			try {
+				rawBefore = await mountable.readFileBuffer(path)
+			} catch (error) {
+				if (isNotFoundError(error)) {
+					throw new Error(
+						i18n.t('chatbox.errors.fileNotFound', { path: operation.path }),
+						{ cause: error },
+					)
+				}
+				throw error
 			}
-			const before = readBinaryText(await mountable.readFileBuffer(path))
+			const before = utf8Decoder.decode(rawBefore)
 			if (operation.kind === 'delete') {
 				planned.push({ kind: 'delete', path, before })
 				continue

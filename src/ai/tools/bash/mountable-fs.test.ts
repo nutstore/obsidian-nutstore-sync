@@ -1,5 +1,6 @@
 import { Bash, InMemoryFs } from 'just-bash/browser'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { decodeReversibleFileSnapshot } from '~/ai/chat/messages/reversible-content'
 import { ReversibleOpRecorder } from './fs'
 import { MountableFs } from './mountable-fs'
 import { ReversibleFs } from './reversible-fs'
@@ -136,5 +137,234 @@ describe('mounted directory enumeration', () => {
 				isSymbolicLink: false,
 			},
 		])
+	})
+
+	it('delegates readdirWithFileTypes natively without per-entry lstat calls', async () => {
+		const base = new InMemoryFs({
+			'/笔记 Notes 🌱/条目一.md': '中性内容 Neutral entry 🌱',
+			'/笔记 Notes 🌱/子目录 Sub 📁/条目二.md': '次级内容 Secondary 🌿',
+		})
+		const mounted = new InMemoryFs({
+			'/清单.md': '挂载内容 Mounted 🧭',
+		})
+		const baseLstatSpy = vi.spyOn(base, 'lstat')
+		const mountLstatSpy = vi.spyOn(mounted, 'lstat')
+		const fs = new MountableFs({
+			base,
+			mounts: [
+				{
+					mountPoint: '/.config/空间 Space 🧭',
+					filesystem: mounted,
+				},
+			],
+		})
+
+		const noteEntries = await fs.readdirWithFileTypes('/笔记 Notes 🌱')
+		expect(noteEntries).toEqual([
+			{
+				name: '子目录 Sub 📁',
+				isFile: false,
+				isDirectory: true,
+				isSymbolicLink: false,
+			},
+			{
+				name: '条目一.md',
+				isFile: true,
+				isDirectory: false,
+				isSymbolicLink: false,
+			},
+		])
+		// Virtual ancestor directories not present in base still surface child mounts.
+		expect(await fs.readdirWithFileTypes('/.config')).toEqual([
+			{
+				name: '空间 Space 🧭',
+				isFile: false,
+				isDirectory: true,
+				isSymbolicLink: false,
+			},
+		])
+		expect(await fs.readdirWithFileTypes('/.config/空间 Space 🧭')).toEqual([
+			{
+				name: '清单.md',
+				isFile: true,
+				isDirectory: false,
+				isSymbolicLink: false,
+			},
+		])
+		expect(baseLstatSpy).not.toHaveBeenCalled()
+		expect(mountLstatSpy).not.toHaveBeenCalled()
+	})
+
+	it('rejects moving or copying a directory into itself on both base and mounts', async () => {
+		const base = new InMemoryFs({
+			'/工作区 Workspace 🌿/文档.md': '基础文档 Base doc 🌱',
+		})
+		const mounted = new InMemoryFs({
+			'/项目 Project 🧩/入口.md': '挂载文档 Mounted doc 🧭',
+		})
+		const fs = new MountableFs({
+			base,
+			mounts: [{ mountPoint: '/.agents/apps', filesystem: mounted }],
+		})
+
+		await expect(
+			fs.mv('/工作区 Workspace 🌿', '/工作区 Workspace 🌿/嵌套 Nested'),
+		).rejects.toThrow(/EINVAL/)
+		await expect(
+			fs.mv(
+				'/.agents/apps/项目 Project 🧩',
+				'/.agents/apps/项目 Project 🧩/子项',
+			),
+		).rejects.toThrow(/EINVAL/)
+		await expect(
+			fs.cp(
+				'/.agents/apps/项目 Project 🧩',
+				'/.agents/apps/项目 Project 🧩/副本',
+				{
+					recursive: true,
+				},
+			),
+		).rejects.toThrow(/EINVAL/)
+	})
+
+	it('copies trees across mounts without invoking destination chmod', async () => {
+		const base = new InMemoryFs()
+		const mounted = new InMemoryFs({
+			'/章节 Chapter 📖/说明🌱.md': '跨挂载内容 Cross-mount content 🌿',
+		})
+		const baseChmodSpy = vi.spyOn(base, 'chmod')
+		const fs = new MountableFs({
+			base,
+			mounts: [{ mountPoint: '/.agents/skills', filesystem: mounted }],
+		})
+
+		await fs.cp('/.agents/skills/章节 Chapter 📖', '/导出 Export 📦', {
+			recursive: true,
+		})
+
+		expect(await base.readFile('/导出 Export 📦/说明🌱.md')).toBe(
+			'跨挂载内容 Cross-mount content 🌿',
+		)
+		expect(baseChmodSpy).not.toHaveBeenCalled()
+	})
+
+	it('reuses verbatim write bytes in ReversibleFs while reading back transforming mounts', async () => {
+		const base = new InMemoryFs({
+			'/草稿 Draft 🌱.md': '初始文本 Initial text 🌱',
+		})
+		const transformingInner = new InMemoryFs({
+			'/config.json': '{"mode":"a"}\n',
+		})
+		const transformingFs = Object.assign(
+			Object.create(transformingInner) as InMemoryFs,
+			{
+				transformsWritesAt: () => true,
+				async writeFile(path: string, content: string | Uint8Array) {
+					const raw =
+						typeof content === 'string'
+							? content
+							: new TextDecoder('utf-8').decode(content)
+					const parsed = JSON.parse(raw) as Record<string, unknown>
+					await transformingInner.writeFile(
+						path,
+						`${JSON.stringify({ ...parsed, normalized: '已规范化 🧭' })}\n`,
+					)
+				},
+			},
+		)
+		const baseReadSpy = vi.spyOn(base, 'readFileBuffer')
+		const baseExistsSpy = vi.spyOn(base, 'exists')
+		const mountReadSpy = vi.spyOn(transformingInner, 'readFileBuffer')
+
+		const recorder = new ReversibleOpRecorder()
+		const mountable = new MountableFs({
+			base,
+			mounts: [{ mountPoint: '/.config/demo', filesystem: transformingFs }],
+		})
+		const fs = new ReversibleFs(mountable, recorder, {
+			absoluteMountPoints: ['/.config/demo'],
+		})
+
+		// Updating an existing verbatim file reads only once for `before` and skips
+		// both parent `exists` probing and post-write read-back.
+		await fs.writeFile('/草稿 Draft 🌱.md', '更新文本 Updated text 🌿')
+		expect(baseReadSpy).toHaveBeenCalledTimes(1)
+		expect(baseExistsSpy).not.toHaveBeenCalled()
+
+		// Updating a second time in the same turn already has `before`, so zero reads.
+		await fs.writeFile('/草稿 Draft 🌱.md', '最终文本 Final text 🚀')
+		expect(baseReadSpy).toHaveBeenCalledTimes(1)
+
+		// Creating a file in a brand-new nested folder records both parents and file
+		// without post-write reads.
+		await fs.writeFile(
+			'/新建目录 New 📁/子层 Sub/文档🌱.md',
+			'新建正文 New body 🌱',
+		)
+		expect(baseReadSpy).toHaveBeenCalledTimes(1)
+
+		// Writing to a transforming mount must read back the normalized bytes.
+		await fs.writeFile('/.config/demo/config.json', '{"mode":"b"}')
+		expect(mountReadSpy).toHaveBeenCalledTimes(2)
+
+		const ops = await recorder.getNetOperations()
+		const updatedDraft = ops.find(
+			(op) => op.operation === 'update' && op.vaultPath === '草稿 Draft 🌱.md',
+		)
+		const createdNestedDir = ops.find(
+			(op) => op.operation === 'create' && op.vaultPath === '新建目录 New 📁',
+		)
+		const createdSubDir = ops.find(
+			(op) =>
+				op.operation === 'create' &&
+				op.vaultPath === '新建目录 New 📁/子层 Sub',
+		)
+		const createdNestedFile = ops.find(
+			(op) =>
+				op.operation === 'create' &&
+				op.vaultPath === '新建目录 New 📁/子层 Sub/文档🌱.md',
+		)
+		const updatedConfig = ops.find(
+			(op) =>
+				op.operation === 'update' &&
+				op.vaultPath === '/.config/demo/config.json',
+		)
+
+		expect(createdNestedDir?.operation).toBe('create')
+		expect(createdSubDir?.operation).toBe('create')
+		expect(createdNestedFile?.operation).toBe('create')
+		expect(updatedDraft?.operation).toBe('update')
+		expect(updatedConfig?.operation).toBe('update')
+
+		const decoder = new TextDecoder('utf-8')
+		if (createdNestedDir?.operation === 'create') {
+			expect(createdNestedDir.after).toEqual({ kind: 'dir' })
+		}
+		if (createdSubDir?.operation === 'create') {
+			expect(createdSubDir.after).toEqual({ kind: 'dir' })
+		}
+		if (
+			createdNestedFile?.operation === 'create' &&
+			createdNestedFile.after?.kind === 'file'
+		) {
+			expect(
+				decoder.decode(
+					await decodeReversibleFileSnapshot(createdNestedFile.after),
+				),
+			).toBe('新建正文 New body 🌱')
+		}
+		if (updatedDraft?.operation === 'update' && updatedDraft.after) {
+			expect(
+				decoder.decode(await decodeReversibleFileSnapshot(updatedDraft.before)),
+			).toBe('初始文本 Initial text 🌱')
+			expect(
+				decoder.decode(await decodeReversibleFileSnapshot(updatedDraft.after)),
+			).toBe('最终文本 Final text 🚀')
+		}
+		if (updatedConfig?.operation === 'update' && updatedConfig.after) {
+			expect(
+				decoder.decode(await decodeReversibleFileSnapshot(updatedConfig.after)),
+			).toBe('{"mode":"b","normalized":"已规范化 🧭"}\n')
+		}
 	})
 })

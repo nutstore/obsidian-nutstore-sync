@@ -56,6 +56,7 @@ export async function restoreVirtualReversibleOperations(
 		fileSystemManager: options.fileSystemManager,
 		getSettingsSnapshot: options.settingsIo?.getSettingsSnapshot,
 		updateSettings: options.settingsIo?.updateSettings,
+		includePathIndex: false,
 	})
 	const earliest = new Map<string, ReversibleToolOp>()
 	for (const operation of operations) {

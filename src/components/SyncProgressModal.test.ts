@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { obsidianRuntime } from '@test/obsidian-runtime'
 import { Platform } from 'obsidian'
 import type NutstorePlugin from '~/index'
 import i18n from '~/i18n'
@@ -13,88 +14,11 @@ import type {
 } from '~/services/progress.service'
 import SyncProgressModal from './SyncProgressModal'
 
-const { notice } = vi.hoisted(() => ({ notice: vi.fn() }))
+const notice = vi.fn()
 
-vi.mock('obsidian', () => {
-	function element(
-		tag = 'div',
-		options: {
-			cls?: string
-			text?: string
-			attr?: Record<string, string>
-		} = {},
-	) {
-		const el = document.createElement(tag)
-		el.className = options.cls ?? ''
-		el.textContent = options.text ?? ''
-		Object.entries(options.attr ?? {}).forEach(([key, value]) =>
-			el.setAttribute(key, value),
-		)
-		return Object.assign(el, {
-			createDiv: (opts?: typeof options) =>
-				el.appendChild(element('div', opts)),
-			createSpan: (opts?: typeof options) =>
-				el.appendChild(element('span', opts)),
-			empty: () => el.replaceChildren(),
-			setText: (text: string) => {
-				el.textContent = text
-			},
-			addClass: (cls: string) => el.classList.add(...cls.split(/\s+/)),
-			removeClass: (cls: string) => el.classList.remove(...cls.split(/\s+/)),
-			show: () => {
-				el.style.removeProperty('display')
-			},
-			hide: () => {
-				el.style.setProperty('display', 'none')
-			},
-			toggle: (show: boolean) => {
-				el.style.setProperty('display', show ? '' : 'none')
-			},
-			setCssProps: (props: Record<string, string>) =>
-				Object.entries(props).forEach(([key, value]) =>
-					el.style.setProperty(key, value),
-				),
-		})
-	}
-	return {
-		Platform: { isMobile: false },
-		Notice: class {
-			constructor(message: string, duration: number) {
-				notice(message, duration)
-			}
-		},
-		Modal: class {
-			modalEl = element('div', { cls: 'modal' })
-			titleEl = this.modalEl
-				.createDiv({ cls: 'modal-header' })
-				.createDiv({ cls: 'modal-title' })
-			contentEl = this.modalEl.createDiv({ cls: 'modal-content' })
-		},
-		ButtonComponent: class {
-			buttonEl: HTMLElement
-			constructor(parent: HTMLElement) {
-				this.buttonEl = parent.appendChild(element('button'))
-			}
-			setButtonText(text: string) {
-				this.buttonEl.textContent = text
-				return this
-			}
-			setDisabled(disabled: boolean) {
-				this.buttonEl.toggleAttribute('disabled', disabled)
-				return this
-			}
-			onClick(callback: () => void) {
-				this.buttonEl.addEventListener('click', callback)
-				return this
-			}
-		},
-		setIcon: (el: HTMLElement, icon: string) => {
-			const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-			svg.setAttribute('data-icon', icon)
-			el.replaceChildren(svg)
-		},
-		TFile: class {},
-		normalizePath: (path: string) => path,
+beforeEach(() => {
+	obsidianRuntime.onNotice = ({ message, timeout }) => {
+		notice(message, timeout)
 	}
 })
 
@@ -113,8 +37,9 @@ const scanning = (processed = 2, queued = 3): SyncPreparationProgress => ({
 const modals: SyncProgressModal[] = []
 afterEach(async () => {
 	notice.mockClear()
+	obsidianRuntime.reset()
 	modals.splice(0).forEach((modal) => modal.onClose())
-	vi.mocked(Platform).isMobile = false
+	Platform.isMobile = false
 	await i18n.changeLanguage('en')
 })
 
@@ -132,12 +57,12 @@ const runOf = (patch: Partial<SyncRunSnapshot> = {}): SyncRunSnapshot => ({
 })
 
 function mount(preparation: SyncPreparationProgress = scanning()) {
-	const progress: { run: SyncRunSnapshot } = {
-		run: runOf({ status: 'preparing', preparation }),
+	const progress: { modalRun: SyncRunSnapshot } = {
+		modalRun: runOf({ status: 'preparing', preparation }),
 	}
 	/** The service replaces the snapshot on every change; do the same here. */
 	const set = (patch: Partial<SyncRunSnapshot>) => {
-		progress.run = { ...progress.run, ...patch }
+		progress.modalRun = { ...progress.modalRun, ...patch }
 	}
 	const settings = { skipLargeFiles: { maxSize: '' } }
 	const showScanIssues = vi.fn()
@@ -486,4 +411,32 @@ describe('sync progress modal', () => {
 		modal.update()
 		expect(find('cache').style.display).toBe('none')
 	})
+
+	it.each(['zh', 'en'])(
+		'renders moveRemote tasks with source → destination path in %s',
+		async (language) => {
+			await i18n.changeLanguage(language)
+			const { modal, set, find } = mount()
+			const ref = {
+				kind: 'moveRemote' as const,
+				fromLocalPath: '旧目录 🌱/文档.md',
+				localPath: '新目录 📘/文档.md',
+			}
+			set({
+				status: 'syncing',
+				preparation: null,
+				total: 1,
+				current: ref,
+				currentInFlight: true,
+				completed: [],
+			})
+			modal.update()
+			const expectedPath = '旧目录 🌱/文档.md → 新目录 📘/文档.md'
+			expect(find('current-file').textContent).toContain(expectedPath)
+			expect(find('current-file').title).toBe(expectedPath)
+			const rowText = find('files-list').textContent ?? ''
+			expect(rowText).toContain(i18n.t('sync.fileOp.moveRemote'))
+			expect(rowText).toContain(expectedPath)
+		},
+	)
 })

@@ -7,23 +7,22 @@ export class SyncRecord {
 		private storage: UseStorageType<Map<string, SyncRecordModel>>,
 	) {}
 
-	async updateFileRecord(path: string, record: SyncRecordModel): Promise<void> {
-		const map = await this.storage.get(this.namespace)
-		if (map) {
-			map.set(path, record)
-			await this.storage.set(this.namespace, map)
-		} else {
-			await this.storage.set(this.namespace, new Map([[path, record]]))
+	async batchDelete(paths: readonly string[]): Promise<void> {
+		if (paths.length === 0) {
+			return
 		}
-	}
-
-	async deleteFileRecord(path: string): Promise<void> {
 		const map = await this.storage.get(this.namespace)
-		if (map) {
-			if (map.has(path)) {
-				map.delete(path)
-				await this.storage.set(this.namespace, map)
+		if (!map) {
+			return
+		}
+		let deleted = false
+		for (const path of paths) {
+			if (map.delete(path)) {
+				deleted = true
 			}
+		}
+		if (deleted) {
+			await this.storage.set(this.namespace, map)
 		}
 	}
 
@@ -40,34 +39,6 @@ export class SyncRecord {
 		const map = await this.storage.get(this.namespace)
 		if (map) {
 			return map.get(path)
-		}
-	}
-
-	async drop() {
-		await this.storage.unset(this.namespace)
-	}
-
-	async exists(path: string): Promise<boolean> {
-		const map = await this.storage.get(this.namespace)
-		if (map) {
-			return map.has(path)
-		}
-		return false
-	}
-
-	async batchUpdate(updates: [string, SyncRecordModel][]): Promise<void> {
-		if (updates.length === 0) {
-			return
-		}
-		const map = await this.storage.get(this.namespace)
-
-		if (map) {
-			for (const [path, record] of updates) {
-				map.set(path, record)
-			}
-			await this.storage.set(this.namespace, map)
-		} else {
-			await this.storage.set(this.namespace, new Map(updates))
 		}
 	}
 }

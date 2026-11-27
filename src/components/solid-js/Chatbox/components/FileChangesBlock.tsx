@@ -1,4 +1,4 @@
-import { createResource, createSignal, For, Show } from 'solid-js'
+import { createMemo, createResource, createSignal, For, Show } from 'solid-js'
 import {
 	buildFileDiff,
 	type FileDiff,
@@ -53,15 +53,17 @@ function DiffSegment(props: {
 	lineKind: FileDiffLine['kind']
 }) {
 	return (
-		<span
-			class={segmentHighlightClass(props.segment, props.lineKind)}
-			style={{
-				'-webkit-box-decoration-break': 'clone',
-				'box-decoration-break': 'clone',
-			}}
-		>
-			{props.segment.text}
-		</span>
+		<Show when={props.segment.changed} fallback={props.segment.text}>
+			<span
+				class={segmentHighlightClass(props.segment, props.lineKind)}
+				style={{
+					'-webkit-box-decoration-break': 'clone',
+					'box-decoration-break': 'clone',
+				}}
+			>
+				{props.segment.text}
+			</span>
+		</Show>
 	)
 }
 
@@ -149,7 +151,7 @@ function FileChangeSummary(props: {
 }
 
 function FileChangeStats(props: { diff: FileDiff }) {
-	const stats = () => computeStats(props.diff)
+	const stats = createMemo(() => computeStats(props.diff))
 	return (
 		<Show when={props.diff.hunks}>
 			<span class=":uno: shrink-0">

@@ -1,74 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorkspaceLeaf } from 'obsidian'
+import { obsidianRuntime } from '@test/obsidian-runtime'
+import type { Component, WorkspaceLeaf } from 'obsidian'
 import type NutstorePlugin from '~/index'
 
-const host = vi.hoisted(() => {
-	class Component {
-		children: Component[] = []
-		loaded = false
-		loadCount = 0
-		unloadCount = 0
-		load() {
-			this.loaded = true
-			this.loadCount += 1
-		}
-		unload() {
-			this.loaded = false
-			this.unloadCount += 1
-		}
-		addChild<T extends Component>(child: T): T {
-			this.children.push(child)
-			if (this.loaded) child.load()
-			return child
-		}
-		removeChild<T extends Component>(child: T): T {
-			const index = this.children.indexOf(child)
-			if (index !== -1) this.children.splice(index, 1)
-			child.unload()
-			return child
-		}
-	}
-	class ItemView extends Component {
-		contentEl = document.createElement('div')
-		app: {
-			workspace: {
-				on: () => object
-				getActiveViewOfType: () => null
-			}
-			vault: { on: () => object }
-		}
-		constructor(readonly leaf: WorkspaceLeaf) {
-			super()
-			this.loaded = true
-			this.app = {
-				workspace: {
-					on: () => ({}),
-					getActiveViewOfType: () => null,
-				},
-				vault: { on: () => ({}) },
-			}
-		}
-		registerEvent() {}
-		registerDomEvent() {}
-	}
-	return {
-		Component,
-		ItemView,
-		render: vi.fn(),
-	}
-})
-
-vi.mock('obsidian', () => ({
-	Component: host.Component,
-	ItemView: host.ItemView,
-	MarkdownView: class {},
-	MarkdownRenderer: { render: host.render },
-	normalizePath: (path: string) => path,
-	TFile: class {},
-	TFolder: class {},
-	WorkspaceLeaf: class {},
-}))
 vi.mock('~/i18n', () => ({ default: { t: (key: string) => key } }))
 vi.mock('~/components/ChatWorkspacePanel', () => ({
 	ChatWorkspacePanel: class {},
@@ -85,13 +20,19 @@ vi.mock('./chatbox-code-preview', () => ({ enhanceHtmlCodeBlocks: vi.fn() }))
 
 import ChatboxView from './chatbox.view'
 
-type HostComponent = InstanceType<typeof host.Component>
+type InspectableComponent = Component & {
+	loaded: boolean
+	loadCount: number
+	unloadCount: number
+}
 
 type RenderMarkdown = (
 	el: HTMLElement,
 	markdown: string,
 	options?: { streaming?: boolean },
 ) => Promise<(() => void) | undefined>
+
+const renderSpy = vi.fn()
 
 async function renderPlainMarkdown(
 	_app: unknown,
@@ -102,19 +43,21 @@ async function renderPlainMarkdown(
 }
 
 function createView(render = renderPlainMarkdown) {
-	host.render.mockImplementation(render)
+	renderSpy.mockImplementation(render)
+	obsidianRuntime.markdownRenderHandler = renderSpy
 	const plugin = {
 		ai: { chat: { subscribe: () => () => {} } },
 		protocolService: {},
 	} as unknown as NutstorePlugin
 	const view = new ChatboxView({} as WorkspaceLeaf, plugin)
 	return view as unknown as {
-		children: HostComponent[]
+		children: InspectableComponent[]
 		renderMarkdown: RenderMarkdown
 	}
 }
 
 beforeEach(() => {
+	obsidianRuntime.reset()
 	Object.assign(document, { win: window })
 	Object.assign(window, {
 		win: window,
@@ -128,6 +71,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.clearAllMocks()
+	obsidianRuntime.reset()
 })
 
 describe('chat markdown rendering lifecycle', () => {
@@ -143,7 +87,7 @@ describe('chat markdown rendering lifecycle', () => {
 		cleanup?.()
 
 		expect(view.children).toHaveLength(0)
-		expect(host.render).toHaveBeenCalledOnce()
+		expect(renderSpy).toHaveBeenCalledOnce()
 	})
 
 	it('detaches the render component when Markdown rendering fails', async () => {

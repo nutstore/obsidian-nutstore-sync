@@ -3,7 +3,7 @@ import type { SyncRecordModel } from '~/model/sync-record.model'
 import type { BaseTask } from './tasks/task.interface'
 import {
 	compileFilterRules,
-	isPathIncluded,
+	createPathInclusionChecker,
 	type GlobFilterRule,
 } from '~/utils/glob-match'
 import { normalizeVaultPath } from '~/utils/normalize-vault-path'
@@ -35,6 +35,7 @@ function* pathChain(path: string): Generator<string> {
 /** One run's boundary: unknown or excluded paths never authorize mutations. */
 export class SyncScope {
 	private readonly rules
+	private readonly checkRuleIncluded: (path: string, isDir?: boolean) => boolean
 	/** Paths whose subtree must stay untouched. Lookups walk a path's ancestors,
 	 * so cost follows path depth, not how many paths are protected. */
 	private readonly protectedRoots = new Set<string>()
@@ -45,6 +46,7 @@ export class SyncScope {
 
 	constructor(rules: GlobFilterRule[] = []) {
 		this.rules = compileFilterRules(rules)
+		this.checkRuleIncluded = createPathInclusionChecker(this.rules)
 	}
 
 	protect(path: string): void {
@@ -75,11 +77,13 @@ export class SyncScope {
 		this.protect(issue.path)
 	}
 
+	matchesRules(path: string, isDir = false): boolean {
+		return this.checkRuleIncluded(normalizeVaultPath(path), isDir)
+	}
+
 	includes(path: string, isDir = false): boolean {
 		const normalized = normalizeVaultPath(path)
-		return (
-			isPathIncluded(normalized, this.rules, isDir) && !this.covers(normalized)
-		)
+		return this.checkRuleIncluded(normalized, isDir) && !this.covers(normalized)
 	}
 
 	/** Path type controls filter matching; mutation extent controls ancestor
@@ -110,7 +114,7 @@ export class SyncScope {
 
 	observe(entries: readonly FsWalkResult[]): void {
 		for (const { stat, ignored } of entries) {
-			if (ignored || !isPathIncluded(stat.path, this.rules, stat.isDir)) {
+			if (ignored || !this.checkRuleIncluded(stat.path, stat.isDir)) {
 				this.protect(stat.path)
 			}
 		}

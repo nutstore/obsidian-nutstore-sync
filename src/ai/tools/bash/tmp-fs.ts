@@ -9,8 +9,6 @@ function getBashTmpAdapterRoot() {
 	return normalizePath(BASH_TMP_VAULT_PATH)
 }
 
-export { BASH_TMP_MOUNT_POINT }
-
 export async function existsBashTmpPath(app: App, absolutePath: string) {
 	return app.vault.adapter.exists(resolveBashTmpAdapterPath(absolutePath))
 }

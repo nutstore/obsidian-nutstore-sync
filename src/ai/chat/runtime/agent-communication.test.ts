@@ -1,22 +1,17 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getAgentDefinition } from '~/ai/chat/agents/registry'
-import { getSessionSubagents } from '~/ai/chat/domain'
-import type { ChatSession } from '~/ai/chat/domain'
+import { createAIRuntimeHarness } from '@test/harness/ai-runtime-harness'
+import { createDeferred, flushUntil } from '@test/harness/async-scheduler'
+import { getSessionSubagents, type ChatSession } from '~/ai/chat/domain'
 import {
-	createEmptyMasterAgent,
 	consumePendingInputs,
 	hasPendingInputs,
 	uiMessagesToModelMessages,
 } from '~/ai/chat/messages/ui-message'
-import type { AgentTurnResult } from './agent-runner'
-import { TaskManager } from './task-manager'
-import type { AgentAddress } from '~/ai/tools/agent-communication'
-import type { ChatAgentState } from '~/ai/chat/types'
 import { normalizeRehydratedExecution } from '~/ai/chat/session/rehydration-execution'
 
 const writeResult = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('~/ai/core/runtime', () => ({
+	assertProviderUsable: () => undefined,
 	prepareMessagesForModel: (
 		_provider: unknown,
 		_model: unknown,
@@ -26,94 +21,14 @@ vi.mock('~/ai/core/runtime', () => ({
 }))
 vi.mock('~/ai/tools/bash/tmp-fs', () => ({ writeBashTmpText: writeResult }))
 const TEXT = '归纳主题 / Summarize themes 🌿'
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((done) => {
-		resolve = done
-	})
-	return { resolve, promise }
-}
+const deferred = createDeferred
+
 function harness() {
-	const master = createEmptyMasterAgent(1)
-	const session: ChatSession = {
-		schemaVersion: 2,
-		id: 'session',
-		createdAt: 1,
-		updatedAt: 1,
-		model: { providerId: 'provider', modelId: 'model' },
-		subagents: { master },
-	}
-	const state = {
-		loadedSessions: new Map([[session.id, session]]),
-		deletedSessionIds: new Set<string>(),
-	}
-	const persistSession = vi.fn(async () => {})
-	const turns = new Map<string, ReturnType<typeof deferred<AgentTurnResult>>>()
-	const runTurn = vi.fn(({ agent }: { agent: ChatAgentState }) => {
-		consumePendingInputs(agent)
-		const turn = deferred<AgentTurnResult>()
-		turns.set(agent.id, turn)
-		return turn.promise
-	})
-	const manager = new TaskManager(
-		{} as never,
-		async () => {},
-		state as never,
-		{
-			getProviderByIdOrThrow: () => ({ id: 'provider' }),
-			getModelByIdsOrThrow: () => ({ id: 'model' }),
-		} as never,
-		{ persistSession } as never,
-		vi.fn(),
-		{
-			getAgentDefinition: (type: string) =>
-				getAgentDefinition(type, {
-					fullAccess: false,
-					subagents: { explorer: { enabled: true } },
-				}),
-			getSubagentModelSelection: () => undefined,
-		} as never,
-		{} as never,
-		{ runTurn } as never,
-		{
-			inspect: () => 'ready',
-			cancel: vi.fn(),
-			shouldSuspendAtSafePoint: () => false,
-		} as never,
-	)
-	const masterWake = vi.fn(() => true)
-	manager.setMasterAgentInputHandler(masterWake)
-	const controller = new AbortController()
-	const origin = { turnId: 'turn', signal: controller.signal }
-	const address = (agentId = 'master'): AgentAddress => ({
-		sessionId: session.id,
-		agentId,
-		origin,
-	})
-	const spawn = async (callerAgentId = 'master') => {
-		const { taskId } = await manager.dispatchTask(
-			{
-				sessionId: session.id,
-				callerAgentId,
-				subagentType: 'explorer',
-				prompt: TEXT,
-			},
-			origin,
-		)
-		return getSessionSubagents(session).find((agent) => agent.id === taskId)!
-	}
+	const h = createAIRuntimeHarness()
 	return {
-		manager,
-		master,
-		session,
-		state,
-		address,
-		spawn,
-		persistSession,
-		turns,
-		runTurn,
-		controller,
-		masterWake,
+		...h,
+		masterWake: h.masterHandler,
+		spawn: (callerAgentId = 'master') => h.spawn(TEXT, callerAgentId),
 	}
 }
 afterEach(() => {
@@ -187,9 +102,9 @@ describe('session agent communication', () => {
 		async (status) => {
 			const h = harness()
 			const child = await h.spawn()
-			await vi.waitFor(() => expect(h.turns.has(child.id)).toBe(true))
+			await flushUntil(() => expect(h.turns.has(child.id)).toBe(true))
 			h.turns.get(child.id)!.resolve({ status: 'completed', text: TEXT })
-			await vi.waitFor(() => expect(child.status).toBe('completed'))
+			await flushUntil(() => expect(child.status).toBe('completed'))
 			const first = { ...child.executions![0] }
 			child.status = status
 			const context = child.timeline.slice()
@@ -202,7 +117,7 @@ describe('session agent communication', () => {
 			expect(child.status).toBe(status)
 			expect(child.pendingInputs).toHaveLength(1)
 			await h.manager.sendMessage(h.address(), child.id, TEXT, true)
-			await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(2))
+			await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(2))
 			expect(child.model).toBe(model)
 			expect(child.timeline).toEqual(expect.arrayContaining(context))
 			expect(
@@ -214,7 +129,7 @@ describe('session agent communication', () => {
 				status: 'completed',
 				text: '完成归纳 / Themes summarized 🌿',
 			})
-			await vi.waitFor(() =>
+			await flushUntil(() =>
 				expect(child.executions?.[1].resultPath).toBeDefined(),
 			)
 			expect(child.executions?.[1].resultPath).not.toBe(first.resultPath)
@@ -229,13 +144,13 @@ describe('session agent communication', () => {
 		const h = harness()
 		const first = await h.spawn()
 		const sibling = await h.spawn()
-		await vi.waitFor(() => expect(h.turns.has(first.id)).toBe(true))
+		await flushUntil(() => expect(h.turns.has(first.id)).toBe(true))
 		h.turns.get(first.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(first.status).toBe('completed'))
+		await flushUntil(() => expect(first.status).toBe('completed'))
 		await h.manager.sendMessage(h.address(sibling.id), first.id, TEXT, true)
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
 		h.turns.get(first.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(sibling.pendingInputs).toHaveLength(1))
+		await flushUntil(() => expect(sibling.pendingInputs).toHaveLength(1))
 		expect(first.executions?.[1].initiator).toBe(sibling.id)
 		expect(h.master.pendingInputs).toHaveLength(1)
 	})
@@ -243,23 +158,23 @@ describe('session agent communication', () => {
 	it('executes follow-up delivered while the previous result is being written', async () => {
 		const h = harness()
 		const child = await h.spawn()
-		await vi.waitFor(() => expect(h.turns.has(child.id)).toBe(true))
+		await flushUntil(() => expect(h.turns.has(child.id)).toBe(true))
 		const write = deferred<void>()
 		writeResult.mockImplementationOnce(() => write.promise)
 		h.turns.get(child.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(writeResult).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(writeResult).toHaveBeenCalledTimes(1))
 		expect(child.status).toBe('running')
 		const sending = h.manager.sendMessage(h.address(), child.id, TEXT, true)
-		await vi.waitFor(() => expect(hasPendingInputs(child)).toBe(true))
+		await flushUntil(() => expect(hasPendingInputs(child)).toBe(true))
 		expect(h.runTurn).toHaveBeenCalledTimes(1)
 		write.resolve()
 		await sending
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(2))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(2))
 		expect(child.pendingInputs).toEqual([])
 		expect(JSON.stringify(child.timeline)).toContain(TEXT)
 		expect(child.executions?.[0].status).toBe('completed')
 		h.turns.get(child.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(h.master.pendingInputs).toHaveLength(2))
+		await flushUntil(() => expect(h.master.pendingInputs).toHaveLength(2))
 		expect(child.executions?.[1].status).toBe('completed')
 	})
 
@@ -268,23 +183,23 @@ describe('session agent communication', () => {
 		const parent = await h.spawn()
 		const nested = await h.spawn(parent.id)
 		const sibling = await h.spawn()
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
 		const executionId = parent.executionId
 		h.turns.get(parent.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(parent.status).toBe('idle'))
+		await flushUntil(() => expect(parent.status).toBe('idle'))
 		await h.manager.sendMessage(h.address(sibling.id), parent.id, TEXT, true)
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(4))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(4))
 		expect(parent.executionId).toBe(executionId)
 		expect(parent.executions).toHaveLength(1)
 		expect(parent.executions?.[0].initiator).toBe('master')
 		expect(parent.pendingInputs).toEqual([])
 		expect(JSON.stringify(parent.timeline)).toContain(TEXT)
 		h.turns.get(parent.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(parent.status).toBe('idle'))
+		await flushUntil(() => expect(parent.status).toBe('idle'))
 		h.turns.get(nested.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(5))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(5))
 		h.turns.get(parent.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(h.master.pendingInputs).toHaveLength(1))
+		await flushUntil(() => expect(h.master.pendingInputs).toHaveLength(1))
 		expect(parent.executions?.[0].status).toBe('completed')
 		expect(sibling.pendingInputs).toEqual([])
 	})
@@ -323,10 +238,10 @@ describe('session agent communication', () => {
 		const h = harness()
 		const children = []
 		for (let index = 0; index < 4; index++) children.push(await h.spawn())
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
 		expect(children[3].status).toBe('queued')
 		const waiting = h.manager.waitAgent(h.address(children[0].id))
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(4))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(4))
 		expect(h.manager.countRunningAgentsForSession(h.session)).toBe(3)
 		await h.manager.sendMessage(h.address(children[1].id), children[0].id, TEXT)
 		expect(children[0].status).toBe('queued')
@@ -368,16 +283,16 @@ describe('session agent communication', () => {
 		const h = harness()
 		const target = await h.spawn()
 		const initiator = await h.spawn()
-		await vi.waitFor(() => expect(h.turns.has(target.id)).toBe(true))
+		await flushUntil(() => expect(h.turns.has(target.id)).toBe(true))
 		h.turns.get(target.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(target.status).toBe('completed'))
+		await flushUntil(() => expect(target.status).toBe('completed'))
 		await h.manager.sendMessage(h.address(initiator.id), target.id, TEXT, true)
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(3))
 		h.turns.get(initiator.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(initiator.status).toBe('idle'))
+		await flushUntil(() => expect(initiator.status).toBe('idle'))
 		expect(initiator.resultPath).toBeUndefined()
 		h.turns.get(target.id)!.resolve({ status: 'completed', text: TEXT })
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(4))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(4))
 		expect(initiator.executions).toHaveLength(1)
 		expect(
 			initiator.timeline.flatMap((message) => message.parts),
@@ -418,14 +333,14 @@ describe('session agent communication', () => {
 		const write = deferred<void>()
 		h.persistSession.mockImplementationOnce(() => write.promise)
 		const spawning = h.spawn()
-		await vi.waitFor(() =>
+		await flushUntil(() =>
 			expect(getSessionSubagents(h.session)).toHaveLength(1),
 		)
 		h.manager.startQueuedAgentsForSession(h.session)
 		expect(h.runTurn).not.toHaveBeenCalled()
 		write.resolve()
 		await spawning
-		await vi.waitFor(() => expect(h.runTurn).toHaveBeenCalledTimes(1))
+		await flushUntil(() => expect(h.runTurn).toHaveBeenCalledTimes(1))
 	})
 
 	it('rolls back failed dispatch persistence without leaving a queued execution', async () => {

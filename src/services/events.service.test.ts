@@ -3,8 +3,6 @@ import { emitEndSync } from '~/events'
 import type { ScanIssue } from '~/sync/scope'
 import EventsService from './events.service'
 
-vi.mock('obsidian', () => ({ Notice: class {} }))
-
 const issue = (path: string): ScanIssue => ({
 	path,
 	operation: 'list',

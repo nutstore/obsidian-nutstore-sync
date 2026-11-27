@@ -5,6 +5,8 @@
 	"settings": {
 		"modules": {
 			"heading": "Module switches",
+			"syncHeading": "Sync module",
+			"aiHeading": "AI module",
 			"sync": "Enable synchronization",
 			"ai": "Enable AI",
 			"description": "Takes effect immediately. Turning off stops this module and preserves its settings and data."
@@ -304,10 +306,17 @@
 					"usage": "Credits"
 				},
 				"models": {
-					"title": "Available models",
 					"available": "Models available now",
 					"count": "{{count}} total",
 					"empty": "No available models.",
+					"modalities": {
+						"text": "Text",
+						"image": "Image",
+						"audio": "Audio",
+						"video": "Video",
+						"pdf": "PDF",
+						"file": "File"
+					},
 					"changes": "Model list changes",
 					"diffSummary": "+{{added}} added · −{{removed}} removed",
 					"refreshed": "Updated",
@@ -316,6 +325,7 @@
 				"usage": {
 					"button": "Overview",
 					"title": "Nutstore AI overview",
+					"overviewTitle": "Credits overview",
 					"description": "View quota usage or refresh the available model list.",
 					"refresh": "Refresh credits",
 					"refreshing": "Refreshing…",
@@ -753,7 +763,9 @@
 			"failedToUploadMerged": "Failed to upload merged content",
 			"requestsTooFrequent": "Requests too frequent, please wait a few minutes and try again",
 			"accountNotConfigured": "Nutstore account not configured. Please configure your account in settings first.",
-			"ssoTokenInvalid": "Login has expired. Please log in again in settings."
+			"ssoTokenInvalid": "Login has expired. Please log in again in settings.",
+			"skippedRemoteRemovalAfterFailedMove": "Skipped remote removal because a preceding move from this path failed",
+			"moveSourceChanged": "Remote file changed before the move"
 		},
 		"requestsTooFrequent": "Requests too frequent, plugin will resume sync at {{time}}",
 		"preparing": "📋 Preparing sync",
@@ -810,6 +822,7 @@
 			"download": "Download",
 			"filenameError": "Invalid path characters",
 			"merge": "Merge",
+			"moveRemote": "Move remote",
 			"removeLocal": "Remove local",
 			"removeRemote": "Remove remote",
 			"removeRemoteRecursively": "Remove remote recursively",
@@ -878,11 +891,6 @@
 		"errorMessage": "Error",
 		"close": "Close"
 	},
-	"textAreaModal": {
-		"copy": "Copy",
-		"close": "Close",
-		"copied": "Text copied to clipboard"
-	},
 	"time": {
 		"justNow": "just now",
 		"minutesAgo": "{{count}}min ago",
@@ -895,6 +903,7 @@
 		"openCommand": "Open chatbox",
 		"addToContext": "Add to AI context",
 		"newChat": "New chat",
+		"alreadyInNewChat": "Already in a new chat",
 		"setup": {
 			"continueEyebrow": "Continue setting up {{provider}}",
 			"progressLabel": "Provider setup progress",
